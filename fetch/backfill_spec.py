@@ -87,8 +87,18 @@ def resolve_codes(kind):
             return []
         df = pd.read_parquet(p)
         # 场内基金才有行情; .OF 无 fund_daily/fund_adj
+        #
+        # ⚠ 2026-09-30 修复（R12 红灯根因，实测 tot=28,080）:
+        #   原实现只认 market 列，而当前 fund_basic.parquet **无 market 列**
+        #   → 过滤**静默失效** → 1.379 万只场外 .OF 混入代码清单 →
+        #   fund_adj / fund_share 的 by_code 应有任务数各虚增 13,790。
+        #   现与 fetch/full_download.py L296-301 用同一优先级:
+        #   market == "E" > ts_code 后缀属 SH/SZ（判定不许静默放行）。
         if "market" in df.columns:
             df = df[df["market"] == "E"]
+        else:
+            _suffix = df["ts_code"].astype(str).str.split(".").str[-1]
+            df = df[_suffix.isin(["SH", "SZ"])]
         return df["ts_code"].dropna().tolist()
 
     if kind in ("index", "index_major"):

@@ -85,6 +85,14 @@ LISTED_COL = {
     "hk_basic.parquet":    (None, None),
 }
 
+# 元数据缺「在场」列时的 ts_code 后缀兜底（2026-09-30 R12 事故修复）:
+#   fund_basic.parquet 曾丢失 market 列，而上面 `if col and col in md.columns`
+#   直接**跳过过滤**（静默放行）→ 场外 .OF 混入场内表清单。
+#   与 fetch/full_download.py / fetch/backfill_spec.py 保持同一判定优先级。
+VENUE_SUFFIX = {
+    "fund_basic.parquet": ("SH", "SZ"),
+}
+
 
 # ============================================================
 # 布局探测
@@ -286,6 +294,10 @@ def _list_codes_uncached(table, listed_only=False, root=None):
                 md = md[m]
             else:
                 md = md[md[col] == val]
+        elif meta_file in VENUE_SUFFIX:
+            # ⚠ 缺列时不许静默放行（原实现直接跳过过滤 → 场外 .OF 混入）
+            _suf = md[code_col].astype(str).str.split(".").str[-1]
+            md = md[_suf.isin(VENUE_SUFFIX[meta_file])]
     return sorted(md[code_col].dropna().unique().tolist())
 
 

@@ -771,6 +771,7 @@ def _run_all():
         #      若不排除，断言会持续红灯 → "狼来了" → 真漂移反而被忽视。
         #      未声明的表仍按原阈值严查。
         from config import HISTORY_BACKFILL_PENDING
+        from tools.db_audit import GAP_CAT_EXEMPT
         pend = set(HISTORY_BACKFILL_PENDING)
         tot_declared = sum(r["missing"] for r in rows.values()
                            if r["name"] in pend)
@@ -780,13 +781,37 @@ def _run_all():
         # 其中「日更表」的真缺口 —— 这个才是需要关注的（豁免表差额恒定存在）
         daily_tot = sum(r["missing"] for r in rows.values()
                         if r["missing"] and r.get("category") == "日更")
-        assert tot < 500, (
-            f"缺口总数 {tot} 异常偏大 —— 疑似出现新的口径漂移"
+        # ⚠ 2026-09-30 修复（R12 长期贴死 500 线；被 fund_basic 截断事故放大到 28,080）:
+        #   豁免表（freq=day 但刻意不日更）的差额是**设计性**的 —— db_audit 已按
+        #   类别分开呈现、doctor 也只把「日更」计入待关注。把设计性差额塞进同一个
+        #   500 预算，会把预算占满（实测正好 500）→ 之后任何真漂移都与之混在一起
+        #   （同 HISTORY_BACKFILL_PENDING 的排除理由: 持续红灯 = 狼来了）。
+        #   现拆两段断言，设计性底线**单独设上界**，两边都不许静默漂移:
+        #     ① 漂移面（日更/周期/其他未声明）: < 500
+        #     ② 豁免表设计面: < EXEMPT_GAP_LIMIT
+        exempt_gaps = {r["name"]: r["missing"] for r in rows.values()
+                       if r["missing"] and r["name"] not in pend
+                       and r.get("category") == GAP_CAT_EXEMPT}
+        exempt_tot = sum(exempt_gaps.values())
+        tot_core = tot - exempt_tot
+        assert tot_core < 500, (
+            f"非豁免缺口总数 {tot_core} 异常偏大 —— 疑似出现新的口径漂移"
             f"（误报时代曾达 4,551）。明细: "
             f"{list(unexplained.items())[:8]}"
             + (f" | 另有已声明的历史扩展待补 {tot_declared} 条"
                f"（{sorted(pend)}，见 HISTORY_BACKFILL_PENDING）"
                if tot_declared else ""))
+        # 豁免表设计性底线上界（实测 424 = 15 个 by_code 表 × 28 个源端无数据标的）:
+        #   该上界的存在意义 —— 豁免表**也会漂移**，且漂移量级极大:
+        #   2026-09-29 fund_basic.parquet 被截到 15,000 行且丢了 market 列时，
+        #   本项达 28,004（fund_adj/fund_share 各虚增 13,790）。
+        #   只设上界（而非并入 500 预算），既保留"狼来了"防护，又不掩盖事故。
+        EXEMPT_GAP_LIMIT = 2000
+        assert exempt_tot < EXEMPT_GAP_LIMIT, (
+            f"豁免表差额 {exempt_tot} ≥ {EXEMPT_GAP_LIMIT} —— 豁免表也在漂移"
+            f"（设计性底线实测 424）。"
+            f"2026-09-29 fund_basic 截断事故即此类（曾达 28,004）。明细: "
+            f"{list(exempt_gaps.items())[:8]}")
         # ④ single_range 必须只产生 1 个任务（防 db_audit 自行按年切分）
         #    —— 2026-09-20 新增（第 7 次复发的精准断言）:
         #    shibor_lpr 改 single_range 后，db_audit 仍按其**自写的**按年枚举
@@ -836,7 +861,8 @@ def _run_all():
                 #   tot 含**豁免表的设计性差额**（那些表刻意不日更，差额恒定存在），
                 #   并非"真缺口"。db_audit 现已按类别分开，此处同步用词以免混淆。
                 f"当前未声明差额 {tot}"
-                f"（其中日更表真缺口 {daily_tot}）"
+                f"（漂移面 {tot_core} | 豁免表设计面 {exempt_tot} | "
+                f"日更表真缺口 {daily_tot}）"
                 + (f" + 已声明历史扩展待补 {tot_declared}" if tot_declared else "")
                 + ")")
 
