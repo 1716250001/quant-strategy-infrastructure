@@ -1,0 +1,40 @@
+# btf 版本控制忽略清单（v1.0 私有托管准备；裁决五-1 定于 v1.0 定版日执行）
+#
+# 原则：
+#   1. **数据不入库**——主库（全量数据/market_data）与回测产物体积大且可再生；
+#   2. **缓存/派生物不入库**——`__pycache__`、pytest/ruff/mypy 缓存；
+#   3. **一次性探针不入库**——`_scratch/`（项目纪律：探针一律放仓库外草稿区）；
+#   4. **插件基线留痕入库**（`.plugin_baseline.json` / `_history.jsonl`）——
+#      它们正是"核心 diff 为零"在非 git 期的证据链，删了等于自毁审计（AA-3）。
+
+# ── Python 派生 ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── 工具缓存 ──
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── 运行产物（可再生产物，不进版本库） ──
+runs/
+*.run.zip
+data_quality_report.json
+metrics.json
+report.html
+events.jsonl
+events.jsonl.*
+
+# ── 一次性草稿/探针 ──
+_scratch/
+*.log
+
+# ── 本地环境 ──
+.env
+.idea/
+.vscode/

@@ -1,0 +1,468 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [
+      {
+        "avg_cost_after": 8.242727504725897,
+        "avg_cost_before": 8.512727504725897,
+        "cash_div": 0.27,
+        "date": "20120626",
+        "nav_delta": -28566.000000000004,
+        "qty_after": 105800,
+        "qty_at_ex": 105800,
+        "qty_before": 105800,
+        "stk_div": 0.0,
+        "symbol": "600000.SH",
+        "type": "ex"
+      },
+      {
+        "cash_delta": 28566.000000000004,
+        "cash_div": 0.27,
+        "date": "20120629",
+        "nav_delta": 28566.000000000004,
+        "qty_at_ex": 105800,
+        "symbol": "600000.SH",
+        "type": "pay"
+      }
+    ],
+    "fills": [
+      {
+        "date": "20120621",
+        "fee": {
+          "commission": 225.09,
+          "stamp_duty": 0.0,
+          "total": 288.57,
+          "transfer_fee": 63.48
+        },
+        "price": 8.51,
+        "qty": 105800,
+        "side": "buy",
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20120705",
+        "fee": {
+          "commission": 214.51,
+          "stamp_duty": 858.04,
+          "total": 1136.03,
+          "transfer_fee": 63.48
+        },
+        "price": 8.11,
+        "qty": 105800,
+        "side": "sell",
+        "symbol": "600000.SH"
+      }
+    ],
+    "invariants": {
+      "event_days": [
+        {
+          "avg_cost_after": 8.242727504725897,
+          "avg_cost_before": 8.512727504725897,
+          "cash_div": 0.27,
+          "date": "20120626",
+          "kind": "ex",
+          "nav_delta": -28566.000000000004,
+          "qty_after": 105800,
+          "qty_before": 105800,
+          "stk_div": 0.0
+        }
+      ],
+      "final_cash": 984821.3999999999,
+      "nav_last": {
+        "20120620": 1000000.0,
+        "20120621": 992305.43,
+        "20120625": 982783.43,
+        "20120626": 952101.43,
+        "20120627": 951043.4300000002,
+        "20120628": 946811.43,
+        "20120629": 988073.4300000002,
+        "20120702": 983841.43,
+        "20120703": 983841.43,
+        "20120704": 987015.4299999999,
+        "20120705": 984821.3999999999
+      },
+      "realized_pnl_total": -15178.599999999962,
+      "windows": [
+        {
+          "ex_date": "20120626",
+          "ex_nav_delta": -28566.000000000004,
+          "pay_date": "20120629",
+          "pay_nav_delta": 28566.000000000004,
+          "qty_at_ex": 105800,
+          "symbol": "600000.SH",
+          "window_event_delta": 0.0
+        }
+      ]
+    },
+    "metrics": {
+      "annualized_return": -0.31984417047220914,
+      "annualized_volatility": 0.2927555561077824,
+      "calmar_ratio": -6.01340044434752,
+      "fee_ratio": 0.0014573725635057561,
+      "final_nav": 984821.3999999999,
+      "max_drawdown": -0.05318856999999999,
+      "n_fills": 2.0,
+      "n_trading_days": 11.0,
+      "profit_loss_ratio": 2.704350397734222,
+      "sharpe_ratio": -1.1853772868222248,
+      "total_fees": 1424.6,
+      "total_return": -0.015178600000000042,
+      "total_turnover": 1758396.0,
+      "turnover_annualized": 45.33095589757992,
+      "win_rate": 0.2
+    },
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20120620",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.512727504725897
+        },
+        "cash": 99353.43000000005,
+        "cumulative_return": -0.007694569999999956,
+        "daily_return": -0.007694569999999956,
+        "date": "20120621",
+        "drawdown": -0.007694569999999956,
+        "market_value": 892952.0,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 992305.43
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.512727504725897
+        },
+        "cash": 99353.43000000005,
+        "cumulative_return": -0.017216569999999987,
+        "daily_return": -0.009595835830506383,
+        "date": "20120625",
+        "drawdown": -0.017216569999999987,
+        "market_value": 883430.0,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 982783.43
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.242727504725897
+        },
+        "cash": 99353.43000000005,
+        "cumulative_return": -0.047898569999999974,
+        "daily_return": -0.031219492579356967,
+        "date": "20120626",
+        "drawdown": -0.047898569999999974,
+        "market_value": 852748.0,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 952101.43
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.242727504725897
+        },
+        "cash": 99353.43000000005,
+        "cumulative_return": -0.048956569999999866,
+        "daily_return": -0.0011112261432060233,
+        "date": "20120627",
+        "drawdown": -0.048956569999999866,
+        "market_value": 851690.0000000001,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 951043.4300000002
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.242727504725897
+        },
+        "cash": 99353.43000000005,
+        "cumulative_return": -0.05318856999999999,
+        "daily_return": -0.004449849361769065,
+        "date": "20120628",
+        "drawdown": -0.05318856999999999,
+        "market_value": 847458.0,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 946811.43
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.242727504725897
+        },
+        "cash": 127919.43000000005,
+        "cumulative_return": -0.011926569999999859,
+        "daily_return": 0.04357995551447891,
+        "date": "20120629",
+        "drawdown": -0.011926569999999859,
+        "market_value": 860154.0000000001,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 988073.4300000002
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.242727504725897
+        },
+        "cash": 127919.43000000005,
+        "cumulative_return": -0.016158569999999983,
+        "daily_return": -0.0042830824830499825,
+        "date": "20120702",
+        "drawdown": -0.016158569999999983,
+        "market_value": 855922.0,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 983841.43
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.242727504725897
+        },
+        "cash": 127919.43000000005,
+        "cumulative_return": -0.016158569999999983,
+        "daily_return": 0.0,
+        "date": "20120703",
+        "drawdown": -0.016158569999999983,
+        "market_value": 855922.0,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 983841.43
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.242727504725897
+        },
+        "cash": 127919.43000000005,
+        "cumulative_return": -0.012984570000000084,
+        "daily_return": 0.0032261296416433716,
+        "date": "20120704",
+        "drawdown": -0.012984570000000084,
+        "market_value": 859095.9999999999,
+        "positions_qty": {
+          "600000.SH": 105800
+        },
+        "total_value": 987015.4299999999
+      },
+      {
+        "avg_cost": {},
+        "cash": 984821.3999999999,
+        "cumulative_return": -0.015178600000000042,
+        "daily_return": -0.002222893313836072,
+        "date": "20120705",
+        "drawdown": -0.015178600000000042,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 984821.3999999999
+      }
+    ]
+  },
+  "case_id": "g1_cash_div_ex_ne_pay",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [
+      {
+        "ann_date": "20120614",
+        "cash_div_per_share": 0.27,
+        "ex_date": "20120626",
+        "pay_date": "20120629",
+        "record_date": "20120625",
+        "stk_div_per_share": 0.0,
+        "symbol": "600000.SH"
+      }
+    ],
+    "bars": [
+      {
+        "amount": 427039.914,
+        "close": 8.5,
+        "date": "20120620",
+        "high": 8.61,
+        "low": 8.48,
+        "open": 8.54,
+        "pre_close": 8.49,
+        "symbol": "600000.SH",
+        "vol": 500001.07
+      },
+      {
+        "amount": 332932.086,
+        "close": 8.44,
+        "date": "20120621",
+        "high": 8.51,
+        "low": 8.4,
+        "open": 8.51,
+        "pre_close": 8.5,
+        "symbol": "600000.SH",
+        "vol": 394238.84
+      },
+      {
+        "amount": 443526.592,
+        "close": 8.35,
+        "date": "20120625",
+        "high": 8.48,
+        "low": 8.34,
+        "open": 8.42,
+        "pre_close": 8.44,
+        "symbol": "600000.SH",
+        "vol": 527065.96
+      },
+      {
+        "amount": 323089.664,
+        "close": 8.06,
+        "date": "20120626",
+        "high": 8.12,
+        "low": 8.03,
+        "open": 8.07,
+        "pre_close": 8.05,
+        "symbol": "600000.SH",
+        "vol": 399825.38
+      },
+      {
+        "amount": 217422.022,
+        "close": 8.05,
+        "date": "20120627",
+        "high": 8.09,
+        "low": 8.03,
+        "open": 8.06,
+        "pre_close": 8.06,
+        "symbol": "600000.SH",
+        "vol": 269660.55
+      },
+      {
+        "amount": 232014.025,
+        "close": 8.01,
+        "date": "20120628",
+        "high": 8.07,
+        "low": 8.01,
+        "open": 8.05,
+        "pre_close": 8.05,
+        "symbol": "600000.SH",
+        "vol": 288764.49
+      },
+      {
+        "amount": 412653.792,
+        "close": 8.13,
+        "date": "20120629",
+        "high": 8.16,
+        "low": 8.02,
+        "open": 8.04,
+        "pre_close": 8.01,
+        "symbol": "600000.SH",
+        "vol": 509742.36
+      },
+      {
+        "amount": 353033.253,
+        "close": 8.09,
+        "date": "20120702",
+        "high": 8.15,
+        "low": 8.05,
+        "open": 8.15,
+        "pre_close": 8.13,
+        "symbol": "600000.SH",
+        "vol": 436919.87
+      },
+      {
+        "amount": 324895.958,
+        "close": 8.09,
+        "date": "20120703",
+        "high": 8.15,
+        "low": 8.07,
+        "open": 8.09,
+        "pre_close": 8.09,
+        "symbol": "600000.SH",
+        "vol": 400809.65
+      },
+      {
+        "amount": 321375.929,
+        "close": 8.12,
+        "date": "20120704",
+        "high": 8.18,
+        "low": 8.08,
+        "open": 8.1,
+        "pre_close": 8.09,
+        "symbol": "600000.SH",
+        "vol": 395524.77
+      },
+      {
+        "amount": 271555.077,
+        "close": 8.07,
+        "date": "20120705",
+        "high": 8.12,
+        "low": 8.05,
+        "open": 8.11,
+        "pre_close": 8.12,
+        "symbol": "600000.SH",
+        "vol": 336358.96
+      }
+    ],
+    "dates": [
+      "20120620",
+      "20120621",
+      "20120625",
+      "20120626",
+      "20120627",
+      "20120628",
+      "20120629",
+      "20120702",
+      "20120703",
+      "20120704",
+      "20120705"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "600000.SH"
+      }
+    ]
+  },
+  "data_hash": "sha256:87fe8fc4512e8c5e36ae3f68d04db92a087a439cdaff6ed589c6d05ed9a83911",
+  "description": "派息 ex≠pay（600000.SH 2012）：ex 日缺口 / pay 日到账，窗口合并 Δ=0",
+  "group": "G1",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "targets": {
+      "20120620": {
+        "600000.SH": 0.9
+      },
+      "20120704": {}
+    }
+  },
+  "source": {
+    "anchor_ex_date": "20120626",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "600000.SH",
+    "window": {
+      "after": 7,
+      "before": 3,
+      "dates": [
+        "20120620",
+        "20120621",
+        "20120625",
+        "20120626",
+        "20120627",
+        "20120628",
+        "20120629",
+        "20120702",
+        "20120703",
+        "20120704",
+        "20120705"
+      ]
+    }
+  }
+}

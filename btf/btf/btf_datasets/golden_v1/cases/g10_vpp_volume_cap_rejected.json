@@ -1,0 +1,475 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 1000000.0,
+      "nav_last": {
+        "20191121": 1000000.0,
+        "20191122": 1000000.0,
+        "20191125": 1000000.0,
+        "20191126": 1000000.0,
+        "20191127": 1000000.0,
+        "20191128": 1000000.0,
+        "20191129": 1000000.0,
+        "20191202": 1000000.0,
+        "20191203": 1000000.0
+      },
+      "realized_pnl_total": 0.0,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": 0.0,
+      "annualized_volatility": 0.0,
+      "calmar_ratio": NaN,
+      "fee_ratio": 0.0,
+      "final_nav": 1000000.0,
+      "max_drawdown": 0.0,
+      "n_fills": 0.0,
+      "n_trading_days": 9.0,
+      "profit_loss_ratio": NaN,
+      "sharpe_ratio": NaN,
+      "total_fees": 0,
+      "total_return": 0.0,
+      "total_turnover": 0,
+      "turnover_annualized": 0.0,
+      "win_rate": 0.0
+    },
+    "rejected_counts": {
+      "volume_cap": 1
+    },
+    "rejections": [
+      {
+        "code": "volume_cap",
+        "date": "20191126",
+        "qty": 100000,
+        "side": "buy",
+        "symbol": "600265.SH"
+      }
+    ],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191121",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191122",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191125",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191126",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191127",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191128",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191129",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191202",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20191203",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20191121": false,
+        "20191122": false,
+        "20191125": false,
+        "20191126": false,
+        "20191127": false,
+        "20191128": false,
+        "20191129": false,
+        "20191202": false,
+        "20191203": false
+      },
+      "is_st": {
+        "20191121": true,
+        "20191122": true,
+        "20191125": true,
+        "20191126": true,
+        "20191127": true,
+        "20191128": true,
+        "20191129": true,
+        "20191202": true,
+        "20191203": true
+      },
+      "limits": {
+        "20191121": [
+          26.0,
+          23.52
+        ],
+        "20191122": [
+          25.86,
+          23.4
+        ],
+        "20191125": [
+          25.9,
+          23.44
+        ],
+        "20191126": [
+          25.94,
+          23.47
+        ],
+        "20191127": [
+          26.04,
+          23.56
+        ],
+        "20191128": [
+          26.08,
+          23.6
+        ],
+        "20191129": [
+          26.09,
+          23.61
+        ],
+        "20191202": [
+          26.15,
+          23.66
+        ],
+        "20191203": [
+          26.65,
+          24.11
+        ]
+      },
+      "suspended": {
+        "20191121": false,
+        "20191122": false,
+        "20191125": false,
+        "20191126": false,
+        "20191127": false,
+        "20191128": false,
+        "20191129": false,
+        "20191202": false,
+        "20191203": false
+      },
+      "symbol": "600265.SH"
+    }
+  },
+  "case_id": "g10_vpp_volume_cap_rejected",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 787.216,
+        "close": 24.63,
+        "date": "20191121",
+        "high": 24.79,
+        "low": 24.55,
+        "open": 24.71,
+        "pre_close": 24.76,
+        "symbol": "600265.SH",
+        "vol": 319.22
+      },
+      {
+        "amount": 1224.728,
+        "close": 24.67,
+        "date": "20191122",
+        "high": 24.8,
+        "low": 24.49,
+        "open": 24.8,
+        "pre_close": 24.63,
+        "symbol": "600265.SH",
+        "vol": 496.84
+      },
+      {
+        "amount": 759.817,
+        "close": 24.7,
+        "date": "20191125",
+        "high": 24.72,
+        "low": 24.52,
+        "open": 24.67,
+        "pre_close": 24.67,
+        "symbol": "600265.SH",
+        "vol": 309.0
+      },
+      {
+        "amount": 374.94,
+        "close": 24.8,
+        "date": "20191126",
+        "high": 24.81,
+        "low": 24.69,
+        "open": 24.69,
+        "pre_close": 24.7,
+        "symbol": "600265.SH",
+        "vol": 151.41
+      },
+      {
+        "amount": 953.395,
+        "close": 24.84,
+        "date": "20191127",
+        "high": 24.89,
+        "low": 24.73,
+        "open": 24.81,
+        "pre_close": 24.8,
+        "symbol": "600265.SH",
+        "vol": 384.0
+      },
+      {
+        "amount": 632.496,
+        "close": 24.85,
+        "date": "20191128",
+        "high": 24.85,
+        "low": 24.77,
+        "open": 24.85,
+        "pre_close": 24.84,
+        "symbol": "600265.SH",
+        "vol": 255.0
+      },
+      {
+        "amount": 1162.814,
+        "close": 24.9,
+        "date": "20191129",
+        "high": 24.94,
+        "low": 24.68,
+        "open": 24.89,
+        "pre_close": 24.85,
+        "symbol": "600265.SH",
+        "vol": 469.0
+      },
+      {
+        "amount": 1708.815,
+        "close": 25.38,
+        "date": "20191202",
+        "high": 25.47,
+        "low": 24.76,
+        "open": 24.88,
+        "pre_close": 24.9,
+        "symbol": "600265.SH",
+        "vol": 679.7
+      },
+      {
+        "amount": 1680.84,
+        "close": 25.68,
+        "date": "20191203",
+        "high": 25.73,
+        "low": 25.11,
+        "open": 25.38,
+        "pre_close": 25.38,
+        "symbol": "600265.SH",
+        "vol": 657.44
+      }
+    ],
+    "dates": [
+      "20191121",
+      "20191122",
+      "20191125",
+      "20191126",
+      "20191127",
+      "20191128",
+      "20191129",
+      "20191202",
+      "20191203"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "600265.SH"
+      }
+    ],
+    "states": [
+      {
+        "date": "20191121",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 23.52,
+        "limit_up": 26.0,
+        "suspended": false,
+        "symbol": "600265.SH"
+      },
+      {
+        "date": "20191122",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 23.4,
+        "limit_up": 25.86,
+        "suspended": false,
+        "symbol": "600265.SH"
+      },
+      {
+        "date": "20191125",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 23.44,
+        "limit_up": 25.9,
+        "suspended": false,
+        "symbol": "600265.SH"
+      },
+      {
+        "date": "20191126",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 23.47,
+        "limit_up": 25.94,
+        "suspended": false,
+        "symbol": "600265.SH"
+      },
+      {
+        "date": "20191127",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 23.56,
+        "limit_up": 26.04,
+        "suspended": false,
+        "symbol": "600265.SH"
+      },
+      {
+        "date": "20191128",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 23.6,
+        "limit_up": 26.08,
+        "suspended": false,
+        "symbol": "600265.SH"
+      },
+      {
+        "date": "20191129",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 23.61,
+        "limit_up": 26.09,
+        "suspended": false,
+        "symbol": "600265.SH"
+      },
+      {
+        "date": "20191202",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 23.66,
+        "limit_up": 26.15,
+        "suspended": false,
+        "symbol": "600265.SH"
+      },
+      {
+        "date": "20191203",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 24.11,
+        "limit_up": 26.65,
+        "suspended": false,
+        "symbol": "600265.SH"
+      }
+    ]
+  },
+  "data_hash": "sha256:a4f760b9415eb0da132501018e9b7e1e94872b696e990a851eac663cd62def72",
+  "description": "VPP 量上限不足一手：600265.SH 20191126 vol=151 × 5% = 7 股 < 100 → volume_cap 拒单（完全无法成交）",
+  "group": "G10",
+  "plan": {
+    "execution": {
+      "volume_participation": 0.05
+    },
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "orders": [
+      {
+        "date": "20191125",
+        "qty": 100000,
+        "side": "buy",
+        "symbol": "600265.SH"
+      }
+    ],
+    "targets": {}
+  },
+  "source": {
+    "anchor": "20191126",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "600265.SH",
+    "window": {
+      "after": 5,
+      "before": 3,
+      "dates": [
+        "20191121",
+        "20191122",
+        "20191125",
+        "20191126",
+        "20191127",
+        "20191128",
+        "20191129",
+        "20191202",
+        "20191203"
+      ]
+    }
+  }
+}

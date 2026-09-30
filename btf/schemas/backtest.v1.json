@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "btf/schemas/backtest.v1.json",
+  "title": "btf 回测配置（backtest.v1）",
+  "description": "04 §8.5 / 06 §11.5 配置契约。rules 段实施 H2：仅 source/path/rules_version/overrides，规则参数字面量一律拒绝；覆盖必须逐条 override: true 声明。",
+  "type": "object",
+  "required": ["schema_version", "run", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "backtest.v1" },
+    "run": {
+      "type": "object",
+      "required": ["strategy", "period"],
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "module:Class 动态加载（06 §11.5）"
+        },
+        "params": {
+          "type": "object",
+          "description": "策略构造参数（构造期注入；非规则源策略可含业务参数——H2 仅约束 rules 段）"
+        },
+        "universe": {
+          "type": "object",
+          "required": ["source"],
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "explicit（symbols 清单）/ all（全市场）/ index（指数成分 index_weight 月末快照机器复算，PIT；v0.5 V5-4）"
+            },
+            "as_of": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "include_delisted": { "type": "boolean", "default": true },
+            "symbols": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "description": "source=explicit 时的标的清单"
+            },
+            "index": {
+              "type": "string",
+              "minLength": 1,
+              "description": "source=index 时的指数（别名 hs300/zz500/sz50 或 index_code 如 000300.SH）"
+            }
+          }
+        },
+        "period": {
+          "type": "object",
+          "required": ["start", "end"],
+          "additionalProperties": false,
+          "properties": {
+            "start": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "end": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "anchor": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "description": "对齐日（T+1 与报告口径锚点；06 §11.5）"
+            }
+          }
+        },
+        "initial_cash": { "type": "number", "exclusiveMinimum": 0 },
+        "event_log": {
+          "type": ["string", "null"],
+          "description": "事件溯源 JSONL 路径（缺省 = 不落盘；RunStore 托管归 M2 任务 5.5）"
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "required": ["feed"],
+      "additionalProperties": false,
+      "properties": {
+        "feed": { "type": "string", "minLength": 1 },
+        "feed_params": {
+          "type": "object",
+          "description": "DataFeed 构造参数（registry 配置声明制；如 root）"
+        },
+        "dataset": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": { "type": "string" },
+            "rules": { "type": "string" }
+          }
+        },
+        "allow_degraded_limit": {
+          "type": "boolean",
+          "description": "允许回测区间早于 stk_limit 起点（涨跌停约束不可用）——默认 false 即装配期 ConfigError（19 号 P1-11 区间守卫）；true 时报告强制披露"
+        },
+        "fingerprint_mode": {
+          "type": "string",
+          "enum": ["meta", "fast", "full"],
+          "description": "数据指纹档位（BB-1 / 19 号 §39.4 + §40.1 实测修正）：meta=Parquet 元数据（行数/行组统计/大小+mtime），毫秒级——**缺省**；fast=键列内容抽样，大表 10 年 6 表 ≈7.2s；full=全列抽样，可检出数值级修订（重）。缺省 meta 使装配/落盘开销 ~0（原缺省 fast 曾令 B4 网格外推 664s→3647s）"
+        },
+        "quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "数据不变量校验（**批 8 / CC-1..CC-6**，19 号 §39.2 裁决六-1）：装配期对【运行宇宙 × 区间】做 OHLC 一致性/涨跌幅边界/日历一致/复权因子/量价互斥 五项校验；产物落 run 目录 data_quality_report.json，摘要经「假设与披露」章节（强制）随产物披露",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "是否在装配期校验（缺省 true）；false → 产物中记录「已由配置关闭」（披露而非静默）"
+            },
+            "strict": {
+              "type": "boolean",
+              "description": "true → 发现异常即装配期 DataQualityError（fail-closed）；缺省 false → 告警 + 记入产物（个别脏点不阻断整轮）"
+            },
+            "max_symbols": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "校验的标的数上限（缺省 200；0=不限）：宇宙超限时按字典序前缀决定性抽样，并在产物/报告中标注 sampled_symbols=true"
+            }
+          }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "handler": { "type": "string", "minLength": 1 },
+        "handler_params": {
+          "type": "object",
+          "description": "ExecutionHandler 构造参数（v0.5：volume_participation∈(0,1] VPP 撮合量上限；缺省 null=v0.2 全成或全拒语义）"
+        },
+        "cost_model": { "type": "string", "minLength": 1 },
+        "slippage": {
+          "type": "object",
+          "required": ["model"],
+          "additionalProperties": false,
+          "properties": {
+            "model": { "type": "string", "minLength": 1 },
+            "params": { "type": "object" }
+          }
+        },
+        "rebalancer": { "type": "string", "minLength": 1 },
+        "rebalancer_params": {
+          "type": "object",
+          "description": "Rebalancer 构造参数（v0.5：threshold rebalancer 的 threshold 偏离带）"
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "params": { "type": "object" }
+            }
+          }
+        },
+        "params": { "type": "object" },
+        "allow_empty_chain": {
+          "type": "boolean",
+          "description": "显式声明以空风控链运行（仅供调试）——缺省/为 false 时空链 → 装配期 ConfigError（19 号 P0-3 fail-closed）；true 时报告强制披露"
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "required": ["source"],
+      "additionalProperties": false,
+      "description": "H2 纪律：本段仅声明规则源与显式覆盖；出现任何规则参数字面量键 → 校验失败（additionalProperties: false）",
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "rules_version": { "type": "string" },
+        "overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["rule", "param", "value", "override"],
+            "additionalProperties": false,
+            "properties": {
+              "rule": { "type": "string", "minLength": 1 },
+              "param": { "type": "string", "minLength": 1 },
+              "value": {},
+              "override": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    "seed": {
+      "type": "object",
+      "required": ["master"],
+      "additionalProperties": false,
+      "properties": {
+        "master": { "type": "integer" }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sections": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "benchmark": {
+          "type": "string",
+          "pattern": "^[0-9]{6}\\.(SH|SZ|BJ)$",
+          "description": "基准指数代码（6 位数字.交易所）。P1-NEW-6：格式校验前移到 Schema；区间覆盖由装配期守卫探测（index_daily 零行即 ConfigError），不再跑完整段回测才报错"
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "risk_free_rate": { "type": "number" },
+        "annualization_factor": { "type": "integer", "minimum": 1 },
+        "metrics": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "指标名字表（19 号 EX-1）：缺省=内置全集；指定后经 registry ANALYZER 解析——自定义 Analyzer 注册后零源码改动生效"
+        }
+      },
+      "description": "指标口径（19 号 P1-7：runtime 原读取该段但 schema 缺失——永远无法经合法配置传入，Sharpe/超额跨区间不可比）"
+    }
+  }
+}

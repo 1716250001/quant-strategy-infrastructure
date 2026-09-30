@@ -1,0 +1,390 @@
+{
+  "assertions": {
+    "calendar": {
+      "dates": [
+        "20210205",
+        "20210208",
+        "20210209",
+        "20210210",
+        "20210218",
+        "20210219",
+        "20210222",
+        "20210223",
+        "20210224",
+        "20210225",
+        "20210226"
+      ],
+      "gaps": [
+        {
+          "calendar_days": 8,
+          "next": "20210218",
+          "prev": "20210210"
+        }
+      ],
+      "week_anchors": {
+        "20210205": [
+          "20210205"
+        ],
+        "20210212": [
+          "20210208",
+          "20210209",
+          "20210210"
+        ],
+        "20210219": [
+          "20210218",
+          "20210219"
+        ],
+        "20210226": [
+          "20210222",
+          "20210223",
+          "20210224",
+          "20210225",
+          "20210226"
+        ]
+      }
+    },
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 1000000.0,
+      "nav_last": {
+        "20210205": 1000000.0,
+        "20210208": 1000000.0,
+        "20210209": 1000000.0,
+        "20210210": 1000000.0,
+        "20210218": 1000000.0,
+        "20210219": 1000000.0,
+        "20210222": 1000000.0,
+        "20210223": 1000000.0,
+        "20210224": 1000000.0,
+        "20210225": 1000000.0,
+        "20210226": 1000000.0
+      },
+      "realized_pnl_total": 0.0,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": 0.0,
+      "annualized_volatility": 0.0,
+      "calmar_ratio": NaN,
+      "fee_ratio": 0.0,
+      "final_nav": 1000000.0,
+      "max_drawdown": 0.0,
+      "n_fills": 0.0,
+      "n_trading_days": 11.0,
+      "profit_loss_ratio": NaN,
+      "sharpe_ratio": NaN,
+      "total_fees": 0,
+      "total_return": 0.0,
+      "total_turnover": 0,
+      "turnover_annualized": 0.0,
+      "win_rate": 0.0
+    },
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210205",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210208",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210209",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210210",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210218",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210219",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210222",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210223",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210224",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210225",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210226",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      }
+    ]
+  },
+  "case_id": "g8_calendar_spring_festival",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 2517804.159,
+        "close": 24.93,
+        "date": "20210205",
+        "high": 25.31,
+        "low": 24.27,
+        "open": 24.6,
+        "pre_close": 24.6,
+        "symbol": "000001.SZ",
+        "vol": 1015575.59
+      },
+      {
+        "amount": 2650948.251,
+        "close": 24.8,
+        "date": "20210208",
+        "high": 24.9,
+        "low": 24.1,
+        "open": 24.9,
+        "pre_close": 24.93,
+        "symbol": "000001.SZ",
+        "vol": 1084264.67
+      },
+      {
+        "amount": 2302978.158,
+        "close": 24.58,
+        "date": "20210209",
+        "high": 24.84,
+        "low": 24.17,
+        "open": 24.79,
+        "pre_close": 24.8,
+        "symbol": "000001.SZ",
+        "vol": 942093.55
+      },
+      {
+        "amount": 4569741.959,
+        "close": 23.82,
+        "date": "20210210",
+        "high": 24.96,
+        "low": 23.38,
+        "open": 24.6,
+        "pre_close": 24.58,
+        "symbol": "000001.SZ",
+        "vol": 1918867.1
+      },
+      {
+        "amount": 3619387.651,
+        "close": 24.3,
+        "date": "20210218",
+        "high": 24.55,
+        "low": 23.48,
+        "open": 24.0,
+        "pre_close": 23.82,
+        "symbol": "000001.SZ",
+        "vol": 1505230.81
+      },
+      {
+        "amount": 2197558.286,
+        "close": 23.85,
+        "date": "20210219",
+        "high": 24.19,
+        "low": 23.57,
+        "open": 23.96,
+        "pre_close": 24.3,
+        "symbol": "000001.SZ",
+        "vol": 922583.14
+      },
+      {
+        "amount": 4445818.547,
+        "close": 22.38,
+        "date": "20210222",
+        "high": 23.8,
+        "low": 22.26,
+        "open": 23.8,
+        "pre_close": 23.85,
+        "symbol": "000001.SZ",
+        "vol": 1956842.48
+      },
+      {
+        "amount": 4160776.611,
+        "close": 21.93,
+        "date": "20210223",
+        "high": 22.68,
+        "low": 21.82,
+        "open": 22.38,
+        "pre_close": 22.38,
+        "symbol": "000001.SZ",
+        "vol": 1870460.13
+      },
+      {
+        "amount": 3144209.051,
+        "close": 22.16,
+        "date": "20210224",
+        "high": 22.28,
+        "low": 21.56,
+        "open": 22.27,
+        "pre_close": 21.93,
+        "symbol": "000001.SZ",
+        "vol": 1428499.85
+      },
+      {
+        "amount": 3524600.794,
+        "close": 22.09,
+        "date": "20210225",
+        "high": 22.56,
+        "low": 21.68,
+        "open": 22.4,
+        "pre_close": 22.16,
+        "symbol": "000001.SZ",
+        "vol": 1593403.47
+      },
+      {
+        "amount": 2424653.753,
+        "close": 21.38,
+        "date": "20210226",
+        "high": 21.96,
+        "low": 21.21,
+        "open": 21.6,
+        "pre_close": 22.09,
+        "symbol": "000001.SZ",
+        "vol": 1124977.3
+      }
+    ],
+    "dates": [
+      "20210205",
+      "20210208",
+      "20210209",
+      "20210210",
+      "20210218",
+      "20210219",
+      "20210222",
+      "20210223",
+      "20210224",
+      "20210225",
+      "20210226"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "000001.SZ"
+      }
+    ]
+  },
+  "data_hash": "sha256:45047be1d0e1a81368e44343459d4ccb9dbb32ecbacbc5c6632590c5344b5268",
+  "description": "日历边界（2021 春节）：最长缺口 ≥ 9 自然日 + 交易日 W-FRI 周锚归组",
+  "group": "G8",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "targets": {}
+  },
+  "source": {
+    "anchor": null,
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "000001.SZ",
+    "window": {
+      "dates": [
+        "20210205",
+        "20210208",
+        "20210209",
+        "20210210",
+        "20210218",
+        "20210219",
+        "20210222",
+        "20210223",
+        "20210224",
+        "20210225",
+        "20210226"
+      ],
+      "span": [
+        "20210205",
+        "20210226"
+      ]
+    }
+  }
+}

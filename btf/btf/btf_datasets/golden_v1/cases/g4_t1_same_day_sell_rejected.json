@@ -1,0 +1,530 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [
+      {
+        "date": "20200529",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 0.0,
+          "total": 5.26,
+          "transfer_fee": 0.26
+        },
+        "price": 13.01,
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000001.SZ"
+      }
+    ],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 986984.74,
+      "nav_last": {
+        "20200527": 1000000.0,
+        "20200528": 1000000.0,
+        "20200529": 999984.74,
+        "20200601": 1000304.74,
+        "20200602": 1000534.74,
+        "20200603": 1000524.74,
+        "20200604": 1000554.74,
+        "20200605": 1000574.74,
+        "20200608": 1000604.74
+      },
+      "realized_pnl_total": 0.0,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": 0.019226037371752547,
+      "annualized_volatility": 0.002008908385512803,
+      "calmar_ratio": 1259.8975997248467,
+      "fee_ratio": 5.258198669669516e-06,
+      "final_nav": 1000604.74,
+      "max_drawdown": -1.5259999999961416e-05,
+      "n_fills": 1.0,
+      "n_trading_days": 9.0,
+      "profit_loss_ratio": 9.97662804134358,
+      "sharpe_ratio": 9.480789375914544,
+      "total_fees": 5.26,
+      "total_return": 0.0006047399999999925,
+      "total_turnover": 13010.0,
+      "turnover_annualized": 0.40967465547730286,
+      "win_rate": 0.625
+    },
+    "rejected_counts": {
+      "t_plus_1": 1
+    },
+    "rejections": [
+      {
+        "code": "t_plus_1",
+        "date": "20200529",
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "000001.SZ"
+      }
+    ],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20200527",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20200528",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.01526
+        },
+        "cash": 986984.74,
+        "cumulative_return": -1.5259999999961416e-05,
+        "daily_return": -1.5259999999961416e-05,
+        "date": "20200529",
+        "drawdown": -1.5259999999961416e-05,
+        "market_value": 13000.0,
+        "positions_qty": {
+          "000001.SZ": 1000
+        },
+        "total_value": 999984.74
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.01526
+        },
+        "cash": 986984.74,
+        "cumulative_return": 0.00030474000000002555,
+        "daily_return": 0.00032000488327454946,
+        "date": "20200601",
+        "drawdown": 0.0,
+        "market_value": 13320.0,
+        "positions_qty": {
+          "000001.SZ": 1000
+        },
+        "total_value": 1000304.74
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.01526
+        },
+        "cash": 986984.74,
+        "cumulative_return": 0.000534739999999978,
+        "daily_return": 0.0002299299311527836,
+        "date": "20200602",
+        "drawdown": 0.0,
+        "market_value": 13550.0,
+        "positions_qty": {
+          "000001.SZ": 1000
+        },
+        "total_value": 1000534.74
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.01526
+        },
+        "cash": 986984.74,
+        "cumulative_return": 0.0005247399999999125,
+        "daily_return": -9.99465545792333e-06,
+        "date": "20200603",
+        "drawdown": -9.99465545792333e-06,
+        "market_value": 13540.0,
+        "positions_qty": {
+          "000001.SZ": 1000
+        },
+        "total_value": 1000524.74
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.01526
+        },
+        "cash": 986984.74,
+        "cumulative_return": 0.000554739999999887,
+        "daily_return": 2.9984266056271025e-05,
+        "date": "20200604",
+        "drawdown": 0.0,
+        "market_value": 13570.0,
+        "positions_qty": {
+          "000001.SZ": 1000
+        },
+        "total_value": 1000554.74
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.01526
+        },
+        "cash": 986984.74,
+        "cumulative_return": 0.000574740000000018,
+        "daily_return": 1.9988911351243033e-05,
+        "date": "20200605",
+        "drawdown": 0.0,
+        "market_value": 13590.0,
+        "positions_qty": {
+          "000001.SZ": 1000
+        },
+        "total_value": 1000574.74
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.01526
+        },
+        "cash": 986984.74,
+        "cumulative_return": 0.0006047399999999925,
+        "daily_return": 2.9982767704161972e-05,
+        "date": "20200608",
+        "drawdown": 0.0,
+        "market_value": 13620.0,
+        "positions_qty": {
+          "000001.SZ": 1000
+        },
+        "total_value": 1000604.74
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20200527": false,
+        "20200528": false,
+        "20200529": false,
+        "20200601": false,
+        "20200602": false,
+        "20200603": false,
+        "20200604": false,
+        "20200605": false,
+        "20200608": false
+      },
+      "is_st": {
+        "20200527": false,
+        "20200528": false,
+        "20200529": false,
+        "20200601": false,
+        "20200602": false,
+        "20200603": false,
+        "20200604": false,
+        "20200605": false,
+        "20200608": false
+      },
+      "limits": {
+        "20200527": [
+          14.34,
+          11.74
+        ],
+        "20200528": [
+          14.06,
+          11.5
+        ],
+        "20200529": [
+          14.38,
+          11.76
+        ],
+        "20200601": [
+          14.3,
+          11.7
+        ],
+        "20200602": [
+          14.65,
+          11.99
+        ],
+        "20200603": [
+          14.91,
+          12.2
+        ],
+        "20200604": [
+          14.89,
+          12.19
+        ],
+        "20200605": [
+          14.93,
+          12.21
+        ],
+        "20200608": [
+          14.95,
+          12.23
+        ]
+      },
+      "suspended": {
+        "20200527": false,
+        "20200528": false,
+        "20200529": false,
+        "20200601": false,
+        "20200602": false,
+        "20200603": false,
+        "20200604": false,
+        "20200605": false,
+        "20200608": false
+      },
+      "symbol": "000001.SZ"
+    }
+  },
+  "case_id": "g4_t1_same_day_sell_rejected",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [
+      {
+        "ann_date": "20200515",
+        "cash_div_per_share": 0.218,
+        "ex_date": "20200528",
+        "pay_date": "20200528",
+        "record_date": "20200527",
+        "stk_div_per_share": 0.0,
+        "symbol": "000001.SZ"
+      }
+    ],
+    "bars": [
+      {
+        "amount": 630305.864,
+        "close": 13.0,
+        "date": "20200527",
+        "high": 13.19,
+        "low": 12.96,
+        "open": 13.05,
+        "pre_close": 13.04,
+        "symbol": "000001.SZ",
+        "vol": 482962.94
+      },
+      {
+        "amount": 1255226.999,
+        "close": 13.07,
+        "date": "20200528",
+        "high": 13.18,
+        "low": 12.81,
+        "open": 12.87,
+        "pre_close": 12.78,
+        "symbol": "000001.SZ",
+        "vol": 960760.31
+      },
+      {
+        "amount": 594502.123,
+        "close": 13.0,
+        "date": "20200529",
+        "high": 13.04,
+        "low": 12.92,
+        "open": 13.01,
+        "pre_close": 13.07,
+        "symbol": "000001.SZ",
+        "vol": 457808.22
+      },
+      {
+        "amount": 1173619.006,
+        "close": 13.32,
+        "date": "20200601",
+        "high": 13.39,
+        "low": 13.08,
+        "open": 13.1,
+        "pre_close": 13.0,
+        "symbol": "000001.SZ",
+        "vol": 882960.55
+      },
+      {
+        "amount": 1194375.822,
+        "close": 13.55,
+        "date": "20200602",
+        "high": 13.63,
+        "low": 13.28,
+        "open": 13.29,
+        "pre_close": 13.32,
+        "symbol": "000001.SZ",
+        "vol": 883458.88
+      },
+      {
+        "amount": 1308782.294,
+        "close": 13.54,
+        "date": "20200603",
+        "high": 13.88,
+        "low": 13.5,
+        "open": 13.64,
+        "pre_close": 13.55,
+        "symbol": "000001.SZ",
+        "vol": 956803.08
+      },
+      {
+        "amount": 788707.63,
+        "close": 13.57,
+        "date": "20200604",
+        "high": 13.64,
+        "low": 13.41,
+        "open": 13.53,
+        "pre_close": 13.54,
+        "symbol": "000001.SZ",
+        "vol": 583066.33
+      },
+      {
+        "amount": 517232.135,
+        "close": 13.59,
+        "date": "20200605",
+        "high": 13.62,
+        "low": 13.43,
+        "open": 13.6,
+        "pre_close": 13.57,
+        "symbol": "000001.SZ",
+        "vol": 383026.9
+      },
+      {
+        "amount": 802115.792,
+        "close": 13.62,
+        "date": "20200608",
+        "high": 13.85,
+        "low": 13.58,
+        "open": 13.68,
+        "pre_close": 13.59,
+        "symbol": "000001.SZ",
+        "vol": 585971.9
+      }
+    ],
+    "dates": [
+      "20200527",
+      "20200528",
+      "20200529",
+      "20200601",
+      "20200602",
+      "20200603",
+      "20200604",
+      "20200605",
+      "20200608"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "000001.SZ"
+      }
+    ],
+    "states": [
+      {
+        "date": "20200527",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 11.74,
+        "limit_up": 14.34,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200528",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 11.5,
+        "limit_up": 14.06,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200529",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 11.76,
+        "limit_up": 14.38,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200601",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 11.7,
+        "limit_up": 14.3,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200602",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 11.99,
+        "limit_up": 14.65,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200603",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 12.2,
+        "limit_up": 14.91,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200604",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 12.19,
+        "limit_up": 14.89,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200605",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 12.21,
+        "limit_up": 14.93,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200608",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 12.23,
+        "limit_up": 14.95,
+        "suspended": false,
+        "symbol": "000001.SZ"
+      }
+    ]
+  },
+  "data_hash": "sha256:271c8f9c6f2994a1a0fc6b503737921260d60197f948136be79c012ba33bea4b",
+  "description": "T+1：同日决策买+卖（股票 t_plus=1）→ 买成交、卖 T_PLUS_1 拒单",
+  "group": "G4",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "orders": [
+      {
+        "date": "20200528",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200528",
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "000001.SZ"
+      }
+    ],
+    "targets": {}
+  },
+  "source": {
+    "anchor": "20200601",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "000001.SZ",
+    "window": {
+      "after": 5,
+      "before": 3,
+      "dates": [
+        "20200527",
+        "20200528",
+        "20200529",
+        "20200601",
+        "20200602",
+        "20200603",
+        "20200604",
+        "20200605",
+        "20200608"
+      ]
+    }
+  }
+}

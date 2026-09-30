@@ -1,0 +1,741 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 1000000.0,
+      "nav_last": {
+        "20190418": 1000000.0,
+        "20190419": 1000000.0,
+        "20190422": 1000000.0,
+        "20190423": 1000000.0,
+        "20190424": 1000000.0,
+        "20190426": 1000000.0,
+        "20190429": 1000000.0,
+        "20190430": 1000000.0,
+        "20190506": 1000000.0,
+        "20190507": 1000000.0,
+        "20190508": 1000000.0,
+        "20190509": 1000000.0,
+        "20190510": 1000000.0,
+        "20190513": 1000000.0,
+        "20190514": 1000000.0,
+        "20190515": 1000000.0
+      },
+      "realized_pnl_total": 0.0,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": 0.0,
+      "annualized_volatility": 0.0,
+      "calmar_ratio": NaN,
+      "fee_ratio": 0.0,
+      "final_nav": 1000000.0,
+      "max_drawdown": 0.0,
+      "n_fills": 0.0,
+      "n_trading_days": 16.0,
+      "profit_loss_ratio": NaN,
+      "sharpe_ratio": NaN,
+      "total_fees": 0,
+      "total_return": 0.0,
+      "total_turnover": 0,
+      "turnover_annualized": 0.0,
+      "win_rate": 0.0
+    },
+    "rejected_counts": {},
+    "rejections": [],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190418",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190419",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190422",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190423",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190424",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190426",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190429",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190430",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190506",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190507",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190508",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190509",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190510",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190513",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190514",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190515",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20190418": false,
+        "20190419": false,
+        "20190422": false,
+        "20190423": false,
+        "20190424": false,
+        "20190426": false,
+        "20190429": false,
+        "20190430": false,
+        "20190506": false,
+        "20190507": false,
+        "20190508": false,
+        "20190509": false,
+        "20190510": false,
+        "20190513": false,
+        "20190514": false,
+        "20190515": false
+      },
+      "is_st": {
+        "20190418": false,
+        "20190419": false,
+        "20190422": false,
+        "20190423": false,
+        "20190424": false,
+        "20190426": true,
+        "20190429": true,
+        "20190430": true,
+        "20190506": true,
+        "20190507": true,
+        "20190508": true,
+        "20190509": true,
+        "20190510": true,
+        "20190513": true,
+        "20190514": true,
+        "20190515": true
+      },
+      "limits": {
+        "20190418": [
+          4.14,
+          3.38
+        ],
+        "20190419": [
+          4.05,
+          3.31
+        ],
+        "20190422": [
+          4.06,
+          3.32
+        ],
+        "20190423": [
+          4.11,
+          3.37
+        ],
+        "20190424": [
+          3.93,
+          3.21
+        ],
+        "20190426": [
+          3.79,
+          3.43
+        ],
+        "20190429": [
+          3.6,
+          3.26
+        ],
+        "20190430": [
+          3.42,
+          3.1
+        ],
+        "20190506": [
+          3.59,
+          3.25
+        ],
+        "20190507": [
+          3.41,
+          3.09
+        ],
+        "20190508": [
+          3.38,
+          3.06
+        ],
+        "20190509": [
+          3.32,
+          3.0
+        ],
+        "20190510": [
+          3.37,
+          3.05
+        ],
+        "20190513": [
+          3.4,
+          3.08
+        ],
+        "20190514": [
+          3.27,
+          2.95
+        ],
+        "20190515": [
+          3.1,
+          2.8
+        ]
+      },
+      "suspended": {
+        "20190418": false,
+        "20190419": false,
+        "20190422": false,
+        "20190423": false,
+        "20190424": false,
+        "20190426": true,
+        "20190429": false,
+        "20190430": false,
+        "20190506": false,
+        "20190507": false,
+        "20190508": false,
+        "20190509": false,
+        "20190510": false,
+        "20190513": false,
+        "20190514": false,
+        "20190515": false
+      },
+      "symbol": "000010.SZ"
+    }
+  },
+  "case_id": "g5_st_interval",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 22985.255,
+        "close": 3.68,
+        "date": "20190418",
+        "high": 3.76,
+        "low": 3.67,
+        "open": 3.74,
+        "pre_close": 3.76,
+        "symbol": "000010.SZ",
+        "vol": 61930.22
+      },
+      {
+        "amount": 20521.762,
+        "close": 3.69,
+        "date": "20190419",
+        "high": 3.71,
+        "low": 3.63,
+        "open": 3.69,
+        "pre_close": 3.68,
+        "symbol": "000010.SZ",
+        "vol": 55936.53
+      },
+      {
+        "amount": 28922.492,
+        "close": 3.74,
+        "date": "20190422",
+        "high": 3.81,
+        "low": 3.69,
+        "open": 3.74,
+        "pre_close": 3.69,
+        "symbol": "000010.SZ",
+        "vol": 77041.83
+      },
+      {
+        "amount": 27262.841,
+        "close": 3.57,
+        "date": "20190423",
+        "high": 3.67,
+        "low": 3.57,
+        "open": 3.67,
+        "pre_close": 3.74,
+        "symbol": "000010.SZ",
+        "vol": 75351.15
+      },
+      {
+        "amount": 16806.477,
+        "close": 3.61,
+        "date": "20190424",
+        "high": 3.63,
+        "low": 3.52,
+        "open": 3.61,
+        "pre_close": 3.57,
+        "symbol": "000010.SZ",
+        "vol": 46737.34
+      },
+      {
+        "amount": 2696.666,
+        "close": 3.43,
+        "date": "20190426",
+        "high": 3.43,
+        "low": 3.43,
+        "open": 3.43,
+        "pre_close": 3.61,
+        "symbol": "000010.SZ",
+        "vol": 7862.0
+      },
+      {
+        "amount": 4023.166,
+        "close": 3.26,
+        "date": "20190429",
+        "high": 3.26,
+        "low": 3.26,
+        "open": 3.26,
+        "pre_close": 3.43,
+        "symbol": "000010.SZ",
+        "vol": 12341.0
+      },
+      {
+        "amount": 92050.426,
+        "close": 3.42,
+        "date": "20190430",
+        "high": 3.42,
+        "low": 3.1,
+        "open": 3.1,
+        "pre_close": 3.26,
+        "symbol": "000010.SZ",
+        "vol": 287968.15
+      },
+      {
+        "amount": 33074.96,
+        "close": 3.25,
+        "date": "20190506",
+        "high": 3.49,
+        "low": 3.25,
+        "open": 3.25,
+        "pre_close": 3.42,
+        "symbol": "000010.SZ",
+        "vol": 100001.41
+      },
+      {
+        "amount": 11665.848,
+        "close": 3.22,
+        "date": "20190507",
+        "high": 3.28,
+        "low": 3.13,
+        "open": 3.13,
+        "pre_close": 3.25,
+        "symbol": "000010.SZ",
+        "vol": 36233.41
+      },
+      {
+        "amount": 8810.032,
+        "close": 3.16,
+        "date": "20190508",
+        "high": 3.25,
+        "low": 3.15,
+        "open": 3.15,
+        "pre_close": 3.22,
+        "symbol": "000010.SZ",
+        "vol": 27530.21
+      },
+      {
+        "amount": 12915.296,
+        "close": 3.21,
+        "date": "20190509",
+        "high": 3.32,
+        "low": 3.18,
+        "open": 3.18,
+        "pre_close": 3.16,
+        "symbol": "000010.SZ",
+        "vol": 39725.47
+      },
+      {
+        "amount": 11214.187,
+        "close": 3.24,
+        "date": "20190510",
+        "high": 3.26,
+        "low": 3.17,
+        "open": 3.21,
+        "pre_close": 3.21,
+        "symbol": "000010.SZ",
+        "vol": 34702.81
+      },
+      {
+        "amount": 18898.561,
+        "close": 3.11,
+        "date": "20190513",
+        "high": 3.23,
+        "low": 3.08,
+        "open": 3.21,
+        "pre_close": 3.24,
+        "symbol": "000010.SZ",
+        "vol": 60714.1
+      },
+      {
+        "amount": 15000.834,
+        "close": 2.95,
+        "date": "20190514",
+        "high": 3.09,
+        "low": 2.95,
+        "open": 3.08,
+        "pre_close": 3.11,
+        "symbol": "000010.SZ",
+        "vol": 49852.01
+      },
+      {
+        "amount": 18869.33,
+        "close": 2.92,
+        "date": "20190515",
+        "high": 3.0,
+        "low": 2.81,
+        "open": 2.96,
+        "pre_close": 2.95,
+        "symbol": "000010.SZ",
+        "vol": 65211.3
+      }
+    ],
+    "dates": [
+      "20190418",
+      "20190419",
+      "20190422",
+      "20190423",
+      "20190424",
+      "20190426",
+      "20190429",
+      "20190430",
+      "20190506",
+      "20190507",
+      "20190508",
+      "20190509",
+      "20190510",
+      "20190513",
+      "20190514",
+      "20190515"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "000010.SZ"
+      }
+    ],
+    "states": [
+      {
+        "date": "20190418",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 3.38,
+        "limit_up": 4.14,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190419",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 3.31,
+        "limit_up": 4.05,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190422",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 3.32,
+        "limit_up": 4.06,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190423",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 3.37,
+        "limit_up": 4.11,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190424",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 3.21,
+        "limit_up": 3.93,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190426",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.43,
+        "limit_up": 3.79,
+        "suspended": true,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190429",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.26,
+        "limit_up": 3.6,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190430",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.1,
+        "limit_up": 3.42,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190506",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.25,
+        "limit_up": 3.59,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190507",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.09,
+        "limit_up": 3.41,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190508",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.06,
+        "limit_up": 3.38,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190509",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.0,
+        "limit_up": 3.32,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190510",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.05,
+        "limit_up": 3.37,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190513",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 3.08,
+        "limit_up": 3.4,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190514",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 2.95,
+        "limit_up": 3.27,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      },
+      {
+        "date": "20190515",
+        "delisted": false,
+        "is_st": true,
+        "limit_down": 2.8,
+        "limit_up": 3.1,
+        "suspended": false,
+        "symbol": "000010.SZ"
+      }
+    ]
+  },
+  "data_hash": "sha256:a00f5b4f5fd01f590b8ad31fe7de5738119e56b26d75cae21aa0c2da162f97be",
+  "description": "ST 状态区间（namechange）：状态面板 is_st 逐日期望（锚点构建期扫描）",
+  "group": "G5",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "targets": {}
+  },
+  "source": {
+    "anchor": "20190426",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "000010.SZ",
+    "window": {
+      "after": 10,
+      "before": 5,
+      "dates": [
+        "20190418",
+        "20190419",
+        "20190422",
+        "20190423",
+        "20190424",
+        "20190426",
+        "20190429",
+        "20190430",
+        "20190506",
+        "20190507",
+        "20190508",
+        "20190509",
+        "20190510",
+        "20190513",
+        "20190514",
+        "20190515"
+      ]
+    }
+  }
+}

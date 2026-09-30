@@ -1,0 +1,30 @@
+# -*- coding: utf-8 -*-
+# 示例配置：月度动量轮动（examples/rotation.py）——M2 5.10 DXP 验收。
+#
+# 运行：
+#   bt config-check examples/config_rotation.yaml
+#   bt run --config examples/config_rotation.yaml
+#   bt report --run <run_id>
+#   bt verify --run <run_id>
+schema_version: "backtest.v1"
+run:
+  strategy: "examples.rotation:MonthlyMomentumRotation"
+  params: {top_k: 5, lookback: 20}
+  universe:
+    source: "explicit"
+    as_of: "2020-01-01"
+    symbols: ["000001.SZ", "000002.SZ", "600000.SH", "600036.SH",
+              "601318.SH", "000651.SZ", "600519.SH", "000858.SZ",
+              "601899.SH", "600276.SH"]
+  period: {start: "2020-01-01", end: "2022-12-31"}
+  initial_cash: 1000000
+data:
+  feed: "tushare_parquet"
+execution:
+  handler: "next_open"
+  cost_model: "tiered_v1"
+  slippage: {model: "none", params: {}}
+risk:
+  rules: [{name: "max_weight", params: {max_weight: 0.4}},
+          {name: "cash_check"}, {name: "tradability"}]
+seed: {master: 20260926}

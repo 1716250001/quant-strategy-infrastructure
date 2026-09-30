@@ -1,0 +1,1932 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [
+      {
+        "date": "20180312",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 0.0,
+          "total": 5.17,
+          "transfer_fee": 0.17
+        },
+        "price": 8.61,
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000006.SZ"
+      }
+    ],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 991384.83,
+      "nav_last": {
+        "20171225": 1000000.0,
+        "20171226": 1000000.0,
+        "20171227": 1000000.0,
+        "20171228": 1000000.0,
+        "20171229": 1000000.0,
+        "20180102": 1000000.0,
+        "20180103": 1000000.0,
+        "20180104": 1000000.0,
+        "20180105": 1000000.0,
+        "20180108": 1000000.0,
+        "20180109": 1000000.0,
+        "20180110": 1000000.0,
+        "20180111": 1000000.0,
+        "20180112": 1000000.0,
+        "20180115": 1000000.0,
+        "20180116": 1000000.0,
+        "20180117": 1000000.0,
+        "20180118": 1000000.0,
+        "20180119": 1000000.0,
+        "20180122": 1000000.0,
+        "20180123": 1000000.0,
+        "20180124": 1000000.0,
+        "20180125": 1000000.0,
+        "20180126": 1000000.0,
+        "20180129": 1000000.0,
+        "20180130": 1000000.0,
+        "20180131": 1000000.0,
+        "20180201": 1000000.0,
+        "20180202": 1000000.0,
+        "20180205": 1000000.0,
+        "20180206": 1000000.0,
+        "20180207": 1000000.0,
+        "20180208": 1000000.0,
+        "20180209": 1000000.0,
+        "20180212": 1000000.0,
+        "20180213": 1000000.0,
+        "20180214": 1000000.0,
+        "20180222": 1000000.0,
+        "20180223": 1000000.0,
+        "20180226": 1000000.0,
+        "20180227": 1000000.0,
+        "20180228": 1000000.0,
+        "20180301": 1000000.0,
+        "20180302": 1000000.0,
+        "20180305": 1000000.0,
+        "20180306": 1000000.0,
+        "20180307": 1000000.0,
+        "20180308": 1000000.0,
+        "20180309": 1000000.0,
+        "20180312": 1000034.83,
+        "20180313": 1000084.83,
+        "20180314": 999674.83,
+        "20180315": 999334.83,
+        "20180316": 999324.83,
+        "20180319": 999294.83,
+        "20180320": 999264.83
+      },
+      "realized_pnl_total": 0.0,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": -0.003363983146059679,
+      "annualized_volatility": 0.0011421397141715436,
+      "calmar_ratio": -4.102766478963109,
+      "fee_ratio": 5.170275704028654e-06,
+      "final_nav": 999264.83,
+      "max_drawdown": -0.0008199304453003764,
+      "n_fills": 1.0,
+      "n_trading_days": 56.0,
+      "profit_loss_ratio": 0.258583664572943,
+      "sharpe_ratio": -2.949718803376683,
+      "total_fees": 5.17,
+      "total_return": -0.0007351700000000072,
+      "total_turnover": 8610.0,
+      "turnover_annualized": 0.03945155829275558,
+      "win_rate": 0.03636363636363636
+    },
+    "rejected_counts": {
+      "suspended": 1
+    },
+    "rejections": [
+      {
+        "code": "suspended",
+        "date": "20180104",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000006.SZ"
+      }
+    ],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20171225",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20171226",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20171227",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20171228",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20171229",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180102",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180103",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180104",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180105",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180108",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180109",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180110",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180111",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180112",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180115",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180116",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180117",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180118",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180119",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180122",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180123",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180124",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180125",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180126",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180129",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180130",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180131",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180201",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180202",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180205",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180206",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180207",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180208",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180209",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180212",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180213",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180214",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180222",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180223",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180226",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180227",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180228",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180301",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180302",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180305",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180306",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180307",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180308",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20180309",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {
+          "000006.SZ": 8.61517
+        },
+        "cash": 991384.83,
+        "cumulative_return": 3.4829999999930195e-05,
+        "daily_return": 3.4829999999930195e-05,
+        "date": "20180312",
+        "drawdown": 0.0,
+        "market_value": 8650.0,
+        "positions_qty": {
+          "000006.SZ": 1000
+        },
+        "total_value": 1000034.83
+      },
+      {
+        "avg_cost": {
+          "000006.SZ": 8.61517
+        },
+        "cash": 991384.83,
+        "cumulative_return": 8.483000000003571e-05,
+        "daily_return": 4.999825856066842e-05,
+        "date": "20180313",
+        "drawdown": 0.0,
+        "market_value": 8700.0,
+        "positions_qty": {
+          "000006.SZ": 1000
+        },
+        "total_value": 1000084.83
+      },
+      {
+        "avg_cost": {
+          "000006.SZ": 8.61517
+        },
+        "cash": 991384.83,
+        "cumulative_return": -0.00032517000000009677,
+        "daily_return": -0.0004099652226501327,
+        "date": "20180314",
+        "drawdown": -0.0004099652226501327,
+        "market_value": 8290.0,
+        "positions_qty": {
+          "000006.SZ": 1000
+        },
+        "total_value": 999674.83
+      },
+      {
+        "avg_cost": {
+          "000006.SZ": 8.61517
+        },
+        "cash": 991384.83,
+        "cumulative_return": -0.0006651699999999927,
+        "daily_return": -0.00034011059376182207,
+        "date": "20180315",
+        "drawdown": -0.0007499363828966654,
+        "market_value": 7950.0,
+        "positions_qty": {
+          "000006.SZ": 1000
+        },
+        "total_value": 999334.83
+      },
+      {
+        "avg_cost": {
+          "000006.SZ": 8.61517
+        },
+        "cash": 991384.83,
+        "cumulative_return": -0.0006751700000000582,
+        "daily_return": -1.000665612749252e-05,
+        "date": "20180316",
+        "drawdown": -0.0007599355346685766,
+        "market_value": 7940.0,
+        "positions_qty": {
+          "000006.SZ": 1000
+        },
+        "total_value": 999324.83
+      },
+      {
+        "avg_cost": {
+          "000006.SZ": 8.61517
+        },
+        "cash": 991384.83,
+        "cumulative_return": -0.0007051700000000327,
+        "daily_return": -3.0020268784847204e-05,
+        "date": "20180319",
+        "drawdown": -0.000789932989984421,
+        "market_value": 7910.0,
+        "positions_qty": {
+          "000006.SZ": 1000
+        },
+        "total_value": 999294.83
+      },
+      {
+        "avg_cost": {
+          "000006.SZ": 8.61517
+        },
+        "cash": 991384.83,
+        "cumulative_return": -0.0007351700000000072,
+        "daily_return": -3.002117002848248e-05,
+        "date": "20180320",
+        "drawdown": -0.0008199304453003764,
+        "market_value": 7880.0,
+        "positions_qty": {
+          "000006.SZ": 1000
+        },
+        "total_value": 999264.83
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20171225": false,
+        "20171226": false,
+        "20171227": false,
+        "20171228": false,
+        "20171229": false,
+        "20180102": false,
+        "20180103": false,
+        "20180104": false,
+        "20180105": false,
+        "20180108": false,
+        "20180109": false,
+        "20180110": false,
+        "20180111": false,
+        "20180112": false,
+        "20180115": false,
+        "20180116": false,
+        "20180117": false,
+        "20180118": false,
+        "20180119": false,
+        "20180122": false,
+        "20180123": false,
+        "20180124": false,
+        "20180125": false,
+        "20180126": false,
+        "20180129": false,
+        "20180130": false,
+        "20180131": false,
+        "20180201": false,
+        "20180202": false,
+        "20180205": false,
+        "20180206": false,
+        "20180207": false,
+        "20180208": false,
+        "20180209": false,
+        "20180212": false,
+        "20180213": false,
+        "20180214": false,
+        "20180222": false,
+        "20180223": false,
+        "20180226": false,
+        "20180227": false,
+        "20180228": false,
+        "20180301": false,
+        "20180302": false,
+        "20180305": false,
+        "20180306": false,
+        "20180307": false,
+        "20180308": false,
+        "20180309": false,
+        "20180312": false,
+        "20180313": false,
+        "20180314": false,
+        "20180315": false,
+        "20180316": false,
+        "20180319": false,
+        "20180320": false
+      },
+      "is_st": {
+        "20171225": false,
+        "20171226": false,
+        "20171227": false,
+        "20171228": false,
+        "20171229": false,
+        "20180102": false,
+        "20180103": false,
+        "20180104": false,
+        "20180105": false,
+        "20180108": false,
+        "20180109": false,
+        "20180110": false,
+        "20180111": false,
+        "20180112": false,
+        "20180115": false,
+        "20180116": false,
+        "20180117": false,
+        "20180118": false,
+        "20180119": false,
+        "20180122": false,
+        "20180123": false,
+        "20180124": false,
+        "20180125": false,
+        "20180126": false,
+        "20180129": false,
+        "20180130": false,
+        "20180131": false,
+        "20180201": false,
+        "20180202": false,
+        "20180205": false,
+        "20180206": false,
+        "20180207": false,
+        "20180208": false,
+        "20180209": false,
+        "20180212": false,
+        "20180213": false,
+        "20180214": false,
+        "20180222": false,
+        "20180223": false,
+        "20180226": false,
+        "20180227": false,
+        "20180228": false,
+        "20180301": false,
+        "20180302": false,
+        "20180305": false,
+        "20180306": false,
+        "20180307": false,
+        "20180308": false,
+        "20180309": false,
+        "20180312": false,
+        "20180313": false,
+        "20180314": false,
+        "20180315": false,
+        "20180316": false,
+        "20180319": false,
+        "20180320": false
+      },
+      "limits": {
+        "20171225": [
+          10.84,
+          8.87
+        ],
+        "20171226": [
+          10.84,
+          8.87
+        ],
+        "20171227": [
+          10.84,
+          8.87
+        ],
+        "20171228": [
+          10.84,
+          8.87
+        ],
+        "20171229": [
+          10.84,
+          8.87
+        ],
+        "20180102": [
+          10.84,
+          8.87
+        ],
+        "20180103": [
+          10.84,
+          8.87
+        ],
+        "20180104": [
+          10.84,
+          8.87
+        ],
+        "20180105": [
+          10.84,
+          8.87
+        ],
+        "20180108": [
+          10.84,
+          8.87
+        ],
+        "20180109": [
+          10.84,
+          8.87
+        ],
+        "20180110": [
+          10.84,
+          8.87
+        ],
+        "20180111": [
+          10.84,
+          8.87
+        ],
+        "20180112": [
+          10.84,
+          8.87
+        ],
+        "20180115": [
+          10.84,
+          8.87
+        ],
+        "20180116": [
+          10.84,
+          8.87
+        ],
+        "20180117": [
+          10.84,
+          8.87
+        ],
+        "20180118": [
+          10.84,
+          8.87
+        ],
+        "20180119": [
+          10.84,
+          8.87
+        ],
+        "20180122": [
+          10.84,
+          8.87
+        ],
+        "20180123": [
+          10.84,
+          8.87
+        ],
+        "20180124": [
+          10.84,
+          8.87
+        ],
+        "20180125": [
+          10.84,
+          8.87
+        ],
+        "20180126": [
+          10.84,
+          8.87
+        ],
+        "20180129": [
+          10.84,
+          8.87
+        ],
+        "20180130": [
+          10.84,
+          8.87
+        ],
+        "20180131": [
+          10.84,
+          8.87
+        ],
+        "20180201": [
+          10.84,
+          8.87
+        ],
+        "20180202": [
+          10.84,
+          8.87
+        ],
+        "20180205": [
+          10.84,
+          8.87
+        ],
+        "20180206": [
+          10.84,
+          8.87
+        ],
+        "20180207": [
+          10.84,
+          8.87
+        ],
+        "20180208": [
+          10.84,
+          8.87
+        ],
+        "20180209": [
+          10.84,
+          8.87
+        ],
+        "20180212": [
+          10.84,
+          8.87
+        ],
+        "20180213": [
+          10.84,
+          8.87
+        ],
+        "20180214": [
+          10.84,
+          8.87
+        ],
+        "20180222": [
+          10.84,
+          8.87
+        ],
+        "20180223": [
+          10.84,
+          8.87
+        ],
+        "20180226": [
+          10.84,
+          8.87
+        ],
+        "20180227": [
+          10.84,
+          8.87
+        ],
+        "20180228": [
+          10.84,
+          8.87
+        ],
+        "20180301": [
+          10.84,
+          8.87
+        ],
+        "20180302": [
+          10.84,
+          8.87
+        ],
+        "20180305": [
+          10.84,
+          8.87
+        ],
+        "20180306": [
+          10.84,
+          8.87
+        ],
+        "20180307": [
+          10.84,
+          8.87
+        ],
+        "20180308": [
+          10.84,
+          8.87
+        ],
+        "20180309": [
+          9.76,
+          7.98
+        ],
+        "20180312": [
+          9.68,
+          7.92
+        ],
+        "20180313": [
+          9.52,
+          7.79
+        ],
+        "20180314": [
+          9.57,
+          7.83
+        ],
+        "20180315": [
+          9.12,
+          7.46
+        ],
+        "20180316": [
+          8.75,
+          7.16
+        ],
+        "20180319": [
+          8.73,
+          7.15
+        ],
+        "20180320": [
+          8.7,
+          7.12
+        ]
+      },
+      "suspended": {
+        "20171225": true,
+        "20171226": true,
+        "20171227": true,
+        "20171228": true,
+        "20171229": true,
+        "20180102": true,
+        "20180103": true,
+        "20180104": true,
+        "20180105": true,
+        "20180108": true,
+        "20180109": true,
+        "20180110": true,
+        "20180111": true,
+        "20180112": true,
+        "20180115": true,
+        "20180116": true,
+        "20180117": true,
+        "20180118": true,
+        "20180119": true,
+        "20180122": true,
+        "20180123": true,
+        "20180124": true,
+        "20180125": true,
+        "20180126": true,
+        "20180129": true,
+        "20180130": true,
+        "20180131": true,
+        "20180201": true,
+        "20180202": true,
+        "20180205": true,
+        "20180206": true,
+        "20180207": true,
+        "20180208": true,
+        "20180209": true,
+        "20180212": true,
+        "20180213": true,
+        "20180214": true,
+        "20180222": true,
+        "20180223": true,
+        "20180226": true,
+        "20180227": true,
+        "20180228": true,
+        "20180301": true,
+        "20180302": true,
+        "20180305": true,
+        "20180306": true,
+        "20180307": true,
+        "20180308": true,
+        "20180309": false,
+        "20180312": false,
+        "20180313": false,
+        "20180314": false,
+        "20180315": false,
+        "20180316": false,
+        "20180319": false,
+        "20180320": false
+      },
+      "symbol": "000006.SZ"
+    }
+  },
+  "case_id": "g3_suspension_buy_rejected",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 51672.185,
+        "close": 8.87,
+        "date": "20180308",
+        "high": 8.87,
+        "low": 8.87,
+        "open": 8.87,
+        "pre_close": 9.85,
+        "symbol": "000006.SZ",
+        "vol": 58255.0
+      },
+      {
+        "amount": 971167.257,
+        "close": 8.8,
+        "date": "20180309",
+        "high": 9.23,
+        "low": 8.44,
+        "open": 8.61,
+        "pre_close": 8.87,
+        "symbol": "000006.SZ",
+        "vol": 1119431.92
+      },
+      {
+        "amount": 635967.707,
+        "close": 8.65,
+        "date": "20180312",
+        "high": 8.79,
+        "low": 8.49,
+        "open": 8.61,
+        "pre_close": 8.8,
+        "symbol": "000006.SZ",
+        "vol": 738316.89
+      },
+      {
+        "amount": 530832.951,
+        "close": 8.7,
+        "date": "20180313",
+        "high": 8.88,
+        "low": 8.6,
+        "open": 8.65,
+        "pre_close": 8.65,
+        "symbol": "000006.SZ",
+        "vol": 607777.85
+      },
+      {
+        "amount": 502396.942,
+        "close": 8.29,
+        "date": "20180314",
+        "high": 8.65,
+        "low": 8.28,
+        "open": 8.55,
+        "pre_close": 8.7,
+        "symbol": "000006.SZ",
+        "vol": 596514.45
+      },
+      {
+        "amount": 516756.471,
+        "close": 7.95,
+        "date": "20180315",
+        "high": 8.21,
+        "low": 7.91,
+        "open": 8.2,
+        "pre_close": 8.29,
+        "symbol": "000006.SZ",
+        "vol": 643137.8
+      },
+      {
+        "amount": 205277.2,
+        "close": 7.94,
+        "date": "20180316",
+        "high": 8.04,
+        "low": 7.91,
+        "open": 7.95,
+        "pre_close": 7.95,
+        "symbol": "000006.SZ",
+        "vol": 257279.86
+      },
+      {
+        "amount": 200108.519,
+        "close": 7.91,
+        "date": "20180319",
+        "high": 7.94,
+        "low": 7.75,
+        "open": 7.91,
+        "pre_close": 7.94,
+        "symbol": "000006.SZ",
+        "vol": 255518.78
+      },
+      {
+        "amount": 194152.923,
+        "close": 7.88,
+        "date": "20180320",
+        "high": 7.96,
+        "low": 7.75,
+        "open": 7.82,
+        "pre_close": 7.91,
+        "symbol": "000006.SZ",
+        "vol": 247524.01
+      }
+    ],
+    "dates": [
+      "20171225",
+      "20171226",
+      "20171227",
+      "20171228",
+      "20171229",
+      "20180102",
+      "20180103",
+      "20180104",
+      "20180105",
+      "20180108",
+      "20180109",
+      "20180110",
+      "20180111",
+      "20180112",
+      "20180115",
+      "20180116",
+      "20180117",
+      "20180118",
+      "20180119",
+      "20180122",
+      "20180123",
+      "20180124",
+      "20180125",
+      "20180126",
+      "20180129",
+      "20180130",
+      "20180131",
+      "20180201",
+      "20180202",
+      "20180205",
+      "20180206",
+      "20180207",
+      "20180208",
+      "20180209",
+      "20180212",
+      "20180213",
+      "20180214",
+      "20180222",
+      "20180223",
+      "20180226",
+      "20180227",
+      "20180228",
+      "20180301",
+      "20180302",
+      "20180305",
+      "20180306",
+      "20180307",
+      "20180308",
+      "20180309",
+      "20180312",
+      "20180313",
+      "20180314",
+      "20180315",
+      "20180316",
+      "20180319",
+      "20180320"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "000006.SZ"
+      }
+    ],
+    "states": [
+      {
+        "date": "20171225",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20171226",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20171227",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20171228",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20171229",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180102",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180103",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180104",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180105",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180108",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180109",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180110",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180111",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180112",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180115",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180116",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180117",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180118",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180119",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180122",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180123",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180124",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180125",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180126",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180129",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180130",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180131",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180201",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180202",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180205",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180206",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180207",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180208",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180209",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180212",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180213",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180214",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180222",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180223",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180226",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180227",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180228",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180301",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180302",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180305",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180306",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180307",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180308",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.87,
+        "limit_up": 10.84,
+        "suspended": true,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180309",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 7.98,
+        "limit_up": 9.76,
+        "suspended": false,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180312",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 7.92,
+        "limit_up": 9.68,
+        "suspended": false,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180313",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 7.79,
+        "limit_up": 9.52,
+        "suspended": false,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180314",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 7.83,
+        "limit_up": 9.57,
+        "suspended": false,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180315",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 7.46,
+        "limit_up": 9.12,
+        "suspended": false,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180316",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 7.16,
+        "limit_up": 8.75,
+        "suspended": false,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180319",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 7.15,
+        "limit_up": 8.73,
+        "suspended": false,
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180320",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 7.12,
+        "limit_up": 8.7,
+        "suspended": false,
+        "symbol": "000006.SZ"
+      }
+    ]
+  },
+  "data_hash": "sha256:a31473bc8fe2003232e94dfca22279bcdbaf7f356fcb8e717c449056b5543d92",
+  "description": "长期停牌：000006.SZ 20180102–20180308 无行情 → 停牌期内买入拒单；复牌后可成交",
+  "group": "G3",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "orders": [
+      {
+        "date": "20180103",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000006.SZ"
+      },
+      {
+        "date": "20180309",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000006.SZ"
+      }
+    ],
+    "targets": {}
+  },
+  "source": {
+    "anchor": null,
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "000006.SZ",
+    "window": {
+      "dates": [
+        "20171225",
+        "20171226",
+        "20171227",
+        "20171228",
+        "20171229",
+        "20180102",
+        "20180103",
+        "20180104",
+        "20180105",
+        "20180108",
+        "20180109",
+        "20180110",
+        "20180111",
+        "20180112",
+        "20180115",
+        "20180116",
+        "20180117",
+        "20180118",
+        "20180119",
+        "20180122",
+        "20180123",
+        "20180124",
+        "20180125",
+        "20180126",
+        "20180129",
+        "20180130",
+        "20180131",
+        "20180201",
+        "20180202",
+        "20180205",
+        "20180206",
+        "20180207",
+        "20180208",
+        "20180209",
+        "20180212",
+        "20180213",
+        "20180214",
+        "20180222",
+        "20180223",
+        "20180226",
+        "20180227",
+        "20180228",
+        "20180301",
+        "20180302",
+        "20180305",
+        "20180306",
+        "20180307",
+        "20180308",
+        "20180309",
+        "20180312",
+        "20180313",
+        "20180314",
+        "20180315",
+        "20180316",
+        "20180319",
+        "20180320"
+      ],
+      "span": [
+        "20171225",
+        "20180320"
+      ]
+    }
+  }
+}

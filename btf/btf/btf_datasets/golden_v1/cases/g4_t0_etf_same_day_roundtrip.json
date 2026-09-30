@@ -1,0 +1,497 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [
+      {
+        "date": "20210531",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 0.0,
+          "total": 5.21,
+          "transfer_fee": 0.21
+        },
+        "price": 10.495,
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210531",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 10.5,
+          "total": 15.7,
+          "transfer_fee": 0.21
+        },
+        "price": 10.495,
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "511380.SH"
+      }
+    ],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 999979.0900000001,
+      "nav_last": {
+        "20210527": 1000000.0,
+        "20210528": 1000000.0,
+        "20210531": 999979.0900000001,
+        "20210601": 999979.0900000001,
+        "20210602": 999979.0900000001,
+        "20210603": 999979.0900000001,
+        "20210604": 999979.0900000001,
+        "20210607": 999979.0900000001,
+        "20210608": 999979.0900000001
+      },
+      "realized_pnl_total": -20.909999999999936,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": -0.0006584550097288311,
+      "annualized_volatility": 0.00011735708393576953,
+      "calmar_ratio": -31.489957423770832,
+      "fee_ratio": 2.09103400718307e-05,
+      "final_nav": 999979.0900000001,
+      "max_drawdown": -2.0909999999929596e-05,
+      "n_fills": 2.0,
+      "n_trading_days": 9.0,
+      "profit_loss_ratio": NaN,
+      "sharpe_ratio": -5.612486080160913,
+      "total_fees": 20.91,
+      "total_return": -2.0909999999929596e-05,
+      "total_turnover": 20990.0,
+      "turnover_annualized": 0.6611957532469336,
+      "win_rate": 0.0
+    },
+    "rejected_counts": {},
+    "rejections": [],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210527",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210528",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 999979.0900000001,
+        "cumulative_return": -2.0909999999929596e-05,
+        "daily_return": -2.0909999999929596e-05,
+        "date": "20210531",
+        "drawdown": -2.0909999999929596e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999979.0900000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999979.0900000001,
+        "cumulative_return": -2.0909999999929596e-05,
+        "daily_return": 0.0,
+        "date": "20210601",
+        "drawdown": -2.0909999999929596e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999979.0900000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999979.0900000001,
+        "cumulative_return": -2.0909999999929596e-05,
+        "daily_return": 0.0,
+        "date": "20210602",
+        "drawdown": -2.0909999999929596e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999979.0900000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999979.0900000001,
+        "cumulative_return": -2.0909999999929596e-05,
+        "daily_return": 0.0,
+        "date": "20210603",
+        "drawdown": -2.0909999999929596e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999979.0900000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999979.0900000001,
+        "cumulative_return": -2.0909999999929596e-05,
+        "daily_return": 0.0,
+        "date": "20210604",
+        "drawdown": -2.0909999999929596e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999979.0900000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999979.0900000001,
+        "cumulative_return": -2.0909999999929596e-05,
+        "daily_return": 0.0,
+        "date": "20210607",
+        "drawdown": -2.0909999999929596e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999979.0900000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999979.0900000001,
+        "cumulative_return": -2.0909999999929596e-05,
+        "daily_return": 0.0,
+        "date": "20210608",
+        "drawdown": -2.0909999999929596e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999979.0900000001
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20210527": false,
+        "20210528": false,
+        "20210531": false,
+        "20210601": false,
+        "20210602": false,
+        "20210603": false,
+        "20210604": false,
+        "20210607": false,
+        "20210608": false
+      },
+      "is_st": {
+        "20210527": false,
+        "20210528": false,
+        "20210531": false,
+        "20210601": false,
+        "20210602": false,
+        "20210603": false,
+        "20210604": false,
+        "20210607": false,
+        "20210608": false
+      },
+      "limits": {
+        "20210527": [
+          11.52,
+          9.42
+        ],
+        "20210528": [
+          11.55,
+          9.45
+        ],
+        "20210531": [
+          11.54,
+          9.44
+        ],
+        "20210601": [
+          11.57,
+          9.47
+        ],
+        "20210602": [
+          11.58,
+          9.47
+        ],
+        "20210603": [
+          11.55,
+          9.45
+        ],
+        "20210604": [
+          11.56,
+          9.46
+        ],
+        "20210607": [
+          11.57,
+          9.47
+        ],
+        "20210608": [
+          11.56,
+          9.46
+        ]
+      },
+      "suspended": {
+        "20210527": false,
+        "20210528": false,
+        "20210531": false,
+        "20210601": false,
+        "20210602": false,
+        "20210603": false,
+        "20210604": false,
+        "20210607": false,
+        "20210608": false
+      },
+      "symbol": "511380.SH"
+    }
+  },
+  "case_id": "g4_t0_etf_same_day_roundtrip",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 34053.652,
+        "close": 10.495,
+        "date": "20210527",
+        "high": 10.508,
+        "low": 10.465,
+        "open": 10.465,
+        "pre_close": 10.468,
+        "symbol": "511380.SH",
+        "vol": 32460.0
+      },
+      {
+        "amount": 43452.299,
+        "close": 10.492,
+        "date": "20210528",
+        "high": 10.528,
+        "low": 10.482,
+        "open": 10.498,
+        "pre_close": 10.495,
+        "symbol": "511380.SH",
+        "vol": 41346.0
+      },
+      {
+        "amount": 57291.394,
+        "close": 10.52,
+        "date": "20210531",
+        "high": 10.522,
+        "low": 10.488,
+        "open": 10.495,
+        "pre_close": 10.492,
+        "symbol": "511380.SH",
+        "vol": 54544.0
+      },
+      {
+        "amount": 44108.918,
+        "close": 10.523,
+        "date": "20210601",
+        "high": 10.523,
+        "low": 10.478,
+        "open": 10.517,
+        "pre_close": 10.52,
+        "symbol": "511380.SH",
+        "vol": 42004.0
+      },
+      {
+        "amount": 49718.026,
+        "close": 10.498,
+        "date": "20210602",
+        "high": 10.545,
+        "low": 10.497,
+        "open": 10.523,
+        "pre_close": 10.523,
+        "symbol": "511380.SH",
+        "vol": 47257.0
+      },
+      {
+        "amount": 46512.241,
+        "close": 10.51,
+        "date": "20210603",
+        "high": 10.537,
+        "low": 10.495,
+        "open": 10.502,
+        "pre_close": 10.498,
+        "symbol": "511380.SH",
+        "vol": 44209.0
+      },
+      {
+        "amount": 54386.155,
+        "close": 10.52,
+        "date": "20210604",
+        "high": 10.538,
+        "low": 10.49,
+        "open": 10.514,
+        "pre_close": 10.51,
+        "symbol": "511380.SH",
+        "vol": 51741.5
+      },
+      {
+        "amount": 33051.286,
+        "close": 10.508,
+        "date": "20210607",
+        "high": 10.541,
+        "low": 10.506,
+        "open": 10.524,
+        "pre_close": 10.52,
+        "symbol": "511380.SH",
+        "vol": 31412.0
+      },
+      {
+        "amount": 36315.941,
+        "close": 10.481,
+        "date": "20210608",
+        "high": 10.53,
+        "low": 10.475,
+        "open": 10.511,
+        "pre_close": 10.508,
+        "symbol": "511380.SH",
+        "vol": 34574.0
+      }
+    ],
+    "dates": [
+      "20210527",
+      "20210528",
+      "20210531",
+      "20210601",
+      "20210602",
+      "20210603",
+      "20210604",
+      "20210607",
+      "20210608"
+    ],
+    "instruments": [
+      {
+        "asset_class": "etf",
+        "board": "etf",
+        "etf_subclass": "bond",
+        "lot_size": 100,
+        "symbol": "511380.SH",
+        "t_plus": 0
+      }
+    ],
+    "states": [
+      {
+        "date": "20210527",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.42,
+        "limit_up": 11.52,
+        "suspended": false,
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210528",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.45,
+        "limit_up": 11.55,
+        "suspended": false,
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210531",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.44,
+        "limit_up": 11.54,
+        "suspended": false,
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210601",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.47,
+        "limit_up": 11.57,
+        "suspended": false,
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210602",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.47,
+        "limit_up": 11.58,
+        "suspended": false,
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210603",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.45,
+        "limit_up": 11.55,
+        "suspended": false,
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210604",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.46,
+        "limit_up": 11.56,
+        "suspended": false,
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210607",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.47,
+        "limit_up": 11.57,
+        "suspended": false,
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210608",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 9.46,
+        "limit_up": 11.56,
+        "suspended": false,
+        "symbol": "511380.SH"
+      }
+    ]
+  },
+  "data_hash": "sha256:dbb21211d1be604f432995bf6c4d3ffbbb22a24690c9efc10c8834597e2da77d",
+  "description": "T+0：可转债 ETF（511380.SH，子类 bond）同日买+卖**均成交**（E2 双维规则）",
+  "group": "G4",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "orders": [
+      {
+        "date": "20210528",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "511380.SH"
+      },
+      {
+        "date": "20210528",
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "511380.SH"
+      }
+    ],
+    "targets": {}
+  },
+  "source": {
+    "anchor": "20210601",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "511380.SH",
+    "window": {
+      "after": 5,
+      "before": 3,
+      "dates": [
+        "20210527",
+        "20210528",
+        "20210531",
+        "20210601",
+        "20210602",
+        "20210603",
+        "20210604",
+        "20210607",
+        "20210608"
+      ]
+    }
+  }
+}

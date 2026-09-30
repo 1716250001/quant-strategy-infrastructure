@@ -1,0 +1,26 @@
+schema_version: "backtest.v1"
+run:
+  strategy: "myapp.strategies:RotationStrategy"
+  universe: {source: "index", index: "hs300", as_of: "2020-01-01", include_delisted: true}
+  period: {start: "2018-01-01", end: "2024-12-31", anchor: "2024-12-31"}
+  initial_cash: 1_000_000
+data:
+  feed: "tushare_parquet"
+  dataset: {version: "tushare.v5.3", rules: "v7.7"}
+  # v0.5.1（19 号 P1-5）：completeness.missing_bars_action/max 为死键已删除；
+  # 区间完整性由装配期覆盖度校验承接（data.allow_degraded_limit 控制降级）
+  # allow_degraded_limit: false   # 默认 false：区间早于 stk_limit 起点即报错
+execution:
+  handler: "next_open"
+  cost_model: "tiered_v1"
+  slippage: {model: "none", params: {}}
+risk:
+  rules: [{name: "max_weight", params: {limit: 0.10}}, {name: "cash_check"}, {name: "tradability"}]
+rules:
+  source: "mirror_json"
+  path: "D:/量化策略/赤潮/rules_mirror_v77.json"
+  overrides: []
+seed: {master: 20260926}
+report:
+  sections: [summary, equity, drawdown, monthly_heat, trades, assumptions]
+  benchmark: "000300.SH"

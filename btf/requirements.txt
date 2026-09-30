@@ -1,0 +1,23 @@
+# btf 依赖清单（锁版本；重装可复活——沿用现有工程 requirements 纪律）
+# 安装：D:\量化策略\代码\_venv\Scripts\python.exe -m pip install -r requirements.txt
+# 依赖预算：8/8（架构 07 §12.11；计数器 python tools/deps_budget.py）
+# 注：本清单仅含 btf 新增依赖；底座依赖（pandas/numpy/pyarrow/tushare/akshare/scipy）
+#     由现有 代码/requirements.txt 提供，不重复锁定。
+
+# runtime
+jsonschema==4.26.0
+pyyaml==6.0.3                  # ADR-11：用户层 YAML 配置解析（第 2 槽）
+
+# dev（测试与架构守护）
+pytest==9.1.1
+import-linter==2.15
+pytest-benchmark==5.3.0
+hypothesis==6.168.1
+# ruff 为开发工具链（不入 pyproject 运行时依赖预算）
+ruff==0.16.9
+
+# viz（M2 5.8 已启用：六图 + 自包含 HTML 报告）
+plotly==7.1.0
+jinja2==3.1.6
+# matplotlib 预占槽位已回收（ADR-11：M1 让位 PyYAML；v0.5 PNG/PDF 导出
+#   届时二选一——plotly 原生静态导出 or 预算例外 ADR）

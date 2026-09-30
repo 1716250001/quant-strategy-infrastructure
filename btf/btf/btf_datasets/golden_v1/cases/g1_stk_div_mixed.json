@@ -1,0 +1,468 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [
+      {
+        "avg_cost_after": 12.07710157922912,
+        "avg_cost_before": 19.454862526766593,
+        "cash_div": 0.1315,
+        "date": "20130620",
+        "nav_delta": -6141.05,
+        "qty_after": 74720,
+        "qty_at_ex": 46700,
+        "qty_before": 46700,
+        "stk_div": 0.6,
+        "symbol": "000001.SZ",
+        "type": "ex"
+      },
+      {
+        "cash_delta": 6141.05,
+        "cash_div": 0.1315,
+        "date": "20130620",
+        "nav_delta": 6141.05,
+        "qty_at_ex": 46700,
+        "symbol": "000001.SZ",
+        "type": "pay"
+      }
+    ],
+    "fills": [
+      {
+        "date": "20130618",
+        "fee": {
+          "commission": 227.08,
+          "stamp_duty": 0.0,
+          "total": 227.08,
+          "transfer_fee": 0.0
+        },
+        "price": 19.45,
+        "qty": 46700,
+        "side": "buy",
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20130701",
+        "fee": {
+          "commission": 183.25,
+          "stamp_duty": 733.0,
+          "total": 916.25,
+          "transfer_fee": 0.0
+        },
+        "price": 9.81,
+        "qty": 74720,
+        "side": "sell",
+        "symbol": "000001.SZ"
+      }
+    ],
+    "invariants": {
+      "event_days": [
+        {
+          "avg_cost_after": 12.07710157922912,
+          "avg_cost_before": 19.454862526766593,
+          "cash_div": 0.1315,
+          "date": "20130620",
+          "kind": "ex",
+          "nav_delta": -6141.05,
+          "qty_after": 74720,
+          "qty_before": 46700,
+          "stk_div": 0.6
+        }
+      ],
+      "final_cash": 829685.9200000002,
+      "nav_last": {
+        "20130617": 1000000.0,
+        "20130618": 1012848.92,
+        "20130619": 989965.9199999999,
+        "20130620": 932968.5700000001,
+        "20130621": 940440.5700000001,
+        "20130624": 856006.9700000001,
+        "20130625": 843304.5700000001,
+        "20130626": 826866.17,
+        "20130627": 814910.9700000001,
+        "20130628": 842557.3700000001,
+        "20130701": 829685.9200000002
+      },
+      "realized_pnl_total": -170314.07999999984,
+      "windows": [
+        {
+          "ex_date": "20130620",
+          "ex_nav_delta": -6141.05,
+          "pay_date": "20130620",
+          "pay_nav_delta": 6141.05,
+          "qty_at_ex": 46700,
+          "symbol": "000001.SZ",
+          "window_event_delta": 0.0
+        }
+      ]
+    },
+    "metrics": {
+      "annualized_return": -0.9909504758070317,
+      "annualized_volatility": 0.5574011446861127,
+      "calmar_ratio": -5.070695736692424,
+      "fee_ratio": 0.0012717082610771819,
+      "final_nav": 829685.9200000002,
+      "max_drawdown": -0.1954269250738797,
+      "n_fills": 2.0,
+      "n_trading_days": 11.0,
+      "profit_loss_ratio": 0.5462368301423711,
+      "sharpe_ratio": -8.103058196945279,
+      "total_fees": 1143.33,
+      "total_return": -0.1703140799999998,
+      "total_turnover": 1641318.2000000002,
+      "turnover_annualized": 46.00544325147379,
+      "win_rate": 0.3
+    },
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20130617",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 19.454862526766593
+        },
+        "cash": 91457.92000000004,
+        "cumulative_return": 0.012848920000000152,
+        "daily_return": 0.012848920000000152,
+        "date": "20130618",
+        "drawdown": 0.0,
+        "market_value": 921391.0,
+        "positions_qty": {
+          "000001.SZ": 46700
+        },
+        "total_value": 1012848.92
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 19.454862526766593
+        },
+        "cash": 91457.92000000004,
+        "cumulative_return": -0.010034080000000056,
+        "daily_return": -0.02259270810102665,
+        "date": "20130619",
+        "drawdown": -0.02259270810102665,
+        "market_value": 898507.9999999999,
+        "positions_qty": {
+          "000001.SZ": 46700
+        },
+        "total_value": 989965.9199999999
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.07710157922912
+        },
+        "cash": 97598.97000000004,
+        "cumulative_return": -0.06703142999999989,
+        "daily_return": -0.05757506278599955,
+        "date": "20130620",
+        "drawdown": -0.07886699429960387,
+        "market_value": 835369.6,
+        "positions_qty": {
+          "000001.SZ": 74720
+        },
+        "total_value": 932968.5700000001
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.07710157922912
+        },
+        "cash": 97598.97000000004,
+        "cumulative_return": -0.05955942999999997,
+        "daily_return": 0.008008844285075867,
+        "date": "20130621",
+        "drawdown": -0.07148978349110546,
+        "market_value": 842841.6,
+        "positions_qty": {
+          "000001.SZ": 74720
+        },
+        "total_value": 940440.5700000001
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.07710157922912
+        },
+        "cash": 97598.97000000004,
+        "cumulative_return": -0.14399302999999997,
+        "daily_return": -0.08978089918005128,
+        "date": "20130624",
+        "drawdown": -0.15485226562713805,
+        "market_value": 758408.0,
+        "positions_qty": {
+          "000001.SZ": 74720
+        },
+        "total_value": 856006.9700000001
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.07710157922912
+        },
+        "cash": 97598.97000000004,
+        "cumulative_return": -0.15669542999999997,
+        "daily_return": -0.014839131508473602,
+        "date": "20130625",
+        "drawdown": -0.16739352400158547,
+        "market_value": 745705.6,
+        "positions_qty": {
+          "000001.SZ": 74720
+        },
+        "total_value": 843304.5700000001
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.07710157922912
+        },
+        "cash": 97598.97000000004,
+        "cumulative_return": -0.17313382999999993,
+        "daily_return": -0.019492838749824437,
+        "date": "20130626",
+        "drawdown": -0.1836233877802822,
+        "market_value": 729267.2,
+        "positions_qty": {
+          "000001.SZ": 74720
+        },
+        "total_value": 826866.17
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.07710157922912
+        },
+        "cash": 97598.97000000004,
+        "cumulative_return": -0.18508902999999988,
+        "daily_return": -0.014458446159431038,
+        "date": "20130627",
+        "drawdown": -0.1954269250738797,
+        "market_value": 717312.0,
+        "positions_qty": {
+          "000001.SZ": 74720
+        },
+        "total_value": 814910.9700000001
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.07710157922912
+        },
+        "cash": 97598.97000000004,
+        "cumulative_return": -0.15744262999999992,
+        "daily_return": 0.03392566920531204,
+        "date": "20130628",
+        "drawdown": -0.16813124508243527,
+        "market_value": 744958.4,
+        "positions_qty": {
+          "000001.SZ": 74720
+        },
+        "total_value": 842557.3700000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 829685.9200000002,
+        "cumulative_return": -0.1703140799999998,
+        "daily_return": -0.015276645197465855,
+        "date": "20130701",
+        "drawdown": -0.18083940890216865,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 829685.9200000002
+      }
+    ]
+  },
+  "case_id": "g1_stk_div_mixed",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [
+      {
+        "ann_date": "20130524",
+        "cash_div_per_share": 0.1315,
+        "ex_date": "20130620",
+        "pay_date": "20130620",
+        "record_date": "20130619",
+        "stk_div_per_share": 0.6,
+        "symbol": "000001.SZ"
+      }
+    ],
+    "bars": [
+      {
+        "amount": 596190.2363,
+        "close": 19.24,
+        "date": "20130617",
+        "high": 19.56,
+        "low": 18.95,
+        "open": 19.16,
+        "pre_close": 19.06,
+        "symbol": "000001.SZ",
+        "vol": 309210.22
+      },
+      {
+        "amount": 770155.9348,
+        "close": 19.73,
+        "date": "20130618",
+        "high": 20.04,
+        "low": 19.45,
+        "open": 19.45,
+        "pre_close": 19.24,
+        "symbol": "000001.SZ",
+        "vol": 389599.38
+      },
+      {
+        "amount": 714070.0268,
+        "close": 19.24,
+        "date": "20130619",
+        "high": 19.56,
+        "low": 19.15,
+        "open": 19.55,
+        "pre_close": 19.73,
+        "symbol": "000001.SZ",
+        "vol": 369977.53
+      },
+      {
+        "amount": 1029738.0988,
+        "close": 11.18,
+        "date": "20130620",
+        "high": 11.95,
+        "low": 11.07,
+        "open": 11.93,
+        "pre_close": 11.92,
+        "symbol": "000001.SZ",
+        "vol": 903066.54
+      },
+      {
+        "amount": 687937.8531,
+        "close": 11.28,
+        "date": "20130621",
+        "high": 11.39,
+        "low": 10.85,
+        "open": 10.95,
+        "pre_close": 11.18,
+        "symbol": "000001.SZ",
+        "vol": 614002.69
+      },
+      {
+        "amount": 1210827.5349,
+        "close": 10.15,
+        "date": "20130624",
+        "high": 11.11,
+        "low": 10.15,
+        "open": 11.11,
+        "pre_close": 11.28,
+        "symbol": "000001.SZ",
+        "vol": 1166671.77
+      },
+      {
+        "amount": 1643643.14,
+        "close": 9.98,
+        "date": "20130625",
+        "high": 10.1,
+        "low": 9.14,
+        "open": 9.8,
+        "pre_close": 10.15,
+        "symbol": "000001.SZ",
+        "vol": 1717162.61
+      },
+      {
+        "amount": 992741.1022,
+        "close": 9.76,
+        "date": "20130626",
+        "high": 10.0,
+        "low": 9.58,
+        "open": 10.0,
+        "pre_close": 9.98,
+        "symbol": "000001.SZ",
+        "vol": 1017151.08
+      },
+      {
+        "amount": 819712.9078,
+        "close": 9.6,
+        "date": "20130627",
+        "high": 10.0,
+        "low": 9.54,
+        "open": 9.85,
+        "pre_close": 9.76,
+        "symbol": "000001.SZ",
+        "vol": 835867.02
+      },
+      {
+        "amount": 909148.1379,
+        "close": 9.97,
+        "date": "20130628",
+        "high": 10.14,
+        "low": 9.3,
+        "open": 9.5,
+        "pre_close": 9.6,
+        "symbol": "000001.SZ",
+        "vol": 926643.94
+      },
+      {
+        "amount": 775396.0452,
+        "close": 9.75,
+        "date": "20130701",
+        "high": 9.95,
+        "low": 9.44,
+        "open": 9.81,
+        "pre_close": 9.97,
+        "symbol": "000001.SZ",
+        "vol": 800196.67
+      }
+    ],
+    "dates": [
+      "20130617",
+      "20130618",
+      "20130619",
+      "20130620",
+      "20130621",
+      "20130624",
+      "20130625",
+      "20130626",
+      "20130627",
+      "20130628",
+      "20130701"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "000001.SZ"
+      }
+    ]
+  },
+  "data_hash": "sha256:89345b2a89629d9f1b6c63fbe6e6ddac89a4e2c31190a15f60eb7bac60e98759",
+  "description": "送转+派息混合（stk 0.6）：合成式 avg_cost'=(avg−cash)/(1+stk)",
+  "group": "G1",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "targets": {
+      "20130617": {
+        "000001.SZ": 0.9
+      },
+      "20130628": {}
+    }
+  },
+  "source": {
+    "anchor_ex_date": "20130620",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "000001.SZ",
+    "window": {
+      "after": 7,
+      "before": 3,
+      "dates": [
+        "20130617",
+        "20130618",
+        "20130619",
+        "20130620",
+        "20130621",
+        "20130624",
+        "20130625",
+        "20130626",
+        "20130627",
+        "20130628",
+        "20130701"
+      ]
+    }
+  }
+}

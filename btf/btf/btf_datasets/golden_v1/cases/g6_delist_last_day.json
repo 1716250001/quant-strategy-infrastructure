@@ -1,0 +1,691 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [
+      {
+        "date": "20170703",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 0.0,
+          "total": 5.03,
+          "transfer_fee": 0.03
+        },
+        "price": 1.44,
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000033.SZ"
+      }
+    ],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 998554.97,
+      "nav_last": {
+        "20170629": 1000000.0,
+        "20170630": 1000000.0,
+        "20170703": 1000034.97,
+        "20170704": 1000034.97,
+        "20170705": 1000184.97,
+        "20170706": 1000254.97,
+        "20170707": 1000254.97,
+        "20170710": 1000254.97,
+        "20170711": 1000254.97,
+        "20170712": 1000254.97,
+        "20170713": 1000254.97,
+        "20170714": 1000254.97,
+        "20170717": 1000254.97,
+        "20170718": 1000254.97,
+        "20170719": 1000254.97
+      },
+      "realized_pnl_total": 0.0,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": 0.004599420022807887,
+      "annualized_volatility": 0.0006817460706238492,
+      "calmar_ratio": NaN,
+      "fee_ratio": 5.02905969659229e-06,
+      "final_nav": 1000254.97,
+      "max_drawdown": 0.0,
+      "n_fills": 1.0,
+      "n_trading_days": 15.0,
+      "profit_loss_ratio": NaN,
+      "sharpe_ratio": 6.731439700125737,
+      "total_fees": 5.03,
+      "total_return": 0.0002549700000000765,
+      "total_turnover": 1440.0,
+      "turnover_annualized": 0.025915154539895062,
+      "win_rate": 0.21428571428571427
+    },
+    "rejected_counts": {
+      "suspended": 1
+    },
+    "rejections": [
+      {
+        "code": "suspended",
+        "date": "20170711",
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "000033.SZ"
+      }
+    ],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20170629",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20170630",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 3.496999999996753e-05,
+        "daily_return": 3.496999999996753e-05,
+        "date": "20170703",
+        "drawdown": 0.0,
+        "market_value": 1480.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000034.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 3.496999999996753e-05,
+        "daily_return": 0.0,
+        "date": "20170704",
+        "drawdown": 0.0,
+        "market_value": 1480.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000034.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.00018497000000006203,
+        "daily_return": 0.000149994754683469,
+        "date": "20170705",
+        "drawdown": 0.0,
+        "market_value": 1630.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000184.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 6.998705449445808e-05,
+        "date": "20170706",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170707",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170710",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170711",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170712",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170713",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170714",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170717",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170718",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      },
+      {
+        "avg_cost": {
+          "000033.SZ": 1.44503
+        },
+        "cash": 998554.97,
+        "cumulative_return": 0.0002549700000000765,
+        "daily_return": 0.0,
+        "date": "20170719",
+        "drawdown": 0.0,
+        "market_value": 1700.0,
+        "positions_qty": {
+          "000033.SZ": 1000
+        },
+        "total_value": 1000254.97
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20170629": false,
+        "20170630": false,
+        "20170703": false,
+        "20170704": false,
+        "20170705": false,
+        "20170706": false,
+        "20170707": true,
+        "20170710": true,
+        "20170711": true,
+        "20170712": true,
+        "20170713": true,
+        "20170714": true,
+        "20170717": true,
+        "20170718": true,
+        "20170719": true
+      },
+      "is_st": {
+        "20170629": false,
+        "20170630": false,
+        "20170703": false,
+        "20170704": false,
+        "20170705": false,
+        "20170706": false,
+        "20170707": false,
+        "20170710": false,
+        "20170711": false,
+        "20170712": false,
+        "20170713": false,
+        "20170714": false,
+        "20170717": false,
+        "20170718": false,
+        "20170719": false
+      },
+      "limits": {
+        "20170629": [
+          1.55,
+          1.27
+        ],
+        "20170630": [
+          1.63,
+          1.33
+        ],
+        "20170703": [
+          1.57,
+          1.29
+        ],
+        "20170704": [
+          1.63,
+          1.33
+        ],
+        "20170705": [
+          1.63,
+          1.33
+        ],
+        "20170706": [
+          1.79,
+          1.47
+        ],
+        "20170707": [
+          null,
+          null
+        ],
+        "20170710": [
+          null,
+          null
+        ],
+        "20170711": [
+          null,
+          null
+        ],
+        "20170712": [
+          null,
+          null
+        ],
+        "20170713": [
+          null,
+          null
+        ],
+        "20170714": [
+          null,
+          null
+        ],
+        "20170717": [
+          null,
+          null
+        ],
+        "20170718": [
+          null,
+          null
+        ],
+        "20170719": [
+          null,
+          null
+        ]
+      },
+      "suspended": {
+        "20170629": false,
+        "20170630": false,
+        "20170703": false,
+        "20170704": false,
+        "20170705": false,
+        "20170706": false,
+        "20170707": false,
+        "20170710": false,
+        "20170711": false,
+        "20170712": false,
+        "20170713": false,
+        "20170714": false,
+        "20170717": false,
+        "20170718": false,
+        "20170719": false
+      },
+      "symbol": "000033.SZ"
+    }
+  },
+  "case_id": "g6_delist_last_day",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 28006.123,
+        "close": 1.48,
+        "date": "20170629",
+        "high": 1.52,
+        "low": 1.41,
+        "open": 1.42,
+        "pre_close": 1.41,
+        "symbol": "000033.SZ",
+        "vol": 189231.98
+      },
+      {
+        "amount": 30468.945,
+        "close": 1.43,
+        "date": "20170630",
+        "high": 1.53,
+        "low": 1.42,
+        "open": 1.48,
+        "pre_close": 1.48,
+        "symbol": "000033.SZ",
+        "vol": 207563.39
+      },
+      {
+        "amount": 23263.547,
+        "close": 1.48,
+        "date": "20170703",
+        "high": 1.48,
+        "low": 1.43,
+        "open": 1.44,
+        "pre_close": 1.43,
+        "symbol": "000033.SZ",
+        "vol": 159417.38
+      },
+      {
+        "amount": 28998.996,
+        "close": 1.48,
+        "date": "20170704",
+        "high": 1.52,
+        "low": 1.47,
+        "open": 1.49,
+        "pre_close": 1.48,
+        "symbol": "000033.SZ",
+        "vol": 194261.98
+      },
+      {
+        "amount": 45055.313,
+        "close": 1.63,
+        "date": "20170705",
+        "high": 1.63,
+        "low": 1.49,
+        "open": 1.5,
+        "pre_close": 1.48,
+        "symbol": "000033.SZ",
+        "vol": 287694.49
+      },
+      {
+        "amount": 65221.874,
+        "close": 1.7,
+        "date": "20170706",
+        "high": 1.77,
+        "low": 1.59,
+        "open": 1.67,
+        "pre_close": 1.63,
+        "symbol": "000033.SZ",
+        "vol": 388042.27
+      }
+    ],
+    "dates": [
+      "20170629",
+      "20170630",
+      "20170703",
+      "20170704",
+      "20170705",
+      "20170706",
+      "20170707",
+      "20170710",
+      "20170711",
+      "20170712",
+      "20170713",
+      "20170714",
+      "20170717",
+      "20170718",
+      "20170719"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "000033.SZ"
+      }
+    ],
+    "states": [
+      {
+        "date": "20170629",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 1.27,
+        "limit_up": 1.55,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170630",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 1.33,
+        "limit_up": 1.63,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170703",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 1.29,
+        "limit_up": 1.57,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170704",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 1.33,
+        "limit_up": 1.63,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170705",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 1.33,
+        "limit_up": 1.63,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170706",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 1.47,
+        "limit_up": 1.79,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170707",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170710",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170711",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170712",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170713",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170714",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170717",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170718",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170719",
+        "delisted": true,
+        "is_st": false,
+        "limit_down": null,
+        "limit_up": null,
+        "suspended": false,
+        "symbol": "000033.SZ"
+      }
+    ]
+  },
+  "data_hash": "sha256:69990729fdfcece6af64b926ebb21a4461514f4f46e00e69a98403c2478a2031",
+  "description": "退市 000033.SZ（最后交易日 20170706）：末日行情 + 退市后卖出拒单 + 残值按末价携带",
+  "group": "G6",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "orders": [
+      {
+        "date": "20170630",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000033.SZ"
+      },
+      {
+        "date": "20170710",
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "000033.SZ"
+      }
+    ],
+    "targets": {}
+  },
+  "source": {
+    "anchor": "20170706",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "000033.SZ",
+    "window": {
+      "after": 9,
+      "before": 5,
+      "dates": [
+        "20170629",
+        "20170630",
+        "20170703",
+        "20170704",
+        "20170705",
+        "20170706",
+        "20170707",
+        "20170710",
+        "20170711",
+        "20170712",
+        "20170713",
+        "20170714",
+        "20170717",
+        "20170718",
+        "20170719"
+      ]
+    }
+  }
+}

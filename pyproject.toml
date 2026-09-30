@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyramid-strategy"
+version = "5.0.0"
+description = "A股三层轮动金字塔策略 — 宽基ETF轮动 + 盘中监控 + 全量数据库"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "pandas",
+    "requests",
+    "tushare",
+    "akshare",
+    "scipy",
+    "pyarrow",   # parquet 读写核心（common/parquet_store、reader 等 7 处引用），原漏声明
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "openpyxl"]
+
+[tool.setuptools]
+# 代码目录就是包根, 不使用 src layout
+package-dir = {"" = "."}
+# 根目录单文件模块（2026-09-25 G6：qidian_daily_scan → strategies/ 包内；convergence 随盘中背离监控归档；
+# 2026-09-25 F4：pipeline / iv_tracker 随旧宽基ETF轮动采集链归档 → _archive/legacy链-20260925/）
+py-modules = ["config", "indicators", "main"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["common*", "fetch*", "push*", "strategies*", "tools*"]
+exclude = ["__pycache__*"]

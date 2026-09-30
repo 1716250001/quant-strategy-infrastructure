@@ -1,0 +1,285 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "btf"
+# 版本单一真源（19 号 P3-4：原 pyproject 0.2.0 与 btf/_version.py 0.5.0 双源不一致）
+dynamic = ["version"]
+description = "BT-Foundation：A 股量化回测工具（架构基线 v0.3 冻结 · 实现 1.0.0 定版）"
+requires-python = ">=3.13"
+# 依赖预算 ≤8（架构 07 §12.11；计数器：tools/deps_budget.py）
+# 槽位变更留痕（ADR-11）：matplotlib 预占槽位于 M1 回收（PNG/PDF 导出
+# 属 M2 5.8，届时按 plotly 原生导出 or 预算例外 ADR 重评）；PyYAML
+# 入预算（06 §11.5 用户层 YAML 配置的解析器，07 §12.11 原清单遗漏项）
+dependencies = [
+    "jsonschema>=4.23",        # 1/8 配置校验（ADR-4）
+    "pyyaml>=6.0",             # 2/8 用户层 YAML 配置解析（ADR-11）
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",             # 3/8
+    "import-linter>=2.1",      # 4/8 架构守护（03 §7.3 六铁律）
+    "pytest-benchmark>=5.1",   # 5/8 L5 基准
+    "hypothesis>=6.112",       # 6/8 属性测试（v0.5 起；提前入预算）
+]
+viz = [
+    "plotly>=5.24",            # 7/8 HTML 报告（M2）
+    "jinja2>=3.1",             # 8/8 报告模板（M2）
+    # matplotlib：槽位已回收（ADR-11）——M2 5.8 PNG/PDF 导出时重评
+]
+
+[project.scripts]
+bt = "btf.cli.main:main"
+
+[tool.setuptools.packages.find]
+include = ["btf*"]
+
+[tool.setuptools.dynamic]
+# 运行时版本 = 包内唯一真源（纯字面量，setuptools 可静态解析，无需 import 包）
+version = {attr = "btf._version.__version__"}
+
+# ─────────────────────────────────────────────────────────────
+# ruff：lint + import 检查（含随机源纪律：禁止直接 import random/np.random，
+# 一切随机经 ctx 已播种 Generator——架构 08 §13.4）
+# ─────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["btf", "tests", "tools"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",        # pycodestyle/pyflakes
+    "I",                  # import 排序
+    "N",                  # 命名
+    "UP",                 # pyupgrade
+    "B",                  # bugbear
+    "A",                  # 内建遮蔽
+    "RUF",
+]
+ignore = [
+    "E501",    # 行长交给 formatter
+    "UP009",   # 保留 UTF-8 编码声明——中文项目纪律（Windows GBK 环境保险）
+    "RUF001",  # 字符串全角标点——中文项目字符串合理用法
+    "RUF002",  # docstring 全角标点误报——中文书写全角标点是正确用法
+    "RUF003",  # 注释全角标点同理
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 示例/工具允许宽松（tools/* 为一次性剖析/登记脚本，非交付物：
+# N=自然语言标识符、E402=脚本级 import 顺序——main 前装载探针模式、
+# B=剖析脚本宽松 bugbear——zip/循环变量纪律只约束交付物）
+"examples/*" = ["N"]
+"tools/*" = ["N", "E402", "B"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"random.random".msg = "随机一律经 ctx 已播种 Generator（08 §13.4）"
+"numpy.random".msg = "随机一律经 ctx 已播种 Generator（08 §13.4）"
+
+# ─────────────────────────────────────────────────────────────
+# import-linter：03 §7.3 六条依赖铁律的机检落地
+# ─────────────────────────────────────────────────────────────
+[tool.importlinter]
+root_packages = ["btf"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+# 铁律 3：domain 零第三方依赖（白名单：typing/dataclasses/enum/datetime/__future__）
+name = "Domain zero-dependency (03 §7.3 rule 3)"
+type = "forbidden"
+source_modules = ["btf.domain"]
+forbidden_modules = [
+    "numpy", "pandas", "pyarrow", "scipy",
+    "jsonschema", "yaml", "plotly", "jinja2", "matplotlib",
+    "btf.data", "btf.engine", "btf.execution", "btf.risk",
+    "btf.portfolio", "btf.strategy", "btf.analytics",
+    "btf.experiment", "btf.config", "btf.registry", "btf.viz", "btf.cli",
+]
+
+[[tool.importlinter.contracts]]
+# 铁律 1：依赖箭头只指向更稳定方向——外围层不得被核心依赖
+# 层级依据 03 §7.2/06 §11.2：config（路径真源/Schema）属稳定核 S1——
+# 与 domain 同归最内层，供全部层引用（阶段 0 曾误置最外层）
+# 装配豁免（06 §2 时序：Runtime 组装注入 Protocol 实现；E→X/E→RB 编排
+# 调用）：engine.loop 为装配/编排器单点，对 execution/portfolio 的
+# import 属依赖注入装配而非运行时耦合
+name = "Layered architecture: outer layers depend on inner only (03 §7.3 rule 1)"
+type = "layers"
+layers = [
+    # M2 5.9 拆层（原 "btf.cli | btf.viz" 同层）：cli 是入口，viz 是报告能力
+    # ——调用方向 cli → viz（报告命令）→ runtime（门面），故 viz 置于 cli 之下
+    "btf.cli",
+    # v0.5 V5-7：api Facade 与 cli 同为**入口层**（互不引用）；report 经
+    # viz（同 cli 的 report 命令路径）→ api 置 viz 之外
+    "btf.api",
+    # P2-3 / R4（19 号 §9.3）：应用服务层——cli/api 的**共享编排**所在，
+    # 位于入口层之下、能力层（viz/optimize/registry/引擎）之上
+    "btf.app",
+    "btf.viz",
+    # v0.5 V5-3：optimize 为编排器（grid_search 经 runtime 门面跑回测），
+    # 置 runtime 之外一层（编排 → 门面 → registry → 引擎）
+    "btf.optimize",
+    "btf.registry",           # 插件注册表（04 §8.5）：名字表 + 版本协商
+    "btf.engine | btf.execution | btf.risk | btf.portfolio",
+    "btf.strategy",
+    "btf.analytics | btf.experiment | btf.data",
+    "btf.config | btf.domain",
+]
+ignore_imports = [
+    "btf.engine.loop -> btf.execution.handler",
+    "btf.engine.loop -> btf.portfolio.portfolio",
+    "btf.engine.loop -> btf.portfolio.rebalancer",
+    "btf.engine.loop -> btf.risk.manager",
+    # v0.5 V5-3：registry 名字表对优化器工厂的惰性 import（与 data.memory/
+    # analytics.metrics 等插件工厂同一豁免范式——名字表必须能取到全部插件）
+    "btf.registry.catalog -> btf.optimize.grid",
+]
+
+[[tool.importlinter.contracts]]
+# 铁律 5：表现层只认 api（viz/cli 不得 import 引擎内部）
+name = "Presentation depends only on contract types (03 §7.3 rule 5)"
+type = "forbidden"
+source_modules = ["btf.viz", "btf.cli"]
+forbidden_modules = [
+    "btf.engine", "btf.execution", "btf.risk", "btf.portfolio",
+    "btf.data", "btf.analytics", "btf.experiment",
+]
+# M2 5.9 门面豁免：04 §8.3.8 既定链路为 cli → runtime（组装门面）→ 内层组件。
+# import-linter 的 forbidden 契约会追踪间接链，故豁免**源端首边**
+# （cli → runtime）——runtime 是唯一组装根，经门面的装配属架构允许路径；
+# 表现层对引擎内部的**直接** import 仍被拦截（实测：cli 直连
+# experiment.store 即违规，已改为经 runtime.make_store 取用）。
+ignore_imports = [
+    "btf.cli.main -> btf.runtime",
+    # P2-3 / R4：cli → app 是**应用服务层首边**（app 内部对 runtime/引擎的
+    # 依赖由 Layered architecture 契约单独约束；表现层对引擎内部零直接 import）
+    "btf.cli.main -> btf.app",
+    # v0.5 V5-3：cli 经 registry 名字表取优化器（声明制消费——同 runtime
+    # 门面首边豁免范式；cli 对引擎内部仍零直接 import）
+    "btf.cli.main -> btf.registry",
+]
+
+[[tool.importlinter.contracts]]
+# 铁律 2：引擎层四模块不互相直接 import 实现（经 domain 事件类型与 Protocol 交互）
+# 装配豁免：engine.loop 编排器对 handler/rebalancer/portfolio 的依赖注入
+# （06 §2 时序；事件协作仍走 domain——execution/risk/portfolio 反向与
+# 平级互赖仍被下方 independence 契约拦截）
+name = "Engine modules decoupled via domain only (03 §7.3 rule 2)"
+type = "forbidden"
+source_modules = ["btf.engine"]
+forbidden_modules = ["btf.execution", "btf.risk", "btf.portfolio"]
+# 注：反向（execution→engine 等）由 layers 契约约束为"平级禁止"靠下方 independence 补强
+ignore_imports = [
+    "btf.engine.loop -> btf.execution.handler",
+    "btf.engine.loop -> btf.portfolio.portfolio",
+    "btf.engine.loop -> btf.portfolio.rebalancer",
+    "btf.engine.loop -> btf.risk.manager",
+]
+
+[[tool.importlinter.contracts]]
+name = "Engine-layer four modules mutually independent (03 §7.3 rule 2)"
+type = "independence"
+modules = ["btf.engine", "btf.execution", "btf.risk", "btf.portfolio"]
+# 装配豁免：同上（engine.loop 是唯一装配点，其余平级 import 仍违规）
+ignore_imports = [
+    "btf.engine.loop -> btf.execution.handler",
+    "btf.engine.loop -> btf.portfolio.portfolio",
+    "btf.engine.loop -> btf.portfolio.rebalancer",
+    "btf.engine.loop -> btf.risk.manager",
+]
+
+[[tool.importlinter.contracts]]
+# 铁律 4：数据层不认识引擎（DataFeed 协议定义在 data 层，engine 依赖协议而非实现）
+name = "Data layer never imports engine (03 §7.3 rule 4)"
+type = "forbidden"
+source_modules = ["btf.data"]
+forbidden_modules = [
+    "btf.engine", "btf.execution", "btf.risk", "btf.portfolio",
+    "btf.strategy", "btf.analytics", "btf.experiment", "btf.viz", "btf.cli",
+]
+
+[[tool.importlinter.contracts]]
+# 新 7（19 号 §6.2 / §9.1；R2-8）：data.core 是**唯一允许认识磁盘**的公共模块，
+# 不得反向依赖任何 data 领域模块或上层（EX-4「唯一数据入口」的机器守卫）
+name = "New 7: data.core depends on no domain module (19 §6.2/R2-8)"
+type = "forbidden"
+source_modules = ["btf.data.core"]
+forbidden_modules = [
+    "btf.data.state", "btf.data.liq", "btf.data.fundamentals",
+    "btf.data.feed", "btf.data.quality", "btf.data.adjust",
+    "btf.strategy", "btf.engine",
+]
+
+[[tool.importlinter.contracts]]
+# 新 8（同上）：data 领域模块**互不依赖**（各自经 tables_meta 与 core 取数）
+name = "New 8: data domain modules are independent (19 §6.2/R2-8)"
+type = "independence"
+# core **不列入**：它是其余模块**共同依赖的**唯一 IO 入口（EX-4），
+# "core 不得反向依赖"由新 7 单独守卫
+modules = [
+    "btf.data.state", "btf.data.liq", "btf.data.fundamentals",
+    "btf.data.adjust", "btf.data.feed", "btf.data.quality",
+]
+# R4（2026-09-29，19 号 §48）：**豁免已移除**——原唯一例外边
+# `btf.data.feed -> btf.data.state` 已由「状态面板构造期注入」反转
+# （`TushareParquetFeed.attach_state_provider`，装配根 `BTFRuntime.build` 注入），
+# 本契约现为**零豁免**：data 域六个模块互不依赖，由机器守卫。
+
+[[tool.importlinter.contracts]]
+# 新 9（EX-4 **完全体**，19 号 §9.2 / §47.4 余项 ② / §49）：**只有 `data.core`
+# 可 import `parquet_reader`** —— 原口径为"上层不得直接触 IO"（engine/strategy/
+# viz/analytics 四个源 + 3 处近端豁免）；完全体把 source 扩到**整个 btf 包**，
+# 豁免收敛为**唯一一条**（core 自身），即 data 域六模块亦不得直呼 reader。
+name = "New 9: only data.core touches parquet IO (EX-4 complete; 19 §9.2)"
+type = "forbidden"
+source_modules = ["btf"]
+forbidden_modules = ["btf.data.parquet_reader"]
+ignore_imports = [
+    # **唯一合法边**：core 是 data 域 IO 出口（业务模块经 YearTableStore 取数）
+    "btf.data.core -> btf.data.parquet_reader",
+    # 说明：`pyarrow.parquet` 是**第三方**导入，import-linter 无法约束 →
+    # 由 `tools/check_io_boundary.py`（`bt check` 第 9 项，AST 扫描 + 变异性
+    # 自检）补齐：`btf/` 内只允许 core 与 parquet_reader 触 pyarrow.parquet。
+]
+
+[[tool.importlinter.contracts]]
+# 新 10（同上）：cli/api **不得含编排逻辑**——二者只能经门面（runtime/app）
+# 触达内层；对 data/engine/execution/risk/portfolio/analytics/experiment 的
+# 直接 import 一律禁止（强化铁律 5）
+name = "New 10: cli/api orchestrate only via facade (19 §6.2/R2-8)"
+type = "forbidden"
+source_modules = ["btf.cli", "btf.api"]
+forbidden_modules = [
+    "btf.data", "btf.engine", "btf.execution", "btf.risk",
+    "btf.portfolio", "btf.analytics", "btf.experiment",
+]
+ignore_imports = [
+    # 门面首边（与铁律 5 的近端豁免同范式）：cli/api → runtime 是**装配根**的
+    # 合法调用；runtime 之下的一切编排收敛在 runtime/app 内
+    "btf.cli.main -> btf.runtime",
+    # 应用服务层首边（R4/P2-3）：cli/api → app 是入口层唯一编排出口
+    "btf.cli.main -> btf.app",
+    "btf.api -> btf.app.services",
+    # 声明制消费（与铁律 5 既有豁免同范式）：cli 经 **registry 名字表**取插件
+    # （optimize/feed/store…）——registry 是名字表而非引擎实现，其到各插件
+    # 模块的边由「Layered architecture」契约单独约束
+    "btf.cli.main -> btf.registry",
+]
+
+# ─────────────────────────────────────────────────────────────
+# pytest：UTF-8 全链路（中文路径纪律，06 §11.3）+ 测试分层标记
+# ─────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "l1: 单元测试（秒级，提交门）",
+    "l2: 集成测试（MemoryFeed 组合行为）",
+    "l3: 系统测试（端到端对账）",
+    "l4: 回归测试（黄金集+双跑 diff）",
+    "l5: 性能基准（B1-B5）",
+    "smoke: 冒烟（中文路径/环境自检）",
+]
+filterwarnings = ["error::UnicodeWarning"]

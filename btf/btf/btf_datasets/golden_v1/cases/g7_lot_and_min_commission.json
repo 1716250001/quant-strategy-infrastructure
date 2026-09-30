@@ -1,0 +1,562 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [
+      {
+        "date": "20210726",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 0.0,
+          "total": 5.09,
+          "transfer_fee": 0.09
+        },
+        "price": 4.67,
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210727",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 4.58,
+          "total": 9.67,
+          "transfer_fee": 0.09
+        },
+        "price": 4.58,
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210727",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 0.0,
+          "total": 5.09,
+          "transfer_fee": 0.09
+        },
+        "price": 4.58,
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "601668.SH"
+      }
+    ],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 995310.15,
+      "nav_last": {
+        "20210723": 1000000.0,
+        "20210726": 999904.91,
+        "20210727": 999830.15,
+        "20210728": 999800.15,
+        "20210729": 999740.15,
+        "20210730": 999770.15,
+        "20210802": 999840.15,
+        "20210803": 999910.15,
+        "20210804": 999860.15
+      },
+      "realized_pnl_total": -104.75999999999989,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": -0.004395892722255712,
+      "annualized_volatility": 0.0010373960432070069,
+      "calmar_ratio": -16.91703953148567,
+      "fee_ratio": 1.985296479764518e-05,
+      "final_nav": 999860.15,
+      "max_drawdown": -0.0002598499999999504,
+      "n_fills": 3.0,
+      "n_trading_days": 9.0,
+      "profit_loss_ratio": 0.9145249751780036,
+      "sharpe_ratio": -4.246279665246916,
+      "total_fees": 19.85,
+      "total_return": -0.0001398499999999414,
+      "total_turnover": 13830.0,
+      "turnover_annualized": 0.4357100679733065,
+      "win_rate": 0.375
+    },
+    "rejected_counts": {
+      "lot_size": 1
+    },
+    "rejections": [
+      {
+        "code": "lot_size",
+        "date": "20210726",
+        "qty": 150,
+        "side": "buy",
+        "symbol": "601668.SH"
+      }
+    ],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20210723",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {
+          "601668.SH": 4.67509
+        },
+        "cash": 995324.91,
+        "cumulative_return": -9.508999999996437e-05,
+        "daily_return": -9.508999999996437e-05,
+        "date": "20210726",
+        "drawdown": -9.508999999996437e-05,
+        "market_value": 4580.0,
+        "positions_qty": {
+          "601668.SH": 1000
+        },
+        "total_value": 999904.91
+      },
+      {
+        "avg_cost": {
+          "601668.SH": 4.58509
+        },
+        "cash": 995310.15,
+        "cumulative_return": -0.00016985000000002692,
+        "daily_return": -7.476710960441224e-05,
+        "date": "20210727",
+        "drawdown": -0.00016985000000002692,
+        "market_value": 4520.0,
+        "positions_qty": {
+          "601668.SH": 1000
+        },
+        "total_value": 999830.15
+      },
+      {
+        "avg_cost": {
+          "601668.SH": 4.58509
+        },
+        "cash": 995310.15,
+        "cumulative_return": -0.00019985000000000142,
+        "daily_return": -3.0005096365637307e-05,
+        "date": "20210728",
+        "drawdown": -0.00019985000000000142,
+        "market_value": 4490.0,
+        "positions_qty": {
+          "601668.SH": 1000
+        },
+        "total_value": 999800.15
+      },
+      {
+        "avg_cost": {
+          "601668.SH": 4.58509
+        },
+        "cash": 995310.15,
+        "cumulative_return": -0.0002598499999999504,
+        "daily_return": -6.001199339689123e-05,
+        "date": "20210729",
+        "drawdown": -0.0002598499999999504,
+        "market_value": 4430.0,
+        "positions_qty": {
+          "601668.SH": 1000
+        },
+        "total_value": 999740.15
+      },
+      {
+        "avg_cost": {
+          "601668.SH": 4.58509
+        },
+        "cash": 995310.15,
+        "cumulative_return": -0.0002298499999999759,
+        "daily_return": 3.000779752615479e-05,
+        "date": "20210730",
+        "drawdown": -0.0002298499999999759,
+        "market_value": 4460.0,
+        "positions_qty": {
+          "601668.SH": 1000
+        },
+        "total_value": 999770.15
+      },
+      {
+        "avg_cost": {
+          "601668.SH": 4.58509
+        },
+        "cash": 995310.15,
+        "cumulative_return": -0.0001598499999999614,
+        "daily_return": 7.001609319901014e-05,
+        "date": "20210802",
+        "drawdown": -0.0001598499999999614,
+        "market_value": 4530.0,
+        "positions_qty": {
+          "601668.SH": 1000
+        },
+        "total_value": 999840.15
+      },
+      {
+        "avg_cost": {
+          "601668.SH": 4.58509
+        },
+        "cash": 995310.15,
+        "cumulative_return": -8.984999999994692e-05,
+        "daily_return": 7.001119128902111e-05,
+        "date": "20210803",
+        "drawdown": -8.984999999994692e-05,
+        "market_value": 4600.0,
+        "positions_qty": {
+          "601668.SH": 1000
+        },
+        "total_value": 999910.15
+      },
+      {
+        "avg_cost": {
+          "601668.SH": 4.58509
+        },
+        "cash": 995310.15,
+        "cumulative_return": -0.0001398499999999414,
+        "daily_return": -5.000449290371023e-05,
+        "date": "20210804",
+        "drawdown": -0.0001398499999999414,
+        "market_value": 4550.0,
+        "positions_qty": {
+          "601668.SH": 1000
+        },
+        "total_value": 999860.15
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20210723": false,
+        "20210726": false,
+        "20210727": false,
+        "20210728": false,
+        "20210729": false,
+        "20210730": false,
+        "20210802": false,
+        "20210803": false,
+        "20210804": false
+      },
+      "is_st": {
+        "20210723": false,
+        "20210726": false,
+        "20210727": false,
+        "20210728": false,
+        "20210729": false,
+        "20210730": false,
+        "20210802": false,
+        "20210803": false,
+        "20210804": false
+      },
+      "limits": {
+        "20210723": [
+          5.09,
+          4.17
+        ],
+        "20210726": [
+          5.15,
+          4.21
+        ],
+        "20210727": [
+          5.04,
+          4.12
+        ],
+        "20210728": [
+          4.97,
+          4.07
+        ],
+        "20210729": [
+          4.94,
+          4.04
+        ],
+        "20210730": [
+          4.87,
+          3.99
+        ],
+        "20210802": [
+          4.91,
+          4.01
+        ],
+        "20210803": [
+          4.98,
+          4.08
+        ],
+        "20210804": [
+          5.06,
+          4.14
+        ]
+      },
+      "suspended": {
+        "20210723": false,
+        "20210726": false,
+        "20210727": false,
+        "20210728": false,
+        "20210729": false,
+        "20210730": false,
+        "20210802": false,
+        "20210803": false,
+        "20210804": false
+      },
+      "symbol": "601668.SH"
+    }
+  },
+  "case_id": "g7_lot_and_min_commission",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 912123.395,
+        "close": 4.68,
+        "date": "20210723",
+        "high": 4.71,
+        "low": 4.62,
+        "open": 4.63,
+        "pre_close": 4.63,
+        "symbol": "601668.SH",
+        "vol": 1948972.32
+      },
+      {
+        "amount": 965390.995,
+        "close": 4.58,
+        "date": "20210726",
+        "high": 4.69,
+        "low": 4.57,
+        "open": 4.67,
+        "pre_close": 4.68,
+        "symbol": "601668.SH",
+        "vol": 2094670.63
+      },
+      {
+        "amount": 1155557.07,
+        "close": 4.52,
+        "date": "20210727",
+        "high": 4.6,
+        "low": 4.48,
+        "open": 4.58,
+        "pre_close": 4.58,
+        "symbol": "601668.SH",
+        "vol": 2552726.49
+      },
+      {
+        "amount": 826040.038,
+        "close": 4.49,
+        "date": "20210728",
+        "high": 4.52,
+        "low": 4.46,
+        "open": 4.5,
+        "pre_close": 4.52,
+        "symbol": "601668.SH",
+        "vol": 1842533.42
+      },
+      {
+        "amount": 812761.136,
+        "close": 4.43,
+        "date": "20210729",
+        "high": 4.52,
+        "low": 4.42,
+        "open": 4.5,
+        "pre_close": 4.49,
+        "symbol": "601668.SH",
+        "vol": 1825535.4
+      },
+      {
+        "amount": 645157.375,
+        "close": 4.46,
+        "date": "20210730",
+        "high": 4.49,
+        "low": 4.38,
+        "open": 4.41,
+        "pre_close": 4.43,
+        "symbol": "601668.SH",
+        "vol": 1449966.83
+      },
+      {
+        "amount": 934699.944,
+        "close": 4.53,
+        "date": "20210802",
+        "high": 4.56,
+        "low": 4.39,
+        "open": 4.45,
+        "pre_close": 4.46,
+        "symbol": "601668.SH",
+        "vol": 2083041.93
+      },
+      {
+        "amount": 989932.66,
+        "close": 4.6,
+        "date": "20210803",
+        "high": 4.6,
+        "low": 4.5,
+        "open": 4.51,
+        "pre_close": 4.53,
+        "symbol": "601668.SH",
+        "vol": 2162835.05
+      },
+      {
+        "amount": 594582.947,
+        "close": 4.55,
+        "date": "20210804",
+        "high": 4.58,
+        "low": 4.53,
+        "open": 4.58,
+        "pre_close": 4.6,
+        "symbol": "601668.SH",
+        "vol": 1305897.4
+      }
+    ],
+    "dates": [
+      "20210723",
+      "20210726",
+      "20210727",
+      "20210728",
+      "20210729",
+      "20210730",
+      "20210802",
+      "20210803",
+      "20210804"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "601668.SH"
+      }
+    ],
+    "states": [
+      {
+        "date": "20210723",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 4.17,
+        "limit_up": 5.09,
+        "suspended": false,
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210726",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 4.21,
+        "limit_up": 5.15,
+        "suspended": false,
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210727",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 4.12,
+        "limit_up": 5.04,
+        "suspended": false,
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210728",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 4.07,
+        "limit_up": 4.97,
+        "suspended": false,
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210729",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 4.04,
+        "limit_up": 4.94,
+        "suspended": false,
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210730",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 3.99,
+        "limit_up": 4.87,
+        "suspended": false,
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210802",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 4.01,
+        "limit_up": 4.91,
+        "suspended": false,
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210803",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 4.08,
+        "limit_up": 4.98,
+        "suspended": false,
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210804",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 4.14,
+        "limit_up": 5.06,
+        "suspended": false,
+        "symbol": "601668.SH"
+      }
+    ]
+  },
+  "data_hash": "sha256:75672e45d3d2d8497c008b082283a11db11f78e52ea88915ed945ec35f8f9c0a",
+  "description": "非整手 150 股拒单 + 1000 股成交触发最低佣金 5 元 + 卖先买后资金链",
+  "group": "G7",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "orders": [
+      {
+        "date": "20210723",
+        "qty": 150,
+        "side": "buy",
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210723",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210726",
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "601668.SH"
+      },
+      {
+        "date": "20210726",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "601668.SH"
+      }
+    ],
+    "targets": {}
+  },
+  "source": {
+    "anchor": "20210728",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "601668.SH",
+    "window": {
+      "after": 5,
+      "before": 3,
+      "dates": [
+        "20210723",
+        "20210726",
+        "20210727",
+        "20210728",
+        "20210729",
+        "20210730",
+        "20210802",
+        "20210803",
+        "20210804"
+      ]
+    }
+  }
+}

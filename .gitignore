@@ -1,0 +1,22 @@
+# ── 凭据：永不进仓 ──────────────────────────
+.env
+*.env
+!.env.example
+
+# ── 运行时环境（可重建，体积大）──────────────
+_python/
+_venv/
+__pycache__/
+*.pyc
+
+# ── 暂存与归档 ──────────────────────────────
+# _scratch/ 含 wind-研究暂存（Wind 硬编码 key，10 文件）
+# _archive/ 含 patch-backup/config.py（历史明文凭据，T2 清）
+_scratch/
+_archive/
+
+# ── 数据与产物（非代码）──────────────────────
+回测产物/
+*.parquet
+*.log
+*.bak*

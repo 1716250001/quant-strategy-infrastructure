@@ -1,0 +1,499 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [
+      {
+        "date": "20140627",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 0.0,
+          "total": 5.6,
+          "transfer_fee": 0.6
+        },
+        "price": 8.99,
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140630",
+        "fee": {
+          "commission": 5.0,
+          "stamp_duty": 8.98,
+          "total": 14.58,
+          "transfer_fee": 0.6
+        },
+        "price": 8.98,
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "600000.SH"
+      }
+    ],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 999969.8200000001,
+      "nav_last": {
+        "20140626": 1000000.0,
+        "20140627": 999974.4,
+        "20140630": 999969.8200000001,
+        "20140701": 999969.8200000001,
+        "20140702": 999969.8200000001,
+        "20140703": 999969.8200000001,
+        "20140704": 999969.8200000001,
+        "20140707": 999969.8200000001,
+        "20140708": 999969.8200000001
+      },
+      "realized_pnl_total": -30.17999999999917,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": -0.0009502325887031926,
+      "annualized_volatility": 0.00014230028607608759,
+      "calmar_ratio": -31.48550658406159,
+      "fee_ratio": 2.0180531106733103e-05,
+      "final_nav": 999969.8200000001,
+      "max_drawdown": -3.0179999999879747e-05,
+      "n_fills": 2.0,
+      "n_trading_days": 9.0,
+      "profit_loss_ratio": NaN,
+      "sharpe_ratio": -6.680757429355907,
+      "total_fees": 20.18,
+      "total_return": -3.0179999999879747e-05,
+      "total_turnover": 17970.0,
+      "turnover_annualized": 0.5660698977017743,
+      "win_rate": 0.0
+    },
+    "rejected_counts": {},
+    "rejections": [],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20140626",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {
+          "600000.SH": 8.9956
+        },
+        "cash": 991004.4,
+        "cumulative_return": -2.559999999995899e-05,
+        "daily_return": -2.559999999995899e-05,
+        "date": "20140627",
+        "drawdown": -2.559999999995899e-05,
+        "market_value": 8970.0,
+        "positions_qty": {
+          "600000.SH": 1000
+        },
+        "total_value": 999974.4
+      },
+      {
+        "avg_cost": {},
+        "cash": 999969.8200000001,
+        "cumulative_return": -3.0179999999879747e-05,
+        "daily_return": -4.580117250907456e-06,
+        "date": "20140630",
+        "drawdown": -3.0179999999879747e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999969.8200000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999969.8200000001,
+        "cumulative_return": -3.0179999999879747e-05,
+        "daily_return": 0.0,
+        "date": "20140701",
+        "drawdown": -3.0179999999879747e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999969.8200000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999969.8200000001,
+        "cumulative_return": -3.0179999999879747e-05,
+        "daily_return": 0.0,
+        "date": "20140702",
+        "drawdown": -3.0179999999879747e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999969.8200000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999969.8200000001,
+        "cumulative_return": -3.0179999999879747e-05,
+        "daily_return": 0.0,
+        "date": "20140703",
+        "drawdown": -3.0179999999879747e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999969.8200000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999969.8200000001,
+        "cumulative_return": -3.0179999999879747e-05,
+        "daily_return": 0.0,
+        "date": "20140704",
+        "drawdown": -3.0179999999879747e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999969.8200000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999969.8200000001,
+        "cumulative_return": -3.0179999999879747e-05,
+        "daily_return": 0.0,
+        "date": "20140707",
+        "drawdown": -3.0179999999879747e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999969.8200000001
+      },
+      {
+        "avg_cost": {},
+        "cash": 999969.8200000001,
+        "cumulative_return": -3.0179999999879747e-05,
+        "daily_return": 0.0,
+        "date": "20140708",
+        "drawdown": -3.0179999999879747e-05,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 999969.8200000001
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20140626": false,
+        "20140627": false,
+        "20140630": false,
+        "20140701": false,
+        "20140702": false,
+        "20140703": false,
+        "20140704": false,
+        "20140707": false,
+        "20140708": false
+      },
+      "is_st": {
+        "20140626": false,
+        "20140627": false,
+        "20140630": false,
+        "20140701": false,
+        "20140702": false,
+        "20140703": false,
+        "20140704": false,
+        "20140707": false,
+        "20140708": false
+      },
+      "limits": {
+        "20140626": [
+          9.88,
+          8.08
+        ],
+        "20140627": [
+          9.89,
+          8.09
+        ],
+        "20140630": [
+          9.87,
+          8.07
+        ],
+        "20140701": [
+          9.96,
+          8.15
+        ],
+        "20140702": [
+          9.97,
+          8.15
+        ],
+        "20140703": [
+          9.97,
+          8.15
+        ],
+        "20140704": [
+          9.98,
+          8.16
+        ],
+        "20140707": [
+          9.98,
+          8.16
+        ],
+        "20140708": [
+          9.96,
+          8.15
+        ]
+      },
+      "suspended": {
+        "20140626": false,
+        "20140627": false,
+        "20140630": false,
+        "20140701": false,
+        "20140702": false,
+        "20140703": false,
+        "20140704": false,
+        "20140707": false,
+        "20140708": false
+      },
+      "symbol": "600000.SH"
+    }
+  },
+  "case_id": "g7_fee_segments_pre2015",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 387941.139,
+        "close": 8.99,
+        "date": "20140626",
+        "high": 9.04,
+        "low": 8.98,
+        "open": 8.98,
+        "pre_close": 8.98,
+        "symbol": "600000.SH",
+        "vol": 430524.7
+      },
+      {
+        "amount": 383829.267,
+        "close": 8.97,
+        "date": "20140627",
+        "high": 9.02,
+        "low": 8.96,
+        "open": 8.99,
+        "pre_close": 8.99,
+        "symbol": "600000.SH",
+        "vol": 427132.39
+      },
+      {
+        "amount": 476195.578,
+        "close": 9.05,
+        "date": "20140630",
+        "high": 9.08,
+        "low": 8.98,
+        "open": 8.98,
+        "pre_close": 8.97,
+        "symbol": "600000.SH",
+        "vol": 526450.89
+      },
+      {
+        "amount": 385288.815,
+        "close": 9.06,
+        "date": "20140701",
+        "high": 9.1,
+        "low": 9.01,
+        "open": 9.08,
+        "pre_close": 9.05,
+        "symbol": "600000.SH",
+        "vol": 425845.0
+      },
+      {
+        "amount": 373724.765,
+        "close": 9.06,
+        "date": "20140702",
+        "high": 9.09,
+        "low": 9.02,
+        "open": 9.06,
+        "pre_close": 9.06,
+        "symbol": "600000.SH",
+        "vol": 412627.9
+      },
+      {
+        "amount": 585009.384,
+        "close": 9.07,
+        "date": "20140703",
+        "high": 9.09,
+        "low": 9.03,
+        "open": 9.06,
+        "pre_close": 9.06,
+        "symbol": "600000.SH",
+        "vol": 645532.32
+      },
+      {
+        "amount": 428330.85,
+        "close": 9.07,
+        "date": "20140704",
+        "high": 9.09,
+        "low": 9.05,
+        "open": 9.08,
+        "pre_close": 9.07,
+        "symbol": "600000.SH",
+        "vol": 472639.41
+      },
+      {
+        "amount": 387738.016,
+        "close": 9.05,
+        "date": "20140707",
+        "high": 9.08,
+        "low": 9.03,
+        "open": 9.07,
+        "pre_close": 9.07,
+        "symbol": "600000.SH",
+        "vol": 428314.05
+      },
+      {
+        "amount": 475316.192,
+        "close": 9.05,
+        "date": "20140708",
+        "high": 9.06,
+        "low": 9.01,
+        "open": 9.05,
+        "pre_close": 9.05,
+        "symbol": "600000.SH",
+        "vol": 525929.64
+      }
+    ],
+    "dates": [
+      "20140626",
+      "20140627",
+      "20140630",
+      "20140701",
+      "20140702",
+      "20140703",
+      "20140704",
+      "20140707",
+      "20140708"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "600000.SH"
+      }
+    ],
+    "states": [
+      {
+        "date": "20140626",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.08,
+        "limit_up": 9.88,
+        "suspended": false,
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140627",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.09,
+        "limit_up": 9.89,
+        "suspended": false,
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140630",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.07,
+        "limit_up": 9.87,
+        "suspended": false,
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140701",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.15,
+        "limit_up": 9.96,
+        "suspended": false,
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140702",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.15,
+        "limit_up": 9.97,
+        "suspended": false,
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140703",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.15,
+        "limit_up": 9.97,
+        "suspended": false,
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140704",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.16,
+        "limit_up": 9.98,
+        "suspended": false,
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140707",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.16,
+        "limit_up": 9.98,
+        "suspended": false,
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140708",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 8.15,
+        "limit_up": 9.96,
+        "suspended": false,
+        "symbol": "600000.SH"
+      }
+    ]
+  },
+  "data_hash": "sha256:5f1d686d0522d62c4123a68d2aba1fdf97de9384b0b35dfcdc0434a035b01cf1",
+  "description": "费率分段（2015-08-01 前：过户费仅沪市按面额 0.06%）+ 最低佣金",
+  "group": "G7",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "orders": [
+      {
+        "date": "20140626",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "600000.SH"
+      },
+      {
+        "date": "20140627",
+        "qty": 1000,
+        "side": "sell",
+        "symbol": "600000.SH"
+      }
+    ],
+    "targets": {}
+  },
+  "source": {
+    "anchor": "20140701",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "600000.SH",
+    "window": {
+      "after": 5,
+      "before": 3,
+      "dates": [
+        "20140626",
+        "20140627",
+        "20140630",
+        "20140701",
+        "20140702",
+        "20140703",
+        "20140704",
+        "20140707",
+        "20140708"
+      ]
+    }
+  }
+}

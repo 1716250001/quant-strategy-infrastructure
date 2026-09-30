@@ -1,0 +1,468 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [
+      {
+        "avg_cost_after": 12.805515417867435,
+        "avg_cost_before": 13.023515417867435,
+        "cash_div": 0.218,
+        "date": "20200528",
+        "nav_delta": -15129.2,
+        "qty_after": 69400,
+        "qty_at_ex": 69400,
+        "qty_before": 69400,
+        "stk_div": 0.0,
+        "symbol": "000001.SZ",
+        "type": "ex"
+      },
+      {
+        "cash_delta": 15129.2,
+        "cash_div": 0.218,
+        "date": "20200528",
+        "nav_delta": 15129.2,
+        "qty_at_ex": 69400,
+        "symbol": "000001.SZ",
+        "type": "pay"
+      }
+    ],
+    "fills": [
+      {
+        "date": "20200526",
+        "fee": {
+          "commission": 225.9,
+          "stamp_duty": 0.0,
+          "total": 243.97,
+          "transfer_fee": 18.07
+        },
+        "price": 13.02,
+        "qty": 69400,
+        "side": "buy",
+        "symbol": "000001.SZ"
+      },
+      {
+        "date": "20200608",
+        "fee": {
+          "commission": 237.35,
+          "stamp_duty": 949.39,
+          "total": 1205.73,
+          "transfer_fee": 18.99
+        },
+        "price": 13.68,
+        "qty": 69400,
+        "side": "sell",
+        "symbol": "000001.SZ"
+      }
+    ],
+    "invariants": {
+      "event_days": [
+        {
+          "avg_cost_after": 12.805515417867435,
+          "avg_cost_before": 13.023515417867435,
+          "cash_div": 0.218,
+          "date": "20200528",
+          "kind": "ex",
+          "nav_delta": -15129.2,
+          "qty_after": 69400,
+          "qty_before": 69400,
+          "stk_div": 0.0
+        }
+      ],
+      "final_cash": 1059483.5,
+      "nav_last": {
+        "20200525": 1000000.0,
+        "20200526": 1001144.0299999999,
+        "20200527": 998368.03,
+        "20200528": 1018355.23,
+        "20200529": 1013497.23,
+        "20200601": 1035705.23,
+        "20200602": 1051667.23,
+        "20200603": 1050973.23,
+        "20200604": 1053055.23,
+        "20200605": 1054443.23,
+        "20200608": 1059483.5
+      },
+      "realized_pnl_total": 59483.500000000015,
+      "windows": [
+        {
+          "ex_date": "20200528",
+          "ex_nav_delta": -15129.2,
+          "pay_date": "20200528",
+          "pay_nav_delta": 15129.2,
+          "qty_at_ex": 69400,
+          "symbol": "000001.SZ",
+          "window_event_delta": 0.0
+        }
+      ]
+    },
+    "metrics": {
+      "annualized_return": 3.2891751236230444,
+      "annualized_volatility": 0.15322804157018843,
+      "calmar_ratio": 689.4912905573048,
+      "fee_ratio": 0.0014066448802587538,
+      "final_nav": 1059483.5,
+      "max_drawdown": -0.004770437522081616,
+      "n_fills": 2.0,
+      "n_trading_days": 11.0,
+      "profit_loss_ratio": 3.477766487648768,
+      "sharpe_ratio": 9.598557884328084,
+      "total_fees": 1449.7,
+      "total_return": 0.05948350000000002,
+      "total_turnover": 1852980.0,
+      "turnover_annualized": 45.3082829010078,
+      "win_rate": 0.7
+    },
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20200525",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.023515417867435
+        },
+        "cash": 96168.03000000003,
+        "cumulative_return": 0.0011440299999998516,
+        "daily_return": 0.0011440299999998516,
+        "date": "20200526",
+        "drawdown": 0.0,
+        "market_value": 904975.9999999999,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 1001144.0299999999
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 13.023515417867435
+        },
+        "cash": 96168.03000000003,
+        "cumulative_return": -0.001631969999999927,
+        "daily_return": -0.002772827801809763,
+        "date": "20200527",
+        "drawdown": -0.002772827801809763,
+        "market_value": 902200.0,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 998368.03
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.805515417867435
+        },
+        "cash": 111297.23000000003,
+        "cumulative_return": 0.018355230000000056,
+        "daily_return": 0.020019871830230684,
+        "date": "20200528",
+        "drawdown": 0.0,
+        "market_value": 907058.0,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 1018355.23
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.805515417867435
+        },
+        "cash": 111297.23000000003,
+        "cumulative_return": 0.013497230000000027,
+        "daily_return": -0.004770437522081616,
+        "date": "20200529",
+        "drawdown": -0.004770437522081616,
+        "market_value": 902200.0,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 1013497.23
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.805515417867435
+        },
+        "cash": 111297.23000000003,
+        "cumulative_return": 0.03570523000000003,
+        "daily_return": 0.021912245384232643,
+        "date": "20200601",
+        "drawdown": 0.0,
+        "market_value": 924408.0,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 1035705.23
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.805515417867435
+        },
+        "cash": 111297.23000000003,
+        "cumulative_return": 0.051667230000000064,
+        "daily_return": 0.015411720958481645,
+        "date": "20200602",
+        "drawdown": 0.0,
+        "market_value": 940370.0,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 1051667.23
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.805515417867435
+        },
+        "cash": 111297.23000000003,
+        "cumulative_return": 0.05097323000000009,
+        "daily_return": -0.00065990455935383,
+        "date": "20200603",
+        "drawdown": -0.00065990455935383,
+        "market_value": 939675.9999999999,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 1050973.23
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.805515417867435
+        },
+        "cash": 111297.23000000003,
+        "cumulative_return": 0.05305523000000001,
+        "daily_return": 0.0019810209628270403,
+        "date": "20200604",
+        "drawdown": 0.0,
+        "market_value": 941758.0,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 1053055.23
+      },
+      {
+        "avg_cost": {
+          "000001.SZ": 12.805515417867435
+        },
+        "cash": 111297.23000000003,
+        "cumulative_return": 0.054443229999999954,
+        "daily_return": 0.0013180695185379676,
+        "date": "20200605",
+        "drawdown": 0.0,
+        "market_value": 943146.0,
+        "positions_qty": {
+          "000001.SZ": 69400
+        },
+        "total_value": 1054443.23
+      },
+      {
+        "avg_cost": {},
+        "cash": 1059483.5,
+        "cumulative_return": 0.05948350000000002,
+        "daily_return": 0.0047800297413831405,
+        "date": "20200608",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1059483.5
+      }
+    ]
+  },
+  "case_id": "g1_cash_div_same_day",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [
+      {
+        "ann_date": "20200515",
+        "cash_div_per_share": 0.218,
+        "ex_date": "20200528",
+        "pay_date": "20200528",
+        "record_date": "20200527",
+        "stk_div_per_share": 0.0,
+        "symbol": "000001.SZ"
+      }
+    ],
+    "bars": [
+      {
+        "amount": 528769.352,
+        "close": 12.96,
+        "date": "20200525",
+        "high": 12.98,
+        "low": 12.76,
+        "open": 12.97,
+        "pre_close": 12.92,
+        "symbol": "000001.SZ",
+        "vol": 410170.78
+      },
+      {
+        "amount": 515451.849,
+        "close": 13.04,
+        "date": "20200526",
+        "high": 13.07,
+        "low": 12.94,
+        "open": 13.02,
+        "pre_close": 12.96,
+        "symbol": "000001.SZ",
+        "vol": 396212.4
+      },
+      {
+        "amount": 630305.864,
+        "close": 13.0,
+        "date": "20200527",
+        "high": 13.19,
+        "low": 12.96,
+        "open": 13.05,
+        "pre_close": 13.04,
+        "symbol": "000001.SZ",
+        "vol": 482962.94
+      },
+      {
+        "amount": 1255226.999,
+        "close": 13.07,
+        "date": "20200528",
+        "high": 13.18,
+        "low": 12.81,
+        "open": 12.87,
+        "pre_close": 12.78,
+        "symbol": "000001.SZ",
+        "vol": 960760.31
+      },
+      {
+        "amount": 594502.123,
+        "close": 13.0,
+        "date": "20200529",
+        "high": 13.04,
+        "low": 12.92,
+        "open": 13.01,
+        "pre_close": 13.07,
+        "symbol": "000001.SZ",
+        "vol": 457808.22
+      },
+      {
+        "amount": 1173619.006,
+        "close": 13.32,
+        "date": "20200601",
+        "high": 13.39,
+        "low": 13.08,
+        "open": 13.1,
+        "pre_close": 13.0,
+        "symbol": "000001.SZ",
+        "vol": 882960.55
+      },
+      {
+        "amount": 1194375.822,
+        "close": 13.55,
+        "date": "20200602",
+        "high": 13.63,
+        "low": 13.28,
+        "open": 13.29,
+        "pre_close": 13.32,
+        "symbol": "000001.SZ",
+        "vol": 883458.88
+      },
+      {
+        "amount": 1308782.294,
+        "close": 13.54,
+        "date": "20200603",
+        "high": 13.88,
+        "low": 13.5,
+        "open": 13.64,
+        "pre_close": 13.55,
+        "symbol": "000001.SZ",
+        "vol": 956803.08
+      },
+      {
+        "amount": 788707.63,
+        "close": 13.57,
+        "date": "20200604",
+        "high": 13.64,
+        "low": 13.41,
+        "open": 13.53,
+        "pre_close": 13.54,
+        "symbol": "000001.SZ",
+        "vol": 583066.33
+      },
+      {
+        "amount": 517232.135,
+        "close": 13.59,
+        "date": "20200605",
+        "high": 13.62,
+        "low": 13.43,
+        "open": 13.6,
+        "pre_close": 13.57,
+        "symbol": "000001.SZ",
+        "vol": 383026.9
+      },
+      {
+        "amount": 802115.792,
+        "close": 13.62,
+        "date": "20200608",
+        "high": 13.85,
+        "low": 13.58,
+        "open": 13.68,
+        "pre_close": 13.59,
+        "symbol": "000001.SZ",
+        "vol": 585971.9
+      }
+    ],
+    "dates": [
+      "20200525",
+      "20200526",
+      "20200527",
+      "20200528",
+      "20200529",
+      "20200601",
+      "20200602",
+      "20200603",
+      "20200604",
+      "20200605",
+      "20200608"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "000001.SZ"
+      }
+    ]
+  },
+  "data_hash": "sha256:c0bdf480668a68c8b58f403183272060ec6ddf9bfd7709c48319a5c588482a7e",
+  "description": "派息且 pay≡ex（2020+ 常态）：单日 Δ=0，avg_cost 摊薄",
+  "group": "G1",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "targets": {
+      "20200525": {
+        "000001.SZ": 0.9
+      },
+      "20200605": {}
+    }
+  },
+  "source": {
+    "anchor_ex_date": "20200528",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "000001.SZ",
+    "window": {
+      "after": 7,
+      "before": 3,
+      "dates": [
+        "20200525",
+        "20200526",
+        "20200527",
+        "20200528",
+        "20200529",
+        "20200601",
+        "20200602",
+        "20200603",
+        "20200604",
+        "20200605",
+        "20200608"
+      ]
+    }
+  }
+}

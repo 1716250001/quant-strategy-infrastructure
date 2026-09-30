@@ -1,0 +1,42 @@
+# ── 依赖声明双文件关系（G8 · 2026-09-25 订正）─────────────────────────
+# 本文件 = **部署视图**：28 包全量冻结（8 直接依赖 + 传递闭包），重建环境用它。
+# pyproject.toml = **开发视图**：仅 8 个直接依赖（宽松版本），说明代码引用面。
+# 两文件定位不同、刻意并存；版本冲突时以本文件（冻结实测）为准。
+#
+# 打捞代码所需依赖（8 个直接依赖 + 传递闭包，共 28 个包）
+# 来源：系统 Store python（Python 3.13.14），2026-09-24 21:34 冻结导出
+# 目标环境（2026-09-25 订正）：D:\量化策略\代码\_venv
+# 用法：D:\量化策略\代码\_venv\Scripts\pip install -r requirements.txt
+#
+# 直接依赖（代码里 import 的）：
+#   pandas(49文件) numpy(12) akshare(8) pyarrow(5) requests(4) scipy(1) tushare(1) openpyxl(1)
+# 其余为上述包的传递依赖，版本全部锁定为 Store python 实测通过的版本。
+
+akshare==1.18.95
+beautifulsoup4==4.14.3
+bs4==0.0.2
+certifi==2026.5.20
+charset-normalizer==3.4.7
+curl_cffi==0.15.0
+decorator==5.3.1
+et_xmlfile==2.0.0
+html5lib==1.1
+idna==3.16
+jsonpath==0.82.2
+lxml==6.1.1
+mini-racer==0.14.1
+numpy==2.4.6
+openpyxl==3.1.5
+pandas==3.0.3
+pyarrow==25.0.1
+python-dateutil==2.9.0.post0
+requests==2.34.2
+scipy==1.18.0
+simplejson==4.1.1
+tabulate==0.10.0
+tqdm==4.67.3
+tushare==1.4.29
+tzdata==2026.2
+urllib3==2.7.0
+websocket-client==1.9.0
+xlrd==2.0.2

@@ -1,0 +1,450 @@
+{
+  "assertions": {
+    "contract_version": "golden.v1",
+    "events": [],
+    "fills": [],
+    "invariants": {
+      "event_days": [],
+      "final_cash": 1000000.0,
+      "nav_last": {
+        "20190408": 1000000.0,
+        "20190409": 1000000.0,
+        "20190410": 1000000.0,
+        "20190411": 1000000.0,
+        "20190412": 1000000.0,
+        "20190415": 1000000.0,
+        "20190416": 1000000.0,
+        "20190417": 1000000.0,
+        "20190418": 1000000.0
+      },
+      "realized_pnl_total": 0.0,
+      "windows": []
+    },
+    "metrics": {
+      "annualized_return": 0.0,
+      "annualized_volatility": 0.0,
+      "calmar_ratio": NaN,
+      "fee_ratio": 0.0,
+      "final_nav": 1000000.0,
+      "max_drawdown": 0.0,
+      "n_fills": 0.0,
+      "n_trading_days": 9.0,
+      "profit_loss_ratio": NaN,
+      "sharpe_ratio": NaN,
+      "total_fees": 0,
+      "total_return": 0.0,
+      "total_turnover": 0,
+      "turnover_annualized": 0.0,
+      "win_rate": 0.0
+    },
+    "rejected_counts": {
+      "limit_up": 1
+    },
+    "rejections": [
+      {
+        "code": "limit_up",
+        "date": "20190411",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000004.SZ"
+      }
+    ],
+    "snapshots": [
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190408",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190409",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190410",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190411",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190412",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190415",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190416",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190417",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      },
+      {
+        "avg_cost": {},
+        "cash": 1000000.0,
+        "cumulative_return": 0.0,
+        "daily_return": 0.0,
+        "date": "20190418",
+        "drawdown": 0.0,
+        "market_value": 0.0,
+        "positions_qty": {},
+        "total_value": 1000000.0
+      }
+    ],
+    "state_expectations": {
+      "delisted": {
+        "20190408": false,
+        "20190409": false,
+        "20190410": false,
+        "20190411": false,
+        "20190412": false,
+        "20190415": false,
+        "20190416": false,
+        "20190417": false,
+        "20190418": false
+      },
+      "is_st": {
+        "20190408": false,
+        "20190409": false,
+        "20190410": false,
+        "20190411": false,
+        "20190412": false,
+        "20190415": false,
+        "20190416": false,
+        "20190417": false,
+        "20190418": false
+      },
+      "limits": {
+        "20190408": [
+          23.84,
+          19.5
+        ],
+        "20190409": [
+          23.84,
+          19.5
+        ],
+        "20190410": [
+          23.84,
+          19.5
+        ],
+        "20190411": [
+          26.22,
+          21.46
+        ],
+        "20190412": [
+          27.4,
+          22.42
+        ],
+        "20190415": [
+          24.73,
+          20.23
+        ],
+        "20190416": [
+          23.66,
+          19.36
+        ],
+        "20190417": [
+          23.19,
+          18.97
+        ],
+        "20190418": [
+          23.32,
+          19.08
+        ]
+      },
+      "suspended": {
+        "20190408": true,
+        "20190409": true,
+        "20190410": true,
+        "20190411": false,
+        "20190412": false,
+        "20190415": false,
+        "20190416": false,
+        "20190417": false,
+        "20190418": false
+      },
+      "symbol": "000004.SZ"
+    }
+  },
+  "case_id": "g2_limit_up_buy_rejected",
+  "contract_version": "golden.v1",
+  "data": {
+    "actions": [],
+    "bars": [
+      {
+        "amount": 8209.16,
+        "close": 23.84,
+        "date": "20190410",
+        "high": 23.84,
+        "low": 23.84,
+        "open": 23.84,
+        "pre_close": 21.67,
+        "symbol": "000004.SZ",
+        "vol": 3443.44
+      },
+      {
+        "amount": 154439.414,
+        "close": 24.91,
+        "date": "20190411",
+        "high": 26.22,
+        "low": 22.9,
+        "open": 26.22,
+        "pre_close": 23.84,
+        "symbol": "000004.SZ",
+        "vol": 62579.41
+      },
+      {
+        "amount": 79517.603,
+        "close": 22.48,
+        "date": "20190412",
+        "high": 24.3,
+        "low": 22.42,
+        "open": 24.28,
+        "pre_close": 24.91,
+        "symbol": "000004.SZ",
+        "vol": 34587.9
+      },
+      {
+        "amount": 48279.075,
+        "close": 21.51,
+        "date": "20190415",
+        "high": 22.58,
+        "low": 21.38,
+        "open": 21.82,
+        "pre_close": 22.48,
+        "symbol": "000004.SZ",
+        "vol": 21928.77
+      },
+      {
+        "amount": 42788.769,
+        "close": 21.08,
+        "date": "20190416",
+        "high": 21.3,
+        "low": 20.18,
+        "open": 21.1,
+        "pre_close": 21.51,
+        "symbol": "000004.SZ",
+        "vol": 20606.22
+      },
+      {
+        "amount": 37033.916,
+        "close": 21.2,
+        "date": "20190417",
+        "high": 21.7,
+        "low": 20.8,
+        "open": 21.06,
+        "pre_close": 21.08,
+        "symbol": "000004.SZ",
+        "vol": 17383.73
+      },
+      {
+        "amount": 22915.582,
+        "close": 21.3,
+        "date": "20190418",
+        "high": 21.6,
+        "low": 21.06,
+        "open": 21.15,
+        "pre_close": 21.2,
+        "symbol": "000004.SZ",
+        "vol": 10742.52
+      }
+    ],
+    "dates": [
+      "20190408",
+      "20190409",
+      "20190410",
+      "20190411",
+      "20190412",
+      "20190415",
+      "20190416",
+      "20190417",
+      "20190418"
+    ],
+    "instruments": [
+      {
+        "asset_class": "stock",
+        "board": "main",
+        "lot_size": 100,
+        "symbol": "000004.SZ"
+      }
+    ],
+    "states": [
+      {
+        "date": "20190408",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 19.5,
+        "limit_up": 23.84,
+        "suspended": true,
+        "symbol": "000004.SZ"
+      },
+      {
+        "date": "20190409",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 19.5,
+        "limit_up": 23.84,
+        "suspended": true,
+        "symbol": "000004.SZ"
+      },
+      {
+        "date": "20190410",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 19.5,
+        "limit_up": 23.84,
+        "suspended": true,
+        "symbol": "000004.SZ"
+      },
+      {
+        "date": "20190411",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 21.46,
+        "limit_up": 26.22,
+        "suspended": false,
+        "symbol": "000004.SZ"
+      },
+      {
+        "date": "20190412",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 22.42,
+        "limit_up": 27.4,
+        "suspended": false,
+        "symbol": "000004.SZ"
+      },
+      {
+        "date": "20190415",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 20.23,
+        "limit_up": 24.73,
+        "suspended": false,
+        "symbol": "000004.SZ"
+      },
+      {
+        "date": "20190416",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 19.36,
+        "limit_up": 23.66,
+        "suspended": false,
+        "symbol": "000004.SZ"
+      },
+      {
+        "date": "20190417",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 18.97,
+        "limit_up": 23.19,
+        "suspended": false,
+        "symbol": "000004.SZ"
+      },
+      {
+        "date": "20190418",
+        "delisted": false,
+        "is_st": false,
+        "limit_down": 19.08,
+        "limit_up": 23.32,
+        "suspended": false,
+        "symbol": "000004.SZ"
+      }
+    ]
+  },
+  "data_hash": "sha256:9d888bac5cffa196b9508a00f5725e332ac52022993811eb82369356e5af54f9",
+  "description": "涨停开盘买入拒单：000004.SZ 20190411 开盘=涨停价 26.22（非停牌日）→ limit_up",
+  "group": "G2",
+  "plan": {
+    "initial_cash": 1000000.0,
+    "lot_size": 100,
+    "orders": [
+      {
+        "date": "20190410",
+        "qty": 1000,
+        "side": "buy",
+        "symbol": "000004.SZ"
+      }
+    ],
+    "targets": {}
+  },
+  "source": {
+    "anchor": "20190411",
+    "database": "D:\\全量数据\\market_data",
+    "symbol": "000004.SZ",
+    "window": {
+      "after": 5,
+      "before": 3,
+      "dates": [
+        "20190408",
+        "20190409",
+        "20190410",
+        "20190411",
+        "20190412",
+        "20190415",
+        "20190416",
+        "20190417",
+        "20190418"
+      ]
+    }
+  }
+}
