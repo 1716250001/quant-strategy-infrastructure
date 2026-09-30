@@ -49,22 +49,48 @@ from common.parquet_store import upsert_by_year
 #   修法: fetch_metadata 增加 dry_run —— 干跑时零请求零写入，只打印计划，
 #        代码清单改读本地已有元数据。
 #
-# ⚠ 仍未修的缺陷（不在 T6 边界内，待另开单）: 本段 0b 无分页保护 ——
-#   fund_type 参数被服务端静默忽略，每次调用各返回全市场前 15,000 行（单页硬顶），
-#   两次 concat 后 drop_duplicates 仍是 1.5 万行级残缺表。真跑（非 dry-run）
-#   仍会用残缺表覆盖 fund_basic.parquet。
+#   2026-09-30（T7）续修: 0b 段改为按官方 market 字段分片分页（E 一页拿全 + O 翻页
+#   ~6 页），不传 fields（拿官方 25 列含 market/status）；三张元数据表在 to_parquet
+#   覆盖前统一过 _guard_overwrite() ——「新行数 < 现有行数 → 拒绝覆盖并抛错」。
+def _guard_overwrite(path, new_df, min_rows_hint=None):
+    """覆盖前守卫：现有表存在且行数 > 新数据行数 → 拒绝覆盖并抛错。
+
+    为什么必须（2026-09-29 事故教训）：服务端静默忽略参数 / 单页硬顶会把
+    完整表写成残缺表；「行数不得少于现有表」是最直接的自愈防线。
+
+    min_rows_hint: 可选下限（stock_basic 5,910 / trade_cal 13,527 /
+        fund_basic 32,953）—— 现有表缺失或读不出时，用它兜住"首次拉取就残缺"。
+    """
+    old_n = None
+    if os.path.exists(path):
+        try:
+            old_n = len(pd.read_parquet(path))
+        except Exception:
+            old_n = None
+        if old_n is not None and len(new_df) < old_n:
+            raise RuntimeError(
+                f"拒绝覆盖 {os.path.basename(path)}: 新 {len(new_df):,} 行 "
+                f"< 现有 {old_n:,} 行。疑似分页截断/参数被静默忽略，"
+                f"请检查拉取逻辑。")
+    if min_rows_hint is not None and len(new_df) < min_rows_hint:
+        raise RuntimeError(
+            f"拒绝写入 {os.path.basename(path)}: 新 {len(new_df):,} 行 "
+            f"< 下限 {min_rows_hint:,} 行（现有表 "
+            f"{old_n if old_n is not None else '缺失/不可读'}）。")
+
+
 def _print_metadata_plan(meta_dir):
     """打印元数据段计划（dry-run 专用；零请求零写入）"""
     print("\n" + "=" * 60)
     print("  Phase 0: 元数据 [DRY-RUN]")
     print("=" * 60)
-    print("[DRY-RUN] 将拉取: stock_basic×3(L/D/P) + fund_basic×2(ETF/LOF) "
-          "+ trade_cal×1 = 6 次请求（本次一条都不发出）")
+    print("[DRY-RUN] 将拉取: stock_basic×3(L/D/P) + fund_basic 分片(E 1 页 + O ~6 页) "
+          "+ trade_cal×1 = 约 11 次请求（本次一条都不发出）")
     print("[DRY-RUN] 将写入: " + " | ".join(
         os.path.join(meta_dir, f) for f in
         ("stock_basic.parquet", "fund_basic.parquet", "trade_cal.parquet")))
-    print("[DRY-RUN]   ⚠ 0b 段无分页保护（fund_type 被服务端忽略 + 单页 15,000 硬顶）"
-          " —— 真跑会用残缺表覆盖 fund_basic，即 2026-09-29 事故")
+    print("[DRY-RUN]   覆盖前守卫: 三张表均校验「新行数 ≥ 现有行数」，"
+          "截断拉取会被拒绝覆盖（2026-09-29 事故自愈防线）")
 
 
 def _load_local_metadata(meta_dir=None):
@@ -123,31 +149,64 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
 
     if stock_list:
         stock_df = pd.concat(stock_list, ignore_index=True).drop_duplicates(subset="ts_code")
-        stock_df.to_parquet(os.path.join(meta_dir, "stock_basic.parquet"), index=False)
+        stock_path = os.path.join(meta_dir, "stock_basic.parquet")
+        _guard_overwrite(stock_path, stock_df)
+        stock_df.to_parquet(stock_path, index=False)
         print(f"  → 合计 {len(stock_df)} 只股票, 已保存")
     else:
         stock_df = pd.DataFrame()
         print("  [ERROR] 未获取到任何股票数据!")
 
-    # --- 基金列表 (ETF + LOF) ---
-    print("\n[0b] 基金列表 (fund_basic)...")
-    limiter.wait()
+    # --- 基金列表 (场内 E + 场外 O) ---
+    # ⚠ 2026-09-30（T7）: 原实现按 fund_type="ETF"/"LOF" 各调一次 —— 该参数被服务端
+    #   静默忽略，每次返回全市场前 15,000 行（单页硬顶）→ concat 去重后仍是 1.5 万行
+    #   残缺表（且 fields 传了非官方字段 → 落盘无 market 列）→ 下游 market=="E"
+    #   过滤静默失效。这就是 2026-09-29 事故的技术根因。
+    #   现改为按官方 market 字段分片: E（场内，一页拿全）+ O（场外，limit/offset 翻页）；
+    #   不传 fields（拿官方 25 列含 market/status）；节奏对齐参考脚本
+    #   _scratch/fix_fund_basic_20260930.py（0.6s/次，限频 170/min 内安全）。
+    print("\n[0b] 基金列表 (fund_basic, 按 market 分片)...")
     fund_list = []
-    for fund_type in ["ETF", "LOF"]:
+    n_e, n_o_total, n_o_pages = 0, 0, 0
+
+    limiter.wait()
+    try:
+        df_e = pro.fund_basic(market="E")
+        limiter.record("fund_basic")
+        if df_e is not None and not df_e.empty:
+            fund_list.append(df_e)
+            n_e = len(df_e)
+        print(f"  [0b] fund_basic 按 market 分片: E {n_e} 只")
+    except Exception as e:
+        print(f"  [WARN] fund_basic market=E: {e}")
+
+    offset = 0
+    while True:
+        time.sleep(0.6)
         try:
-            df = pro.fund_basic(fund_type=fund_type,
-                                fields="ts_code,symbol,name,fund_type,list_date,delist_date,list_status")
+            df = pro.fund_basic(market="O", limit=5000, offset=offset)
             limiter.record("fund_basic")
-            if df is not None and not df.empty:
-                fund_list.append(df)
-                print(f"  {fund_type}: {len(df)}只")
         except Exception as e:
-            print(f"  [WARN] fund_basic {fund_type}: {e}")
+            print(f"  [WARN] fund_basic market=O offset={offset}: {e}")
+            break
+        n = 0 if df is None else len(df)
+        n_o_pages += 1
+        n_o_total += n
+        print(f"  [0b] fund_basic 按 market 分片: O 第{n_o_pages}页 {n} 只")
+        if n == 0:
+            break
+        fund_list.append(df)
+        if n < 5000:
+            break
+        offset += 5000
 
     if fund_list:
         fund_df = pd.concat(fund_list, ignore_index=True).drop_duplicates(subset="ts_code")
-        fund_df.to_parquet(os.path.join(meta_dir, "fund_basic.parquet"), index=False)
-        print(f"  → 合计 {len(fund_df)} 只基金(ETF+LOF), 已保存")
+        path = os.path.join(meta_dir, "fund_basic.parquet")
+        _guard_overwrite(path, fund_df)
+        fund_df.to_parquet(path, index=False)
+        print(f"  → 合计 {len(fund_df)} 只基金 (场内E {n_e} + 场外O "
+              f"{n_o_total}/{n_o_pages}页), 已保存")
     else:
         fund_df = pd.DataFrame()
         print("  [ERROR] 未获取到任何基金数据!")
@@ -159,7 +218,9 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
         cal = pro.trade_cal(exchange="SSE", start_date="19900101", end_date="20301231")
         limiter.record("trade_cal")
         if cal is not None and not cal.empty:
-            cal.to_parquet(os.path.join(meta_dir, "trade_cal.parquet"), index=False)
+            cal_path = os.path.join(meta_dir, "trade_cal.parquet")
+            _guard_overwrite(cal_path, cal)
+            cal.to_parquet(cal_path, index=False)
             trade_dates = cal[cal["is_open"] == 1]["cal_date"].tolist()
             print(f"  → {len(trade_dates)} 个交易日, 已保存")
         else:
