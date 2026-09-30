@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from common.jsonio import load_json, save_json
-from config import PUSHPLUS_TOKEN, PUSHPLUS_CHANNEL, PUSHPLUS_TEMPLATE, DATA_DIR
+from config import PUSHPLUS_TOKEN, PUSHPLUS_CHANNEL, PUSHPLUS_TEMPLATE, TEMP_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class PushPlus:
         self.cooldown_seconds = cooldown_minutes * 60
 
         # 状态文件（持久化计数器，跨进程共享）
-        self.state_file = state_file or os.path.join(DATA_DIR, ".pushplus_state.json")
+        self.state_file = state_file or os.path.join(TEMP_DIR, "pushplus_state.json")
 
         # 运行时状态
         self._state = self._load_state()
