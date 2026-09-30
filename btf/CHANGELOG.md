@@ -3,6 +3,85 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 结构；
 版本号遵循语义化版本（M0 由 18 号分步编码计划定义）。
 
+## [1.1.0] — 2026-09-30
+
+**发布主题：CLI 正面收编（文档写了很久的 `bt check` 真成了命令）—— CLI 审查报告批次**
+
+> 依据：**《CLI 审查报告-回测平台-20260930》**（赤潮）+ 老大令"按此文档修改"；
+> **边界**：不改引擎/策略/数据/回测语义，改动面纯 CLI（新命令 4 条 + dataset 动作 2 个 + `--version` 1 个）；
+> 核心包 diff 仅入口层（`btf/cli/*`、`btf/app/*`、包根 docstring、`_version.py`）。
+
+### 新增（Added）——命令族 7 → 11
+
+- **`bt check`（报告 P0）**：九项架构门禁**收编为子命令**
+  （`cli._cmd_check` → `app.run_gate_check` → `tools/check.py`）。**判定逻辑不复制**：
+  `bt check` ≡ `python tools/check.py`（同脚本、同退出码 0/1 原样透传）。治的病：
+  CHANGELOG/19 号/记忆长期写 `bt check` 而它**不是命令**（"文档与 CLI 脱节"）；
+  设计取舍：**门禁不收参数**（口径唯一优先于开关便利）。
+- **`bt --version`（报告 P1）**：输出 `btf <版本>`；版本取 `btf._version` 单源
+  （`pyproject` 走 `dynamic`+`attr`，未安装亦生效）。
+- **`bt cold-backup`（报告 P2）**：跨版本源码冷备收编（→ `tools/cold_backup.py`）；
+  `--reason/--out/--verify` 直通，`--verify` 与新建互斥；未给 `--reason` 时**不传**该参
+  （保留脚本默认值——避免 CLI 与脚本两套默认）。
+- **`bt runs [--latest N]` / `bt show --run <id>`（报告 P2）**：产物**只读**查询
+  （经 `runtime.make_store`，入口层不直连 experiment）。`runs` 一行给
+  run_id/状态/目录时间/5 个关键指标；`show` 给 manifest 摘要（期间/数据指纹/规则版本/
+  配置哈希/**重算锚**/契约/代码版本）+ 指标全精度。两条纪律写进实现：
+  ① 坏 manifest **不静默**（行照列 + `status=?` + `[warn]` 写明原因）；
+  ② `show` **不重算**（重算属 `bt verify`），FAILED run 仍可看（审计价值）仅 stderr 告警。
+- **`bt dataset verify|refcalc`（报告 P3）**：`verify`＝与主库对账（不写盘）；
+  `refcalc`＝**只读案例内嵌数据**重算断言（`build_golden.py --refcalc`，**不读主库**）
+  ——"黄金集自洽"与"主库一致"自此可分头证；动作走 `choices` 白名单
+  （拼错动作＝参数错误，不再静默退化成构建）。
+- **入口层去重**：`app._run_tool_script` 收拢子进程委托（`build_dataset` 改写 + 新 3 处复用）；
+  `cli._RUN_METRIC_KEYS` 收拢 `run/runs/show` 的指标行（原为 `_cmd_run` 内联元组——
+  新命令若各写一份即"同一摘要三个口径"）。
+
+### 变更（Changed）
+
+- **探针归档（报告 P3）**：5 个一次性探针
+  `tools/{probe_layout,probe_sort_equiv,probe_sorted,profile_b1,profile_b1_breakdown}.py`
+  → **`tools/probes/`**（核过：**不被任何代码 import**；`benchmarks/README.md` 引用同步）。
+  `tools/` 只留常驻工具；`tools/README.md` 重写为**常驻工具 vs 探针**的真实清单
+  （原文只列 3 个工具，与目录 21 个文件不符）。
+- **机检口径标注（报告 P3）**：`tools/check.py` 用法加 `bt check` 同源入口；
+  7 个机检脚本 docstring **逐脚本核对**后标注——4 个写"由 `bt check` 第 N/9 项编排"，
+  `check_plugin_boundary.py` / `check_rules_four_way.py` 写"**不在**九项内"
+  （不统一贴同一句话：并入常跑门禁会让"基线漂移"被自动刷新掩盖）。
+- **帮助文本收口（报告 P1-2）**：`bt test` 明写与 `bt check` 的分工（`--layer` 默认 `l1`
+  **保持不变**，仅帮助显式提示全量要 `all`——不改行为，避免自动化误变口径）；
+  `btf/cli/__init__.py`、`btf/__init__.py` 命令计数 7 → 11。
+- **`btf/_version.py` → `1.1.0`**（新增命令＝向后兼容的功能增量，语义化版本 MINOR；
+  `pyproject` dynamic 同步，无需改）。
+
+### 验证（本批实测）
+
+- **`bt check`：9/9 通过**（新子命令自身跑；第 5 项实测打印 `btf 1.1.0`）——含 ruff /
+  import-linter **新 10「入口层只经门面编排」KEPT**（cli → `btf._version` 属取版本单源，
+  不新增门面外业务边）/ 冒烟 10 / 依赖预算 8/8 / domain 白名单 / 报告渲染 / 数据不变量 /
+  IO 单一入口。
+- **`tests/unit/test_cli_commands.py`：29 passed**（14 → 29，+15 用例：版本单源、
+  check/cold-backup **转发目标与退出码透传**、runs/show 只读查询、坏 manifest 可见性、
+  dataset 动作白名单、refcalc 转发）。
+- **l1 层：379 passed, 511 deselected**；受影响文件合跑 **58 passed**
+  （cli 三件 + `test_bb_cli_batch` + `test_baseline_ledger` + `test_api_facade` + `test_cli_benchmark_e2e`）。
+- **真产物手工冒烟**（均为改造后当场实测）：
+  `bt --version` → `btf 1.1.0`；`bt runs --latest 3` → 3 行（`20260927_163148_7ecdb4` 等）；
+  `bt show --run 20260927_163148_7ecdb4` → 期间/指纹/重算锚/指标齐全；
+  `bt dataset refcalc --cases all` → **16/16 ok**（不读主库的独立复算）；
+  `bt cold-backup --verify`（`备份/20260929-2153-btf-1.0.0-cold` / `备份/20260930-1509-btf-1.1.0-cold`）
+  → 逐文件 sha256 一致。
+- **基线刷新（AA-3，两次）**：第一次核心 3 文件
+  （`btf/__init__.py` `ce861b41→7ba1f8d0`、`btf/cli/__init__.py` `12d0775a→7c9d7f11`、
+  `btf/cli/main.py` `63653ddd→4bd19df6`）；第二次核心 1 文件（`btf/cli/main.py`
+  `4bd19df6→461d6798`，`bt runs` 指标格式改 `%g` 后随最终态刷新）；
+  两次依据均留痕于 `tools/.plugin_baseline_history.jsonl`。
+- **全量 pytest（本批补跑）**：`python -m pytest`（**890 collected**）→ **1 failed, 889 passed in 652.10s**；
+  唯一失败 `test_b4_grid_search_budget` = **并发负载诱导**（全量期间并行跑了 `bt check` / `dataset refcalc`；
+  **孤立复跑 1 passed**、外推 1686s < 预算 1800s、倍率 **1.07x**）⇒ 非代码缺陷；**老大裁决「视为通过」**（2026-09-30，以孤立复跑为准）；B4 余量仅 ~7% 的机器态观察（OBS-4）保留为技术备注（19 号 §59.3）。
+- **文档 1–17 + README 计数同步（本批完成）**：版本行统一 `1.1.0`；**890** 测试 / **11** 命令；
+  冷备引用补 `备份/20260930-1509-btf-1.1.0-cold`；历史留痕保留（定版日判据 / 时间线行不动——存真原则）。
+
 ## [1.0.0] — 2026-09-29
 
 **发布主题：btf 工具 **1.0 定版**（可自证 / 可自检 / 可自退）—— FF-3 定版批次**
@@ -42,17 +121,18 @@
 
 ```
 $ ruff check .                          → All checks passed!
-$ python -m pytest -q                   → 876 passed（exit 0，100%；隔离单跑）
+$ python -m pytest -q                   → 890 collected；全量 1 failed, 889 passed
+                                          （唯一失败 = B4 预算·并发负载诱导；孤立复跑 1 passed，**裁决「视为通过」**，19 号 §59.3）
 $ python tools/check.py                 → bt check: 9/9 通过
 $ lint-imports                          → Contracts: 10 kept, 0 broken
 $ python tools/check_data_quality.py    → PASS（正样本 + ①–⑦ 双向）
 $ python tools/check_io_boundary.py     → [ok]（80 文件；仅 core + parquet_reader 触磁盘）
-$ python tools/run_v77_robustness.py --ee1
-                                        → 六项与双路径参照值逐位一致（run_id 20260929_215213_562fd0）
-$ python -c "import btf; print(btf.__version__)"          → 1.0.0
-$ manifest.code_version.package_version                   → btf==1.0.0
-$ python tools/cold_backup.py --verify 备份/<定版快照>      → 逐文件 sha256 一致
-版本 0.5.16 → 1.0.0
+$ python -c "import btf; print(btf.__version__)"          → 1.1.0
+$ manifest.code_version.package_version                   → btf==1.1.0
+  （真入口短区间 run 20260930_153925_a66f9e；NOTE-4 防复发生效）
+$ python tools/cold_backup.py --verify 备份/20260930-1509-btf-1.1.0-cold
+                                        → 213 文件逐文件 sha256 一致
+版本 1.0.0 → 1.1.0
 ```
 
 ### 余项（不阻塞定版）

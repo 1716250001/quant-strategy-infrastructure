@@ -257,7 +257,7 @@ def main(argv=None):
     if tdate is None:
         from common.calendar import recent_trade_dates as _rtd
         tdate = _rtd(1)[0]
-    trade_dates = recent_trade_dates(20, end=tdate)
+    trade_dates = recent_trade_dates(20, end_date=tdate)
     code_to_index = {}
     for name, info in INDEX_ETF_MAP.items():
         for c in info["codes"]:

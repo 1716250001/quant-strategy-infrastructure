@@ -95,6 +95,20 @@ def dir_size_bytes(dir_path, pattern=".parquet"):
     return total
 
 
+def _atomic_write_parquet(df, path):
+    """原子写 parquet：先写 {path}.tmp，再 os.replace 覆盖目标。
+
+    为什么（2026-09-30 DB2）:
+      to_parquet 直接覆盖原文件，写中途崩溃/断电会同时失去新旧数据 ——
+      原文件已被截断且无法回退。原子写保证任一时刻磁盘上要么是旧文件、
+      要么是完整新文件。残留 .tmp 无害：list_parquet_files 按 .parquet
+      后缀过滤不会认到它；同目录同名 .tmp 重跑即被覆盖，幂等。
+    """
+    tmp = "%s.tmp" % path
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)
+
+
 def merge_append(path, new_df, subset, sort_by=None, keep="last"):
     """把 new_df 合并进 path，按 subset 去重后写回。
 
@@ -134,7 +148,7 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
         # 列顺序与既有文件对齐，保持文件结构稳定
         if set(combined.columns) == set(existing.columns):
             combined = combined[list(existing.columns)]
-        combined.to_parquet(path, index=False)
+        _atomic_write_parquet(combined, path)
         _invalidate_reader_cache(path)          # 写后失效读取缓存
         return True, added
 
@@ -144,7 +158,7 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
         df = df.sort_values(sort_by)
     df = df.reset_index(drop=True)
     ensure_dir(os.path.dirname(os.path.abspath(path)))
-    df.to_parquet(path, index=False)
+    _atomic_write_parquet(df, path)
     _invalidate_reader_cache(path)
     return True, len(df)
 

@@ -22,6 +22,9 @@
                        自检（注入违例必检出、合规样本不误报）
 
 用法: python tools/check.py   （任意工作目录；用绝对解释器路径调用）
+      bt check                （**同一脚本的 CLI 收编入口**，退出码一致：[btf/cli/main.py
+                               的 `_cmd_check` → `btf.app.run_gate_check` → 本脚本]，
+                               判定逻辑只有这一份——CLI 审查报告-20260930 P0）
 退出码: 0=全绿 / 1=有失败项
 """
 import subprocess

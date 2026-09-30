@@ -257,15 +257,26 @@ def scan(root=None, verbose=True):
     return schema
 
 
-def run_schema(out=None, verbose=True, quiet=False):
-    """扫描并写出 JSON。"""
+def run_schema(out=None, verbose=True, quiet=False, as_json=False, announce=True):
+    """扫描并写出 JSON。
+
+    as_json=True: stdout 输出回执 JSON（schema 文件照写；CLI --json）
+    announce=False: 静音"已保存"回执（供 db-report --refresh 内部调用）
+    """
     out = out or DEFAULT_OUT
-    schema = scan(verbose=verbose and not quiet)
+    schema = scan(verbose=verbose and not quiet and not as_json)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     json.dump(schema, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    print(f"\n已保存: {out}")
-    print(f"  {len(schema['tables'])} 表 / {schema['total_files']:,} 文件 / "
-          f"{schema['total_rows']:,} 行 / {schema['total_gb']} GB")
+    if as_json:
+        from common.jsonio import print_json
+        print_json({"out": out, "tables": len(schema["tables"]),
+                    "total_files": schema["total_files"],
+                    "total_rows": schema["total_rows"],
+                    "total_gb": schema["total_gb"]})
+    elif announce:
+        print(f"\n已保存: {out}")
+        print(f"  {len(schema['tables'])} 表 / {schema['total_files']:,} 文件 / "
+              f"{schema['total_rows']:,} 行 / {schema['total_gb']} GB")
     return schema
 
 
@@ -273,8 +284,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="数据库结构扫描（输出机器可读 schema JSON）")
     ap.add_argument("--out", default=None, help=f"输出路径（默认 {DEFAULT_OUT}）")
     ap.add_argument("--quiet", action="store_true", help="只写文件，不打印明细")
+    ap.add_argument("--json", action="store_true", help="stdout 输出回执 JSON（文件照写）")
     a = ap.parse_args(argv)
-    run_schema(out=a.out, verbose=not a.quiet, quiet=a.quiet)
+    run_schema(out=a.out, verbose=not a.quiet, quiet=a.quiet, as_json=a.json)
 
 
 if __name__ == "__main__":

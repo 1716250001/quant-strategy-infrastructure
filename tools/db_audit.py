@@ -688,26 +688,50 @@ def audit_scale(top_n=12, verbose=True):
 # 主流程
 # ============================================================
 def run_audit(sections=("checkpoint", "dup", "gap", "scale"), only=None,
-              verbose=True, exact=False):
-    """执行体检。exact=True 时无主键目录做全量整行判重(慢, 约18分钟)。"""
-    print("=" * 96)
-    print("  全量数据库体检")
-    print(f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  存储: {MARKET_DATA_DIR}")
-    print(f"  项目: {', '.join(sections)}")
-    if "dup" in sections:
-        print(f"  重复判重范围: {'全量(慢)' if exact else '抽样(快)'}")
-    print("=" * 96)
+              verbose=True, exact=False, as_json=False):
+    """执行体检。exact=True 时无主键目录做全量整行判重(慢, 约18分钟)。
 
+    as_json: stdout 输出结果 JSON（CLI --json；2026-09-30 P3 统一）
+    """
+    if not as_json:
+        print("=" * 96)
+        print("  全量数据库体检")
+        print(f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"  存储: {MARKET_DATA_DIR}")
+        print(f"  项目: {', '.join(sections)}")
+        if "dup" in sections:
+            print(f"  重复判重范围: {'全量(慢)' if exact else '抽样(快)'}")
+        print("=" * 96)
+
+    v = verbose and not as_json
     result = {}
     if "checkpoint" in sections:
-        result["checkpoint"] = audit_checkpoint(verbose)
+        result["checkpoint"] = audit_checkpoint(v)
     if "dup" in sections:
-        result["dup"] = audit_duplicates(only=only, verbose=verbose, exact=exact)
+        result["dup"] = audit_duplicates(only=only, verbose=v, exact=exact)
     if "gap" in sections:
-        result["gap"] = audit_gaps(verbose)
+        result["gap"] = audit_gaps(v)
     if "scale" in sections:
-        result["scale"] = audit_scale(verbose=verbose)
+        result["scale"] = audit_scale(verbose=v)
+
+    if as_json:
+        from common.jsonio import print_json
+        out = dict(result)
+        if "checkpoint" in out:
+            errs, infos = out["checkpoint"]
+            out["checkpoint"] = {"errors": errs, "infos": infos}
+        # 与下方文本结论同一判据: 断点真异常 + 真重复 + 日更真缺口
+        n_issue = 0
+        if "checkpoint" in result:
+            n_issue += len(result["checkpoint"][0])
+        if "dup" in result:
+            n_issue += len([r for r in result["dup"] if "⚠" in r["verdict"]])
+        if "gap" in result:
+            n_issue += len([x for x in result["gap"]
+                            if x.get("category") == GAP_CAT_DAILY])
+        out["n_issue"] = n_issue
+        print_json(out, indent=1)
+        return result
 
     print()
     print("=" * 96)

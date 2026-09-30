@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyramid-strategy"
-version = "5.0.0"
+# 版本单一真源（2026-09-30 CLI 审查 P1-2，对标 btf P3-4）：
+# 真源在 config.py 的 __version__，经下方 [tool.setuptools.dynamic] 读取
+dynamic = ["version"]
 description = "A股三层轮动金字塔策略 — 宽基ETF轮动 + 盘中监控 + 全量数据库"
 requires-python = ">=3.9"
 dependencies = [
@@ -20,6 +22,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "openpyxl"]
 
+[project.scripts]
+# 控制台短命令（2026-09-30 CLI 审查 P1-2）：pip install -e . 后即可 `pyramid gap-update`
+# —— 原只能 `python main.py xxx`。旧调用方式保持兼容，automation 不受影响。
+pyramid = "main:main"
+
 [tool.setuptools]
 # 代码目录就是包根, 不使用 src layout
 package-dir = {"" = "."}
@@ -31,3 +38,7 @@ py-modules = ["config", "indicators", "main"]
 where = ["."]
 include = ["common*", "fetch*", "push*", "strategies*", "tools*"]
 exclude = ["__pycache__*"]
+
+[tool.setuptools.dynamic]
+# 运行时版本 = config.py 的 __version__（纯字面量，setuptools 可静态解析，无需 import）
+version = {attr = "config.__version__"}

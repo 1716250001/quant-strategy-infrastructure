@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """依赖预算计数器（架构 07 §12.11：探索期新直接依赖 ≤8）。
 
-用法: python tools/deps_budget.py
+用法: python tools/deps_budget.py            （= `bt check` 第 4/9 项；单跑仅用于定位）
 退出码: 0=预算内 / 2=超预算
 来源：pyproject.toml（tomllib 解析，Python 3.11+ 标准库）。
 口径：[project].dependencies + [project.optional-dependencies] 全部组，

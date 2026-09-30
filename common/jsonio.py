@@ -11,6 +11,7 @@ common/jsonio.py — JSON 读写统一封装
 """
 import json
 import os
+import sys
 
 
 def load_json(path, default=None, raises=False):
@@ -57,3 +58,18 @@ def save_json(path, obj, indent=2, ensure_ascii=False, default=str, raises=False
             raise
         print(f"  [WARN] JSON写入失败 {path}: {e}")
         return False
+
+
+def print_json(obj, indent=None, ensure_ascii=False):
+    """把对象作为 JSON 打印到 stdout（CLI --json 的统一出口）。
+
+    2026-09-30 P3 新增：GBK 控制台安全 —— JSON 中若含 GBK 不可编码
+    字符（⚠/✓/↔ 等），按 stdout 实际编码降级替换，结构化输出永不中断
+    （与 regress_pipeline._say 同一降级策略）。
+    """
+    s = json.dumps(obj, ensure_ascii=ensure_ascii, indent=indent, default=str)
+    try:
+        print(s)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(s.encode(enc, errors="replace").decode(enc, errors="replace"))

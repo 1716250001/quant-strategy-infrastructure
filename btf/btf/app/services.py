@@ -28,18 +28,25 @@ import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 __all__ = [
+    "RunDetail",
     "RunOutcome",
+    "RunSummary",
     "assemble_assumptions",
     "build_dataset",
     "build_report_file",
+    "cold_backup",
     "filter_btf_env",
+    "list_runs",
     "parse_override_value",
     "parse_overrides",
     "run_backtest",
+    "run_detail",
+    "run_gate_check",
 ]
 
 
@@ -156,22 +163,155 @@ def build_dataset(
     verify: bool = False,
     force: bool = False,
     list_only: bool = False,
+    refcalc: bool = False,
     out: str | Path | None = None,
 ) -> int:
-    """黄金集构建（委托 `tools/build_golden.py` 子进程；CLI/api 同源）。"""
-    script = Path(__file__).resolve().parents[2] / "tools" / "build_golden.py"
-    if not script.is_file():
-        print(f"[error] 构建脚本缺失: {script}", file=sys.stderr)
-        return 2
-    cmd = [sys.executable, str(script)]
-    if list_only:
-        cmd += ["--list"]
+    """黄金集构建（委托 `tools/build_golden.py` 子进程；CLI/api 同源）。
+
+    三个动作（CLI 审查报告-20260930 P3：把"构建/校验/重算"三条路显式化）：
+        build-golden  构建（写盘；`force` 显式覆盖）
+        verify        只与**主库**对账、不写盘（`--verify`）
+        refcalc       只用**案例文件内嵌数据**独立重算断言（`--refcalc`，
+                      不读主库——"黄金集自洽性"与"主库一致性"分开可证）
+    """
+    args: list[str] = []
+    if refcalc:
+        args += ["--cases", cases, "--refcalc"]
+    elif list_only:
+        args += ["--list"]
     else:
-        cmd += ["--cases", cases]
+        args += ["--cases", cases]
         if verify:
-            cmd.append("--verify")
+            args.append("--verify")
         if force:
-            cmd.append("--force")
+            args.append("--force")
+    if out and (refcalc or not list_only):
+        args += ["--out", str(out)]
+    return _run_tool_script("build_golden.py", args)
+
+
+# ─────────────────────────────────────────────────────────────
+# 工具脚本委托（CLI 审查报告-20260930 P0/P2：门禁/冷备收编为子命令）
+# ─────────────────────────────────────────────────────────────
+def _run_tool_script(script_name: str, args: Sequence[str]) -> int:
+    """子进程委托 `tools/<script_name>`（**单一真源**：CLI 只转发不做第二实现）。
+
+    为什么不把判定逻辑搬进 `btf/`：门禁口径只能有一份——本项目文档长期写
+    `bt check`，而它此前**不是** `bt` 子命令（文档与 CLI 脱节即是本函数要治
+    的病）。委托保证 `bt check` 与 `python tools/check.py` 逐位同源，不存在
+    "两条路各判一套"的漂移面。
+    """
+    script = Path(__file__).resolve().parents[2] / "tools" / script_name
+    if not script.is_file():
+        print(f"[error] 工具脚本缺失: {script}", file=sys.stderr)
+        return 2
+    return subprocess.call([sys.executable, str(script), *args])
+
+
+def run_gate_check() -> int:
+    """`bt check`：九项架构门禁（委托 `tools/check.py`；退出码原样透传）。"""
+    return _run_tool_script("check.py", [])
+
+
+def cold_backup(
+    *,
+    reason: str | None = None,
+    out: str | Path | None = None,
+    verify: str | Path | None = None,
+) -> int:
+    """`bt cold-backup`：跨版本源码冷备（委托 `tools/cold_backup.py`）。
+
+    `--verify DIR`（校验既有冷备）与"新建备份"互斥——脚本如此，故此处二选一；
+    未给 `--reason` 时**不传**该参数（保留脚本默认值，避免 CLI 与脚本两套默认）。
+    """
+    args: list[str] = []
+    if verify:
+        args += ["--verify", str(verify)]
+    else:
+        if reason:
+            args += ["--reason", str(reason)]
         if out:
-            cmd += ["--out", str(out)]
-    return subprocess.call(cmd)
+            args += ["--out", str(out)]
+    return _run_tool_script("cold_backup.py", args)
+
+
+@dataclass(frozen=True)
+class RunSummary:
+    """`bt runs` 一行：run 目录摘要（只读；不改产物、不触发重算）。"""
+
+    run_id: str
+    status: str
+    created: str                       # run 目录 mtime（本地时间）
+    metrics: Mapping[str, float]
+    note: str = ""                     # manifest/metrics 不可读时的原因
+
+
+@dataclass(frozen=True)
+class RunDetail:
+    """`bt show --run <id>`：manifest + metrics 摘要（只读，不重算指标）。
+
+    为什么不复用 `RunBundle`（`store.load`）：那会把 snapshots/fills 等
+    全量 jsonl 读进内存（十年全市场 run 是百万行量级），而"看 manifest +
+    指标"只需两个小文件——展示命令不应付读取全产物的代价。
+    """
+
+    run_id: str
+    directory: Path
+    manifest: Mapping[str, Any]
+    metrics: Mapping[str, float]
+
+
+def _dir_time(directory: Path) -> str:
+    """run 目录 mtime → `YYYY-MM-DD HH:MM:SS`（不读 manifest：损坏目录也可列）。"""
+    try:
+        stamp = directory.stat().st_mtime
+    except OSError:
+        return "—"
+    return datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def list_runs(
+    *,
+    out_dir: str | Path | None = None,
+    latest: int | None = None,
+) -> list[RunSummary]:
+    """列 RunStore 下的 run 摘要（按目录时间**新→旧**；`latest` 取前 N）。
+
+    Store 经 `runtime.make_store` 取（铁律 5 / 新 10：入口层不直连 experiment）。
+    manifest 缺失/损坏**不静默**：该行照列，`status` 退化为 `?`、`note` 写明
+    原因——"列不出来"与"列出来但读不了"是两件事，后者必须可见（fail-visible）。
+    """
+    from btf.runtime import make_store
+
+    store = make_store(out_dir)
+    rows: list[RunSummary] = []
+    for run_id in store.list_runs():
+        directory = Path(store.run_dir(run_id))
+        try:
+            status, note = store.read_manifest(run_id).status, ""
+        except (OSError, ValueError) as exc:       # 缺失/坏 JSON/契约不兼容
+            status, note = "?", f"{type(exc).__name__}: {exc}"
+        try:
+            metrics: dict[str, float] = dict(store.read_metrics(run_id))
+        except (OSError, ValueError) as exc:
+            metrics = {}
+            note = note or f"{type(exc).__name__}: {exc}"
+        rows.append(RunSummary(run_id, status, _dir_time(directory), metrics,
+                               note))
+    rows.sort(key=lambda r: (r.created, r.run_id), reverse=True)
+    return rows[:latest] if latest else rows
+
+
+def run_detail(
+    run_id: str,
+    *,
+    out_dir: str | Path | None = None,
+) -> RunDetail:
+    """读单个 run 的 manifest + metrics（只读；`run_id` 不存在 → FileNotFoundError）。"""
+    from btf.runtime import make_store
+
+    store = make_store(out_dir)
+    manifest = store.read_manifest(run_id)
+    return RunDetail(run_id=manifest.run_id, directory=Path(store.run_dir(run_id)),
+                     manifest=manifest.to_dict(),
+                     metrics=dict(store.read_metrics(run_id)))

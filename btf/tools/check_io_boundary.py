@@ -17,6 +17,7 @@
 跑同一套判定，断言"注入违例必被检出、合规样本必通过"——防止规则写反/失效。
 
 用法：python tools/check_io_boundary.py [--self-test]
+      （= `bt check` 第 9/9 项，带 --self-test 编排；单跑仅用于定位）
 退出码：0=通过 / 1=违例（或自检失败）
 """
 from __future__ import annotations

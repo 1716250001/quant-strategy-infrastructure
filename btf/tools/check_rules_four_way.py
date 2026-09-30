@@ -3,6 +3,7 @@
 
     python tools/check_rules_four_way.py [--root d:/量化策略/赤潮]
                                          [--json .../rules_mirror_v77.json]
+    （**不在** `bt check` 九项内：四方需赤潮源码树与镜像导出，属独立机检；单跑）
 
 四方（任一不一致 → FAIL，退出码 2）：
     ① 规则源  赤潮/rules/single-source.md（v7.7，人读权威）

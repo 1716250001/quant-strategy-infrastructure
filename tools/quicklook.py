@@ -97,15 +97,21 @@ def _latest(table):
 # ============================================================
 # freshness
 # ============================================================
-def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True):
+def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
+                  as_json=False):
     """各表最新日期一览。
 
     stale_days: 只显示落后超过 N 个交易日的表（None=全显示）
+    as_json: stdout 输出机器可读 JSON（CLI --json；2026-09-30 P3 统一）
     """
     names = tables or (_all_tables() if show_all else list(CORE_TABLES))
     names = [n for n in names if os.path.isdir(os.path.join(MARKET_DATA_DIR, n))]
     if not names:
-        print("  无可查的表")
+        if as_json:
+            from common.jsonio import print_json
+            print_json({"base": None, "n_tables": 0, "n_stale": 0, "tables": []})
+        else:
+            print("  无可查的表")
         return []
 
     # 基准日 = 最近已收盘交易日
@@ -137,6 +143,18 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True):
     if stale_days is not None:
         rows = [x for x in rows if x[2] is None or x[2] >= stale_days]
 
+    if as_json:
+        from common.jsonio import print_json
+        n_stale = sum(1 for _, d, l in rows if l is not None and l > 3)
+        print_json({
+            "base": base,
+            "n_tables": len(rows),
+            "n_stale": n_stale,
+            "tables": [{"table": n, "latest": (str(dt) if dt else None), "lag": l}
+                       for n, dt, l in rows],
+        }, indent=1)
+        return rows
+
     if verbose:
         print("=" * 88)
         print(f"  数据新鲜度（基准交易日 {base}）")
@@ -166,11 +184,27 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True):
 # ============================================================
 # peek
 # ============================================================
-def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True):
-    """查看某张表的实际数据（默认尾部 N 行）"""
+def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True,
+             as_json=False):
+    """查看某张表的实际数据（默认尾部 N 行）。
+
+    as_json: stdout 输出机器可读 JSON（CLI --json；2026-09-30 P3 统一）
+    """
+    from common.jsonio import print_json
+
+    def _empty(error=None):
+        out = {"table": table, "code": code, "date": date,
+               "rows": 0, "columns": [], "data": []}
+        if error:
+            out["error"] = error
+        print_json(out, indent=1)
+
     d = os.path.join(MARKET_DATA_DIR, table)
     if not os.path.isdir(d):
-        print(f"  ✗ 表不存在: {table}")
+        if as_json:
+            _empty(f"表不存在: {table}")
+        else:
+            print(f"  ✗ 表不存在: {table}")
         return None
 
     dc = _date_col_for(table) or "trade_date"
@@ -191,13 +225,29 @@ def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True):
         df = pd.read_parquet(os.path.join(d, files[-1]))
 
     if df is None or df.empty:
-        print(f"  （无匹配数据）table={table} code={code} date={date}")
+        if as_json:
+            _empty("无匹配数据")
+        else:
+            print(f"  （无匹配数据）table={table} code={code} date={date}")
         return df
 
     if cols:
         keep = [c for c in cols.split(",") if c.strip() in df.columns]
         if keep:
             df = df[keep]
+
+    if as_json:
+        n = min(int(rows or 10), len(df))
+        print_json({
+            "table": table, "code": code, "date": date,
+            "rows": int(len(df)),
+            "columns": [str(c) for c in df.columns],
+            "data": df.tail(n).to_dict(orient="records"),
+            "date_col": dc,
+            "date_range": ([str(df[dc].min()), str(df[dc].max())]
+                           if dc in df.columns else None),
+        }, indent=1)
+        return df
 
     if verbose:
         print("=" * 88)
@@ -229,6 +279,7 @@ def main(argv=None):
     p.add_argument("--all", action="store_true", help="显示全部表")
     p.add_argument("--stale", type=int, default=None,
                    help="只显示落后超过N个交易日的表")
+    p.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
 
     p = sub.add_parser("peek", help="查看表数据")
     p.add_argument("table", help="表名")
@@ -236,13 +287,16 @@ def main(argv=None):
     p.add_argument("--date", default=None, help="日期 YYYYMMDD")
     p.add_argument("--rows", type=int, default=10, help="显示行数（默认10）")
     p.add_argument("--cols", default=None, help="只显示指定列（逗号分隔）")
+    p.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
 
     a = ap.parse_args(argv)
     if a.cmd == "freshness":
         t = [x.strip() for x in a.tables.split(",")] if a.tables else None
-        run_freshness(tables=t, show_all=a.all, stale_days=a.stale)
+        run_freshness(tables=t, show_all=a.all, stale_days=a.stale,
+                      as_json=a.json)
     elif a.cmd == "peek":
-        run_peek(a.table, code=a.code, date=a.date, rows=a.rows, cols=a.cols)
+        run_peek(a.table, code=a.code, date=a.date, rows=a.rows, cols=a.cols,
+                 as_json=a.json)
     return 0
 
 

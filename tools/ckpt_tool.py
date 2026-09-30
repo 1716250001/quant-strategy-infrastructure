@@ -224,7 +224,7 @@ def _do_show(tables=None, verbose=True):
 # ============================================================
 # --fix：按磁盘回填断点（幂等，只增不减）
 # ============================================================
-def _do_fix(tables=None, execute=False, verbose=True):
+def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
     cp = _load()
     names = tables or sorted(cp.keys())
     if verbose:
@@ -246,9 +246,14 @@ def _do_fix(tables=None, execute=False, verbose=True):
         if not add:
             continue
         total += len(add)
-        print(f"\n  [{name}] 断点 {len(done):,} → 磁盘 {len(disk):,} "
-              f"（补记 {len(add):,}）")
-        print(f"      样例: {add[:5]}")
+        if verbose:
+            print(f"\n  [{name}] 断点 {len(done):,} → 磁盘 {len(disk):,} "
+                  f"（补记 {len(add):,}）")
+            print(f"      样例: {add[:5]}")
+        if details_out is not None:
+            details_out.append({"table": name, "checkpoint": len(done),
+                                "disk": len(disk), "added": len(add),
+                                "samples": [str(x) for x in add[:5]]})
         if execute:
             cp.setdefault(name, {})["completed"] = sorted(done | disk)
 
@@ -271,7 +276,7 @@ def _do_fix(tables=None, execute=False, verbose=True):
 # ============================================================
 # --clear：清虚记（断点已记但磁盘无数据）
 # ============================================================
-def _do_clear(tables=None, execute=False, verbose=True):
+def _do_clear(tables=None, execute=False, verbose=True, details_out=None):
     cp = _load()
     names = tables or sorted(cp.keys())
     if verbose:
@@ -313,8 +318,13 @@ def _do_clear(tables=None, execute=False, verbose=True):
         if not fake:
             continue
         total += len(fake)
-        print(f"\n  [{name}] 清除 {len(fake):,} 项（断点 {len(done):,}）")
-        print(f"      样例: {fake[:5]}")
+        if verbose:
+            print(f"\n  [{name}] 清除 {len(fake):,} 项（断点 {len(done):,}）")
+            print(f"      样例: {fake[:5]}")
+        if details_out is not None:
+            details_out.append({"table": name, "cleared": len(fake),
+                                "checkpoint": len(done),
+                                "samples": [str(x) for x in fake[:5]]})
         if execute:
             cp.setdefault(name, {})["completed"] = sorted(done - set(fake))
 
@@ -338,7 +348,11 @@ def _do_clear(tables=None, execute=False, verbose=True):
 # 入口
 # ============================================================
 def run_ckpt(show=False, fix=False, clear=False, table=None,
-             dry_run=False, execute=False):
+             dry_run=False, execute=False, as_json=False):
+    """断点管理（show=交叉核对, fix=回填, clear=清虚记）。
+
+    as_json: stdout 输出结果 JSON（show 明细 + fix/clear 统计与明细）
+    """
     tables = [x.strip() for x in table.split(",")] if table else None
     if not (show or fix or clear):
         show = True                      # 默认展示
@@ -346,17 +360,34 @@ def run_ckpt(show=False, fix=False, clear=False, table=None,
     # --dry-run 显式给出时不写入；--execute 才写入
     do_write = bool(execute) and not dry_run
 
+    show_rows = fix_info = clear_info = None
     did = False
     if show:
-        _do_show(tables=tables)
+        show_rows = _do_show(tables=tables, verbose=not as_json)
         did = True
     if fix:
-        if did:
+        if did and not as_json:
             print()
-        _do_fix(tables=tables, execute=do_write)
+        det = [] if as_json else None
+        fix_info = {"total": _do_fix(tables=tables, execute=do_write,
+                                     verbose=not as_json, details_out=det),
+                    "execute": do_write, "details": det or []}
         did = True
     if clear:
-        if did:
+        if did and not as_json:
             print()
-        _do_clear(tables=tables, execute=do_write)
+        det = [] if as_json else None
+        clear_info = {"total": _do_clear(tables=tables, execute=do_write,
+                                         verbose=not as_json, details_out=det),
+                      "execute": do_write, "details": det or []}
+    if as_json:
+        from common.jsonio import print_json
+        out = {"dry_run": not do_write}
+        if show_rows is not None:
+            out["show"] = show_rows
+        if fix_info is not None:
+            out["fix"] = fix_info
+        if clear_info is not None:
+            out["clear"] = clear_info
+        print_json(out, indent=1)
     return 0

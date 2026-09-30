@@ -21,6 +21,8 @@
     python tools/check_plugin_boundary.py            # 检查（基线缺失时自动建立）
     python tools/check_plugin_boundary.py --update   # 开发变更后刷新基线
     python tools/check_plugin_boundary.py --update --reason "Z-1 报告转义修复 ..."
+注：**不在** `bt check` 九项内（核心文件变更后由人按 AA-3 显式刷新留痕，
+    故不并入常跑门禁——并入会让"基线漂移"被自动刷新掩盖；单跑本脚本）。
 """
 from __future__ import annotations
 

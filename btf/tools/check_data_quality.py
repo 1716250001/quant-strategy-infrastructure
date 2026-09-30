@@ -9,6 +9,7 @@
        尖刺／停牌日有行情／因子断层／有价无量）→ 每条**必须被检出**；
     ③ **不得恒空**（铁律新 16）：`checked_rows` 逐规则 > 0。
 
+用法: python tools/check_data_quality.py     （= `bt check` 第 8/9 项；单跑仅用于定位）
 退出码：0 = 全绿；1 = 正样本失败或任一注入缺陷漏检。
 用法：python tools/check_data_quality.py [--full]
 """

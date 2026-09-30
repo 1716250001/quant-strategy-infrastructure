@@ -5,6 +5,14 @@
     python tools/build_golden.py --cases g1             # 构建（默认 golden_v1）
     python tools/build_golden.py --cases g1 --verify    # 只校验（不写）
     python tools/build_golden.py --cases g1 --force     # 显式覆盖（留痕）
+    python tools/build_golden.py --cases all --refcalc  # 内嵌数据重算（**不读主库**）
+    # 亦可经 CLI：`bt dataset build-golden|verify|refcalc`（同源委托本脚本）
+
+三个动作的分工（CLI 审查报告-20260930 P3）：
+    build-golden  主库截取 → 写案例文件（只增不改）
+    --verify      主库截取 → 与既有案例对账（data_hash + assertions），不写盘
+    --refcalc     只读案例文件的**内嵌 data**，重跑参考计算器 → 与落盘断言对账
+                  ——不需要主库，治的是"参考计算器被改动/黄金集不自洽"
 
 产出：`{DATASETS_DIR}/golden_v{N}/cases/{case_id}.json` —— 含**截取数据**
 （bars/actions/instruments/dates）+ plan（确定性输入）+ assertions（独立
@@ -649,6 +657,28 @@ class GoldenAssertionDrift(RuntimeError):
     """断言漂移（只增不改纪律拦截）。"""
 
 
+def refcalc_case(case_id: str, out_dir: Path) -> tuple[str, bool]:
+    """`--refcalc`：由案例**内嵌 data**独立重算断言（不读主库、不写盘）。
+
+    与 `--verify` 的分工：`verify` 校验"案例 vs 主库"（需主库、要重新截取），
+    本动作校验"断言 vs 案例自带输入"——**不需要主库**，因此可在无主库环境跑，
+    且能把"参考计算器（`golden_refcalc.py`）被改动"与"主库数据变化"分开归因。
+    只比对参考计算器**产出**的断言键；`state_expectations`/`calendar`/`hfq`
+    为构建侧组专属块（不在计算器职责内），本动作不覆盖（避免"看不见的假绿"）。
+    """
+    path = out_dir / f"{case_id}.json"
+    if not path.is_file():
+        return f"{case_id}: 缺失（--refcalc 需案例文件已构建）", False
+    case = json.loads(path.read_text(encoding="utf-8"))
+    recomputed = compute_case(case["data"], case["plan"])
+    stored = case.get("assertions") or {}
+    drift = [k for k in sorted(recomputed)
+             if not _same(recomputed[k], stored.get(k))]
+    if drift:
+        return (f"{case_id}: DIFF（参考计算器结果与落盘断言不一致）{drift}", False)
+    return (f"{case_id}: ok（{len(recomputed)} 组断言独立复算一致）", True)
+
+
 # ─────────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────────
@@ -671,6 +701,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verify", action="store_true", help="只校验不写")
     parser.add_argument("--force", action="store_true", help="显式覆盖（留痕）")
     parser.add_argument("--list", action="store_true", help="列出案例规格与已构建状态")
+    parser.add_argument("--refcalc", action="store_true",
+                        help="由案例内嵌数据独立重算断言（不读主库、不写盘）")
     args = parser.parse_args(argv)
 
     # 中文/全角输出纪律（06 §11.3）：Windows GBK 控制台强制 UTF-8
@@ -691,6 +723,20 @@ def main(argv: list[str] | None = None) -> int:
         for group, desc in PENDING_GROUPS.items():
             print(f"{group:24s} {desc}")
         return 0
+
+    if args.refcalc:
+        # 内嵌数据重算：**不读主库**（故置于主库可用性守卫之前）
+        ok = True
+        for case_id in _select(args.cases):
+            if case_id not in CASE_SPECS:
+                print(f"未知案例 {case_id}（可选: {sorted(CASE_SPECS)}）",
+                      file=sys.stderr)
+                ok = False
+                continue
+            message, matched = refcalc_case(case_id, out_dir)
+            print(message)
+            ok = ok and matched
+        return 0 if ok else 1
 
     if read_full is None:
         print("主库读取不可用（btf 未安装/pyarrow 缺失）", file=sys.stderr)

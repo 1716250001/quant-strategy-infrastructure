@@ -2,7 +2,9 @@
 """
 tools/regress_pipeline.py — 回归测试（改造不破坏既有流水线）
 ==============================================================
-盘后流水线固定三步: main.py fetch → fix_and_resonance.py → gen_split_v3_reports.py
+盘后流水线固定三步（fetch → fix_and_resonance → gen_split_v3_reports）已于
+2026-09-24/25 归档，相应死命令入口随 2026-09-30 P1-1 删除；R5 改为验证归档件
+在位于收编后的活入口（leverage / etf-flow）。
 日常更新链路: gap-update / intraday-update / fund-nav / redtide-supply / download-cb
 
 测试项（全部只读或 dry-run, 不改数据、不消耗额度）:
@@ -45,12 +47,26 @@ PY = sys.executable
 passed, failed = [], []
 
 
+_quiet = False
+
+
 def _say(msg):
-    """输出（适配 Windows 控制台编码）"""
+    """输出（适配 Windows GBK 控制台）
+
+    2026-09-30 修复: 原实现把文本 utf-8 编解码一圈后原样 print —— 等于没降级，
+    遇到 GBK 无法编码的字符（如 R14 标题的 ↔）依然抛 UnicodeEncodeError 中断回归。
+    新实现按 stdout 实际编码降级: 不可编码字符替换为 '?'，输出永不抛异常。
+
+    2026-09-30 P3: --json 模式置 _quiet=True，逐项日志静音，只留最终结果 JSON。
+    """
+    if _quiet:
+        return
+    stream = sys.stdout
     try:
-        print(msg)
+        stream.write(msg + "\n")
     except UnicodeEncodeError:
-        print(msg.encode("utf-8", errors="replace").decode("utf-8", errors="replace"))
+        enc = getattr(stream, "encoding", None) or "utf-8"
+        stream.write(msg.encode(enc, errors="replace").decode(enc, errors="replace") + "\n")
 
 
 def check(name, fn):
@@ -63,12 +79,29 @@ def check(name, fn):
         _say(f"  [失败] {name} → {str(e)[:160]}")
 
 
-def run(verbose=True):
-    """执行全部回归检查。返回 (passed_n, failed_n)。"""
-    global passed, failed
+def run(verbose=True, as_json=False):
+    """执行全部回归检查。返回 (passed_n, failed_n)。
+
+    as_json: 逐项日志静音，仅 stdout 输出最终结果 JSON
+             （CLI --json；2026-09-30 P3 统一，退出码语义不变）。
+    """
+    global passed, failed, _quiet
     passed, failed = [], []
-    _run_all()
-    if verbose:
+    _quiet = bool(as_json)
+    try:
+        _run_all()
+    finally:
+        _quiet = False
+    if as_json:
+        from common.jsonio import print_json
+        print_json({
+            "passed": len(passed),
+            "failed": len(failed),
+            "ok": not failed,
+            "passed_items": list(passed),
+            "failed_items": [{"name": n, "error": e} for n, e in failed],
+        }, indent=1)
+    elif verbose:
         _say(f"\n{SEP}")
         _say(f"  回归结果: 通过 {len(passed)} 项, 失败 {len(failed)} 项")
         if failed:
@@ -84,15 +117,15 @@ def _run_all():
     """实际检查体"""
 
 
-    print(SEP)
-    print("  回归测试 — 盘后流水线 + 按年分区改造")
-    print(SEP)
+    _say(SEP)
+    _say("  回归测试 — 盘后流水线 + 按年分区改造")
+    _say(SEP)
 
 
     # ------------------------------------------------------------
     # R1 CLI 注册
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R1 CLI 子命令注册\n{SEP}")
+    _say(f"\n{SEP}\n  R1 CLI 子命令注册\n{SEP}")
 
 
     def _run_cli(args):
@@ -127,15 +160,17 @@ def _run_all():
         subs = _registered_commands()
         assert len(subs) >= 20, (
             f"子命令数异常偏少（{len(subs)}）—— 注册表疑似被误改: {subs}")
-        must = ["fetch", "report", "all", "fix-resonance", "gap-update",
+        must = ["gap-update",
                 "intraday-update", "fund-nav", "redtide-supply",
                 "download-full", "download-cb", "backfill", "check-coverage",
-                "daily-report", "db-clean", "db-audit", "db-schema",
+                "db-clean", "db-audit", "db-schema",
                 "db-report", "db-migrate", "regress",
                 # 2026-09-19 审查补充的速查/运维命令（原先不在白名单内）
                 "freshness", "peek", "doctor", "ckpt",
-                # 2026-09-25 D1：scan-divergence / divergence-trigger 已归档，白名单移除（argparse 注册保留，显示停用提示）
-                "qidian", "monitor"]
+                # 2026-09-30 P1-1：fetch/report/all/fix-resonance/daily-report/
+                # wind-index/scan-divergence/divergence-trigger/monitor 死命令
+                # 已删（--help 只剩活命令）；leverage/etf-flow 收编为正式入口
+                "qidian", "leverage", "etf-flow"]
         missing = [m for m in must if m not in subs]
         assert not missing, f"缺失核心子命令: {missing}"
         return (f"(动态取到 {len(subs)} 个子命令, 关键 {len(must)} 个齐全)")
@@ -154,7 +189,9 @@ def _run_all():
             "ckpt": ("--show", "--fix", "--clear", "--table",
                      "--dry-run", "--execute"),
             "backfill": ("--list", "--only", "--tier", "--dry-run"),
-            "daily-report": (),
+            # 2026-09-30 P1-1 收编入口（daily-report 死命令已删）
+            "leverage": (),
+            "etf-flow": (),
         }
         for cmd, flags in specs.items():
             r = _run_cli([cmd, "--help"])
@@ -203,7 +240,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R2 每日增量引擎缺口计算（只读，不发请求）
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R2 每日增量引擎缺口计算 (只读)\n{SEP}")
+    _say(f"\n{SEP}\n  R2 每日增量引擎缺口计算 (只读)\n{SEP}")
 
 
     def r2a():
@@ -256,7 +293,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R3 限频器
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R3 限频器按接口生效\n{SEP}")
+    _say(f"\n{SEP}\n  R3 限频器按接口生效\n{SEP}")
 
 
     def r3():
@@ -275,7 +312,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R4 fund_nav / redtide 模块
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R4 fund-nav / redtide-supply 模块\n{SEP}")
+    _say(f"\n{SEP}\n  R4 fund-nav / redtide-supply 模块\n{SEP}")
 
 
     def r4a():
@@ -297,16 +334,18 @@ def _run_all():
 
 
     # ------------------------------------------------------------
-    # R5 盘后三步关键模块
+    # R5 关键模块入口（盘后三步已归档；2026-09-30 P1-1 随删死命令入口）
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R5 盘后三步关键模块导入\n{SEP}")
+    _say(f"\n{SEP}\n  R5 关键模块导入\n{SEP}")
 
 
     def r5a():
         import main as m
-        for f in ("cmd_fetch", "cmd_report", "cmd_all"):
+        # 2026-09-30 P1-1: cmd_fetch/cmd_report/cmd_all 死命令函数已随归档删除；
+        # 改验收收编后的新入口（leverage/etf-flow）与增量入口在册。
+        for f in ("cmd_leverage", "cmd_etf_flow", "cmd_gap_update"):
             assert hasattr(m, f), f"{f} 丢失"
-        return "(main.py 三步入口齐全)"
+        return "(main.py leverage/etf-flow/gap-update 入口齐全)"
 
 
     def r5b():
@@ -346,7 +385,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R6 限频行为
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R6 限频行为核对\n{SEP}")
+    _say(f"\n{SEP}\n  R6 限频行为核对\n{SEP}")
 
 
     def r6():
@@ -362,7 +401,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R7 废弃引擎守卫
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R7 废弃引擎守卫（必须硬拦）\n{SEP}")
+    _say(f"\n{SEP}\n  R7 废弃引擎守卫（必须硬拦）\n{SEP}")
 
 
     def r7a():
@@ -390,7 +429,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R8 全库布局一致性
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R8 全库布局一致性\n{SEP}")
+    _say(f"\n{SEP}\n  R8 全库布局一致性\n{SEP}")
 
 
     def r8():
@@ -440,7 +479,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R9 存储布局期望 vs 写入器守卫
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R9 存储布局期望 与 写入器守卫\n{SEP}")
+    _say(f"\n{SEP}\n  R9 存储布局期望 与 写入器守卫\n{SEP}")
 
 
     def r9():
@@ -523,7 +562,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R10 每日更新清单完整性
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R10 每日更新清单完整性\n{SEP}")
+    _say(f"\n{SEP}\n  R10 每日更新清单完整性\n{SEP}")
 
 
     def r10():
@@ -664,7 +703,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R11 配置完整性（防"编辑共享配置时误删条目"）
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R11 配置完整性\n{SEP}")
+    _say(f"\n{SEP}\n  R11 配置完整性\n{SEP}")
 
 
     def r11():
@@ -705,7 +744,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R12 缺口分析口径一致性（防 freq 漏读造成大规模误报）
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R12 缺口分析口径一致性\n{SEP}")
+    _say(f"\n{SEP}\n  R12 缺口分析口径一致性\n{SEP}")
 
 
     def r12():
@@ -874,7 +913,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R13 by_code 截断防护（防"默认窗口"静默漏数据）
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R13 by_code 截断防护\n{SEP}")
+    _say(f"\n{SEP}\n  R13 by_code 截断防护\n{SEP}")
 
 
     def r13():
@@ -952,7 +991,7 @@ def _run_all():
     # ------------------------------------------------------------
     # R14 联查层契约（alt 库 ↔ 主库）
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R14 联查层契约（alt ↔ 主库）\n{SEP}")
+    _say(f"\n{SEP}\n  R14 联查层契约（alt <-> 主库）\n{SEP}")
 
 
     def r14():
@@ -1050,13 +1089,13 @@ def _run_all():
                 f"列名错抛KeyError{detail})")
 
 
-    check("联查层契约（alt ↔ 主库）", r14)
+    check("联查层契约（alt <-> 主库）", r14)
 
 
     # ------------------------------------------------------------
     # R15 权限漏网监控
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R15 权限漏网监控\n{SEP}")
+    _say(f"\n{SEP}\n  R15 权限漏网监控\n{SEP}")
 
 
     def r15():
@@ -1168,7 +1207,7 @@ def _run_all():
     # 注: 派单文里写作「R13」，但 R13 已被 by_code 截断防护占用（见上），
     #     故按现有编号顺延为 R16。
     # ------------------------------------------------------------
-    print(f"\n{SEP}\n  R16 dry-run 零副作用\n{SEP}")
+    _say(f"\n{SEP}\n  R16 dry-run 零副作用\n{SEP}")
 
 
     def _meta_fingerprint(meta_dir):

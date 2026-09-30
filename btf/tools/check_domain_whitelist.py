@@ -6,7 +6,7 @@ import-linter forbidden 契约是黑名单式（列举已知第三方）；本�
 （__future__/dataclasses/enum/datetime/collections.abc）与域内模块，
 其余（含任何第三方、任何 btf 外层包、相对域外导入）一律违例。
 
-用法：python tools/check_domain_whitelist.py（违例 → 逐条列出，exit 1）
+用法：python tools/check_domain_whitelist.py（`bt check` 第 6/9 项编排；违例 → 逐条列出，exit 1）
 """
 from __future__ import annotations
 

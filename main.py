@@ -5,16 +5,9 @@ main.py — A股三层轮动金字塔策略 · 统一CLI入口
 v5.1 子命令注册表：每个子命令独立声明参数与实现，
 替代原先的 if 链 + 全局参数混用，新增命令只需注册一个函数。
 
-【日常流水线】
-  python main.py fetch              # 数据采集（大盘β+宽基ETF+杠杆+IV）
-  python main.py report             # 生成HTML日报
-  python main.py all                # 采集 + 日报（一键完成）
-  python main.py fix-resonance      # 补算四因子 + ETF份额 + 多层共振
-  python main.py daily-report       # 量化日报（大盘分析 + 宽基ETF持仓调仓）
-
 【数据维护】
   python main.py gap-update         # 差额补全（数据库最新日→今天）
-  python main.py intraday-update    # 尾盘增量更新（只拉今天）
+  python main.py intraday-update    # 尾盘增量更新（= gap-update --lookback 1）
   python main.py redtide-supply     # 赤潮数据补全（adj_factor/stk_limit/market_state）
   python main.py fund-nav           # 基金净值增量更新（回溯N个交易日）
   python main.py download-full      # 全市场数据下载（建库/重建，断点续跑）
@@ -23,13 +16,13 @@ v5.1 子命令注册表：每个子命令独立声明参数与实现，
   python main.py check-coverage     # 数据覆盖体检（可转债 + ETF/LOF）
   python main.py check-consumer     # 决策侧消费标的覆盖体检（A2池+作战包+持仓，逐标的验行数）
 
-【库维护与体检】
-  python main.py db-clean           # 存量数据清理（版本冗余压缩，默认干跑 + 自动备份）
-  python main.py db-audit           # 全量数据库体检（断点/重复/缺口/规模）
-  python main.py db-schema          # 结构扫描（输出机器可读 schema JSON）
-  python main.py db-report          # 从 schema JSON 生成结构报告 Markdown
-  python main.py db-migrate         # 存储布局迁移（by_code → by_year）
-  python main.py ckpt               # 断点管理（查看/交叉核对/回填/清虚记）
+【库维护与体检（db 命令族；旧平铺名 db-clean/db-audit/... 仍可用，已隐藏于 --help）】
+  python main.py db audit           # 全量数据库体检（断点/重复/缺口/规模）
+  python main.py db schema          # 结构扫描（输出机器可读 schema JSON）
+  python main.py db report          # 结构报告 Markdown（--refresh: 先扫描再出报告）
+  python main.py db clean           # 存量数据清理（版本冗余压缩，默认干跑 + 自动备份）
+  python main.py db migrate         # 存储布局迁移（by_code → by_year）
+  python main.py db ckpt            # 断点管理（查看/交叉核对/回填/清虚记）
   python main.py config-check       # config.py 完整性检查（主键/日期列/清单覆盖）
   python main.py regress            # 回归测试（盘后流水线 + 存储布局约束）
 
@@ -46,7 +39,6 @@ v5.1 子命令注册表：每个子命令独立声明参数与实现，
   python main.py alt-verify         # alt 表规格校验（只读）
 
 【基金与指数分析】
-  python main.py wind-index         # 【已剥离停用 2026-09-25】Wind 研究暂停，代码暂存 _scratch/wind-研究暂存
   python main.py micro-index        # 本地自建微盘指数（替代 Wind 8841431.WI）
   python main.py factor-lib         # 因子库概览（全收益基准 + 风格因子）
   python main.py fund-pool          # 公募主动权益基金池构建
@@ -54,19 +46,29 @@ v5.1 子命令注册表：每个子命令独立声明参数与实现，
 
 【分析扫描】
   python main.py qidian             # 奇点战法每日双重信号扫描
-  python main.py scan-divergence    # [已归档 2026-09-24] 背离扫描（运行显示停用提示）
-  python main.py divergence-trigger # [已归档 2026-09-24] 背离触发（运行显示停用提示）
 
 【监控推送】
-  python main.py monitor            # [已归档 2026-09-25] 盘中背离监控（运行显示停用提示）
   python main.py push-test          # PushPlus推送测试/发送
 
 【工具】
   python main.py lof-list           # 场内ETF/LOF清单统计
   python main.py lof-export         # 场内LOF导出Excel
+  python main.py leverage           # 杠杆风险监控（两融B口径，零请求读本地库）
+  python main.py etf-flow           # ETF份额/申赎资金流
 
-本清单与 build_parser() 的注册表保持一致（共 41 个命令）。
+【已归档命令（2026-09-30 P1-1 删除入口；代码与恢复说明见归档目录）】
+  fetch / report / all / fix-resonance / daily-report
+       → _archive/日报链路-20260924/、_archive/legacy链-20260925/
+  wind-index
+       → _scratch/wind-研究暂存/（Wind 研究暂停 2026-09-25）
+  scan-divergence / divergence-trigger / monitor
+       → _archive/背离扫描器-20260924/（背离假设已实证否决）
+
+本清单与 build_parser() 的注册表保持一致：注册 36 个命令名 —— 30 个可见顶级命令
+（其中 db 命令族含 audit / schema / report / clean / migrate / ckpt 6 个子命令）
++ 6 个隐藏兼容别名（db-clean / db-audit / db-schema / db-report / db-migrate / ckpt）。
 alt 库另有等价模块入口：python -m alt.update / alt.audit / alt.backfill
+亦支持等价直调（与子命令等价）：python -m tools.leverage_monitor / tools.etf_flow
 """
 import argparse
 import datetime
@@ -86,46 +88,6 @@ def _banner(text):
 
 
 # ============================================================
-# 【日常流水线】
-# ============================================================
-def cmd_fetch(args):
-    """数据采集 —— 已停用（2026-09-25 F4：旧宽基ETF轮动采集链整体归档）"""
-    _banner("fetch 数据采集")
-    print("  [停用] 旧宽基ETF轮动采集链（pipeline + market_beta/iv_fetch/wide_etf/leverage 采集版）")
-    print("         已于 2026-09-25 归档: _archive/legacy链-20260925/")
-    print("         数据新鲜度现由 A1 库日更接管（main.py gap-update --group all，工作日 17:30 automation）。")
-    print("         杠杆读数入口保留: python -m tools.leverage_monitor")
-
-
-def cmd_report(args):
-    """日报生成 —— 已停用（2026-09-24 决策）"""
-    _banner("report 日报生成")
-    print("  [停用] 日报链路已于 2026-09-24 停用 —— "
-          "它服务的「宽基ETF轮动 v3.0」与 v7.7 选股驱动范式不同源。")
-    print("         代码归档: 代码/_archive/日报链路-20260924/")
-    print("         保留能力: 杠杆风险监控 / 宽基ETF份额资金流（见归档 README 的接入待办）")
-    return
-
-
-def cmd_all(args):
-    """采集 + 日报（一键完成）—— 两步均已停用"""
-    _banner("all 采集 + 日报")
-    print("  [停用] 第 1 步「数据采集」2026-09-25 归档（_archive/legacy链-20260925/，")
-    print("         数据新鲜度由 A1 库日更接管）；第 2 步「日报生成」2026-09-24 停用。")
-    print("         日常维护入口: main.py gap-update --group all")
-
-
-def cmd_fix_resonance(args):
-    """[已拆分归档 2026-09-25 D2] 原 fix_and_resonance 混合体"""
-    _banner("fix-resonance 已拆分归档（2026-09-25 D2）")
-    print("  保留部分已拆出为独立模块（活代码）：")
-    print("    杠杆风险监控 → python -m tools.leverage_monitor [YYYYMMDD]")
-    print("    ETF份额/申赎 → python -m tools.etf_flow [YYYYMMDD]")
-    print("  β合成/仓位映射/多层共振等择时旧逻辑随原文件归档：")
-    print("    _archive/日报链路-20260924/fix_and_resonance.py")
-
-
-# ============================================================
 # 【数据维护】
 # ============================================================
 def cmd_gap_update(args):
@@ -140,7 +102,7 @@ def cmd_gap_update(args):
 
 
 def cmd_intraday_update(args):
-    """尾盘增量更新（只关心最近一个交易日）"""
+    """尾盘增量更新（= gap-update --lookback 1 的特例；保留兼容入口，语义见 DB-G2）"""
     from fetch.daily_update import run_daily_update
     _banner("intraday-update 尾盘增量更新")
     target_date = args.date.replace("-", "") if args.date else _today().replace("-", "")
@@ -213,16 +175,6 @@ def cmd_backfill(args):
                  force=getattr(args, "force", False))
 
 
-def cmd_daily_report(args):
-    """量化日报生成 —— 已停用（2026-09-24 决策）"""
-    _banner("daily-report 量化日报生成")
-    print("  [停用] 日报链路已于 2026-09-24 停用 —— "
-          "它服务的「宽基ETF轮动 v3.0」与 v7.7 选股驱动范式不同源。")
-    print("         代码归档: 代码/_archive/日报链路-20260924/")
-    print("         保留能力: 杠杆风险监控 / 宽基ETF份额资金流（见归档 README 的接入待办）")
-    return
-
-
 def cmd_check_coverage(args):
     """数据覆盖体检（可转债 + ETF/LOF）"""
     from tools.check_coverage import run
@@ -238,7 +190,7 @@ def cmd_check_consumer(args):
 
 
 def cmd_db_clean(args):
-    """存量数据清理（版本冗余压缩）"""
+    """存量数据清理（版本冗余压缩；默认干跑，--apply 才写入）"""
     from tools.db_clean import run_clean, DB_CLEAN_TARGETS
     if args.list:
         print(f"{'目标':22s} {'说明':14s} {'主键':32s} 策略")
@@ -248,45 +200,60 @@ def cmd_db_clean(args):
         return
     _banner("db-clean 存量数据清理")
     only = tuple(x.strip() for x in args.only.split(",")) if getattr(args, "only", None) else None
-    run_clean(targets=only, apply=args.apply, backup=not args.no_backup)
+    apply = bool(args.apply)
+    if apply and getattr(args, "dry_run", False):
+        print("  [提示] --dry-run 优先：本次不写入（去掉 --dry-run 才真正执行）")
+        apply = False
+    run_clean(targets=only, apply=apply, backup=not args.no_backup)
 
 
 def cmd_db_audit(args):
     """全量数据库体检"""
     from tools.db_audit import run_audit, DB_AUDIT_PKEYS
+    as_json = getattr(args, "json", False)
     if args.list:
         print(f"{'目录':22s} 主键")
         for n, pk in DB_AUDIT_PKEYS.items():
             print(f"{n:22s} {pk if pk else '(跳过重复检查)'}")
         return
-    _banner("db-audit 全量数据库体检")
+    if not as_json:
+        _banner("db-audit 全量数据库体检")
     only = tuple(x.strip() for x in args.only.split(",")) if getattr(args, "only", None) else None
     if args.section == "all":
         sections = ("checkpoint", "dup", "gap", "scale")
     else:
         sections = tuple(x.strip() for x in args.section.split(",") if x.strip())
-    run_audit(sections=sections, only=only, exact=getattr(args, "exact", False))
+    run_audit(sections=sections, only=only, exact=getattr(args, "exact", False),
+              as_json=as_json)
 
 
 def cmd_db_schema(args):
     """数据库结构扫描（输出机器可读 schema JSON）"""
     from tools.db_schema import run_schema
-    _banner("db-schema 数据库结构扫描")
-    run_schema(out=getattr(args, "out", None), verbose=not args.quiet, quiet=args.quiet)
+    as_json = getattr(args, "json", False)
+    if not as_json:
+        _banner("db-schema 数据库结构扫描")
+    run_schema(out=getattr(args, "out", None), verbose=not args.quiet,
+               quiet=args.quiet, as_json=as_json)
 
 
 def cmd_db_report(args):
-    """数据库结构报告生成（从 db_schema.json 生成 Markdown）"""
+    """数据库结构报告（--refresh: 先扫描刷新 schema 再生成，两步合一）"""
     from tools.gen_db_report import run as gen_report
-    _banner("db-report 数据库结构报告")
-    gen_report(out=getattr(args, "out", None))
+    as_json = getattr(args, "json", False)
+    if not as_json:
+        _banner("db-report 数据库结构报告")
+    gen_report(out=getattr(args, "out", None), as_json=as_json,
+               refresh=getattr(args, "refresh", False))
 
 
 def cmd_regress(args):
     """回归测试（盘后流水线 + 存储布局约束）"""
     from tools.regress_pipeline import run as run_regress
-    _banner("regress 回归测试")
-    n_ok, n_fail = run_regress()
+    as_json = getattr(args, "json", False)
+    if not as_json:
+        _banner("regress 回归测试")
+    n_ok, n_fail = run_regress(verbose=not as_json, as_json=as_json)
     if n_fail:
         raise SystemExit(1)
 
@@ -294,18 +261,23 @@ def cmd_regress(args):
 def cmd_freshness(args):
     """数据新鲜度速查"""
     from tools.quicklook import run_freshness
-    _banner("freshness 数据新鲜度")
+    as_json = getattr(args, "json", False)
+    if not as_json:
+        _banner("freshness 数据新鲜度")
     tables = ([x.strip() for x in args.tables.split(",")]
               if getattr(args, "tables", None) else None)
-    run_freshness(tables=tables, show_all=args.all, stale_days=args.stale)
+    run_freshness(tables=tables, show_all=args.all, stale_days=args.stale,
+                  as_json=as_json)
 
 
 def cmd_peek(args):
     """数据预览"""
     from tools.quicklook import run_peek
-    _banner("peek 数据预览")
+    as_json = getattr(args, "json", False)
+    if not as_json:
+        _banner("peek 数据预览")
     run_peek(args.table, code=args.code, date=args.date,
-             rows=args.rows, cols=args.cols)
+             rows=args.rows, cols=args.cols, as_json=as_json)
 
 
 def cmd_doctor(args):
@@ -320,9 +292,12 @@ def cmd_doctor(args):
 def cmd_ckpt(args):
     """断点管理（查看 / 交叉核对 / 按磁盘回填 / 清虚记）"""
     from tools.ckpt_tool import run_ckpt
-    _banner("ckpt 断点管理")
+    as_json = getattr(args, "json", False)
+    if not as_json:
+        _banner("ckpt 断点管理")
     run_ckpt(show=args.show, fix=args.fix, clear=args.clear,
-             table=args.table, dry_run=args.dry_run, execute=args.execute)
+             table=args.table, dry_run=args.dry_run, execute=args.execute,
+             as_json=as_json)
 
 
 def cmd_db_migrate(args):
@@ -349,15 +324,6 @@ def cmd_db_migrate(args):
 # ============================================================
 # 【基金与指数分析】
 # ============================================================
-def cmd_wind_index(args):
-    """Wind 自编指数枚举/采集（默认 DRY-RUN）—— 已剥离停用（2026-09-25 老大令：Wind 研究暂停）"""
-    _banner("wind-index Wind 自编指数枚举")
-    print("【已剥离停用】Wind 研究暂停（2026-09-25），代码已整体剥离至临时脚本区：")
-    print("    _scratch\\wind-研究暂存\\wind_index_enum.py（含 wind_probe 9 脚本）")
-    print("恢复方式：把该目录文件 copy 回 fetch\\ 后，还原 main.py 的 cmd_wind_index")
-    print("（备份与恢复指引见 _scratch\\wind-研究暂存\\README.md）")
-
-
 def cmd_micro_index(args):
     """本地自建微盘指数"""
     from tools.build_micro_index import main as micro_main
@@ -434,31 +400,9 @@ def cmd_qidian(args):
     )
 
 
-def cmd_scan_divergence(args):
-    """[已归档 2026-09-24] 全市场MACD背离扫描——实证负增量，停止使用（见 _archive/背离扫描器-20260924/README.md）"""
-    _banner("scan-divergence 已归档（2026-09-24 决议）")
-    print("  背离扫描器经 133 信号日 / 34,945 样本回测为负增量（L2 低估值池内 -0.24%~-1.06%，t=-1.65~-3.41），")
-    print("  与 v7.5+ 选股驱动范式不同源，已决议归档。报告: reports/背离扫描器有效性验证-20260924.html")
-    print("  代码保留于 _archive/背离扫描器-20260924/；若要重启须换假设而非调参。")
-
-
-def cmd_divergence_trigger(args):
-    """[已归档 2026-09-24] 分钟级背离触发扫描——随背离扫描器一并归档"""
-    _banner("divergence-trigger 已归档（2026-09-24 决议）")
-    print("  与 scan-divergence 同链路同假设，一并归档。详见 _archive/背离扫描器-20260924/README.md")
-
-
 # ============================================================
 # 【监控推送】
 # ============================================================
-def cmd_monitor(args):
-    """[已归档 2026-09-25 G6] 盘中MACD背离监控——背离假设已否决，随 D1 链路归档"""
-    _banner("monitor 已归档（2026-09-25，随背离扫描器决议）")
-    print("  盘中多周期MACD背离监控与 scan-divergence 同假设同链路（假设已实证否决）。")
-    print("  代码归档于 _archive/背离扫描器-20260924/（convergence.py + intraday_monitor.py）。")
-    print("  若要重启须换假设而非调参。")
-
-
 def cmd_push_test(args):
     """PushPlus 推送测试 / 发送"""
     from push.pushplus import run_push
@@ -490,6 +434,22 @@ def cmd_lof_export(args):
     _banner("lof-export 场内LOF导出Excel")
     out_path = run(args.out)
     print(f"\n输出文件: {out_path}")
+
+
+# [2026-09-30 P1-1 收编] 原 fix-resonance 拆分产物，此前只能 python -m tools.xxx 调用；
+# 现升级为正式子命令（模块入口保留，两套等价）。
+def cmd_leverage(args):
+    """杠杆风险监控（两融B口径，零请求读本地库）"""
+    from tools.leverage_monitor import main as lm_main
+    _banner("leverage 杠杆风险监控")
+    lm_main([args.date] if args.date else [])
+
+
+def cmd_etf_flow(args):
+    """ETF份额/申赎资金流"""
+    from tools.etf_flow import main as ef_main
+    _banner("etf-flow ETF份额/申赎资金流")
+    ef_main([args.date] if args.date else [])
 
 
 # ============================================================
@@ -644,20 +604,12 @@ def cmd_config_check(args):
 # ============================================================
 _EPILOG = """
 示例:
-  # 日常流水线
-  python main.py fetch                          采集今天数据
-  python main.py report                         生成最新HTML日报
-  python main.py report --format brief          仅控制台摘要
-  python main.py all                            数据采集+日报一键完成
-  python main.py fix-resonance 20260914         补算四因子+共振
-  python main.py daily-report                   量化日报（大盘+持仓调仓）
-
   # 数据维护
   python main.py gap-update                     每日增量更新（走 backfill 引擎）
   python main.py gap-update --dry-run           只算缺口，不发请求
   python main.py gap-update --group all         追加资金面/事件面接口
   python main.py gap-update --lookback 10       扩大复核窗口（修历史残缺）
-  python main.py intraday-update                尾盘增量（只关心最近1个交易日）
+  python main.py intraday-update                尾盘增量（= gap-update --lookback 1 的特例）
   python main.py redtide-supply                 赤潮派生（market_state）
   python main.py fund-nav                       基金净值增量更新
   python main.py fund-nav --repair              历史回补（行数过少的文件）
@@ -668,24 +620,27 @@ _EPILOG = """
   python main.py check-coverage                 数据覆盖体检
   python main.py check-coverage 20260911        指定日期体检
 
-  # 库维护
-  python main.py db-audit                       全量数据库体检
-  python main.py db-audit --section gap         只看缺口
-  python main.py db-audit --list                列出体检主键配置
-  python main.py db-schema                      结构扫描（输出 schema JSON）
-  python main.py db-report                      生成结构报告 Markdown
-  python main.py db-migrate --dry-run           布局迁移计划（by_code→by_year）
-  python main.py db-migrate --all               执行迁移（自动备份+行数校验）
-  python main.py db-clean                       存量清理（默认干跑）
-  python main.py db-clean --apply --only fina_indicator   执行清理
-  python main.py ckpt --show                    断点×磁盘交叉核对
+  # 库维护（db 命令族；旧平铺名 db-audit / db-schema / db-report / db-clean / db-migrate 仍可用）
+  python main.py db audit                       全量数据库体检
+  python main.py db audit --section gap         只看缺口
+  python main.py db audit --json                体检结果 JSON（机器可读）
+  python main.py db schema                      结构扫描（输出 schema JSON）
+  python main.py db report                      生成结构报告 Markdown
+  python main.py db report --refresh            一步完成：先扫描再出报告
+  python main.py db migrate --dry-run           布局迁移计划（by_code→by_year）
+  python main.py db migrate --all               执行迁移（自动备份+行数校验）
+  python main.py db clean                       存量清理（默认干跑；--dry-run 显式干跑）
+  python main.py db clean --apply --only fina_indicator   执行清理
+  python main.py db ckpt --show                 断点×磁盘交叉核对
+  python main.py db ckpt --show --json          交叉核对 JSON（机器可读）
   python main.py config-check                   配置完整性检查
   python main.py regress                        回归测试（改数据层后必跑）
 
   # 数据速查
   python main.py freshness --all                全部表最新日期
-  python main.py freshness --stale 3            只看落后超过3个交易日的表
+  python main.py freshness --stale 3 --json     落后表（JSON）
   python main.py peek daily --code 600519.SH    预览某张表的实际数据
+  python main.py peek daily --json              预览（JSON，机器可读）
   python main.py doctor                         环境自检
 
   # alt 库（另类/海外数据，物理隔离于主库；tier = P0/P1/P3/P4）
@@ -700,21 +655,24 @@ _EPILOG = """
 
   # 分析扫描
   python main.py qidian --dry-run               奇点战法扫描（不推送）
-  python main.py scan-divergence                [已归档] 运行显示停用提示（2026-09-24 决议）
-  python main.py divergence-trigger --push      [已归档] 运行显示停用提示（2026-09-24 决议）
 
   # 监控推送
-  python main.py monitor                        [已归档] 运行显示停用提示（2026-09-25 决议）
   python main.py push-test                      发送推送测试消息
   python main.py push-test --title T --content C  发送自定义内容
 
   # 工具
   python main.py lof-list                       场内ETF/LOF清单统计
   python main.py lof-export                     导出LOF清单Excel
+  python main.py leverage                       杠杆风险监控（零请求读本地库）
+  python main.py etf-flow                       宽基ETF份额/申赎资金流
 
 全量下载也可直接调用模块（与子命令等价）:
   python -m fetch.full_download --phase all
   python -m fetch.cb_download --reset
+
+已归档命令（2026-09-30 P1-1 删除入口，不再占命令槽）: fetch / report / all /
+fix-resonance / daily-report / wind-index / scan-divergence / divergence-trigger /
+monitor —— 代码与恢复说明见 _archive/ 对应目录。
 """
 
 
@@ -726,38 +684,126 @@ def _add_dry_run(p, help_text="只统计不写入"):
     p.add_argument("--dry-run", action="store_true", help=help_text)
 
 
-def _add_format(p):
-    p.add_argument("--format", default="html", choices=["html", "brief"],
-                   help="日报输出格式 (html=完整网页日报, brief=仅控制台摘要)")
+def _add_json(p, help_text="输出 JSON（机器可读；不打印横幅/明细）"):
+    p.add_argument("--json", action="store_true", dest="json", help=help_text)
+
+
+def cmd_db_group(args):
+    """db 命令族入口（无子命令时提示用法）"""
+    if not getattr(args, "db_command", None):
+        print("db 命令族: 请指定子命令 —— audit / schema / report / clean / migrate / ckpt")
+        print("  例: python main.py db audit --section gap")
+        print("  旧平铺名（db-audit / db-schema / db-report / db-clean / db-migrate）仍可用，等价。")
+
+
+def _add_db_clean_args(p):
+    p.add_argument("--only", default=None, help="只清理指定目标, 逗号分隔")
+    p.add_argument("--apply", action="store_true",
+                   help="真正写入(默认干跑); 执行时自动备份整个目录")
+    p.add_argument("--dry-run", action="store_true",
+                   help="显式干跑（默认行为；与 --apply 同时给出时以 --dry-run 为准）")
+    p.add_argument("--no-backup", action="store_true", help="跳过自动备份(不推荐)")
+    p.add_argument("--list", action="store_true", help="列出清理目标后退出")
+    p.set_defaults(func=cmd_db_clean)
+
+
+def _add_db_audit_args(p):
+    p.add_argument("--section", default="all",
+                   help="检查项: all / checkpoint / dup / gap / scale (可逗号组合)")
+    p.add_argument("--only", default=None, help="重复检查只针对指定目录, 逗号分隔")
+    p.add_argument("--exact", action="store_true",
+                   help="无主键目录做全量整行判重(慢, 约18分钟; 默认抽样)")
+    p.add_argument("--list", action="store_true", help="列出主键配置后退出")
+    _add_json(p, help_text="输出体检结果 JSON（不打印横幅/明细）")
+    p.set_defaults(func=cmd_db_audit)
+
+
+def _add_db_schema_args(p):
+    p.add_argument("--out", default=None, help="输出路径（默认 文档/数据与工程/db_schema.json）")
+    p.add_argument("--quiet", action="store_true", help="只写文件，不打印明细")
+    _add_json(p, help_text="stdout 输出回执 JSON（schema 文件照写）")
+    p.set_defaults(func=cmd_db_schema)
+
+
+def _add_db_report_args(p):
+    p.add_argument("--out", default=None, help="输出路径（默认 文档/数据与工程/数据库结构报告_YYYYMMDD.md）")
+    p.add_argument("--refresh", action="store_true",
+                   help="先扫描刷新 schema 再生成报告（= db-schema + db-report 一步完成）")
+    _add_json(p, help_text="stdout 输出回执 JSON（Markdown 文件照写）")
+    p.set_defaults(func=cmd_db_report)
+
+
+def _add_ckpt_args(p):
+    p.add_argument("--show", action="store_true", help="显示断点与磁盘交叉核对")
+    p.add_argument("--fix", action="store_true",
+                   help="按磁盘实际数据回填断点（幂等，只增不减）")
+    p.add_argument("--clear", action="store_true",
+                   help="清除'断点说完成但磁盘无数据'的虚记条目")
+    p.add_argument("--table", default=None, help="指定表（逗号分隔）；默认全部")
+    p.add_argument("--dry-run", action="store_true", help="只显示计划不写入")
+    p.add_argument("--execute", action="store_true", help="真正写入（默认干跑）")
+    _add_json(p, help_text="输出结果 JSON（含明细；不打印横幅）")
+    p.set_defaults(func=cmd_ckpt)
+
+
+def _add_db_migrate_args(p):
+    p.add_argument("--tables", default=None, help="指定表, 逗号分隔")
+    p.add_argument("--all", action="store_true", help="迁移全部待迁移表")
+    p.add_argument("--daily", action="store_true", help="只迁移每日更新链路表")
+    p.add_argument("--dry-run", action="store_true", help="只报告计划, 不改动文件")
+    p.add_argument("--no-backup", action="store_true", help="不留备份（不推荐）")
+    p.add_argument("--list", action="store_true", help="列出待迁移表后退出")
+    p.set_defaults(func=cmd_db_migrate)
+
+
+# db 命令族登记表：(子命令, 旧平铺名, 参数注册器, help)
+#   新入口: python main.py db <子命令>
+#   旧平铺名（db-clean/db-audit/db-schema/db-report/db-migrate/ckpt）保留为
+#   **隐藏兼容别名**：不出现在 --help（DB-M4），但调用行为完全等价
+#   （tools/regress_pipeline R1 的契约白名单依赖这些名字存在）。
+_DB_FAMILY = (
+    ("clean", "db-clean", _add_db_clean_args, "存量数据清理（版本冗余压缩）"),
+    ("audit", "db-audit", _add_db_audit_args, "全量数据库体检（断点/重复/缺口/规模）"),
+    ("schema", "db-schema", _add_db_schema_args, "数据库结构扫描（输出机器可读 schema JSON）"),
+    ("report", "db-report", _add_db_report_args, "数据库结构报告（从 schema JSON 生成 Markdown）"),
+    ("migrate", "db-migrate", _add_db_migrate_args, "存储布局迁移（by_code → by_year）"),
+    ("ckpt", "ckpt", _add_ckpt_args, "断点管理（查看/交叉核对/回填/清虚记）"),
+)
+
+
+class _NoSuppressSubcommands(argparse.RawDescriptionHelpFormatter):
+    """隐藏 help=argparse.SUPPRESS 的子命令（Python 3.13 argparse 不自动隐藏）。
+
+    仅在 --help 格式化时**临时**过滤 _choices_actions 里的 SUPPRESS 项并在 finally
+    恢复 —— 不永久改动 parser 内部状态，替代此前的 `_choices_actions` 摘除 hack。
+    说明：invalid-choice 报错走 _name_parser_map，与本格式化器无关、不受影响。
+    """
+
+    def _format_action(self, action):
+        choices = getattr(action, "_choices_actions", None)
+        if choices:
+            saved = choices
+            action._choices_actions = [
+                a for a in saved if getattr(a, "help", None) is not argparse.SUPPRESS
+            ]
+            try:
+                return super()._format_action(action)
+            finally:
+                action._choices_actions = saved
+        return super()._format_action(action)
 
 
 def build_parser():
+    from config import __version__
     parser = argparse.ArgumentParser(
-        prog="main.py",
+        prog="pyramid",
         description="A股三层轮动金字塔策略 · 统一入口",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=_NoSuppressSubcommands,
         epilog=_EPILOG,
     )
+    parser.add_argument("--version", action="version",
+                        version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
-
-    # ── 日常流水线 ──
-    p = sub.add_parser("fetch", help="数据采集（大盘β+宽基ETF+杠杆+IV）")
-    _add_date(p)
-    p.set_defaults(func=cmd_fetch)
-
-    p = sub.add_parser("report", help="生成HTML日报")
-    _add_date(p)
-    _add_format(p)
-    p.set_defaults(func=cmd_report)
-
-    p = sub.add_parser("all", help="采集 + 日报（一键完成）")
-    _add_date(p)
-    _add_format(p)
-    p.set_defaults(func=cmd_all)
-
-    p = sub.add_parser("fix-resonance", help="补算四因子 + ETF份额 + 多层共振")
-    p.add_argument("date", nargs="?", default=None, help="交易日 YYYYMMDD (默认今天)")
-    p.set_defaults(func=cmd_fix_resonance)
 
     # ── 数据维护 ──
     p = sub.add_parser("gap-update", help="每日增量更新（数据库最新日→今天，走 backfill 引擎）")
@@ -770,7 +816,8 @@ def build_parser():
     p.add_argument("--only", default=None, help="只跑指定表, 逗号分隔")
     p.set_defaults(func=cmd_gap_update)
 
-    p = sub.add_parser("intraday-update", help="尾盘增量更新（只关心最近一个交易日）")
+    p = sub.add_parser("intraday-update",
+                       help="尾盘增量更新（= gap-update --lookback 1 的特例，保留入口）")
     _add_date(p)
     _add_dry_run(p)
     p.set_defaults(func=cmd_intraday_update)
@@ -831,39 +878,19 @@ def build_parser():
     p = sub.add_parser("check-consumer", help="决策侧消费标的覆盖体检（A2池+作战包+持仓）")
     p.set_defaults(func=cmd_check_consumer)
 
-    p = sub.add_parser("daily-report",
-                       help="量化日报生成（大盘分析 + 宽基ETF持仓调仓）")
-    p.add_argument("date", nargs="?", default=None,
-                   help="交易日 YYYYMMDD (默认: 最新)")
-    p.set_defaults(func=cmd_daily_report)
-
-    p = sub.add_parser("db-clean", help="存量数据清理（版本冗余压缩）")
-    p.add_argument("--only", default=None, help="只清理指定目标, 逗号分隔")
-    p.add_argument("--apply", action="store_true",
-                   help="真正写入(默认干跑); 执行时自动备份整个目录")
-    p.add_argument("--no-backup", action="store_true", help="跳过自动备份(不推荐)")
-    p.add_argument("--list", action="store_true", help="列出清理目标后退出")
-    p.set_defaults(func=cmd_db_clean)
-
-    p = sub.add_parser("db-audit", help="全量数据库体检（断点/重复/缺口/规模）")
-    p.add_argument("--section", default="all",
-                   help="检查项: all / checkpoint / dup / gap / scale (可逗号组合)")
-    p.add_argument("--only", default=None, help="重复检查只针对指定目录, 逗号分隔")
-    p.add_argument("--exact", action="store_true",
-                   help="无主键目录做全量整行判重(慢, 约18分钟; 默认抽样)")
-    p.add_argument("--list", action="store_true", help="列出主键配置后退出")
-    p.set_defaults(func=cmd_db_audit)
-
-    p = sub.add_parser("db-schema", help="数据库结构扫描（输出机器可读 schema JSON）")
-    p.add_argument("--out", default=None, help="输出路径（默认 文档/数据与工程/db_schema.json）")
-    p.add_argument("--quiet", action="store_true", help="只写文件，不打印明细")
-    p.set_defaults(func=cmd_db_schema)
-
-    p = sub.add_parser("db-report", help="数据库结构报告（从 schema JSON 生成 Markdown）")
-    p.add_argument("--out", default=None, help="输出路径（默认 文档/数据与工程/数据库结构报告_YYYYMMDD.md）")
-    p.set_defaults(func=cmd_db_report)
+    # ── 库维护：db 命令族（2026-09-30 P3 / DB-M4）──
+    db = sub.add_parser("db", help="数据库命令族（audit/schema/report/clean/migrate/ckpt）")
+    db_sub = db.add_subparsers(dest="db_command", metavar="<subcommand>")
+    db.set_defaults(func=cmd_db_group)
+    for _sub, _flat, _add_args, _help in _DB_FAMILY:
+        _add_args(db_sub.add_parser(_sub, help=_help))
+        # 旧平铺名：隐藏兼容别名（调用等价，不占 --help 版面）
+        #   help=SUPPRESS 的隐藏由 _NoSuppressSubcommands 格式化器处理
+        #   （命令仍注册在 choices 中，可正常调用，regress R1 契约依赖）。
+        _add_args(sub.add_parser(_flat, help=argparse.SUPPRESS))
 
     p = sub.add_parser("regress", help="回归测试（盘后流水线 + 存储布局约束）")
+    _add_json(p, help_text="输出回归结果 JSON（逐项日志静音，退出码语义不变）")
     p.set_defaults(func=cmd_regress)
 
     # ── 数据速查 ──
@@ -873,6 +900,7 @@ def build_parser():
     p.add_argument("--all", action="store_true", help="显示全部表")
     p.add_argument("--stale", type=int, default=None,
                    help="只显示落后超过N个交易日的表")
+    _add_json(p, help_text="输出新鲜度 JSON（机器可读；不打印横幅）")
     p.set_defaults(func=cmd_freshness)
 
     p = sub.add_parser("peek", help="数据预览（看某张表的实际数据）")
@@ -881,6 +909,7 @@ def build_parser():
     p.add_argument("--date", default=None, help="日期 YYYYMMDD")
     p.add_argument("--rows", type=int, default=10, help="显示行数（默认10）")
     p.add_argument("--cols", default=None, help="只显示指定列（逗号分隔）")
+    _add_json(p, help_text="输出预览 JSON（机器可读；不打印横幅）")
     p.set_defaults(func=cmd_peek)
 
     p = sub.add_parser("doctor", help="环境自检（依赖/路径/磁盘/断点/凭据）")
@@ -889,26 +918,8 @@ def build_parser():
     p.add_argument("--json", action="store_true", dest="json",
                    help="输出 JSON")
     p.set_defaults(func=cmd_doctor)
-
-    p = sub.add_parser("ckpt", help="断点管理（查看/交叉核对/回填/清虚记）")
-    p.add_argument("--show", action="store_true", help="显示断点与磁盘交叉核对")
-    p.add_argument("--fix", action="store_true",
-                   help="按磁盘实际数据回填断点（幂等，只增不减）")
-    p.add_argument("--clear", action="store_true",
-                   help="清除'断点说完成但磁盘无数据'的虚记条目")
-    p.add_argument("--table", default=None, help="指定表（逗号分隔）；默认全部")
-    p.add_argument("--dry-run", action="store_true", help="只显示计划不写入")
-    p.add_argument("--execute", action="store_true", help="真正写入（默认干跑）")
-    p.set_defaults(func=cmd_ckpt)
-
-    p = sub.add_parser("db-migrate", help="存储布局迁移（by_code → by_year）")
-    p.add_argument("--tables", default=None, help="指定表, 逗号分隔")
-    p.add_argument("--all", action="store_true", help="迁移全部待迁移表")
-    p.add_argument("--daily", action="store_true", help="只迁移每日更新链路表")
-    p.add_argument("--dry-run", action="store_true", help="只报告计划, 不改动文件")
-    p.add_argument("--no-backup", action="store_true", help="不留备份（不推荐）")
-    p.add_argument("--list", action="store_true", help="列出待迁移表后退出")
-    p.set_defaults(func=cmd_db_migrate)
+    # 注: ckpt / db-migrate 的平铺入口已并入 db 命令族登记（见上方 _DB_FAMILY），
+    #     旧名 ckpt / db-migrate 作为隐藏别名保留。
 
     p = sub.add_parser("config-check",
                        help="config.py 完整性检查（主键/日期列/清单覆盖/归属）")
@@ -983,14 +994,6 @@ def build_parser():
     p.set_defaults(func=cmd_alt_verify)
 
     # ── 基金与指数分析 ──
-    p = sub.add_parser("wind-index", help="【已剥离停用 2026-09-25】Wind 研究暂停，暂存于 _scratch\\wind-研究暂存")
-    p.add_argument("--plan", action="store_true", help="只输出分块计划（不消耗额度）")
-    p.add_argument("--execute", action="store_true", help="真正调用 Wind（消耗额度，谨慎）")
-    p.add_argument("--segments", default=None, help="段位，逗号分隔（如 881,882）")
-    p.add_argument("--budget", type=int, default=None, help="调用次数硬上限（默认100）")
-    p.add_argument("--out", default=None, help="产出目录（须与 tushare 库分离）")
-    p.set_defaults(func=cmd_wind_index)
-
     p = sub.add_parser("micro-index", help="本地自建微盘指数（替代 Wind 8841431.WI）")
     p.add_argument("--start", default=None, help="起始日期 YYYYMMDD（默认20160101）")
     p.add_argument("--out-dir", default=None, help="输出目录")
@@ -1027,16 +1030,7 @@ def build_parser():
                    help="方案C: 加推单边卖出信号（带仅观察标注）")
     p.set_defaults(func=cmd_qidian)
 
-    p = sub.add_parser("scan-divergence", help="[已归档] 全市场MACD背离扫描（停用提示）")
-    p.set_defaults(func=cmd_scan_divergence)
-
-    p = sub.add_parser("divergence-trigger", help="[已归档] 分钟级背离触发扫描（停用提示）")
-    p.set_defaults(func=cmd_divergence_trigger)
-
     # ── 监控推送 ──
-    p = sub.add_parser("monitor", help="[已归档] 盘中MACD背离监控（停用提示）")
-    p.set_defaults(func=cmd_monitor)
-
     p = sub.add_parser("push-test", help="PushPlus推送测试/发送")
     p.add_argument("--token", default=None, help="PushPlus token (默认取config.py)")
     p.add_argument("--channel", default=None, help="发送渠道 (wechat/clawbot)")
@@ -1054,6 +1048,15 @@ def build_parser():
     p.add_argument("--out", default=None, help="输出路径 (默认 文档/场内LOF完整列表.xlsx)")
     p.set_defaults(func=cmd_lof_export)
 
+    # [2026-09-30 P1-1 收编] fix-resonance 拆分的两个孤儿活工具（此前只能 python -m 调用）
+    p = sub.add_parser("leverage", help="杠杆风险监控（两融B口径，零请求读本地库）")
+    p.add_argument("date", nargs="?", default=None, help="交易日 YYYYMMDD (默认: 最新)")
+    p.set_defaults(func=cmd_leverage)
+
+    p = sub.add_parser("etf-flow", help="ETF份额/申赎资金流（宽基ETF）")
+    p.add_argument("date", nargs="?", default=None, help="交易日 YYYYMMDD (默认: 最新)")
+    p.set_defaults(func=cmd_etf_flow)
+
     return parser
 
 
@@ -1066,7 +1069,9 @@ def main(argv=None):
         return
 
     args.func(args)
-    print("\n完成。")
+    # --json 模式保持 stdout 为**纯 JSON**（机器可读），不追加完成语
+    if not getattr(args, "json", False):
+        print("\n完成。")
 
 
 if __name__ == "__main__":

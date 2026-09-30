@@ -19,7 +19,9 @@
     viz         L5 图表/报告（只消费 RunResult 数据契约）
     cli         L5 命令行入口（只编排不承载业务）
 
-入口：CLI 七命令（`btf.cli.main`）+ `btf.runtime.BTFRuntime` 门面（装配/落盘/复核）
+入口：CLI 十一命令（`btf.cli.main`：config-check/run/report/verify/test/dataset/
+optimize + **check/cold-backup/runs/show**——后四条见 CLI 审查报告-20260930）
++ `btf.runtime.BTFRuntime` 门面（装配/落盘/复核）
 + **api Facade**（v0.5 V5-7）：`btf.run / btf.report / btf.dataset` 顶层函数
 （`btf/api.py` 惰性暴露——与 CLI 同链路等价，见模块 docstring 的等价性口径）。
 """

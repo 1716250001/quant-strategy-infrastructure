@@ -263,9 +263,23 @@ def build_markdown(d):
     return "\n".join(lines)
 
 
-def run(out=None, verbose=True):
+def run(out=None, verbose=True, as_json=False, refresh=False):
+    """生成结构报告。
+
+    refresh=True: 先扫描刷新 schema 再出报告（= db-schema + db-report 一步完成）
+    as_json=True: stdout 输出回执 JSON（Markdown 文件照写；CLI --json）
+    """
+    if refresh:
+        from tools.db_schema import run_schema
+        run_schema(verbose=False, quiet=True, announce=False)
+
     if not os.path.exists(SCHEMA_PATH):
-        print(f"  [ERROR] 缺少 {SCHEMA_PATH}，请先运行 python main.py db-schema")
+        if as_json:
+            from common.jsonio import print_json
+            print_json({"error": f"缺少 {SCHEMA_PATH}",
+                        "hint": "先运行 python main.py db schema"})
+        else:
+            print(f"  [ERROR] 缺少 {SCHEMA_PATH}，请先运行 python main.py db-schema")
         return None
     with open(SCHEMA_PATH, encoding="utf-8") as f:
         d = json.load(f)
@@ -277,7 +291,13 @@ def run(out=None, verbose=True):
     with open(path, "w", encoding="utf-8") as f:
         f.write(md)
 
-    if verbose:
+    if as_json:
+        from common.jsonio import print_json
+        print_json({"out": path, "schema": SCHEMA_PATH,
+                    "tables": d["total_dirs"], "total_files": d["total_files"],
+                    "total_rows": d["total_rows"], "total_gb": d["total_gb"],
+                    "kb": round(len(md) / 1024), "lines": md.count(chr(10))})
+    elif verbose:
         print(f"  表数={d['total_dirs']} 文件={d['total_files']:,} "
               f"行={d['total_rows']:,} 体积={d['total_gb']}GB")
         print(f"  已生成: {path}  ({len(md)/1024:.0f} KB / {md.count(chr(10))} 行)")
@@ -287,8 +307,11 @@ def run(out=None, verbose=True):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="数据库结构报告生成器")
     ap.add_argument("--out", default=None, help="输出路径")
+    ap.add_argument("--refresh", action="store_true",
+                    help="先扫描刷新 schema 再生成报告（= db-schema + db-report 一步完成）")
+    ap.add_argument("--json", action="store_true", help="stdout 输出回执 JSON（文件照写）")
     a = ap.parse_args(argv)
-    run(out=a.out)
+    run(out=a.out, as_json=a.json, refresh=a.refresh)
 
 
 if __name__ == "__main__":

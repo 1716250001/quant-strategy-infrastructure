@@ -8,6 +8,7 @@ _python/
 _venv/
 __pycache__/
 *.pyc
+*.egg-info/
 
 # ── 暂存与归档 ──────────────────────────────
 # _scratch/ 含 wind-研究暂存（Wind 硬编码 key，10 文件）
