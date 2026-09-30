@@ -21,6 +21,7 @@ tools/regress_pipeline.py — 回归测试（改造不破坏既有流水线）
   R13 by_code 截断防护 (服务端上限可能 < 配置值)
   R14 联查层契约 (alt ↔ 主库: 告警/方向/列名/日期列)
   R15 权限漏网监控 (无权限不重试 / 判据不误伤 / 清单交叉验证)
+  R16 dry-run 零副作用 (元数据段零请求零写入 —— 2026-09-29 fund_basic 事故防再犯)
 
 用法:
   python main.py regress        # 统一入口
@@ -1160,6 +1161,124 @@ def _run_all():
 
 
     check("权限漏网监控", r15)
+
+
+    # ------------------------------------------------------------
+    # R16 dry-run 零副作用（2026-09-30 T6 事故防再犯）
+    # 注: 派单文里写作「R13」，但 R13 已被 by_code 截断防护占用（见上），
+    #     故按现有编号顺延为 R16。
+    # ------------------------------------------------------------
+    print(f"\n{SEP}\n  R16 dry-run 零副作用\n{SEP}")
+
+
+    def _meta_fingerprint(meta_dir):
+        """metadata/ 目录指纹: 相对路径 + 大小 + mtime_ns（逐文件）。
+
+        2026-09-29 事故的直接观测面就是「这个目录被动过」——
+        指纹比对是最短判据（不依赖任何模块自述"我没写"）。
+        """
+        out = []
+        for root, _dirs, files in os.walk(meta_dir):
+            for fn in files:
+                p = os.path.join(root, fn)
+                st = os.stat(p)
+                out.append((os.path.relpath(p, meta_dir), st.st_size,
+                            st.st_mtime_ns))
+        return sorted(out)
+
+
+    def r16():
+        """dry-run 必须零请求、零写入（元数据段）。
+
+        背景（2026-09-29 22:35 真实事故）:
+          用 `python -m fetch.full_download --dry-run` 做重建估算 —— 行情段被
+          download_one_api 的 dry_run 拦住，但元数据段 fetch_metadata()
+          无 dry_run 参数、无条件真请求 + 真写 → 覆盖写坏 fund_basic.parquet
+          （15,000 行残缺表: 无 market 列、场内基金缺约 1,700 只）→
+          连锁把 R12 的缺口虚增 13,790（fund_adj/fund_share 各一份）。
+        本检查把「dry-run 零副作用」焊进回归: 任何命令漏保护 → 直接红。
+        """
+        import contextlib
+        import inspect
+        import tempfile
+        import fetch.full_download as fd
+        from fetch.base import RateLimiter as RealLimiter
+        from config import META_DIR
+
+        # ---------- ① 保护必须在位: fetch_metadata 有 dry_run 参数 ----------
+        params = inspect.signature(fd.fetch_metadata).parameters
+        assert "dry_run" in params, "fetch_metadata 丢了 dry_run 参数（保护被移除）"
+        assert params["dry_run"].default is False, \
+            "dry_run 默认值必须为 False（非干跑行为不得改变）"
+
+        # ---------- ② spy: 真请求会被记下（计数后抛错, 不触网） ----------
+        calls = []
+
+        class _SpyPro:
+            def __getattr__(self, name):
+                def _f(*_a, **_k):
+                    calls.append(name)
+                    raise AssertionError(f"dry-run 触发了真实请求: pro.{name}")
+                return _f
+
+        spy_limiters = []
+
+        class _SpyLimiter(RealLimiter):
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                spy_limiters.append(self)
+
+        def _probe(phase, dry_run=True):
+            """跑一次 run_download（注入 spy），返回观测四元组"""
+            before = _meta_fingerprint(META_DIR)
+            buf = io.StringIO()
+            del calls[:]
+            del spy_limiters[:]
+            _orig_pro, _orig_lim = fd.get_pro, fd.RateLimiter
+            fd.get_pro, fd.RateLimiter = (lambda: _SpyPro()), _SpyLimiter
+            try:
+                with contextlib.redirect_stdout(buf):
+                    fd.run_download(phase=phase, dry_run=dry_run)
+            finally:
+                fd.get_pro, fd.RateLimiter = _orig_pro, _orig_lim
+            return (buf.getvalue(), before, _meta_fingerprint(META_DIR),
+                    [l.total_requests for l in spy_limiters])
+
+        # ---------- ③ 主判据: dry-run(phase=all) 零请求零写入 ----------
+        out, before, after, reqs = _probe("all")
+        assert "[DRY-RUN]" in out, "dry-run 未打印 [DRY-RUN] 计划"
+        assert not calls, f"★ dry-run 期间发生真实 API 调用: {calls[:3]}（保护失效）"
+        assert reqs and all(n == 0 for n in reqs), \
+            f"★ dry-run 期间限频器记录到请求: {reqs}（保护失效）"
+        assert before == after, (
+            "★ dry-run 改动了 metadata/ —— 变化="
+            f"{[x for x in after if x not in before][:3]}")
+
+        # ---------- ④ 判据自证: 指纹能识别新增/改写（临时目录上验, 不碰真数据）----------
+        with tempfile.TemporaryDirectory() as td:
+            f0 = _meta_fingerprint(td)
+            with open(os.path.join(td, "x.parquet"), "wb") as f:
+                f.write(b"1")
+            f1 = _meta_fingerprint(td)
+            with open(os.path.join(td, "x.parquet"), "wb") as f:
+                f.write(b"2222")
+            f2 = _meta_fingerprint(td)
+        assert f0 != f1, "指纹判据失效: 新增文件未被识别"
+        assert f1 != f2, "指纹判据失效: 文件被改写（大小变化）未被识别"
+
+        # ---------- ⑤ 反向对照: 同一 spy 在非 dry-run 下**必须**发出请求 ----------
+        #   证明"零请求"是 dry_run 的功劳，而不是 spy 失灵 / 阶段为空导致的假绿。
+        _out2, _b2, _a2, _ = _probe("meta", dry_run=False)
+        assert calls, "非 dry-run 下 spy 一次都没被调用 —— 对照实验无效（判据存疑）"
+        assert _b2 == _a2, "非 dry-run 的反向对照不应改动 metadata/（spy 会抛错）"
+        n_non_dry = len(calls)
+
+        return (f"(metadata 指纹 {len(after)} 文件不变 | dry-run 零 API 调用/零请求 | "
+                f"[DRY-RUN] 计划已打印 | 反向对照: 非 dry-run 真调 {n_non_dry} 次 | "
+                f"指纹判据自证OK)")
+
+
+    check("dry-run 零副作用", r16)
 
 
 # ------------------------------------------------------------

@@ -41,13 +41,69 @@ from common.parquet_store import upsert_by_year
 # ============================================================
 # 元数据获取
 # ============================================================
-def fetch_metadata(pro, limiter, data_root):
-    """Phase 0: 获取股票/基金代码清单 + 交易日历"""
+# ⚠ 2026-09-30（T6 事故防再犯）
+#   事故回放: 09-29 22:35 以 `python -m fetch.full_download --dry-run` 做重建估算。
+#   行情段被 download_one_api 的 dry_run 拦住，元数据段却无条件真请求 + 真写
+#   → 真拉了 stock_basic/fund_basic/trade_cal 并覆盖落盘，写坏 fund_basic.parquet
+#   （15,000 行残缺表，场内基金少了约 1,700 只）。
+#   修法: fetch_metadata 增加 dry_run —— 干跑时零请求零写入，只打印计划，
+#        代码清单改读本地已有元数据。
+#
+# ⚠ 仍未修的缺陷（不在 T6 边界内，待另开单）: 本段 0b 无分页保护 ——
+#   fund_type 参数被服务端静默忽略，每次调用各返回全市场前 15,000 行（单页硬顶），
+#   两次 concat 后 drop_duplicates 仍是 1.5 万行级残缺表。真跑（非 dry-run）
+#   仍会用残缺表覆盖 fund_basic.parquet。
+def _print_metadata_plan(meta_dir):
+    """打印元数据段计划（dry-run 专用；零请求零写入）"""
+    print("\n" + "=" * 60)
+    print("  Phase 0: 元数据 [DRY-RUN]")
+    print("=" * 60)
+    print("[DRY-RUN] 将拉取: stock_basic×3(L/D/P) + fund_basic×2(ETF/LOF) "
+          "+ trade_cal×1 = 6 次请求（本次一条都不发出）")
+    print("[DRY-RUN] 将写入: " + " | ".join(
+        os.path.join(meta_dir, f) for f in
+        ("stock_basic.parquet", "fund_basic.parquet", "trade_cal.parquet")))
+    print("[DRY-RUN]   ⚠ 0b 段无分页保护（fund_type 被服务端忽略 + 单页 15,000 硬顶）"
+          " —— 真跑会用残缺表覆盖 fund_basic，即 2026-09-29 事故")
+
+
+def _load_local_metadata(meta_dir=None):
+    """读本地已落盘的元数据（stock_basic / fund_basic）；缺失则空表 + 提示。
+
+    两条路径共用:
+      · 非 meta 阶段（原本就是读本地）
+      · dry-run（2026-09-30 T6）—— 干跑不许触网，代码清单只能来自本地文件
+    """
+    meta_dir = meta_dir or META_DIR
+    out = []
+    for fname in ("stock_basic.parquet", "fund_basic.parquet"):
+        path = os.path.join(meta_dir, fname)
+        if os.path.exists(path):
+            out.append(pd.read_parquet(path))
+        else:
+            print(f"  [WARN] 本地元数据不存在: {path} → 该清单按空处理")
+            out.append(pd.DataFrame())
+    print(f"[元数据] 从本地加载: 股票={len(out[0])} 基金={len(out[1])}")
+    return out[0], out[1]
+
+
+def fetch_metadata(pro, limiter, data_root, dry_run=False):
+    """Phase 0: 获取股票/基金代码清单 + 交易日历
+
+    dry_run=True: **零请求、零写入** —— 只打印计划，并把代码清单换成本地已有
+    元数据（不存在则空表 + 提示），保证干跑全程不触网、不落盘。
+    """
+    meta_dir = os.path.join(data_root, "metadata")
+
+    if dry_run:
+        _print_metadata_plan(meta_dir)
+        stock_df, fund_df = _load_local_metadata(meta_dir)
+        return stock_df, fund_df, []
+
     print("\n" + "=" * 60)
     print("  Phase 0: 元数据")
     print("=" * 60)
 
-    meta_dir = os.path.join(data_root, "metadata")
     ensure_dir(meta_dir)
 
     # --- 股票列表 (含退市) ---
@@ -261,7 +317,9 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None):
     print("=" * 60)
 
     # ── 初始化 ──
-    ensure_dir(MARKET_DATA_DIR)
+    # dry-run 不许写入（含建目录）: 目录缺失时后续只读路径自然退化为空清单
+    if not dry_run:
+        ensure_dir(MARKET_DATA_DIR)
     limiter = RateLimiter()
     checkpoint = Checkpoint(MARKET_DATA_DIR)
 
@@ -273,15 +331,17 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None):
     print("[OK] Tushare Pro API 已连接")
 
     # ── 元数据 ──
+    # ⚠ 2026-09-30（T6）: dry-run 必须**全程零网络零写入** —— 元数据段同样受保护。
+    #   事故回放: 09-29 22:35 用 `--dry-run` 做重建估算，行情段被
+    #   download_one_api 的 dry_run 拦住，元数据段却真请求 + 真写，
+    #   覆盖写坏了 fund_basic.parquet（15,000 行残缺表）。
     if phase in ("all", "meta"):
-        stock_df, fund_df, trade_dates = fetch_metadata(pro, limiter, MARKET_DATA_DIR)
+        stock_df, fund_df, trade_dates = fetch_metadata(
+            pro, limiter, MARKET_DATA_DIR, dry_run=dry_run)
     else:
         # 非meta阶段, 从本地读取元数据
-        stock_df = pd.read_parquet(os.path.join(META_DIR, "stock_basic.parquet")) if \
-            os.path.exists(os.path.join(META_DIR, "stock_basic.parquet")) else pd.DataFrame()
-        fund_df = pd.read_parquet(os.path.join(META_DIR, "fund_basic.parquet")) if \
-            os.path.exists(os.path.join(META_DIR, "fund_basic.parquet")) else pd.DataFrame()
-        print(f"[元数据] 从本地加载: 股票={len(stock_df)} 基金={len(fund_df)}")
+        stock_df, fund_df = _load_local_metadata()
+        trade_dates = []
 
     # ── 构建代码列表 ──
     stock_codes = stock_df["ts_code"].tolist() if not stock_df.empty else []
