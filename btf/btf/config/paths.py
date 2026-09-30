@@ -11,7 +11,7 @@
     BTF_DATA_DIR     主库根（默认 D:/全量数据/market_data —— 经 default_from_env 之外
                      的「探测式默认」取得，见 _default_market_data；可指向任意挂载点）
     BTF_ALT_DATA_DIR akshare 备库根（v0.5 接入用）
-    BTF_OUTPUT_DIR   回测产物根（默认 包根/../回测产物）
+    BTF_OUTPUT_DIR   回测产物根（默认 工作区根/回测产物 = 量化策略/回测产物）
     BTF_DATASETS_DIR 黄金/示例数据集根（默认 包根/btf_datasets）
 """
 from __future__ import annotations
@@ -28,11 +28,15 @@ __all__ = [
     "PROJECT_ROOT",
     "QIDIAN_REF",
     "RUNS_DIR",
+    "WORKSPACE_ROOT",
 ]
 
 # 包根（btf/ 上层 = 代码/btf/）；PROJECT_ROOT = 代码/（与现有工程同级约定）
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = PACKAGE_ROOT.parent
+# 工作区根（PROJECT_ROOT=代码/btf 的上两层 = 量化策略/）：产物与验收文档的
+# 统一落盘锚点（引擎 runs 与专项验证产物同根，避免「回测产物」两处分叉）
+WORKSPACE_ROOT = PROJECT_ROOT.parent.parent
 
 
 def _from_env(name: str, default: Path) -> Path:
@@ -56,8 +60,10 @@ ALT_DATA_DIR = _from_env(
     "BTF_ALT_DATA_DIR", Path(PROJECT_ROOT.anchor) / "全量数据" / "alt_data"
 )
 
-# 产物目录：默认 PROJECT_ROOT 同级「回测产物/」（06 §11.3 部署拓扑；绝不写主库）
-OUTPUT_DIR = _from_env("BTF_OUTPUT_DIR", PROJECT_ROOT.parent / "回测产物")
+# 产物目录：默认 工作区根「回测产物/」=（D:/量化策略/回测产物，06 §11.3 部署拓扑；
+# 绝不写主库）。单一落盘点：引擎 runs/ 与 tools/run_v77_robustness.py 的
+# v77-robustness/ 同处一个根，避免仓库内外两套「回测产物」分叉。
+OUTPUT_DIR = _from_env("BTF_OUTPUT_DIR", WORKSPACE_ROOT / "回测产物")
 RUNS_DIR = OUTPUT_DIR / "runs"
 
 # 黄金/示例数据集（05 §20.1 三层数据集体系的落盘位）
