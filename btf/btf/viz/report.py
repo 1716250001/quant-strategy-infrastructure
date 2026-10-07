@@ -57,6 +57,10 @@ class Assumptions:
 
     matching: str = "next_open"                 # 撮合假设
     slippage: str = "none"                      # 滑点模型
+    #: **F9（2026-10-06）**：价内滑点成本披露（元 + 与显性费用倍数）。
+    #: 由 `app.assemble_assumptions` 从 `bundle.fills` 的 `ref_price` 还原
+    #: （`Σ qty×|price−ref|`）；空串 = 不披露（旧产物无 `ref_price`）。
+    slippage_cost: str = ""
     fee_segments: tuple[dict[str, Any], ...] = ()   # 费率分段明细（H3）
     rules_version: str = "none"                 # H2 规则源版本指纹
     rules_overrides: tuple[dict[str, Any], ...] = ()
@@ -65,6 +69,48 @@ class Assumptions:
     #: 口径披露（P1-NEW-5，19 号 §22.2）：宇宙/基准等**结论前提**——原
     #: `runtime.assembly_notes` 零消费者（只落日志），跨区间/跨实验不可比
     assembly: tuple[str, ...] = ()
+
+
+def format_matching(name: str) -> str:
+    """撮合处理器名 → 人类可读串（**RC-03，2026-10-05**）。
+
+    报告「假设与披露」的假设字段**一律读生效配置**，不得硬编码——原实现把
+    撮合写死为 `next_open（T+1 开盘撮合）`，用户在 `execution.handler` 换实现
+    后报告仍显示旧值（披露与事实相反）。
+    """
+    labels = {"next_open": "next_open（T+1 开盘撮合）"}
+    key = str(name)
+    return labels.get(key, key)
+
+
+def format_slippage(model: str, params: Mapping[str, Any] | None = None) -> str:
+    """滑点模型 + 参数 → 人类可读串（**RC-03，2026-10-05**；13 §19.4）。
+
+    约定：
+        `none`  → `none（显式声明，零摩擦基线）`
+        `pct`   → `pct 0.001（单边 10bp）`
+        `fixed` → `fixed 0.01 元`
+        其它模型 → 原样名前 + JSON 参数（未知实现也必须如实显示）
+    """
+    key = str(model)
+    p = dict(params or {})
+    if key == "none":
+        return "none（显式声明，零摩擦基线）"
+    if key == "pct":
+        pct = p.get("pct", 0.001)
+        return f"pct {pct:g}（单边 {pct * 10000:g}bp）"
+    if key == "fixed":
+        return f"fixed {p.get('amount', 0.01):g} 元"
+    if key == "sqrt_impact":
+        # RC-12（2026-10-05）：研究参数**必须可见**（η/σ/cap 全部显示）
+        eta = p.get("eta", 0.1)
+        sigma = p.get("sigma", 0.02)
+        cap = p.get("impact_cap", 0.05)
+        return (f"sqrt_impact η={eta:g} σ={sigma:g} "
+                f"cap={cap * 10000:g}bp（规模相关冲击；研究参数）")
+    if p:
+        return f"{key} {json.dumps(p, ensure_ascii=False, sort_keys=True)}"
+    return key
 
 
 #: 强制章节（不可被 `report.sections` 关闭；13 §19.4 + BB-1）
@@ -125,6 +171,12 @@ def _assembly_disclosures(manifest: Any) -> tuple[str, ...]:
     if benchmark:
         out.append(f"基准对比：`{benchmark}`——相对指标取自同期指数收盘价"
                    f"（缺日 fail-closed，不前向填充；19 号 R2.5/P1-10）")
+    else:
+        # RC-09（2026-10-05）：基准**软强制**的披露半边——不配不阻断（保持
+        # 灵活），但「无基准对照」必须显式标注：IR/超额等相对指标不存在，
+        # 不得以绝对收益替代基准结论（04 §8.6 / 17 术语表）。
+        out.append("**无基准对照**（`report.benchmark` 未配置）：IR / 超额等"
+                   "相对指标不存在——不得以绝对收益替代基准结论（RC-09）")
     return tuple(out)
 
 
@@ -368,10 +420,13 @@ class ReportBuilder:
         assembly = list(a.assembly)
         assembly_html = (_table([[x] for x in assembly], ["口径与装配披露"])
                          if assembly else "<p class='note'>无口径披露项</p>")
+        cost_rows = [["撮合假设", a.matching], ["滑点模型", a.slippage]]
+        if a.slippage_cost:
+            # F9（2026-10-06）：价内滑点成本单列（修正 fee_ratio 低估真实成本）
+            cost_rows.append(["滑点成本（价内）", a.slippage_cost])
         return (
             "<h3>撮合与成本假设</h3>"
-            + _table([["撮合假设", a.matching], ["滑点模型", a.slippage]],
-                     ["项目", "取值"])
+            + _table(cost_rows, ["项目", "取值"])
             + "<h3>口径与装配披露（P1-NEW-5）</h3>" + assembly_html
             + "<h3>费率分段明细（H3）</h3>" + seg_html
             + "<h3>规则版本（H2）</h3>" + rules_html
@@ -401,4 +456,5 @@ class ReportBuilder:
                 f" · {dv.get('completeness_level', '—')}")
 
 
-__all__ = ["Assumptions", "ReportBuilder", "ReportError", "RunResultView"]
+__all__ = ["Assumptions", "ReportBuilder", "ReportError", "RunResultView",
+           "format_matching", "format_slippage"]

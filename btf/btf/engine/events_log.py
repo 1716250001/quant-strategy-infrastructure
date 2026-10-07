@@ -76,6 +76,8 @@ def _enc_fill(f: Fill) -> dict[str, Any]:
         "side": f.side.value, "qty": f.qty, "price": f.price,
         "fee": _enc_fee(f.fee), "fill_date": _d(f.fill_date),
         "fill_timing": f.fill_timing,
+        # F9（2026-10-06）：滑点前基准价（可空；旧日志无此键 ⇒ 解码回 None）
+        "ref_price": (None if f.ref_price is None else float(f.ref_price)),
     }
 
 
@@ -84,11 +86,18 @@ def _enc_rejection(r: Rejection) -> dict[str, Any]:
 
 
 def _enc_action(a: CorporateAction) -> dict[str, Any]:
+    # CL-2 第二段（R3′/R5′，19 号 §79.4）：配股/缩股字段入事件日志
+    # （旧字段原样；新字段带默认值 ⇒ 旧日志解码仍兼容）。
     return {
         "symbol": a.symbol, "ex_date": _d(a.ex_date), "pay_date": _d(a.pay_date),
         "record_date": _d(a.record_date),
         "cash_div_per_share": a.cash_div_per_share,
         "stk_div_per_share": a.stk_div_per_share, "ann_date": _d(a.ann_date),
+        "rights_ratio": a.rights_ratio,
+        "rights_price": a.rights_price,
+        "rights_ex_date": _d(a.rights_ex_date),
+        "rights_listing_date": _d(a.rights_listing_date),
+        "consolidation_ratio": a.consolidation_ratio,
     }
 
 
@@ -145,6 +154,7 @@ def _dec_fill(p: dict[str, Any]) -> Fill:
         fee=_dec_fee(p["fee"]),
         fill_date=TradingDate.from_ymd(p["fill_date"]),
         fill_timing=p["fill_timing"],
+        ref_price=p.get("ref_price"),          # F9：缺键（旧日志）⇒ None
     )
 
 
@@ -153,7 +163,13 @@ def _dec_rejection(p: dict[str, Any]) -> Rejection:
 
 
 def _dec_action(p: dict[str, Any]) -> CorporateAction:
+    # 兼容：旧日志无配股/缩股键 ⇒ 取默认（0/0/None/1.0），行为与改动前一致。
     return CorporateAction(
+        rights_ratio=float(p.get("rights_ratio") or 0.0),
+        rights_price=float(p.get("rights_price") or 0.0),
+        rights_ex_date=_td(p.get("rights_ex_date")),
+        rights_listing_date=_td(p.get("rights_listing_date")),
+        consolidation_ratio=float(p.get("consolidation_ratio") or 1.0),
         symbol=p["symbol"],
         ex_date=TradingDate.from_ymd(p["ex_date"]), pay_date=_td(p["pay_date"]),
         record_date=_td(p["record_date"]),

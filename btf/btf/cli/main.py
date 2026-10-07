@@ -12,14 +12,15 @@
     test           运行测试层（pytest 执行器；--layer/--pattern）
     dataset        黄金集：build-golden 构建 / verify 对账 / refcalc 重算
     optimize       参数网格搜索（grid_search 进程池；v0.5 V5-3）
-    check          九项架构门禁（委托 tools/check.py）
+    check          十项架构门禁（委托 tools/check.py）
     cold-backup    跨版本源码冷备（委托 tools/cold_backup.py）
     runs           RunStore 下的 run 摘要清单（只读）
     show           单个 run 的 manifest + 指标摘要（只读）
 
-`bt check` 与 `bt test` 的分工（审查报告 P1-2：命名相近易互相误读）：
-`check` = **提交前九项门禁**（ruff / import-linter / 冒烟 / 依赖预算 / domain
-白名单 / 报告渲染 / 数据不变量 / IO 单一入口，委托 `tools/check.py` 单一真源）；
+ `bt check` 与 `bt test` 的分工（审查报告 P1-2：命名相近易互相误读）：
+ `check` = **提交前十项门禁**（ruff / import-linter / 冒烟 / 依赖预算 / domain
+ 白名单 / 报告渲染 / 数据不变量 / IO 单一入口 / 插件边界基线，委托
+ `tools/check.py` 单一真源；第 10 项自 GG-6② 起并入）；
 `test` = **回归测试层**（pytest，默认 l1；全量 `--layer all`）。文档长期写的
 `bt check` 此前不是命令，本批收编——文档、CHANGELOG 与 CLI 自此同口径。
 
@@ -193,6 +194,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(f"[error] {exc}", file=sys.stderr)
         return 2
+    # CL-3（19 号 §72.4 Q-2(b)）：退市清算口径开关——显式选择才注入覆盖
+    # （默认档不写键 ⇒ 与改动前逐位一致；声明进 config_effective 可追溯）。
+    if getattr(args, "delisted_settlement", None):
+        overrides.setdefault("run", {})["delisted_settlement"] = \
+            args.delisted_settlement
     try:
         outcome = run_backtest(Path(args.config), overrides=overrides,
                                out=args.out, dry_run=args.dry_run)
@@ -200,6 +206,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(f"[error] 装配失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
     rt = outcome.runtime
+
+    # RC-09（2026-10-05）：基准**软强制**——未配 `report.benchmark` 不阻断，
+    # 但终端必须显式提示「无基准对照」（IR/超额等相对指标不存在，不得以
+    # 绝对收益替代基准结论；报告侧同款披露见 viz/report._assembly_disclosures）。
+    if not ((rt.config.get("report") or {}).get("benchmark")):
+        print("[warn] 未配置 report.benchmark —— 无基准对照："
+              "IR / 超额等相对指标不存在（RC-09，仅披露不阻断）")
 
     if args.dry_run:
         run_cfg = rt.config["run"]
@@ -256,6 +269,11 @@ def _args_run(p: argparse.ArgumentParser) -> None:
     p.add_argument("--out", help="产物根目录（默认 BTF_OUTPUT_DIR/runs）")
     p.add_argument("--verbose", action="store_true",
                    help="输出分步耗时 / 数据质检 / 数据指纹（R5-4）")
+    p.add_argument("--delisted-settlement", choices=("carry", "writeoff"),
+                   dest="delisted_settlement",
+                   help="退市持仓残值口径（CL-3 / 19 号 §72.4）：carry=残值"
+                        "携带（默认＝现状）；writeoff=按 0 核销（压力口径，"
+                        "仅末日快照清零并下调 NAV）")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -323,7 +341,7 @@ def _cmd_test(args: argparse.Namespace) -> int:
     """bt test [--layer l1] [--pattern EXPR]：运行测试层（pytest 执行器）。
 
     **与 `bt check` 分工**（审查报告 P1-2）：本命令跑 pytest 测试层，
-    `bt check` 跑九项架构门禁（lint/import-linter/数据不变量…）——"提交前
+    `bt check` 跑十项架构门禁（lint/import-linter/数据不变量/插件边界基线…）——"提交前
     该跑哪个"的答案在 `check`；本命令默认 `--layer l1`（秒级单元层），
     全量回归要显式 `--layer all`（该默认值刻意保守：全量约 64 分钟）。
 
@@ -335,11 +353,30 @@ def _cmd_test(args: argparse.Namespace) -> int:
          始批量删除历史 `pytest-of-<user>/pytest-N` 目录（实测一次 329 个
          文件），在带"批量删除守卫"的环境里被拦截 → 子进程退出码非 0 →
          用例误判为"测试失败"（第三轮审查环境归因，非 btf 缺陷）。
+      ③ **N5-②（2026-10-06；19 号 §67.11.2）**：basetemp 由 `%TEMP%` 迁至
+         **项目内** `_scratch/pytest_tmp/bt_test/` 下**每次唯一**子目录
+         （根可经 `BTFTOOL_TEST_PYTEST_BASETEMP` 覆盖），避开系统临时区的
+         批量删除守卫拦截（"用例全过但 exit≠0"假红）。
+         **N6 分根（19 号 §69.3）**：与门禁第 3 项（`…/pytest_tmp/check`）
+         **各用独立子根**——任一通道残留不再污染另一通道。
+         **N7 命名（19 号 §69.4）**：工具变量一律 `BTFTOOL_` 前缀
+         （`BTF_` 前缀会被配置层当覆盖键注入 ⇒ 配置校验失败）。
     故子进程显式 `-p no:cacheprovider` + `--basetemp`（**显式 basetemp 下
     pytest 不做历史临时目录 GC**）+ 剥离 `PYTEST_CURRENT_TEST`。
     """
     cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
-    basetemp = Path(tempfile.mkdtemp(prefix="btf_bt_test_"))
+    #: N5-②（2026-10-06；19 号 §67.11.2）＋ **N6 分根**（§69.3）：basetemp
+    #: **项目内独立子根** `代码/_scratch/pytest_tmp/bt_test/`（与门禁第 3 项
+    #: `…/pytest_tmp/check` 分根；根可经 `BTFTOOL_TEST_PYTEST_BASETEMP` 覆盖）
+    #: ＋**每次唯一**子目录（保持父子隔离，避免共用固定 basetemp 时相互清空）
+    #: ——不走 `%TEMP%`（系统临时区垃圾轮转可能被环境批量删除守卫拦截
+    #: ⇒ "用例全过但 exit≠0"假红）。变量名 `BTFTOOL_` 前缀（**N7**，§69.4）。
+    _base = Path(os.environ.get(
+        "BTFTOOL_TEST_PYTEST_BASETEMP",
+        Path(__file__).resolve().parents[2].parent / "_scratch"
+        / "pytest_tmp" / "bt_test"))
+    _base.mkdir(parents=True, exist_ok=True)
+    basetemp = Path(tempfile.mkdtemp(prefix="btf_bt_test_", dir=str(_base)))
     cmd += ["--basetemp", str(basetemp)]
     if args.layer and args.layer != "all":
         cmd += ["-m", args.layer]
@@ -353,7 +390,19 @@ def _cmd_test(args: argparse.Namespace) -> int:
         return subprocess.call(cmd, cwd=str(Path(__file__).resolve().parents[2]),
                                env=env)
     finally:
-        shutil.rmtree(basetemp, ignore_errors=True)   # 自建目录自行回收
+        # N5-②：回收**分小批逐子项**执行，且**绝不改变退出码**——环境批量删除
+        # 守卫对同轮大批量删除会拦（实测项目内阈值 500；固定复用同一 basetemp
+        # 目录时，pytest 会话起始"清空旧内容"同样被拦 ⇒ 全部用例假 ERROR）。
+        # 如被拦：保留现场 + 打一行 [note]，退出码仍 = pytest 码（不掩盖）。
+        try:
+            for child in basetemp.iterdir():
+                if child.is_dir():
+                    shutil.rmtree(child, ignore_errors=True)
+                else:
+                    child.unlink(missing_ok=True)
+            basetemp.rmdir()
+        except BaseException:            # 守卫经 SystemExit(1) 表达"需确认"
+            print(f"[note] basetemp 未完全回收（环境批量删除守卫）：{basetemp}")
 
 
 def _args_test(p: argparse.ArgumentParser) -> None:
@@ -367,11 +416,15 @@ def _args_test(p: argparse.ArgumentParser) -> None:
 # ⑥ dataset
 # ─────────────────────────────────────────────────────────────
 def _cmd_dataset(args: argparse.Namespace) -> int:
-    """bt dataset <build-golden|verify|refcalc>：黄金集构建/对账/重算。
+    """bt dataset <build-golden|verify|refcalc|freeze>：黄金集 / 数据冻结清单。
 
     子进程编排**委托 `btf.app.build_dataset`**（P2-3 第 5 组重复收敛）；
     三动作语义见 `btf.app.build_dataset` docstring（审查报告 P3：`--verify`
     与"内嵌数据重算"此前只有前者的影子——`refcalc` 补上主库无关的自洽性检查）。
+
+    **CL-4（19 号 §72.5）**：`freeze` = 数据不可变快照（S-2 清单＋哈希）——
+    委托 `btf.app.freeze_dataset`（复用 BB-1 实算；只读落盘、同 anchor 幂等/
+    冲突显式；R3 不静默覆写）。
     """
     from btf.app import build_dataset
 
@@ -379,27 +432,60 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
         print(f"[error] 未知 dataset 动作：{args.action!r}"
               f"（可选 {_DATASET_ACTIONS}）", file=sys.stderr)
         return 2
+    if args.action == "freeze":
+        from btf.app import freeze_dataset
+
+        if not args.config:
+            print("[error] dataset freeze 需 --config <yaml>"
+                  "（冻结口径随回测配置：区间/表集/档位）", file=sys.stderr)
+            return 2
+        try:
+            result = freeze_dataset(args.config, out=args.out, mode=args.mode)
+        except FileExistsError as exc:
+            print(f"[error] {exc}", file=sys.stderr)
+            return 1
+        except Exception as exc:              # 配置/装配/主库不可用
+            print(f"[error] 冻结失败：{type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            return 1
+        payload = result["payload"]
+        if result["action"] == "idempotent":
+            print(f"[info] 冻结清单已存在且 content_hash 一致（幂等，不覆写）："
+                  f"{result['path']}")
+        else:
+            print(f"[ok] 冻结清单已落盘（只读）：{result['path']}")
+        print(f"     anchor_date={payload.get('anchor_date')}"
+              f" | mode={payload.get('mode')}"
+              f" | tables={len(payload.get('tables') or [])}"
+              f" | content_hash={payload.get('content_hash')}")
+        return 0
     return build_dataset(args.cases, action=args.action,
                          verify=args.verify or args.action == "verify",
                          force=args.force, list_only=args.list,
                          refcalc=args.action == "refcalc", out=args.out)
 
 
-#: dataset 子动作（审查报告 P3；`build-golden` 为默认，向后兼容原调用）
-_DATASET_ACTIONS = ("build-golden", "verify", "refcalc")
+#: dataset 子动作（审查报告 P3；`build-golden` 为默认，向后兼容原调用；
+#: `freeze` = CL-4 数据冻结清单）
+_DATASET_ACTIONS = ("build-golden", "verify", "refcalc", "freeze")
 
 
 def _args_dataset(p: argparse.ArgumentParser) -> None:
     p.add_argument("action", nargs="?", default="build-golden",
                    choices=_DATASET_ACTIONS,
                    help="子动作：build-golden（构建）|verify（与主库对账，不写）"
-                        "|refcalc（内嵌数据重算，不读主库）")
+                        "|refcalc（内嵌数据重算，不读主库）"
+                        "|freeze（数据冻结清单，CL-4）")
     p.add_argument("--cases", default="g1", help="案例（g1|all|逗号分隔）")
     p.add_argument("--list", action="store_true", help="列出案例与待补组")
     p.add_argument("--verify", action="store_true",
                    help="只校验不写（等价 action=verify）")
     p.add_argument("--force", action="store_true", help="显式覆盖（留痕）")
-    p.add_argument("--out", help="输出目录")
+    p.add_argument("--config", help="freeze：回测配置 YAML（冻结口径随它）")
+    p.add_argument("--mode", choices=("meta", "fast", "full"),
+                   help="freeze：指纹档位（缺省随 data.fingerprint_mode=meta）")
+    p.add_argument("--out",
+                   help="输出目录（freeze：清单目录，缺省 BTFTOOL_FREEZE_DIR）")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -428,6 +514,39 @@ def _parse_grid(spec: str) -> dict[str, list[Any]]:
     return grid
 
 
+def _parse_perturb(spec: str) -> list[float]:
+    """`--perturb "0.1,0.2"` → δ 列表（0 < δ < 1；RC-07）。
+
+    δ 为**相对比例**：对 top1 的数值型参数生成 `p×(1±δ)` 邻域点。
+    """
+    deltas: list[float] = []
+    for raw in spec.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            delta = float(raw)
+        except ValueError as exc:
+            raise ValueError(
+                f"--perturb 需形如 0.1,0.2，得 {raw!r}") from exc
+        if not 0.0 < delta < 1.0:
+            raise ValueError(f"--perturb δ 须在 (0, 1)，得 {raw!r}")
+        deltas.append(delta)
+    if not deltas:
+        raise ValueError("--perturb 为空（至少一个 δ）")
+    return deltas
+
+
+def _fmt_prob(value: object) -> str:
+    """显著性概率打印（None → `—`；RC-06）。"""
+    if value is None:
+        return "—"
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return "—"
+
+
 def _cmd_optimize(args: argparse.Namespace) -> int:
     """bt optimize --config <yaml> --grid <spec>：网格搜索并打印排名。"""
     import json
@@ -437,6 +556,8 @@ def _cmd_optimize(args: argparse.Namespace) -> int:
 
     try:
         grid = _parse_grid(args.grid)
+        perturb = (_parse_perturb(args.perturb)
+                   if getattr(args, "perturb", None) else None)
     except ValueError as exc:
         print(f"[error] {exc}", file=sys.stderr)
         return 2
@@ -451,14 +572,68 @@ def _cmd_optimize(args: argparse.Namespace) -> int:
     # runtime→engine 会触发 import-linter 拦截；名字表即声明制消费方式）
     optimizer = registry.create(registry.OPTIMIZER, "grid_search",
                                 {"workers": args.workers})
-    report = optimizer.run(config, grid, objective=args.objective)
+    report = optimizer.run(config, grid, objective=args.objective,
+                           n_trials_declared=args.n_trials,
+                           perturb=perturb)
+
+    # CL-1（19 号 §72.2 / 报告 D 篇 P2-5）：**短区间默认阻断**。判据 = 实算样本
+    # 长度（`n_trading_days`，与 RC-06 披露同源——"样本不足 ⇒ 排序无意义"）。
+    # 阻断点在任何排序结论**打印之前** ⇒ 不产出可被引用的排名；放行（显式
+    # `--allow-short`）必须把 override 记入产物（禁"绕过即静默"）；默认档
+    # （n_days ≥ 阈值）行为与改动前逐位一致（R4）。
+    from btf.runtime import MIN_OPTIMIZE_TRADING_DAYS
+
+    n_days = int(report.get("n_trading_days") or 0)
+    if 0 < n_days < MIN_OPTIMIZE_TRADING_DAYS:
+        if not getattr(args, "allow_short", False):
+            print(
+                f"[error] 样本区间仅 {n_days} 个交易日（< "
+                f"{MIN_OPTIMIZE_TRADING_DAYS} 交易日 ≈ 1 个完整交易年）："
+                f"不得据此给出参数排序结论（短样本下指标数学有定义、业务无意义，"
+                f"19 号 §72.2 / 报告 D 篇 P2-5）。去路：① 拉长 run.period；"
+                f"② 显式放行 `--allow-short`（结果将标注 n_days/阈值/override 并"
+                f"记入产物，仍**不得**用作参数选择依据）")
+            return 3
+        report["short_period_override"] = {
+            "n_days": n_days,
+            "threshold": MIN_OPTIMIZE_TRADING_DAYS,
+            "override": True,
+        }
+        tail = ("override 已记入产物 short_period_override"
+                if args.out else
+                "未指定 --out ⇒ 仅本行留痕；如需持久留痕请加 --out（写产物 JSON）")
+        print(f"[warn] --allow-short 放行：{n_days} < "
+              f"{MIN_OPTIMIZE_TRADING_DAYS} 交易日——本结果**不得**用作参数"
+              f"选择的依据（{tail}）")
 
     print(f"[ok] grid_search：{report['n_combos']} 组 × {report['workers']} 进程"
           f" | objective={report['objective']}")
-    print(f"{'rank':>4}  {'value':>10}  params")
+    # RC-06（2026-10-05）：多重检验**显式可见**——"试得越多越不可信"。
+    print(f"[warn] {report['adjustment_note']}"
+          "（PSR=单策略显著性；DSR=校正「挑出来」之后的显著性）")
+    print(f"{'rank':>4}  {'value':>10}  {'psr':>6}  {'dsr':>6}  params")
     for item in report["top"][: args.top]:
         params = ", ".join(f"{k}={v}" for k, v in sorted(item["params"].items()))
-        print(f"{item['rank']:>4}  {item['value']:>10.4f}  {params}")
+        print(f"{item['rank']:>4}  {item['value']:>10.4f}  "
+              f"{_fmt_prob(item.get('psr')):>6}  {_fmt_prob(item.get('dsr')):>6}"
+              f"  {params}")
+    # RC-07（2026-10-05）：邻域扫描结果——极差 / 标准差 / 相对退化率；
+    # 退化 > 50% ⇒ warn「疑似过拟合」（**只提示，不替使用者判定**）。
+    block = report.get("perturbation")
+    if block:
+        if block["n_points"] == 0:
+            print(f"[info] perturb δ={block['deltas']}：{block['note']}")
+        elif block["relative_degradation"] is None:
+            print(f"[info] perturb：{block['n_points']} 点 | {block['note']}")
+        else:
+            print(f"[info] perturb：{block['n_points']} 点 | "
+                  f"极差={block['range']:.4f} | σ={block['std']:.4f} | "
+                  f"相对退化={block['relative_degradation']:.1%}")
+            if block.get("sensitive"):
+                print(f"[warn] 参数敏感：邻域相对退化 "
+                      f"{block['relative_degradation']:.0%} > "
+                      f"{block['threshold']:.0%} —— 疑似过拟合"
+                      f"（RC-07；只提示，不替使用者判定）")
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -469,14 +644,26 @@ def _cmd_optimize(args: argparse.Namespace) -> int:
 
 
 def _args_optimize(p: argparse.ArgumentParser) -> None:
+    from btf.runtime import MIN_OPTIMIZE_TRADING_DAYS
+
     p.add_argument("--config", required=True, help="回测配置 YAML")
     p.add_argument("--grid", required=True,
                    help='网格 spec："path=v1,v2;path2=v1,v2"（点分配置路径）')
     p.add_argument("--objective", default="sharpe_ratio",
-                   help="排名指标（默认 sharpe_ratio）")
+                   help="排名指标（默认 sharpe_ratio；配 report.benchmark 后"
+                        "可选 information_ratio / annualized_excess，RC-08）")
     p.add_argument("--workers", type=int, default=8,
                    help="进程数（默认 8；0=内联顺序执行——调试/注入型 feed）")
     p.add_argument("--top", type=int, default=10, help="打印前 N 名（默认 10）")
+    p.add_argument("--n-trials", type=int, default=0, dest="n_trials",
+                   help="历史累计试验数（RC-06：与本次组合数相加为 N，用于 DSR 校正）")
+    p.add_argument("--perturb", metavar="D1,D2",
+                   help="参数邻域扫描（RC-07）：对 top1 数值型参数做 "
+                        "p×(1±δ)，如 0.1,0.2（退化 > 50%% 提示疑似过拟合）")
+    p.add_argument("--allow-short", action="store_true", dest="allow_short",
+                   help=f"显式放行「样本 < {MIN_OPTIMIZE_TRADING_DAYS} 交易日」的"
+                        "网格排序（CL-1；默认阻断退出码 3；放行会把 n_days/"
+                        "阈值/override 记入产物 short_period_override）")
     p.add_argument("--out", help="结果 JSON 输出路径（可选）")
 
 
@@ -484,7 +671,7 @@ def _args_optimize(p: argparse.ArgumentParser) -> None:
 # ⑧ check / cold-backup / runs / show（CLI 审查报告-20260930：P0/P2）
 # ─────────────────────────────────────────────────────────────
 def _cmd_check(args: argparse.Namespace) -> int:
-    """bt check：九项架构门禁（委托 `tools/check.py`，口径单一真源）。
+    """bt check：十项架构门禁（委托 `tools/check.py`，口径单一真源）。
 
     审查报告 P0：19 号/CHANGELOG/记忆长期写 `bt check`，而它此前**不存在**——
     文档与 CLI 脱节。收编后 `bt check` ≡ `python tools/check.py`（同脚本、
@@ -613,6 +800,136 @@ def _args_show(p: argparse.ArgumentParser) -> None:
     p.add_argument("--out-dir", help="RunStore 根目录（默认产物目录）")
 
 
+#: validate 子动作（RC-15/16）
+_VALIDATE_ACTIONS = ("walk-forward", "mc")
+
+
+def _cmd_validate(args: argparse.Namespace) -> int:
+    """bt validate walk-forward|mc：滚动验证（RC-15）/ 蒙特卡洛（RC-16）。"""
+    from btf.app import run_mc, run_walk_forward
+
+    if args.action == "walk-forward":
+        if not args.config:
+            print("[error] walk-forward 需 --config <yaml>", file=sys.stderr)
+            return 2
+        if not args.window:
+            print("[error] walk-forward 需 --window <训练窗长(交易日)>",
+                  file=sys.stderr)
+            return 2
+        try:
+            overrides = _parse_overrides(args.set)
+        except ValueError as exc:
+            print(f"[error] {exc}", file=sys.stderr)
+            return 2
+        try:
+            report = run_walk_forward(
+                args.config, window=args.window, test=args.test,
+                step=args.step, mode=args.mode, purge=args.purge,
+                embargo=args.embargo, persist=not args.no_persist,
+                out=args.out, out_dir=args.out_dir, overrides=overrides)
+        except Exception as exc:                    # 装配/窗口/IO 失败
+            print(f"[error] walk-forward 失败：{type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            return 1
+        spec = report["spec"]
+        print(f"[ok] walk-forward：{report['n_folds']} 折 | mode={spec['mode']}"
+              f" window={spec['window']} test={spec['test']}"
+              f" step={spec['step']} purge={spec['purge']}"
+              f" embargo={spec['embargo']} | persist={spec['persist']}")
+        keys = ("sharpe_ratio", "annualized_return", "max_drawdown",
+                "total_return")
+        print(f"{'折':>3}  {'训练窗':<23} {'测试窗':<23}  "
+              + "  ".join(f"oos_{k[:9]:>10}" for k in keys))
+        for fold in report["folds"]:
+            m = fold["test_metrics"]
+            print(f"{fold['index']:>3}  "
+                  f"{fold['train']['start']}~{fold['train']['end']}  "
+                  f"{fold['test']['start']}~{fold['test']['end']}  "
+                  + "  ".join(f"{_fmt_metric(m.get(k)):>14}" for k in keys))
+        print("── OOS 汇总（含最差折——不得只报最优）──")
+        for key, s in report["summary"].items():
+            print(f"     {key}: mean={_fmt_metric(s['mean'])}"
+                  f" median={_fmt_metric(s['median'])}"
+                  f" min={_fmt_metric(s['min'])}"
+                  f" max={_fmt_metric(s['max'])} n={s['n']}")
+        if args.out:
+            print(f"     结果: {args.out}")
+        return 0
+
+    # ── mc ──
+    if not args.run:
+        print("[error] mc 需 --run <run_id>（产物读回）", file=sys.stderr)
+        return 2
+    try:
+        report = run_mc(args.run, n_resamples=args.n, n_permutations=args.n,
+                        seed=args.seed, out=args.out, out_dir=args.out_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[error] mc 失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    seed = report["seed"]
+    print(f"[ok] mc：run={report['run_id']} 样本 {report['n_periods']} 日"
+          f"（年化 {report['annualization']}）| seed={seed['used']}"
+          f"（{seed['source']}）")
+    bs = report["bootstrap"]
+    print(f"bootstrap（{bs['n_resamples']} 次重采样）:")
+    for key in ("sharpe", "annualized_return"):
+        item = bs[key]
+        print(f"     {key}: observed={_fmt_metric(item['observed'])}"
+              f" p05={_fmt_metric(item['p05'])}"
+              f" p50={_fmt_metric(item['p50'])}"
+              f" p95={_fmt_metric(item['p95'])}"
+              f" CI=[{_fmt_metric(item['ci_low'])},"
+              f"{_fmt_metric(item['ci_high'])}]"
+              f" 跨0={item['crosses_zero']}")
+    for item in report["permutation"].values():
+        print(f"置换检验[{item['scheme']}/{item['statistic']}] 双侧:"
+              f" observed={_fmt_metric(item['observed'])}"
+              f" p={_fmt_metric(item['p_value'])}"
+              f"（null {item['null_summary']['n']} 次）")
+    nb = report["noise_baseline"]
+    if nb:
+        print(f"随机择时对照（{nb['n_hold']} 天 / {nb['n_draws']} 次）:"
+              f" 观测分位={_fmt_metric(nb['observed_percentile'])}"
+              f" p05={_fmt_metric(nb['p05'])}"
+              f" p50={_fmt_metric(nb['p50'])}"
+              f" p95={_fmt_metric(nb['p95'])}")
+    else:
+        print(f"[warn] {report.get('noise_note')}")
+    if args.out:
+        print(f"     结果: {args.out}")
+    return 0
+
+
+def _args_validate(p: argparse.ArgumentParser) -> None:
+    p.add_argument("action", choices=_VALIDATE_ACTIONS,
+                   help="walk-forward（RC-15 滚动验证）| mc（RC-16 蒙特卡洛）")
+    p.add_argument("--config", help="walk-forward：回测配置 YAML")
+    p.add_argument("--window", type=int, metavar="N",
+                   help="walk-forward：训练窗长（交易日）")
+    p.add_argument("--test", type=int, metavar="N",
+                   help="walk-forward：测试窗长（缺省 = --step）")
+    p.add_argument("--step", type=int, metavar="N",
+                   help="walk-forward：滚动步长（缺省 = --test）")
+    p.add_argument("--mode", choices=("rolling", "anchored"), default="rolling",
+                   help="训练窗形态：rolling=滚动 / anchored=锚定加长（默认 rolling）")
+    p.add_argument("--purge", type=int, default=0, metavar="N",
+                   help="训练/测试间隔交易日（与 embargo 合并计入 gap；缺省 0）")
+    p.add_argument("--embargo", type=int, default=0, metavar="N",
+                   help="测试前缓冲带（交易日；缺省 0）")
+    p.add_argument("--no-persist", action="store_true",
+                   help="walk-forward：不落盘（缺省每折落盘且窗口信息入 manifest）")
+    p.add_argument("--run", help="mc：run_id（读回产物，不重跑引擎）")
+    p.add_argument("--n", type=int, default=1000, metavar="N",
+                   help="mc：重采样 / 置换次数（缺省 1000）")
+    p.add_argument("--seed", type=int,
+                   help="mc：显式种子（缺省 = manifest.seed.master 单源）")
+    p.add_argument("--out", help="结果 JSON 输出路径（可选）")
+    p.add_argument("--out-dir", dest="out_dir",
+                   help="RunStore 根（walk-forward 落盘 / mc 读产物）")
+    p.add_argument("--set", action="append", metavar="K=V",
+                   help="walk-forward：配置覆盖（与 bt run 同则）")
+
+
 #: 命令注册表：名字 → (处理器, 帮助, 参数注册器)
 COMMANDS: dict[str, tuple[CommandHandler, str, ArgAdder]] = {
     "config-check": (_cmd_config_check,
@@ -625,27 +942,31 @@ COMMANDS: dict[str, tuple[CommandHandler, str, ArgAdder]] = {
     "test": (_cmd_test, "运行测试层（pytest 执行器；提交前门禁请用 `bt check`）",
              _args_test),
     "dataset": (_cmd_dataset,
-                "黄金集：build-golden 构建 / verify 主库对账 / refcalc 内嵌重算",
+                "黄金集：build-golden 构建 / verify 主库对账 / refcalc 内嵌重算"
+                " / freeze（CL-4 数据冻结清单）",
                 _args_dataset),
     "optimize": (_cmd_optimize,
                  "参数网格搜索（grid_search 进程池；v0.5 V5-3）", _args_optimize),
     "check": (_cmd_check,
-              "九项架构门禁（= python tools/check.py；提交前必跑）", _args_check),
+              "十项架构门禁（= python tools/check.py；提交前必跑）", _args_check),
     "cold-backup": (_cmd_cold_backup,
                     "跨版本源码冷备（= python tools/cold_backup.py）",
                     _args_cold_backup),
     "runs": (_cmd_runs, "列 RunStore 下的 run 摘要（只读；--latest N）", _args_runs),
     "show": (_cmd_show, "单 run 的 manifest + 指标摘要（只读；--run <id>）",
              _args_show),
+    "validate": (_cmd_validate,
+                 "滚动验证 / 蒙特卡洛：walk-forward（RC-15）| mc（RC-16）",
+                 _args_validate),
 }
 
 
 def main(argv: list[str] | None = None) -> int:
     _utf8()
     parser = argparse.ArgumentParser(
-        prog="bt", description="btf 回测工具（十一命令族：config-check/run/report/"
-                               "verify/test/dataset/optimize + check/cold-backup/"
-                               "runs/show）")
+        prog="bt", description="btf 回测工具（十二命令族：config-check/run/report/"
+                               "verify/test/dataset/optimize/validate + check/"
+                               "cold-backup/runs/show）")
     parser.add_argument("--version", action="version",
                         version=f"btf {__version__}",
                         help="打印版本（单一真源 btf/_version.py）")

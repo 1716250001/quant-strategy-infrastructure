@@ -32,7 +32,18 @@ DEFAULTS: dict[str, Any] = {
     "execution": {
         "handler": "next_open",
         "cost_model": "tiered_v1",  # 分段费率表（M2 5.1；04 §8.5 未配置→默认分段+警告）
-        "slippage": {"model": "none"},
+        # 滑点默认**非零摩擦**（**RC-01，2026-10-05 派单 §3**）：
+        # 原默认 `{"model": "none"}` ⇒ 用户不改参数跑出来滑点恒为 0
+        # （实测 98 份历史 manifest：100% 零滑点）。改为单边 10bp
+        # （业界保守下限）。显式 `model: none` 仍可用（保留显式语义），
+        # 但装配期 warn + 报告披露（`_runtime.py` 与 `viz/report.py`）。
+        "slippage": {"model": "pct", "params": {"pct": 0.001}},
+        # VPP 成交量参与率上限默认 **0.05**（**RC-02，2026-10-05 派单 §3**）：
+        # 原缺省无此键 ⇒ handler 收 `None` ⇒ "以开盘价无限量成交、零冲击"
+        # （实测 98 份历史 manifest：100% 未启用）。显式取消有两条等价通道：
+        # `handler_params: {}`（空 dict = 清空，见 `deep_merge`）或
+        # `{volume_participation: null}`——两者均回到 v0.2 全成/全拒语义。
+        "handler_params": {"volume_participation": 0.05},
         "rebalancer": "full",
     },
     # 风控链（19 号审查 P0-3；**Q1 裁决 A —— X-7，2026-09-28**）：
@@ -72,9 +83,16 @@ class ConfigSourceError(RuntimeError):
 
 
 def deep_merge(base: dict[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
-    """就地深合并（overlay 覆盖 base；非 dict 值整替；返回 base 引用）。"""
+    """就地深合并（overlay 覆盖 base；非 dict 值整替；返回 base 引用）。
+
+    **空 dict = 显式清空（RC-02，2026-10-05）**：overlay 值为**空 dict** 时
+    整体替换（而非"无操作"）—— 否则默认层自带参数的键（`execution.
+    handler_params`、`execution.slippage.params`）**无法被用户显式取消**：
+    深合并只覆盖键、不删键，`{}` 曾等价于「没写」（默认值残留）。
+    显式语义优先；该规则对四层（默认/环境/文件/--set）一致生效。
+    """
     for k, v in overlay.items():
-        if isinstance(v, Mapping) and isinstance(base.get(k), dict):
+        if isinstance(v, Mapping) and len(v) and isinstance(base.get(k), dict):
             deep_merge(base[k], v)
         else:
             base[k] = copy.deepcopy(v)

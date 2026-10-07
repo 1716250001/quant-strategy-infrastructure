@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-qidian_daily_scan.py — 奇点战法每日双重信号扫描
+qidian_daily_scan.py — 奇点战法每日双重信号扫描（⚠ 旧池版，已停用于定时任务）
 =================================================
+
+⚠⚠ 2026-10-01 起：本脚本的标的池（QIDIAN_POOL，副官时代 30 个 ETF）已**停用于定时任务**，
+   每日定时推送改用 **`strategies/qidian_pool_scan.py`（A 类观察池：25 指数 / 54 ETF，
+   带四维标签 + ETF 复权 + 交易日闸门）**。
+   本文件保留原因：QIDIAN_POOL 是 btf 回测（`btf/btf/strategy/qidian.py` 动态加载）
+   与回归测试 `btf/tests/regression/test_qidian_l3.py` 的真源，删除会破坏回测。
+   如需旧池口径，可手动 `python -m strategies.qidian_daily_scan --date YYYYMMDD`。
+
 每日扫描41个ETF及其对应指数的周线KDJ/CCI，
 ETF+指数双重确认买卖点后通过PushPlus推送。
 
@@ -34,7 +42,7 @@ from typing import Dict, List
 
 from common.paths import DOC_DIR
 from config import PUSHPLUS_TOKEN, PUSHPLUS_CHANNEL
-from fetch.base import get_latest_trade_date
+from fetch.base import get_latest_trade_date, is_trading_day
 from indicators import calc_kdj_standard
 
 # ── 信号层（标的池/取数/指标/信号判断）──
@@ -795,12 +803,30 @@ def generate_html_report(results: List[Dict], end_date: str) -> str:
 # 12. 主入口
 # ============================================================
 def run_scan_pipeline(date=None, dry_run=False, report=False,
-                      push_single_buy=False, push_single_sell=False):
+                      push_single_buy=False, push_single_sell=False, force=False):
     """执行一轮奇点战法扫描：扫描 → 汇总打印 → 推送（可选报告）。
 
     供本文件 CLI 与统一入口 main.py 的 qidian 子命令共用，避免重复解析参数。
     返回 {"results": [...]}，生成报告时额外带 "report" 路径。
+
+    ★ 交易日闸门（2026-10-01 新增）：
+      未显式指定 date 时，先判断「今天」是否为 A 股交易日。
+      非交易日直接跳过 —— 否则本脚本会以「最近交易日」为基准，
+      把上一交易日的信号重复推一遍（周末/节假日每天重复推送）。
+      显式指定 --date 或加 --force 可越过该闸门。
     """
+    if date is None and not force:
+        ok, why = is_trading_day()
+        if not ok:
+            print(f"\n{'='*70}")
+            print("奇点战法每日双重信号扫描 — 已跳过")
+            print(f"  交易日判定：{why}")
+            print("  非交易日不扫描、不推送（避免重复推送上一交易日信号）。")
+            print("  如需强制运行，请加 --force；如需指定日期，请加 --date YYYYMMDD。")
+            print(f"{'='*70}")
+            return {"results": [], "skipped": "non_trading_day", "reason": why}
+        print(f"[交易日闸门] {why} → 继续扫描")
+
     # 扫描
     results = scan_all(date)
 
@@ -893,6 +919,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="仅扫描不推送")
     parser.add_argument("--report", action="store_true", help="生成HTML报告")
     parser.add_argument("--date", type=str, default=None, help="扫描日期 YYYYMMDD (默认最近交易日)")
+    parser.add_argument("--force", action="store_true",
+                        help="跳过交易日闸门（非交易日也照常扫描推送，默认关闭）")
     # 推送分级开关（默认关 = 方案A: 仅双重确认）
     parser.add_argument("--push-single-buy", action="store_true",
                         help="方案B: 加推单边买入信号（带观察标记+纪律提示）")
@@ -906,6 +934,7 @@ def main():
         report=args.report,
         push_single_buy=args.push_single_buy,
         push_single_sell=args.push_single_sell,
+        force=args.force,
     )
 
 

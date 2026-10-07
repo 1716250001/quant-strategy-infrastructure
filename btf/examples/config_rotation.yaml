@@ -23,7 +23,8 @@ data:
 execution:
   handler: "next_open"
   cost_model: "tiered_v1"
-  slippage: {model: "none", params: {}}
+  # RC-01（2026-10-05）：默认已非零摩擦（单边 10bp）；零摩擦需显式 `model: "none"`。
+  slippage: {model: "pct", params: {pct: 0.001}}
 risk:
   rules: [{name: "max_weight", params: {max_weight: 0.4}},
           {name: "cash_check"}, {name: "tradability"}]

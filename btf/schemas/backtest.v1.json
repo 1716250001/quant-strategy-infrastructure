@@ -60,6 +60,11 @@
           }
         },
         "initial_cash": { "type": "number", "exclusiveMinimum": 0 },
+        "delisted_settlement": {
+          "enum": ["carry", "writeoff"],
+          "default": "carry",
+          "description": "退市持仓残值口径（CL-3 / 19 号 §72.4）：carry=残值按区间内末次可用收盘价携带（默认＝现状，数值零回归）；writeoff=按 0 核销（压力口径；仅末日快照清零并下调 NAV，核销基准不取区间外价——防前视）"
+        },
         "event_log": {
           "type": ["string", "null"],
           "description": "事件溯源 JSONL 路径（缺省 = 不落盘；RunStore 托管归 M2 任务 5.5）"
@@ -80,8 +85,22 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "version": { "type": "string" },
-            "rules": { "type": "string" }
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "数据快照版本门禁（RC-14，2026-10-05）：声明内容哈希（如 sha256:…）——装配期实算 content_hash（档位=data.fingerprint_mode）并**严格比对**，不一致即 ConfigError（拒绝静默换数）；与 expected_hash 同时声明且不同 ⇒ 自相矛盾即拒"
+            },
+            "rules": { "type": "string" },
+            "anchor_date": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "description": "期望数据水位下限（RC-14）：实算水位（表内最大日期，未裁剪）必须 ≥ 该值，否则 ConfigError（数据未更新到声明水位）"
+            },
+            "expected_hash": {
+              "type": "string",
+              "minLength": 1,
+              "description": "期望内容哈希（RC-14；与 version 同义、等价可用；两者同时声明须一致）"
+            }
           }
         },
         "allow_degraded_limit": {
@@ -122,9 +141,13 @@
         "handler": { "type": "string", "minLength": 1 },
         "handler_params": {
           "type": "object",
-          "description": "ExecutionHandler 构造参数（v0.5：volume_participation∈(0,1] VPP 撮合量上限；缺省 null=v0.2 全成或全拒语义）"
+          "description": "ExecutionHandler 构造参数（volume_participation∈(0,1]：VPP 撮合量上限，**缺省 0.05**——RC-02，2026-10-05；显式 `null` 或空 dict `{}` = 不启用，回到 v0.2 全成或全拒语义）"
         },
         "cost_model": { "type": "string", "minLength": 1 },
+        "cost_model_params": {
+          "type": "object",
+          "description": "成本模型构造参数（**RC-05，2026-10-05**；成本敏感性分析的前提）。tiered_v1 → commission_rate / commission_min / segments；flat_rate → commission_rate / min_commission / stamp_duty_rate / transfer_rate；zero → 无参数（传参被忽略并 warn）。例：--set execution__cost_model_params__commission_rate=0.0005"
+        },
         "slippage": {
           "type": "object",
           "required": ["model"],
@@ -222,6 +245,20 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "description": "指标名字表（19 号 EX-1）：缺省=内置全集；指定后经 registry ANALYZER 解析——自定义 Analyzer 注册后零源码改动生效"
+        },
+        "crisis_windows": {
+          "type": "array",
+          "description": "危机区间清单覆盖（RC-13，2026-10-05）：缺省=内置常量表（2015 股灾/2018 熊/2020 疫情/2022 调整/2024 初冲击，月级）；声明后替换之。回测区间与危机窗重叠时装配期强制披露（assembly_notes）——『结论跨危机/平静期不可直接对比』",
+          "items": {
+            "type": "object",
+            "required": ["name", "start", "end"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "start": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+              "end": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            }
+          }
         }
       },
       "description": "指标口径（19 号 P1-7：runtime 原读取该段但 schema 缺失——永远无法经合法配置传入，Sharpe/超额跨区间不可比）"

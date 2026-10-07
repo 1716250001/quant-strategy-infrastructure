@@ -23,6 +23,7 @@ import inspect
 import logging
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -30,11 +31,12 @@ from btf import registry
 from btf.analytics.run_metrics import compute_run_metrics
 from btf.config.paths import RUNS_DIR
 from btf.config.validation import ConfigError
-from btf.data.coverage import check_coverage
+from btf.data.coverage import check_coverage, check_etf_adjust_coverage
 from btf.data.memory import MemoryFeed  # noqa: F401  # 类型注记
 from btf.domain.contracts import CONTRACT_VERSION
 from btf.domain.orders import Fee, Fill, OrderSide
 from btf.domain.types import (
+    AssetClass,
     Instrument,
     TradingDate,
 )
@@ -63,6 +65,13 @@ logger = logging.getLogger(__name__)
 #: 极短区间阈值（交易日；BB-4，19 号 §33.6④/OBS-1）：低于此值告警（不阻断）。
 #: 单源：CLI 打印与 runtime 日志共用本常量。
 SHORT_PERIOD_TRADING_DAYS = 20
+
+#: `optimize` 样本下限（**交易日**；CL-1，19 号 §72.2 / 报告 D 篇 P2-5）：低于此值
+#: `bt optimize` **默认拒绝给出排序结论**（非零退出；显式 `--allow-short` 放行并把
+#: override 记入产物）。取值依据：A 股近十年年均交易日约 242–244（2024 起节假日
+#: 新规略增），取 **250** ＝「≥1 个完整交易年」的保守整取口径（与业界惯例一致）；
+#: 与 `SHORT_PERIOD_TRADING_DAYS`（20，**告警**、不阻断）语义正交、互不改动。
+MIN_OPTIMIZE_TRADING_DAYS = 250
 
 #: 数据指纹**进程内 memo**（BB-1）：键 = (root, tables, years, mode)。
 #: 为什么需要：指纹是**披露字段**，同一进程内重复 build/run（网格搜索、批量
@@ -222,10 +231,28 @@ class BTFRuntime:
         elif self.coverage.degraded:
             logger.info("区间覆盖度提示：%s", "；".join(self.coverage.degraded))
 
+        # RC-13（2026-10-05）：**危机区间披露**——区间与危机窗重叠即登记装配
+        # 披露（"跨危机/平静期的结论不可直接对比"）。清单外置于
+        # `btf/analytics/windows.py`（常量表 + `analysis.crisis_windows` 可覆盖）；
+        # **只披露、不改数、不阻断**。纪律项"基准必须在跑前定死"属 20 号域。
+        from btf.analytics.windows import from_config as _crisis_from_config
+        from btf.analytics.windows import intersect as _crisis_intersect
+
+        _crisis_hits = _crisis_intersect(
+            str(period["start"]), str(period["end"]), _crisis_from_config(cfg))
+        if _crisis_hits:
+            self.assembly_notes.append(
+                "危机区间覆盖（RC-13）：本次区间与 " + "、".join(
+                    f"{w.name}（{w.start}~{w.end}）" for w in _crisis_hits)
+                + " 重叠——**跨危机/平静期的结论不可直接对比**"
+                  "（分段解读或配合危机窗清单；窗口可经 analysis.crisis_windows 覆盖）")
+
         # 基准装配期守卫（P1-NEW-6，19 号 §23.1/§23.3）：基准号拼错/区间不覆盖
         # 原须**跑完整段回测**才在 `_benchmark_metrics` 报错（长区间 = 白烧）；
         # 与"区间已有装配期守卫"的既有标准不一致 → 现装配期即探测（fail-closed）。
         self._guard_benchmark(period)
+        # RC-14（2026-10-05）：数据版本门禁——声明版本/水位才生效（opt-in）
+        self._guard_dataset_version(period)
         self.step_timings["装配·前置与守卫"] = _pc() - _t
         _t = _pc()
 
@@ -241,6 +268,21 @@ class BTFRuntime:
         self.instruments = self._resolve_instruments(
             run_cfg.get("universe") or {}, _ymd(period["start"]),
             _ymd(period["end"]))
+
+        # ETF 复权因子覆盖守卫（**RC-04，2026-10-05**）：**条件降级**——仅当
+        # 宇宙含 ETF 时检查 `fund_adj` 起点（19991022）。为什么不并入
+        # `DEGRADED_TABLES`：该表与股票结论无关，无条件检查会让 1999 年前的
+        # **纯股票**回测误报降级。命中 ⇒ warn + 降级登记 + 装配披露，不阻断
+        # （与 `etf_limit` 同机制）。
+        if any(inst.asset_class is AssetClass.ETF
+               for inst in self.instruments.values()):
+            _fa_note = check_etf_adjust_coverage(_ymd(period["start"]).to_ymd())
+            if _fa_note:
+                logger.warning("ETF 复权因子覆盖降级：%s", _fa_note)
+                self.coverage = replace(
+                    self.coverage,
+                    degraded=(*self.coverage.degraded, _fa_note))
+                self.assembly_notes.append(_fa_note)
 
         # 数据不变量校验（**批 8：CC-1..CC-6**，§39.2 裁决六-1）：装配期**一次**
         # （区间 + 宇宙裁剪；走 data.core 唯一入口 + 谓词下推）。三条设计要点
@@ -264,12 +306,42 @@ class BTFRuntime:
             logger.warning(
                 "execution.cost_model 未配置（默认 zero）：本回测为**零费用"
                 "基线**，实盘需按分段费率（tiered_v1）重估——报告将披露")
+        # 成本模型构造参数（**RC-05，2026-10-05**）：原实现调 `registry.create`
+        # 不传 params ⇒ "把成本翻倍跑一遍"只能靠写插件代码（schema 亦无参数位）。
+        # `zero` 是"零费用基线"调试模型（无字段）⇒ 传参无意义且会 TypeError，
+        # 故显式忽略 + warn（不静默）。
+        cost_params = exec_cfg.get("cost_model_params")
+        if self.cost_model_name == "zero" and cost_params:
+            logger.warning(
+                "execution.cost_model=zero 时忽略 cost_model_params（%s）："
+                "零费用模型无参数（报告将披露零成本口径）", sorted(cost_params))
+            cost_params = None
         self.cost_model = registry.create(
-            registry.COST_MODEL, self.cost_model_name)
+            registry.COST_MODEL, self.cost_model_name, cost_params)
+        # 滑点显式化（**RC-01，2026-10-05**）：默认层已改 `pct 0.001`（非零
+        # 摩擦），故 `model == "none"` 只可能来自**用户显式声明**（或旧配置
+        # 继承）—— 与 `cost_model == "zero"` 同款对称告警 + 报告披露
+        # （`viz.report._derived_disclosures` 消费 config_effective）。
         slip_cfg = exec_cfg.get("slippage", {}) or {}
+        slip_model_name = str(slip_cfg.get("model", "pct"))
+        slip_params = slip_cfg.get("params")
+        # ⚠ 深合并残留（RC-01 引入的必答题）：默认层为 `pct` 且自带
+        # `{"pct": 0.001}`，而配置合并是**深合并** ⇒ 用户显式把 model 换成
+        # 其它值时，默认层的 `pct` 键会**残留**在 params 里
+        # （`defaults.params` ⊕ `user.params`）。该键对其它模型无意义
+        # （NoSlippage 无参 / FixedSlippage 用 amount）——透传即 `TypeError`。
+        # 规则：**模型非 pct ⇒ 剥离 params 中的 `pct` 键**（用户显式给的
+        # 其它键原样保留；剥空则视为无参数）。
+        if (slip_model_name != "pct" and isinstance(slip_params, dict)
+                and "pct" in slip_params):
+            slip_params = {k: v for k, v in slip_params.items()
+                           if k != "pct"} or None
+        if slip_model_name == "none":
+            logger.warning(
+                "execution.slippage.model=none（显式声明）：本回测为**零摩擦"
+                "基线**——默认已为 pct 0.001（单边 10bp）；报告将披露该口径")
         self.slippage = registry.create(
-            registry.SLIPPAGE_MODEL, slip_cfg.get("model", "none"),
-            slip_cfg.get("params"))
+            registry.SLIPPAGE_MODEL, slip_model_name, slip_params)
         handler_cls = registry.resolve(
             registry.EXECUTION_HANDLER, exec_cfg.get("handler", "next_open"))
         self.handler = handler_cls(
@@ -400,6 +472,10 @@ class BTFRuntime:
     def _guard_benchmark(self, period: Mapping[str, Any]) -> None:
         """装配期基准守卫（R4：逻辑下沉到 `component_assembler`）。"""
         return ComponentAssembler(self).guard_benchmark(period)
+
+    def _guard_dataset_version(self, period: Mapping[str, Any]) -> None:
+        """数据版本门禁（**RC-14**；R4：逻辑下沉到 `component_assembler`）。"""
+        return ComponentAssembler(self).guard_dataset_version(period)
     def _data_tables(self) -> list[str]:
         """本次实际用到的表集（R4：逻辑下沉到 `component_assembler`）。"""
         return ComponentAssembler(self).data_tables()
@@ -409,6 +485,24 @@ class BTFRuntime:
     def _compute_data_version(self, period: Mapping[str, Any]) -> dict[str, Any]:
         """数据内容指纹（R4：逻辑下沉到 `component_assembler`）。"""
         return ComponentAssembler(self).compute_data_version(period)
+
+    def dataset_fingerprint(self, period: Mapping[str, Any] | None = None
+                            ) -> dict[str, Any]:
+        """数据指纹（BB-1 **实算**）只读入口——**CL-4** 冻结清单与 manifest 同源。
+
+        为什么公开：`_compute_data_version` 原为落盘编排的内部步骤（只在
+        `run()` 的落盘路径触发）；`bt dataset freeze`（19 号 §72.5）需要在
+        **不跑回测**的前提下取得**同一实算**——R2「单一真值源」要求冻结清单的
+        `content_hash` 与 RC-14 门禁 / `manifest.data_version` 逐字同源
+        （`btf.data.version.compute` 同一函数），**不得另起一套哈希**。
+        进程内 memo 与档位语义（`data.fingerprint_mode`）与 run 路径完全一致。
+        """
+        if getattr(self, "feed", None) is None:
+            raise RuntimeError("先 build 再取数据指纹（CL-4 dataset_fingerprint）")
+        period = period or (self.config.get("run") or {}).get("period")
+        if not period:
+            raise ConfigError(["run.period 未声明：无法确定冻结口径（CL-4）"])
+        return self._compute_data_version(period)
 
     def run(self, *, store: LocalRunStore | None = None,
             persist: bool = True) -> Any:
@@ -561,6 +655,11 @@ class BTFRuntime:
             instruments=self.instruments,
             cross_section=cross,
             event_log_path=event_log_path,
+            # CL-3（19 号 §72.4 Q-2(b)）：退市清算口径（schema 声明；默认 carry
+            # ＝ 现状，零回归；writeoff 供压力口径显式选择——CLI
+            # `--delisted-settlement writeoff` / `--set run__delisted_settlement=…`）
+            delisted_settlement=str(
+                run_cfg.get("delisted_settlement") or "carry"),
         )
         return engine.run()
 

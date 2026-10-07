@@ -615,6 +615,15 @@ class TushareParquetFeed:
                 ann_date=(TradingDate.from_ymd(r["ann_date"])
                           if r["ann_date"] else None),
             ))
+        # ── CL-2 第二段（R3′/R4′；19 号 §79.4）配股 / 缩股事件并入 ──
+        # 来源＝离线清单 adapter（`btf.data.corp_action_probe`：akshare 快照
+        # ＋ 本地 `adj_factor` 跳变真值；**不写主库**）。清单缺失 ⇒ 空表 +
+        # runtime 显式披露「未建模」（禁静默；见 run_orchestrator）。
+        from btf.data.corp_action_probe import load_actions, to_corporate_actions
+
+        extra = to_corporate_actions(load_actions(), start, end)
+        if extra:
+            out.extend(extra)
         out.sort(key=lambda a: (a.ex_date, a.symbol))
         _CORPORATE_ACTIONS_CACHE[memo_key] = tuple(out)     # IO-3 进程内 memo
         return out

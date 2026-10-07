@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from btf.domain.action import CorporateAction
 from btf.domain.orders import Fill, OrderSide
@@ -105,6 +106,11 @@ class Portfolio:
     _tv0: float | None = None       # total_value_0（cumulative 基点）
     _tv_prev: float | None = None   # total_value_{t-1}
     _tv_peak: float | None = None   # max(total_value_0..t)
+    #: **CL-2 第二段（R5′，19 号 §79.4）**：配股行权审计（逐事件：
+    #: 获配股数 / 缴款额 / 现金缺口 / 上市日 / 理论除权价）——引擎转 run 元数据。
+    rights_events: list[dict[str, Any]] = field(default_factory=list)
+    #: 缩股（R6′ 代理检测）审计（逐事件）。
+    consolidations: list[dict[str, Any]] = field(default_factory=list)
 
     # ── 入账（唯一路径：撮合成交 → apply_fill）──
     def apply_fill(self, fill: Fill, *, t_plus: int = 1) -> None:
@@ -163,6 +169,75 @@ class Portfolio:
         if pos is None:
             return 0
         qty_at_ex = pos.qty
+
+        # ── CL-2 第二段（R4′；19 号 §79.2 公式块；Q-4(a) 默认全额行权）──
+        # 配股：**原子入账**——份额增加与现金流出**同一时点**（不可拆分：
+        # 先扣现金会造成除权日前先跌一次、除权日再跌一次的**双重计数**）。
+        #   M = floor(N × ratio)；qty += M；available_qty += M；
+        #   cash −= M × 配股价；avg_cost' = (N·avg_cost + M·Pr)/(N+M)
+        #   ⚠ **禁止**沿用送转的 `avg_cost /= (1+r)`（那会平白降成本、虚增浮盈）。
+        # 除权日以**理论除权价** `(P0 + r·Pr)/(1+r)` 重估该标的：
+        #   当日有 bar ⇒ 步骤⑤ mark_all 以真实收盘价覆盖（真实价胜）；
+        #   无 bar（缴款期停牌未复牌）⇒ 避免用停牌前价高估 NAV。
+        #   等价性自证（§79.2 #3）：(1+r)·Pex = P0 + r·Pr ⇒ 除权日 NAV ≈ 不变。
+        # 零回归：`rights_ratio == 0`（旧事件）整块跳过，路径逐位不变。
+        ratio = float(getattr(action, "rights_ratio", 0.0) or 0.0)
+        if ratio > 0.0 and qty_at_ex > 0:
+            price = float(getattr(action, "rights_price", 0.0) or 0.0)
+            m = int(qty_at_ex * ratio)          # 可配股数（§79.3 #1 默认 floor）
+            if m > 0:
+                cost = m * price
+                p0 = self._last_close.get(action.symbol)
+                old_cost = pos.avg_cost
+                if p0 is None or p0 <= 0:
+                    p0 = old_cost
+                cash_before = self.cash
+                pos.qty += m
+                pos.available_qty += m
+                self.cash -= cost                   # 默认外部增资补足（可透支）
+                pos.avg_cost = ((old_cost * qty_at_ex + cost)
+                                / (qty_at_ex + m))
+                pex = (p0 + ratio * price) / (1.0 + ratio) if p0 > 0 else None
+                if pex is not None:
+                    self._last_close[action.symbol] = pex
+                listing = getattr(action, "rights_listing_date", None)
+                self.rights_events.append({
+                    "symbol": action.symbol,
+                    "ex_date": action.ex_date.to_ymd(),
+                    "ratio": ratio, "price": price,
+                    "qty_at_ex": qty_at_ex, "rights_qty": m, "cost": cost,
+                    "cash_shortfall": max(0.0, cost - cash_before),
+                    "p0": p0, "pex": pex,
+                    "listing_date": (listing.to_ymd() if listing else None),
+                })
+
+        # 缩股（**R6′**，19 号 §78.5 代理检测；默认不触发）：qty 按比例减少、
+        # **无现金流**；成本总额守恒 ⇒ 每股成本按 1/ratio 放大；理论价同步
+        # 上移 `P0 / ratio`（有 bar 时被真实收盘覆盖）。`ratio == 1` 跳过。
+        cons = float(getattr(action, "consolidation_ratio", 1.0) or 1.0)
+        if cons != 1.0 and qty_at_ex > 0:
+            new_qty = int(qty_at_ex * cons)
+            p0c = self._last_close.get(action.symbol)
+            if p0c is None or p0c <= 0:
+                p0c = pos.avg_cost
+            self.consolidations.append({
+                "symbol": action.symbol,
+                "ex_date": action.ex_date.to_ymd(),
+                "ratio": cons, "qty_before": qty_at_ex, "qty_after": new_qty,
+                "p0": p0c,
+                "p_resume_theory": (p0c / cons if p0c > 0 and cons > 0 else None),
+            })
+            if new_qty <= 0:
+                # 极端代理值（如 0.033）：不做核销，保留 1 股并如实披露
+                new_qty = 1
+            pos.avg_cost = (pos.avg_cost * qty_at_ex / new_qty
+                            if new_qty else 0.0)
+            pos.available_qty = int(pos.available_qty * cons)
+            pos.qty = new_qty
+            pos.available_qty = min(pos.available_qty, pos.qty)
+            if p0c > 0 and cons > 0:
+                self._last_close[action.symbol] = p0c / cons
+
         cd = action.cash_div_per_share
         d = action.stk_div_per_share
         if cd:

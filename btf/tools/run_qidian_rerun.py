@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     import time
 
     from btf.domain.types import TradingDate
-    from btf.runtime import BTFRuntime, fee_segments, make_store
+    from btf.runtime import BTFRuntime, make_store
     from btf.strategy.qidian import load_reference, pool_of
 
     reference = load_reference()
@@ -122,15 +122,17 @@ def main(argv: list[str] | None = None) -> int:
     print(f"拒单：{sum(rejections.values())} 单 {rejections or '{}'}")
 
     if not args.no_report:
-        from btf.viz.report import Assumptions, ReportBuilder
+        from dataclasses import replace
+
+        from btf.app.services import assemble_assumptions
+        from btf.viz.report import ReportBuilder
 
         bundle = store.load(result.run_id)
-        assumptions = Assumptions(
-            matching="next_open（T+1 开盘撮合）", slippage="none（回测基线）",
-            fee_segments=tuple(fee_segments()),
-            rules_version=bundle.manifest.rules_version,
-            rules_overrides=tuple(bundle.manifest.rules_overrides),
-            degraded=notes,
+        # RC-03（2026-10-05）：假设字段统一走 `assemble_assumptions`
+        # （读 `manifest.config_effective`）——不再硬编码滑点/撮合，
+        # 仅在本工具特有项（degraded / notes）上做覆盖。
+        assumptions = replace(
+            assemble_assumptions(store, bundle), degraded=notes,
             notes=(f"奇点战法引擎级复跑（V3-1 混合表 Feed）"
                    f"{args.start}–{args.end}；"
                    f"初始资金 {args.cash:,.0f} 元 / 单标权重 {args.weight}",

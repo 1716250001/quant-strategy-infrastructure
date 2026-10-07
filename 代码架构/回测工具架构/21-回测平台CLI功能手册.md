@@ -1,9 +1,47 @@
-# btf 回测平台 · CLI 功能手册（v1.1.0）
+# btf 回测平台 · CLI 功能手册（v1.2.0）
 
 > **定位**：`bt` 命令行的**完整功能参考**——逐命令给出用途、语法、参数表、行为分步、输出样例、退出码与限制。
 > **只用工具**请看 [20-回测平台使用指引.md](20-回测平台使用指引.md)（5 分钟上手向）；本手册面向「查参数、排故障、写自动化脚本」。
-> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf 1.1.0）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现。
+> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **1.2.0**；2026-10-07 配股/缩股入链路落版）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测。
 > **维护**：CLI 改动必须同步本手册；相邻文档：装配/引擎语义见 04/06 号，产物契约见 08 号，门禁口径见 09 号。
+> 2026-10-05 补 §0「输出解读纪律」（Q3 裁决 · 纪律类立即生效）。
+
+---
+
+## 0. 输出解读纪律（**首条 · 必读**）
+
+> 本节约束的是**如何解读 `bt` 的输出**，不依赖代码交付 ⇒ **即刻生效**。
+> 依据：19 号 §60 轮次十四；老大 **2026-10-05 Q3 裁决**。完整使用纪律见 **20 号首条**。
+
+### 0.1 三条硬规矩（**2026-10-06 更新：RC-01..16 已全交付，独立复核见 19 号 §65**）
+
+1. **`bt run` 的输出是"记账结果"，不是"策略有效证明"。**
+   CLI 打印的年化 / 夏普 / 超额**只说明账算得对**，不说明策略可行。
+   **成本敏感性复跑已完成**（v77 同区间：零摩擦 **+7.19% / IR 0.0504**｜交付默认 **+6.07% / 0.0305**｜0.3% 压力 **+4.28% / IR −0.0013**）⇒
+   引用**必须标注成本口径**；未附框架外推断证据者仍加限定语「**零摩擦假设下的记账结果**」（[20 号纪律二](20-回测平台使用指引.md)）。
+
+2. **`bt optimize` 的最优结果必须连同试验数 N 一起解读。**
+   从 N 组里挑最好的那一个，**N 越大、最优值越不可信**（多重检验）。
+   **RC-06/07/08 已交付**：`optimize` 现输出 `n_trials / psr / dsr` 与 `0.05/N` 阈值披露（`--perturb` 邻域退化可用）⇒
+   引用仍须**连同 N 与校正值**；**只报最优值、不报 N** 的结论一律不采信。
+   **CL-1 起**：样本 < **250 交易日**（≈1 完整交易年）**默认直接阻断**（退出码 3；`--allow-short` 显式放行
+   且 override 记入产物）——"区间太短"不再只是告警（见 §4.7）。
+
+3. **`bt report` / `bt show` 的"假设"段现读实际配置（RC-03 已交付）。**
+   `app/services.py::assemble_assumptions` 取 `config_effective`（滑点 / 撮合同源渲染）——**旧硬编码 `"none（回测基线）"` 已移除**；
+   抽查口径仍以 `manifest.json::config_effective.execution` 为准；**显式 `none` 会以「零摩擦（显式声明）」披露**。
+
+### 0.2 参数默认值风险速查
+
+| 项 | 当前默认（实测） | 风险 | 相关 RC |
+|---|---|---|---|
+| `execution.slippage` | **`none`** | 零滑点，系统性高估收益 | RC-01 |
+| `execution.handler_params.volume_participation` | **未设（= 100% 成交）** | 无视流动性约束 | RC-02 |
+| `report.benchmark` | **可不配** | 无基准裸奔，超额无锚 | RC-09 |
+| `cost_model` | `flat_rate`（印花税恒 0.05%） | 2023-08 前 7.5 年卖出印花税按半价计 | RC-05 / 19 号 §60 |
+
+> ⚠ **默认值不等于推荐值。** 上表为**当前实测**的默认行为，不是最佳实践；
+> 这些默认值将在 RC-01/02/05/09 交付后变更，**届时本表由执行方同步更新**（配置类随批次）。
 
 ---
 
@@ -29,13 +67,14 @@
 
 ## 2. 全局概览
 
-### 2.1 命令族地图（11 命令，按场景分组）
+### 2.1 命令族地图（12 命令，按场景分组）
 
 ```
 ① 核心回测链路   config-check → run → runs → show → report → verify
 ② 研究调优       optimize
 ③ 数据资产       dataset
 ④ 工程门禁       check / test / cold-backup
+⑤ 推断校验       validate（walk-forward | mc；RC-15/16）
 ```
 
 ### 2.2 命令总表
@@ -43,15 +82,16 @@
 | 命令 | 作用 | 关键参数 | 改产物 | 退出码 |
 |---|---|---|---|---|
 | `config-check` | 四层合并 + JSON Schema 校验 + 摘要 | `<config.yaml>` `--dump` `--resolve-strategy` | 否 | 0/1/2 |
-| `run` | 执行回测并落盘（`--dry-run` 只装配） | `--config` `--set` `--dry-run` `--out` `--verbose` | **是**（建 run 目录） | 0/1/2 |
+| `run` | 执行回测并落盘（`--dry-run` 只装配） | `--config` `--set` `--dry-run` `--out` `--verbose` `--delisted-settlement` | **是**（建 run 目录） | 0/1/2 |
 | `runs` | 列 RunStore 下的 run 摘要（只读） | `--latest N` `--out-dir` | 否 | 0/2 |
 | `show` | 单 run 的 manifest + 指标摘要（只读，不重算） | `--run` `--out-dir` | 否 | 0/1/2 |
 | `report` | 由产物再生成 HTML 报告（幂等） | `--run` `--out` `--out-dir` | 写 `report.html` | 0/1/2 |
 | `verify` | R1 复核：产物重算指标 vs `manifest.metrics_digest` | `--run` `--out-dir` | 否 | 0/1/2 |
-| `optimize` | 参数网格搜索（`grid_search` 进程池） | `--config` `--grid` `--objective` `--workers` `--top` `--out` | **是**（多次 run） | 0/1/2 |
-| `dataset` | 黄金集：构建 / 主库对账 / 内嵌重算 | `build-golden\|verify\|refcalc` `--cases` `--list` `--force` `--out` | 视动作 | 0/1/2 |
+| `optimize` | 参数网格搜索（`grid_search` 进程池） | `--config` `--grid` `--objective` `--workers` `--top` `--out` `--allow-short` | **是**（多次 run） | 0/1/2/**3** |
+| `dataset` | 黄金集：构建 / 主库对账 / 内嵌重算 / **数据冻结清单** | `build-golden\|verify\|refcalc\|freeze` `--cases` `--list` `--force` `--config` `--mode` `--out` | 视动作（`freeze` 写只读清单） | 0/1/2 |
 | `test` | 运行测试层（pytest 执行器） | `--layer` `--pattern` `--path` | 否 | pytest 码 |
-| `check` | 九项架构门禁（提交前必跑，无参数） | — | 否 | 0/1 |
+| `check` | 十项架构门禁（提交前必跑，无参数） | — | 否 | 0/1 |
+| `validate` | 滚动验证 / 蒙特卡洛（`walk-forward` / `mc`） | `walk-forward\\|mc` `--config` `--window` `--test` `--step` `--mode` `--purge` `--embargo` `--no-persist` `--run` `--n` `--seed` `--out` `--out-dir` `--set` | `mc` 否；`walk-forward` **是**（每折落盘） | 0/1/2 |
 | `cold-backup` | 跨版本源码冷备 / 校验既有冷备 | `--reason` `--out` `--verify DIR` | **是**（写备份） | 0/1/2 |
 
 > **易混对**：`check` ≠ `test`（门禁 vs 回归测试层）；`show` ≠ `verify`（读事实 vs 重算对账）；
@@ -78,7 +118,7 @@ flowchart LR
 | 项 | 值 |
 |---|---|
 | 解释器 | `D:\量化策略\代码\_venv\Scripts\python.exe` |
-| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.1.0`） |
+| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.2.0`） |
 | 等价调用 | `python -m btf.cli.main <命令>`（脚本化推荐，不依赖 console script） |
 | 仓库根 | `D:\量化策略\代码\btf`（含 `btf/` 包、`tests/`、`tools/`、`schemas/`、`examples/`） |
 
@@ -87,11 +127,11 @@ flowchart LR
 | 选项 | 说明 |
 |---|---|
 | `-h`, `--help` | 打印帮助（顶层或任意子命令；退出码 0） |
-| `--version` | 打印 `btf 1.1.0`（版本单一真源 `btf/_version.py`） |
+| `--version` | 打印 `btf 1.2.0`（版本单一真源 `btf/_version.py`） |
 
 ```bash
 $ bt --version
-btf 1.1.0
+btf 1.2.0
 
 $ bt --help
 usage: bt [-h] [--version]
@@ -115,7 +155,16 @@ usage: bt [-h] [--version]
 | `BTF_DATA_DIR` | 主库根（只读） | `D:\全量数据\market_data` |
 | `BTF_DATASETS_DIR` | 黄金/示例数据集根 | `D:\量化策略\代码\btf\btf_datasets` |
 | `BTF_ALT_DATA_DIR` | akshare 备库根（v0.5 接入预留） | `D:\全量数据\alt_data` |
+| `BTFTOOL_CHECK_PYTEST_BASETEMP` | 门禁第 3 项 pytest basetemp **根**（N4① / **N6 分根**） | `D:\量化策略\代码\_scratch\pytest_tmp\check` |
+| `BTFTOOL_TEST_PYTEST_BASETEMP` | `bt test` basetemp **根**（N5-② / **N6 分根**；其内再建**每次唯一**子目录） | `D:\量化策略\代码\_scratch\pytest_tmp\bt_test` |
+| `BTFTOOL_CHECK_LOG_DIR` | `bt check` 逐项输出日志目录（N4①） | `D:\量化策略\代码\_scratch\bt_check_logs` |
 | `BTF_<SECTION>__<KEY>` | **L2 配置层覆盖**（`__` 表嵌套；值自动推断 bool/int/float/str） | — |
+
+> **⚠ 命名警示（N7，2026-10-06）**：工具变量一律 **`BTFTOOL_` 前缀**；**切勿使用 `BTF_` 前缀的自定义
+> 变量**——`BTF_<SECTION>__<KEY>` 是**配置覆盖命名空间**（`loader.from_env` 注入），`BTF_` 开头且不在
+> 白名单（仅 `BTF_DATA_DIR` / `BTF_OUTPUT_DIR`）的变量会被当作**配置键**注入 ⇒ **配置校验失败**
+> （`Additional properties are not allowed ('check_pytest_basetemp' was unexpected)`），`bt run` 等
+> 一切加载配置的路径全废（19 号 §69.4 实测；历史变量 `BTF_CHECK_*` 已因此改名）。
 
 ```powershell
 # 例：把产物根改到临时盘；打开风控链逃生开关（仅调试）
@@ -208,6 +257,7 @@ $ bt config-check config.yaml --dump > merged.yaml               # 留档合并�
 
 ```bash
 bt run --config <config.yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
+       [--delisted-settlement carry|writeoff]
 ```
 
 **参数**
@@ -219,6 +269,7 @@ bt run --config <config.yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 | `--dry-run` | | 关 | 只装配：**不建 run 目录、不执行引擎、不落盘**，打印装配计划 |
 | `--out` | | `BTF_OUTPUT_DIR\runs` | 产物根目录（本次 run 目录在其下） |
 | `--verbose` | | 关 | 额外打印分步耗时 / 数据质检结论 / 数据指纹 |
+| `--delisted-settlement` | | `carry` | **CL-3**：退市持仓残值口径——`carry` 残值按区间内末次可用收盘价**携带**（＝现状，零回归）；`writeoff` **按 0 核销**（压力口径：仅末日快照清零并下调 NAV）；进 `config_effective` 可追溯（等价 `--set run__delisted_settlement=writeoff`） |
 
 **行为**
 
@@ -227,7 +278,11 @@ bt run --config <config.yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 3. `build()` 装配期硬门（见 §7.4），任一不过 → `[error] 装配失败：...` 且**不建 run 目录**；
 4. `--dry-run`：打印装配计划后结束；正式执行：`create_run`（写 `manifest.json` 骨架，状态 `RUNNING`）
    → 引擎日循环 → 快照/成交/拒单/事件落盘 → 指标计算 → `metrics.json` + manifest 补全（`COMPLETED`）；
-5. 打印 `run_id`、产物路径、5 项关键指标；`--verbose` 追加诊断行。
+5. 退市清算口径（**CL-3**，19 号 §72.4）：`--delisted-settlement writeoff` ⇒ 覆盖 `run.delisted_settlement`
+   （进 `config_effective`）；区间末按 0 核销退市持仓残值（末日快照市值/权重/数量清零、NAV 下调核销额，
+   四式重算保一致；核销基准 = **区间内末次可用收盘价**，不取区间外价——防前视）；披露文案随口径变化
+   （三要素保留：标的 / 末次交易日 / 残值口径）。默认 `carry` ＝ 现状（数值零回归）；
+6. 打印 `run_id`、产物路径、5 项关键指标；`--verbose` 追加诊断行。
 
 **输出**
 
@@ -288,6 +343,9 @@ $ bt run --config config.yaml --out E:\bt_runs --verbose         # 换产物根 
 
 - **类型推断不做布尔化**：`--set data.quality.strict=true` 会以**字符串** `"true"` 进入合并 →
   Schema 类型校验**报错**。布尔开关请走环境变量（`BTF_DATA__QUALITY__STRICT=true`）或直接改 YAML；
+- **退市清算口径（CL-3；19 号 §72.4 Q-1(a)/Q-2(b)）**：默认 `carry`（残值按区间内末次可用收盘价携带、
+  未清算——数值与改动前逐位一致）；`writeoff` 为**压力档**：只在**末日快照**按 0 核销（市值/权重/数量清零、
+  NAV 下调核销额；核销基准不取区间外价——防前视）。二者差异**只出现在 writeoff**；披露文案随口径变化；
 - 装配期失败**不留半成品 run 目录**；引擎期失败会留下 `manifest.json`（状态 `FAILED` + error），可用 `bt show` 复盘；
 - 长回测观测耗时分布用 `--verbose`；失败后先 `bt check` 排除环境问题，再 `--dry-run` 定位装配期硬门。
 
@@ -511,7 +569,8 @@ $ bt verify --run 20260927_163148_7ecdb4        # 审计/归档前复核
 **语法**
 
 ```bash
-bt optimize --config <config.yaml> --grid "<spec>" [--objective X] [--workers N] [--top N] [--out FILE]
+bt optimize --config <config.yaml> --grid "<spec>" [--objective X] [--workers N]
+            [--top N] [--n-trials N] [--perturb D1,D2] [--allow-short] [--out FILE]
 ```
 
 **参数**
@@ -520,9 +579,12 @@ bt optimize --config <config.yaml> --grid "<spec>" [--objective X] [--workers N]
 |---|---|---|---|
 | `--config` | ✅ | — | 回测配置 YAML（基准配置） |
 | `--grid` | ✅ | — | 网格 spec：`path=v1,v2;path2=v1,v2`（见下） |
-| `--objective` | | `sharpe_ratio` | 排名指标名（不做白名单：任何出现在指标集里的名字都接受） |
+| `--objective` | | `sharpe_ratio` | 排名指标名（不做白名单：任何出现在指标集里的名字都接受；配 `report.benchmark` 后**相对指标** `information_ratio` / `annualized_excess` 可一起排序——**RC-08**，经 `extras`） |
 | `--workers` | | `8` | 进程数；`0` = 内联顺序执行（调试 / 注入型 feed 用） |
 | `--top` | | `10` | 打印前 N 名 |
+| `--n-trials` | | `0` | 历史累计试验数（**RC-06**）：与本次组合数相加为 N，用于 DSR 多重检验校正 |
+| `--perturb` | | 不扫描 | 参数邻域扫描（**RC-07**）：对 top1 **数值型**参数做 `p×(1±δ)`；如 `0.1,0.2`（δ ∈ (0,1)，可多个）；相对退化 > 50% 打印"疑似过拟合"提示 |
+| `--allow-short` | | 关（阻断） | **CL-1**：显式放行「样本 < 250 交易日」的排序（默认阻断、退出码 3）；放行把 `n_days/阈值/override` 记入结果 JSON 的 `short_period_override`（**禁「绕过即静默」**） |
 | `--out` | | 不写 | 结果 JSON 输出路径（父目录自动创建） |
 
 **`--grid` spec 语法**
@@ -533,22 +595,33 @@ bt optimize --config <config.yaml> --grid "<spec>" [--objective X] [--workers N]
 
 **行为**
 
-1. 解析 grid（语法错 → 退出码 2）；读取基准配置（读失败 → 退出码 1）；
+1. 解析 grid（语法错 → 退出码 2）＋ 解析 `--perturb`（δ 越界 / 空 ⇒ 退出码 2）；读取基准配置（读失败 → 退出码 1）；
 2. 经注册表取 `grid_search` 优化器，进程池并行跑全部组合（每组合 `persist=False`，**不落 run 产物**）；
-3. 按 objective 降序排名（指标缺失/NaN 按 `-inf` 垫底，不剔除记录）；
-4. 打印 `n_combos × workers` 概览 + 前 `--top` 名；`--out` 写全量结果 JSON。
+3. **短区间门禁（CL-1 / 报告 D 篇 P2-5）**：实算样本 `n_trading_days < 250`
+   （`MIN_OPTIMIZE_TRADING_DAYS`，≈1 个完整交易年）⇒ **默认阻断**：打印阈值 / 当前 `n_days` / 去路，
+   **退出码 3**，且**不打印任何排序结论**（短样本下指标"数学有定义、业务无意义"）；
+   显式 `--allow-short` 放行（打印 `[warn]`，并把 `short_period_override = {n_days, threshold,
+   override: true}` 记入结果 JSON）；`n_days ≥ 250` ⇒ 行为与改动前一致（**零回归**）；
+4. 按 objective 降序排名（指标缺失/NaN 按 `-inf` 垫底，不剔除记录）；每组合给出 `psr` / `dsr`，
+   并打印 **N 与 `0.05/N` 阈值**的校正说明（**RC-06**："试得越多越不可信"）；
+5. 传 `--perturb` ⇒ 对 **top1** 的数值型参数做邻域扫描（极差 / σ / 相对退化率；退化 > 50% ⇒
+   **warn"疑似过拟合"，只提示、不替使用者判定**——**RC-07**）；
+6. 打印 `n_combos × workers` 概览 + 前 `--top` 名；`--out` 写全量结果 JSON。
 
-**输出**
+**输出（示意；数值随配置而变）**
 
 ```
 [ok] grid_search：9 组 × 8 进程 | objective=sharpe_ratio
-rank       value  params
-   1      1.2345  run.params.lookback=20, run.params.top_k=5
-   2      1.1021  run.params.lookback=40, run.params.top_k=5
+[warn] N=9 未校正 —— 阈值应 ≤ 0.05/N = 0.005556（PSR=单策略显著性；DSR=校正「挑出来」之后的显著性）
+rank       value     psr     dsr  params
+   1      1.2345   0.981   0.874  run.params.lookback=20, run.params.top_k=5
+   2      1.1021   0.932   0.781  run.params.lookback=40, run.params.top_k=5
+[info] perturb：14 点 | 极差=0.3521 | σ=0.0987 | 相对退化=28.5%
      结果: E:\grid_result.json
 ```
 
-**退出码**：0；1（配置读取失败）；2（`--grid` 解析失败 / 用法错误）。
+**退出码**：0；1（配置读取失败）；2（`--grid` 解析失败 / 用法错误）；
+**3（短区间默认阻断——CL-1；`--allow-short` 显式放行）**。
 
 **示例**
 
@@ -563,9 +636,14 @@ $ bt optimize --config config.yaml --grid "run.params.top_k=5" --workers 0   # �
 
 **注意**
 
-- 结果 JSON 结构：`objective / n_combos / workers / results[]（每组合 params+metrics+rank）/ top[]（最多 10 项）`。
+- 结果 JSON 结构：`objective / n_combos / param_dim / n_trading_days / n_trials_declared / n_trials /
+  adjustment_note / workers / perturbation（传 `--perturb` 时）/ results[]（每组合 params+metrics+rank+psr+dsr）/ top[]`。
   `--out` 写**全量记录**；`--top` 只影响屏幕打印；
-- **极短区间污染排名**：区间太短时部分指标「数学有定义、业务无意义」，排名不可信；
+- `--perturb` 的 δ 为**相对比例**（`p×(1±δ)`），仅作用于 top1 的**数值型**参数；δ 越界（≤0 或 ≥1）⇒ 退出码 2；
+- `--n-trials` 把**历史**试错次数并入 N（DSR 校正）；不写 = 只按本次组合数；
+- **极短区间污染排名**：区间太短时部分指标「数学有定义、业务无意义」，排名不可信——**CL-1 起
+  `< 250 交易日` 默认直接阻断（退出码 3）**；例外放行走 `--allow-short`，且 override 只记「**实际放行**」
+  （长区间加开关不写标记——不得恒现）；
 - 组合为**独立 run**（不共享随机状态），可复现性由 `seed.master` 保证；
 - `--workers 0` 用于 `memory` feed 或调试；负数进程数非法。
 
@@ -579,26 +657,30 @@ $ bt optimize --config config.yaml --grid "run.params.top_k=5" --workers 0   # �
 
 ```bash
 bt dataset [build-golden|verify|refcalc] [--cases g1|all|id,id] [--list] [--verify] [--force] [--out DIR]
+bt dataset freeze --config <config.yaml> [--mode meta|fast|full] [--out DIR]     # CL-4
 ```
 
 **参数**
 
 | 参数 | 必填 | 默认 | 说明 |
 |---|---|---|---|
-| `action`（位置） | | `build-golden` | 子动作（choices）：`build-golden` / `verify` / `refcalc` |
+| `action`（位置） | | `build-golden` | 子动作（choices）：`build-golden` / `verify` / `refcalc` / `freeze`（CL-4） |
 | `--cases` | | `g1` | 案例选择：单组（`g1`）、`all`、逗号分隔 case_id |
 | `--list` | | 关 | 列出案例与待补组（**不写盘**） |
 | `--verify` | | 关 | 只校验不写（等价 `action=verify`） |
 | `--force` | | 关 | 显式覆盖已构建案例（留痕） |
-| `--out` | | `BTF_DATASETS_DIR\golden_v1\cases` | 输出目录 |
+| `--config` | | — | **freeze**：回测配置 YAML（冻结口径随它：区间 / 表集 / 档位）；缺 ⇒ 退出码 2 |
+| `--mode` | | 随 `data.fingerprint_mode`（`meta`） | **freeze**：指纹档位 `meta|fast|full` |
+| `--out` | | `BTF_DATASETS_DIR\golden_v1\cases`（`freeze`：`BTFTOOL_FREEZE_DIR`） | 输出目录 |
 
-**三动作语义**
+**动作语义**
 
 | 动作 | 读主库 | 写盘 | 判据 |
 |---|---|---|---|
 | `build-golden` | ✅ | ✅ | 从主库构建/更新案例文件；断言漂移 → FAIL |
 | `verify` | ✅ | ❌ | 现有案例与主库对账（主库变了/案例陈旧即暴露） |
 | `refcalc` | ❌ | ❌ | 只用**案例文件内嵌数据**独立重算断言（黄金集自洽性） |
+| `freeze`（**CL-4**） | ✅（只读指纹） | ✅（**只读清单**） | 落「表清单 ＋ content_hash ＋ anchor_date」不可变清单（S-2；19 号 §72.5）；`content_hash` 与 `manifest.data_version` / RC-14 门禁**同源**（BB-1 实算）；同 `anchor_date` 重复冻结 ⇒ **幂等**（哈希一致不覆写）/ **显式冲突**（哈希不同退出 1）；内存 Feed 拒绝冻结（退出 1，不产假清单） |
 
 **输出（`--list` 实测节选）**
 
@@ -642,13 +724,18 @@ $ bt dataset build-golden --cases all            # 全量构建
 $ bt dataset verify --cases g1                   # 与主库对账（不写）
 $ bt dataset refcalc --cases all                 # 内嵌数据重算（不读主库）
 $ bt dataset build-golden --cases g1 --force     # 显式覆盖（留痕）
+$ bt dataset freeze --config config.yaml         # CL-4：冻结点（默认 meta 档）
+$ bt dataset freeze --config config.yaml --mode fast --out E:\freeze   # 显式档位/目录
 ```
 
 **注意**
 
 - `--list` 与 `--out` 同时给出时 `--out` 被忽略（列清单不写盘）；
 - 构建产物是**版本化数据集**（`golden_v1`，契约 `golden.v1`）；覆盖必须显式 `--force`，防误伤；
-- `refcalc` 不依赖主库——数据盘不可用时仍可做**黄金集自洽性**检查。
+- `refcalc` 不依赖主库——数据盘不可用时仍可做**黄金集自洽性**检查；
+- **`freeze`（CL-4）**：产出的清单文件**只读**（`BTFTOOL_FREEZE_DIR`，默认 `代码\_freeze\<anchor_date>.json`），
+  **不得**被后续回测覆写；⚠ **S-2 有效边界**：只冻「清单＋哈希」，**依赖原始库不被改写**——原始库回填/重算后
+  旧清单不可自证（登记要求见 08 号与 [20 号纪律](20-回测平台使用指引.md)）。
 
 ---
 
@@ -681,8 +768,12 @@ bt test [--layer l1|l2|l3|l4|l5|all] [--pattern EXPR] [--path PATH]
 | `l5` | 性能基准（B1-B5） |
 | `smoke` | 冒烟（中文路径/环境自检；`bt check` 第 3 项） |
 
-**行为**：以**子进程**跑 `python -m pytest -q -p no:cacheprovider --basetemp <临时目录>`；cwd 固定为仓库根；
-剥离 `PYTEST_CURRENT_TEST` 环境变量；结束后回收自建临时目录。命令回显 `[run] ...`。
+**行为**：以**子进程**跑 `python -m pytest -q -p no:cacheprovider --basetemp <项目内临时目录>`；
+basetemp 默认建在 **`代码/_scratch/pytest_tmp/bt_test/`** 下的**每次唯一**子目录（**N6 分根**：与门禁第 3 项
+`…/pytest_tmp/check` 各用独立子根；根可经 `BTFTOOL_TEST_PYTEST_BASETEMP` 覆盖）——**不走 `%TEMP%`**
+（**N5-②**，2026-10-06：系统临时区的 pytest 垃圾轮转可能被环境批量删除守卫拦截 ⇒ "用例全过但 exit≠0"假红）；
+cwd 固定为仓库根；剥离 `PYTEST_CURRENT_TEST` 环境变量；结束后**分小批**回收自建临时目录（被守卫拦则打
+`[note]` 保留现场，**退出码不变**）。命令回显 `[run] ...`。
 
 **退出码**：**原样透传 pytest 码**——`0` 全通过；`1` 有失败；`2` 中断；`5` 无用例。
 
@@ -699,12 +790,17 @@ $ bt test --layer all --pattern smoke            # 只跑冒烟集
 **注意**
 
 - 默认 `l1` 是**刻意保守**：全量回归耗时约 1 小时，需显式 `--layer all`；
-- 与 `bt check` 分工：`check` = 提交前九项门禁（含 lint / 架构契约 / 数据不变量，一体跑完）；
+- basetemp 落**项目内独立子根** `_scratch/pytest_tmp/bt_test/`（**N5-②/N6**，**每次唯一子目录**——复用已有大目录
+  会被守卫拦成假 ERROR）；**直接手跑 `pytest tests` 时请自加 `--basetemp <项目内路径>`（目录每轮新起、另起子目录）**
+  （**N5-①/③** 纪律，见 [09 §14.1](09-测试验证与基准.md)）；
+- 回收被守卫拦时打 **`[note] basetemp 未完全回收（环境批量删除守卫）`**（**N9**；19 号 §71.3）——属**已知
+  fail-safe、非用例失败**（退出码仍 ＝ pytest 码），但**须清理**（**判据 D**，见 [09 §14.1](09-测试验证与基准.md)）；
+- 与 `bt check` 分工：`check` = 提交前十项门禁（含 lint / 架构契约 / 数据不变量，一体跑完）；
   `test` = 按层跑 pytest 回归。**日常改完代码：`bt check` → `bt test`**。
 
 ---
 
-### 4.10 `bt check` —— 九项架构门禁
+### 4.10 `bt check` —— 十项架构门禁
 
 **用途**：提交前必跑的一体化门禁；与 `python tools/check.py` **同一脚本、同一退出码**。
 
@@ -716,27 +812,35 @@ bt check
 
 **参数**：**无**（刻意如此——加开关等于允许「跑得不一样」，口径唯一优先）。
 
-**九项清单**
+**十项清单**
 
 | # | 项 | 守护的纪律 |
 |---|---|---|
-| 1/9 | ruff lint | 代码规范 + 随机源禁令 |
-| 2/9 | import-linter 架构铁律 | 六铁律分层依赖 |
-| 3/9 | 冒烟测试（中文路径/环境） | 部署环境自检 |
-| 4/9 | 依赖预算 | 外部依赖 ≤ 8 |
-| 5/9 | 包可导入 | 骨架完整性（`import btf`） |
-| 6/9 | domain 白名单 | `btf/domain` 仅标准库 |
-| 7/9 | 报告渲染级结构 | 渲染/序列化产物断言 |
-| 8/9 | 数据不变量校验 | 主库正样本 + 负向对照 |
-| 9/9 | IO 单一入口（+变异性自检） | 磁盘访问收敛点唯一 |
+| 1/10 | ruff lint | 代码规范 + 随机源禁令 |
+| 2/10 | import-linter 架构铁律 | 六铁律分层依赖 |
+| 3/10 | 冒烟测试（中文路径/环境） | 部署环境自检 |
+| 4/10 | 依赖预算 | 外部依赖 ≤ 8 |
+| 5/10 | 包可导入 | 骨架完整性（`import btf`） |
+| 6/10 | domain 白名单 | `btf/domain` 仅标准库 |
+| 7/10 | 报告渲染级结构 | 渲染/序列化产物断言 |
+| 8/10 | 数据不变量校验 | 主库正样本 + 负向对照 |
+| 9/10 | IO 单一入口（+变异性自检） | 磁盘访问收敛点唯一 |
+| 10/10 | 插件边界基线 | 核心包 diff 为零（GG-6② 并入门禁；刷新须显式 `--update --reason` 留痕） |
 
-**输出**：每项 `=== N/9 ... ===` / `--- PASS|FAIL ---`；末尾汇总。
+**输出**：每项 `=== N/10 ... ===` / `--- PASS|FAIL ---`；末尾汇总。
 
 ```
-bt check: 9/9 通过
+bt check: 10/10 通过
 ```
 
-**退出码**：0（9/9）；1（有失败项）；2（工具脚本缺失）。
+**退出码**：0（10/10）；1（有失败项）；2（工具脚本缺失）。
+
+**诊断（N4 加固，2026-10-06）**
+
+- 每项输出**自动落盘**：`代码/_scratch/bt_check_logs/<时间戳>/<项>.attemptN.log`（`BTFTOOL_CHECK_LOG_DIR` 可覆盖）——
+  偶发假红自此**可归因**（此前两次冷启动假红均因无失败日志无法定论）；
+- **第 3 项（冒烟）冷启动偶发假红**（19 号 §67.3 N4 / §67.9：**两次独立复现**）：**自动复跑一次**并在输出中显式标注
+  「**首次失败 / 复跑通过——N4 冷启动偶发，已留痕**」，运行末汇总再打印一次；**其余项失败一律按真失败**（不复跑）。
 
 **示例**
 
@@ -797,6 +901,57 @@ $ bt cold-backup --verify "D:\量化策略\备份\20260930-1509-btf-1.1.0-cold" 
 
 ---
 
+### 4.12 `bt validate` —— 滚动验证 / 蒙特卡洛（RC-15/16）
+
+**用途**：L4 推断层。`walk-forward` 做**滚动 / 锚定**样本外验证（含 purge / embargo 隔离）；
+`mc` **读回既有 run 产物**（不重跑引擎）做 bootstrap 置信区间 / 置换检验 / 噪声基线。
+
+**语法**
+
+```bash
+bt validate walk-forward --config <yaml> --window N [--test N] [--step N] [--mode rolling|anchored] \
+                         [--purge N] [--embargo N] [--no-persist] [--set K=V] [--out F] [--out-dir DIR]
+bt validate mc --run <run_id> [--n N] [--seed N] [--out F] [--out-dir DIR]
+```
+
+**参数**
+
+| 参数 | 适用 | 说明 | 缺省 |
+|---|---|---|---|
+| `action`（位置） | 两者 | `walk-forward` \| `mc` | 必填 |
+| `--config` | wf | 回测配置 YAML | 必填 |
+| `--window` / `--test` / `--step` | wf | 训练窗长 / 测试窗长 / 滚动步长（交易日）；`--test` 缺省 = `--step`，`--step` 缺省 = `--test` | — |
+| `--mode` | wf | `rolling`（滚动）/ `anchored`（锚定加长） | `rolling` |
+| `--purge` / `--embargo` | wf | 训练/测试间隔与测试前缓冲（交易日；合并计入 gap） | 0 |
+| `--no-persist` | wf | 不落盘（缺省每折落盘，窗口信息入 manifest） | 落盘 |
+| `--set K=V` | wf | 配置覆盖（与 `bt run` 同则） | — |
+| `--run` | mc | run_id（读回产物，**不重跑引擎**） | 必填 |
+| `--n` | mc | 重采样 / 置换次数 | 1000 |
+| `--seed` | mc | 显式种子（缺省 = `manifest.seed.master` 单源） | manifest |
+| `--out` / `--out-dir` | 两者 | 结果 JSON 路径 / RunStore 根 | — |
+
+**输出（实测，2026-10-06；`python -m btf.cli.main validate mc --run 20261001_182705_3ae6f2 --n 200`）**
+
+```
+[ok] mc：run=20261001_182705_3ae6f2 样本 5039 日（年化 252）| seed=20260926（manifest）
+bootstrap（200 次重采样）:
+     sharpe: observed=0.6240193727017235 p05=0.2818512126386722 p50=0.6566383779678984 p95=1.0017285537415197 CI=[0.17460746598666502,1.0456754369812271] 跨0=False
+     annualized_return: observed=0.08846160612268195 p05=0.031226509204007824 p50=0.09423947533679788 p95=0.16478184284444808 CI=[0.016506895809841327,0.17451985379043222] 跨0=False
+置换检验[sign/sharpe] 双侧: observed=0.6240193727017235 p=0.01（null 200 次）
+置换检验[order/max_drawdown] 双侧: observed=-0.4463542572131344 p=0.105（null 200 次）
+[warn] 无基准（report.benchmark 未配）⇒ 随机择时对照不可得——null 而非伪造；配基准后可用（RC-16）
+```
+
+**退出码**：0；1（配置 / 产物不可读、样本不足等）；2（参数用法错误）。
+
+**注意**
+
+- `walk-forward` 每折**独立回测并落盘**（走 RunStore）；`--no-persist` 关闭落盘；
+- `mc` **只读产物**：缺基准时**如实 warn**（"无基准对照"），**不伪造**随机择时对照（RC-16 纪律）；
+- 推断结果是**解释层**，**不改变** `metrics.json` 任何指标，也不得直接回写为策略结论（20 号纪律一~三）。
+
+---
+
 ## 5. 退出码与错误处理约定
 
 ### 5.1 退出码总表
@@ -806,6 +961,7 @@ $ bt cold-backup --verify "D:\量化策略\备份\20260930-1509-btf-1.1.0-cold" 
 | `0` | 成功 / 检查通过（含「无数据可列」这类正常空结果） | 全部 |
 | `1` | **业务失败**：校验失败 / 装配失败 / 复核不一致 / 对账漂移 / 哈希失败 / run 不存在 | `config-check` `run` `report` `verify` `dataset` `check` `cold-backup` |
 | `2` | **用法与前置错误**：argparse 用法错误、`--set`/`--grid` 语法错、未知 dataset 动作、工具脚本缺失 | 全部 |
+| `3` | **策略性阻断**：`optimize` 短区间（样本 < 250 交易日）默认拒绝给出排序结论（**CL-1**；`--allow-short` 可显式放行） | `optimize` |
 | pytest 码 | 原样透传（0/1/2/5） | `test` |
 
 > 脚本化建议：把 `1` 视为「看 stderr 的业务原因」，`2` 视为「调用方写错了命令行」——前者重试/修配置，
@@ -986,7 +1142,7 @@ $ bt report --run <run_id>                           # ④ 出可交付报告
 ### 8.4 提交前与定版
 
 ```bash
-$ bt check                                           # ① 九项门禁全绿（9/9）
+$ bt check                                           # ① 十项门禁全绿（10/10）
 $ bt test                                            # ② l1 回归（秒级）
 $ bt test --layer all                                # ③ 全量回归（约 1 小时，节点前跑）
 $ bt cold-backup --reason "vX.Y.Z 定版"              # ④ 定版冷备（含 sha256 自校验）
@@ -1019,7 +1175,7 @@ $ bt cold-backup --verify <冷备目录>                  # ⑤ 异地校验（�
 ### 附录 A：速查卡（一屏带走）
 
 ```
-bt --version                                          # btf 1.1.0
+bt --version                                          # btf 1.2.0
 bt config-check <yaml> [--dump] [--resolve-strategy]  # 静态校验
 bt run --config <yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 bt runs [--latest N] [--out-dir DIR]                  # 只读清单
@@ -1029,7 +1185,9 @@ bt verify --run <id> [--out-dir DIR]                  # 重算对账
 bt optimize --config <yaml> --grid "p=v1,v2;p2=v1,v2" [--objective X] [--workers N] [--top N] [--out F]
 bt dataset [build-golden|verify|refcalc] [--cases g1|all] [--list] [--force] [--out DIR]
 bt test [--layer l1|l2|l3|l4|l5|all] [--pattern EXPR] [--path P]
-bt check                                              # 九项门禁（无参数）
+bt validate walk-forward --config <yaml> --window N [--test N] [--step N] [--mode rolling|anchored] [--purge N] [--embargo N] [--no-persist]
+bt validate mc --run <id> [--n N] [--seed N] [--out F]  # 读回产物，不重跑引擎
+bt check                                              # 十项门禁（无参数）
 bt cold-backup [--reason R] [--out DIR] [--verify DIR]
 ```
 
@@ -1048,18 +1206,22 @@ bt cold-backup [--reason R] [--out DIR] [--verify DIR]
 
 | 命令 | 处理器（行号） | 参数注册（行号） |
 |---|---|---|
-| `config-check` | `_cmd_config_check` 82-133 | `_args_config_check` 163-169 |
-| `run` | `_cmd_run` 182-247 | `_args_run` 250-258 |
-| `report` | `_cmd_report` 264-277 | `_args_report` 280-283 |
-| `verify` | `_cmd_verify` 289-311 | `_args_verify` 314-316 |
-| `test` | `_cmd_test` 322-356 | `_args_test` 359-363 |
-| `dataset` | `_cmd_dataset` 369-385 | `_args_dataset` 392-402 |
-| `optimize` | `_cmd_optimize` 431-468 | `_args_optimize` 471-480（`_parse_grid` 408-428） |
-| `check` | `_cmd_check` 486-495 | `_args_check` 498-499（无参数） |
-| `cold-backup` | `_cmd_cold_backup` 502-510 | `_args_cold_backup` 513-516 |
-| `runs` | `_cmd_runs` 535-555 | `_args_runs` 558-561 |
-| `show` | `_cmd_show` 564-608 | `_args_show` 611-613 |
-| 注册表 / 分发 | `COMMANDS` 617-640 / `main()` 643-658 | — |
+| `config-check` | `_cmd_config_check` 83-134 | `_args_config_check` 164-175 |
+| `run` | `_cmd_run` 183-255 | `_args_run` 258-271 |
+| `report` | `_cmd_report` 272-285 | `_args_report` 288-296 |
+| `verify` | `_cmd_verify` 297-319 | `_args_verify` 322-329 |
+| `test` | `_cmd_test` 330-364 | `_args_test` 367-376 |
+| `dataset` | `_cmd_dataset` 377-397 | `_args_dataset` 400-415 |
+| `optimize` | `_cmd_optimize` 472-535 | `_args_optimize` 538-558（`_parse_grid` 416-436） |
+| `validate` | `_cmd_validate` 693-786 | `_args_validate` 789-819（`_VALIDATE_ACTIONS` 690） |
+| `check` | `_cmd_check` 559-568 | `_args_check` 571-572（无参数） |
+| `cold-backup` | `_cmd_cold_backup` 575-583 | `_args_cold_backup` 586-589 |
+| `runs` | `_cmd_runs` 608-628 | `_args_runs` 631-634 |
+| `show` | `_cmd_show` 637-681 | `_args_show` 684-690 |
+| 注册表 / 分发 | `COMMANDS` 820-846 / `main()` 849-864 | — |
+
+> **行号为 2026-10-06 实测**（原表为 1.1.0 收编时快照，本批全员复测后刷新——RC 批次与 CLI 收编使多数行号漂移；
+> 维护时按附录 C-1 重新实测，**不得沿用**）。
 
 > 编排实现委托 `btf/app/services.py`（CLI 与 API 同源）：`run_backtest` / `build_report_file` /
 > `build_dataset` / `run_gate_check` / `cold_backup` / `list_runs` / `run_detail`。
@@ -1073,4 +1235,4 @@ bt cold-backup [--reason R] [--out DIR] [--verify DIR]
 
 ---
 
-*本手册覆盖 `bt` 全部 11 命令；任意命令加 `--help` 可获得与本文一致的即时参数说明。*
+*本手册覆盖 `bt` 全部 12 命令；任意命令加 `--help` 可获得与本文一致的即时参数说明。*

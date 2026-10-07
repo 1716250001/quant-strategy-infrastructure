@@ -13,12 +13,16 @@ from btf.app.services import (
     build_report_file,
     cold_backup,
     filter_btf_env,
+    freeze_dataset,
+    freeze_payload,
     list_runs,
     parse_override_value,
     parse_overrides,
     run_backtest,
     run_detail,
     run_gate_check,
+    run_mc,
+    run_walk_forward,
 )
 
 __all__ = [
@@ -30,10 +34,14 @@ __all__ = [
     "build_report_file",
     "cold_backup",
     "filter_btf_env",
+    "freeze_dataset",
+    "freeze_payload",
     "list_runs",
     "parse_override_value",
     "parse_overrides",
     "run_backtest",
     "run_detail",
     "run_gate_check",
+    "run_mc",
+    "run_walk_forward",
 ]

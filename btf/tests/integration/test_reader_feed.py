@@ -29,17 +29,21 @@ def _skip_if_no_data():
 
 
 class TestTablesMeta:
-    """17 表登记与架构字典一致（05 §9.4，含 E3/E4 勘误值）。"""
+    """表登记与架构字典一致（05 §9.4，含 E3/E4 勘误值；**RC-04：18 → 19**）。"""
 
     def test_tables_registered(self):
-        """05 §9.4 字典编号 17 项（T-01..T-17，其中 T-12=fund_daily+etf_limit
-        两张物理表）→ 物理表 18 张。"""
-        assert len(TABLES) == 18
+        """05 §9.4：**RC-04（2026-10-05）新增 T-19 `fund_adj`（ETF 复权因子，
+        起点 19991022）** ⇒ 物理表 **19 张**（原 18）。
+
+        断言值随**规范变更**更新（非弱化）：新语义由
+        `tests/unit/test_fund_adj_rc04.py::test_registered_and_19_tables` 覆盖。
+        """
+        assert len(TABLES) == 19
         for required in (
             "daily", "adj_factor", "stk_limit", "suspend_d", "namechange",
             "dividend", "stock_basic", "trade_cal", "index_daily", "daily_basic",
             "index_weight", "index_dailybasic", "new_share", "moneyflow",
-            "fina_indicator", "fx_daily", "fund_daily", "etf_limit",
+            "fina_indicator", "fx_daily", "fund_daily", "etf_limit", "fund_adj",
         ):
             assert required in TABLES, f"核心表缺失: {required}"
 

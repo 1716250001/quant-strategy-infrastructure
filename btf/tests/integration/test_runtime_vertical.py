@@ -41,6 +41,16 @@ def runtime_config():
             "initial_cash": 1_000_000,
         },
         "data": {"feed": FEED_NAME},
+        # RC-01（2026-10-05）：默认滑点已改 pct 0.001（非零摩擦）——
+        # 本 fixture 的断言锚定"T+1 开盘原始成交价 10.1"，故**显式声明零摩擦**
+        # 保留原语义（改入参、不改断言数值；派单 §3 回归处置铁律）。
+        # RC-02（2026-10-05）：默认 VPP=0.05 会使 90,000 股缩量至 50,000 股
+        # （bar.volume 1e6 × 5%）——本 fixture 断言锚定"全额 90,000 股"，
+        # 故**显式关闭 VPP**（改入参、不改断言数值）。
+        "execution": {
+            "slippage": {"model": "none"},
+            "handler_params": {"volume_participation": None},
+        },
         # X-7（Q1=A）：显式声明无风控裸奔（默认层已拒绝空链）
         "risk": {"rules": [], "allow_empty_chain": True},
     }
@@ -77,6 +87,68 @@ class TestRuntimeVertical:
             runtime_config,
             environ={"BTF_EXECUTION__COST_MODEL": "flat_rate"}).build()
         assert type(rt.cost_model).__name__ == "FlatRateCostModel"
+
+
+@pytest.mark.l2
+class TestSlippageDefaultRc01:
+    """RC-01（2026-10-05）：滑点缺省 = `pct 0.001`（单边 10bp，非零摩擦）；
+    显式 `model: none` 语义优先且必告警（与 cost_model=zero 对称）。"""
+
+    def test_default_is_pct_10bp(self, runtime_config):
+        from btf.execution.cost import PctSlippage
+
+        runtime_config.pop("execution", None)        # 空 execution 配置
+        rt = BTFRuntime().load_config(runtime_config).build()
+        assert isinstance(rt.slippage, PctSlippage)
+        assert rt.slippage.pct == pytest.approx(0.001)
+
+    def test_explicit_none_kept_and_warned(self, runtime_config, caplog):
+        import logging
+
+        from btf.execution.cost import NoSlippage
+
+        runtime_config["execution"] = {"slippage": {"model": "none"}}
+        with caplog.at_level(logging.WARNING, logger="btf.runtime._runtime"):
+            rt = BTFRuntime().load_config(runtime_config).build()
+        assert isinstance(rt.slippage, NoSlippage)   # 显式语义未被默认值吞掉
+        assert any("零摩擦" in r.getMessage() for r in caplog.records)
+
+    def test_switching_model_drops_pct_params(self, runtime_config):
+        """深合并残留防护：显式换模型时，默认层的 `{"pct": 0.001}` 不得透传
+        （否则 NoSlippage/FixedSlippage 会 TypeError）；用户自带 params 保留。"""
+        from btf.execution.cost import FixedSlippage
+
+        runtime_config["execution"] = {"slippage": {"model": "fixed"}}
+        rt = BTFRuntime().load_config(runtime_config).build()
+        assert isinstance(rt.slippage, FixedSlippage)
+        assert rt.slippage.amount == pytest.approx(0.01)   # 模型自带默认
+
+        runtime_config["execution"] = {
+            "slippage": {"model": "fixed", "params": {"amount": 0.02}}}
+        rt2 = BTFRuntime().load_config(runtime_config).build()
+        assert rt2.slippage.amount == pytest.approx(0.02)  # 用户 params 原样
+
+
+@pytest.mark.l2
+class TestVppDefaultRc02:
+    """RC-02（2026-10-05）：VPP 缺省 `0.05`（默认启用，不再零冲击）；
+    显式 `{}`（空 dict = 清空）与显式 `null` 两条通道均回到不启用。"""
+
+    def test_default_vpp_assembled(self, runtime_config):
+        runtime_config.pop("execution", None)
+        rt = BTFRuntime().load_config(runtime_config).build()
+        assert rt.handler._vpp == pytest.approx(0.05)
+
+    def test_empty_handler_params_disables(self, runtime_config):
+        runtime_config["execution"] = {"handler_params": {}}
+        rt = BTFRuntime().load_config(runtime_config).build()
+        assert rt.handler._vpp is None
+
+    def test_explicit_null_disables(self, runtime_config):
+        runtime_config["execution"] = {
+            "handler_params": {"volume_participation": None}}
+        rt = BTFRuntime().load_config(runtime_config).build()
+        assert rt.handler._vpp is None
 
 
 @pytest.mark.l2

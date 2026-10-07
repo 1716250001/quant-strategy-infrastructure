@@ -16,12 +16,15 @@
 
 **对外 API 不变**（`BTFRuntime` / `make_store` / `fee_segments` / `DataQualityError` /
 `SHORT_PERIOD_TRADING_DAYS`），所有 `from btf.runtime import …` 的调用方无需改动。
+**CL-1（19 号 §72.2）**：新增导出 `MIN_OPTIMIZE_TRADING_DAYS`（`optimize` 样本下限；
+**纯新增**，无既有调用方受影响）。
 
 依赖纪律：`btf.runtime` 是**装配根**，可触达 registry/data/engine/… 全部内层
 （不参与 `Layered architecture` 的分层序号，故不构成逆向依赖）；
 入口层（cli/api）→ runtime 的边由契约新 10 的**门面豁免**显式留痕。
 """
 from btf.runtime._runtime import (
+    MIN_OPTIMIZE_TRADING_DAYS,
     SHORT_PERIOD_TRADING_DAYS,
     BTFRuntime,
     DataQualityError,
@@ -30,6 +33,7 @@ from btf.runtime._runtime import (
 )
 
 __all__ = [
+    "MIN_OPTIMIZE_TRADING_DAYS",
     "SHORT_PERIOD_TRADING_DAYS",
     "BTFRuntime",
     "DataQualityError",

@@ -12,7 +12,12 @@ tools/doctor.py — 环境自检
   5. 数据速览   各目录表数、最新日期（复用 freshness 能力）
   6. API 凭据   tushare / pushplus token 是否已配置（只查配置，不联网）
   7. 配置完整性 config.py 条目是否被误删（与回归 R11 共用判据）
-  8. 定时任务   列出已登记的定时任务（若可访问）
+  7b. 死配置复活  [ARCHIVED] 标记项是否被重新引用
+  8. 漏网接口    monitor=True 的漏网接口是否**真的会被每天调用**（空转检测）+ 新鲜度。
+                ⚠ 只查 monitor=True 的：monitor=False 的（如 hk_daily/us_daily，
+                本地无表、走 akshare 替代源且新鲜度由替代源侧自带检查）本就不在
+                Tushare 日更体系内，跳过而非漏检 —— 详见 config.LEAKY_IDLE_EXEMPT。
+  9. 定时任务   列出已登记的定时任务（若可访问）
 
 用法:
   python main.py doctor                  # 全部检查（离线）
@@ -29,7 +34,7 @@ from datetime import datetime
 
 from config import (
     CODE_DIR, PROJECT_DIR, MARKET_DATA_DIR, META_DIR, DOC_DIR, TS_TOKEN,
-    PUSHPLUS_TOKEN,
+    PUSHPLUS_TOKEN, LEAKY_IDLE_EXEMPT,
 )
 
 OK = "✓"
@@ -332,6 +337,108 @@ def check_dead_config_revival(rep):
 
 
 # ============================================================
+# 9. 漏网接口：监控空转检测 + 新鲜度（2026-10-01 新增）
+# ============================================================
+def check_leaky_permissions(rep):
+    """LEAKY_PERMISSIONS 自检 —— 回答"漏网失效能不能被自动发现"。
+
+    背景（fund_adj 实证，2026-10-01）：
+      LEAKY_PERMISSIONS 的 monitor=True 是**被动告警**——只在接口被调用失败时提示
+      （fetch/base.py）、以及日更结束时汇总**本次涉及的接口**（fetch/daily_update.py）。
+      它从来不是主动心跳。⇒ **不进 DAILY_UPDATE_GROUPS 的漏网接口，没人每天调它，
+      失效就永远发现不了**——登记 monitor=True 给的是安全感，不是覆盖。
+      fund_adj 正是因此空转（库停 20260918，无人察觉）。
+
+    两个判据:
+      ① 空转：接口不在任何日更组 ⇒ 每日零调用 ⇒ 告警形同虚设
+      ② 变旧：有本地表但最新日期落后 daily 基准 > 3 个自然日
+    """
+    try:
+        from config import LEAKY_PERMISSIONS, DAILY_UPDATE_GROUPS
+        from common import reader
+    except Exception as e:
+        rep.warn("漏网接口", "检查未执行", f"{str(e)[:60]}")
+        return
+
+    daily_groups = set()
+    for members in DAILY_UPDATE_GROUPS.values():
+        daily_groups |= set(members)
+
+    base = None
+    try:
+        reader.clear_cache("daily")
+        base = reader.latest_date("daily")
+    except Exception:
+        pass
+
+    def _days(a, b):
+        """YYYYMMDD 日期差（自然日）；解析失败返回 None"""
+        try:
+            return (datetime.strptime(b, "%Y%m%d") - datetime.strptime(a, "%Y%m%d")).days
+        except Exception:
+            return None
+
+    idle, stale, no_table, undated, healthy, exempted = [], [], [], [], [], []
+    for api, info in LEAKY_PERMISSIONS.items():
+        if not info.get("monitor"):
+            continue
+        # 按设计就不该每日调用的（接口语义不支持 / 全量重拉代价不可接受）
+        # ⇒ 归为"豁免"而非"空转"，避免与真疏漏混在一起刷屏
+        if api in LEAKY_IDLE_EXEMPT:
+            exempted.append(api)
+            continue
+        # ⚠ 区分"目录不存在"与"有表但读不出日期列"——后者仍须参与空转判定
+        #   （实证 share_float 有目录，只是无 trade_date 列，不能当"无表"放过去）
+        has_dir = os.path.isdir(os.path.join(MARKET_DATA_DIR, api))
+        if not has_dir:
+            no_table.append(api)          # 本地无表（如 hk_daily/us_daily 走 akshare）
+            # ⚠ 不进 idle 判定：它们本就不走 Tushare 日更那条路（替代源自建），
+            #    "不在日更组"不构成风险，报出来只是噪音。真风险在"应该日更却没日更"。
+            continue
+        latest = None
+        try:
+            reader.clear_cache(api)
+            latest = reader.latest_date(api)
+        except Exception:
+            latest = None
+        gap = _days(latest, base) if (base and latest) else None
+        if latest is None:
+            undated.append(api)
+        elif gap is not None and gap > 3:
+            stale.append(f"{api}={latest}(落后基准{base} {gap}天)")
+        if api not in daily_groups:
+            idle.append(api)
+        elif gap is None or gap <= 3:
+            healthy.append(api)
+
+    if idle:
+        rep.warn("漏网接口", "监控空转",
+                 f"⛔ {len(idle)} 个漏网接口**不在任何日更组** ⇒ 每日零调用 ⇒ "
+                 f"失效无法自动发现: {', '.join(idle)}"
+                 f"（登记 monitor=True 只在被调用失败时才告警）")
+    else:
+        rep.ok("漏网接口", "监控空转",
+               f"{len(healthy)} 个受监控漏网接口均纳入日更（失效可被日发现）")
+    if exempted:
+        rep.items.append({
+            "group": "漏网接口", "name": "设计豁免（非真空转）", "status": "－",
+            "detail": f"{len(exempted)} 个按设计不日更（接口语义/代价所限，"
+                      f"原因见 config.LEAKY_IDLE_EXEMPT）: {', '.join(exempted)}"})
+    if stale:
+        rep.warn("漏网接口", "新鲜度", f"落后: {', '.join(stale)}")
+    elif base:
+        rep.ok("漏网接口", "新鲜度", f"在库漏网表均不落后于基准 {base}")
+    if no_table:
+        rep.items.append({
+            "group": "漏网接口", "name": "本地无表", "status": "－",
+            "detail": f"{len(no_table)} 个走替代源/未建库: {', '.join(no_table)}"})
+    if undated:
+        rep.items.append({
+            "group": "漏网接口", "name": "无日期列", "status": "－",
+            "detail": f"{len(undated)} 个有表但无日期列，无法判新鲜度: {', '.join(undated)}"})
+
+
+# ============================================================
 # 8. 定时任务
 # ============================================================
 def check_scheduler(r):
@@ -370,6 +477,7 @@ def run_doctor(network=False, as_json=False):
     check_credentials(r, network=network)
     check_config_integrity(r)
     check_dead_config_revival(r)
+    check_leaky_permissions(r)
     check_scheduler(r)
 
     if as_json:

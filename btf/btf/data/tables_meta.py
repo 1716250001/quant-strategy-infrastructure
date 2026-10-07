@@ -143,14 +143,23 @@ ETF_LIMIT = TableMeta(
     pk=("ts_code", "trade_date"),
     note="ETF 涨跌停价；起点 2019-06-26（终审 E3）——更早由 BoardRule 计算回退并披露",
 )
+#: ETF 复权因子（**RC-04，2026-10-05**；T-19，18 → 19 表）：份额折算 /
+#: 不定期折算的**唯一来源**——`adj_factor` 只含股票，ETF 查该表必然无行
+#: （原实现静默回落 1.0 ⇒ ETF 未复权价的折算日跳变污染回测价格序列）。
+#: 起点经主库实测（`fund_adj/1999.parquet` 最小 trade_date = 19991022）。
+FUND_ADJ = TableMeta(
+    name="fund_adj", layout=Layout.BY_YEAR, date_col="trade_date", start="19991022",
+    pk=("ts_code", "trade_date"),
+    note="ETF 复权因子；ETF/LOF 复权唯一口径（股票走 adj_factor；RC-04）",
+)
 
-#: 全部 18 表注册表（05 §9.4：T-01..T-18——14 BY_YEAR / 2 SINGLE / 2 METADATA）
+#: 全部 19 表注册表（05 §9.4：T-01..T-19——15 BY_YEAR / 2 SINGLE / 2 METADATA）
 TABLES: dict[str, TableMeta] = {
     t.name: t for t in (
         DAILY, ADJ_FACTOR, STK_LIMIT, SUSPEND_D, NAMECHANGE, DIVIDEND,
         STOCK_BASIC, TRADE_CAL, INDEX_DAILY, DAILY_BASIC, INDEX_WEIGHT,
         INDEX_DAILYBASIC, NEW_SHARE, MONEYFLOW, FINA_INDICATOR, FX_DAILY,
-        FUND_DAILY, ETF_LIMIT,
+        FUND_DAILY, ETF_LIMIT, FUND_ADJ,
     )
 }
 
@@ -183,5 +192,17 @@ def daily_table_of(symbol: str) -> str:
     return "fund_daily"                       # ETF/LOF（51x/56x/58x/159x/16x/50x）
 
 
+def factor_table_of(symbol: str) -> str:
+    """**复权因子表路由**（RC-04，2026-10-05）：股票 → `adj_factor`；ETF/LOF → `fund_adj`。
+
+    判定**复用 `daily_table_of`**（同一套代码段/后缀逻辑）——禁止另写第二套
+    判定（双真源必然漂移）。指数无复权因子（btf 内不复权指数），回落
+    `adj_factor` 保持既有行为。
+    """
+    return ("fund_adj" if daily_table_of(symbol) == "fund_daily"
+            else "adj_factor")
+
+
 __all__ = ["INDEX_PREFIXES", "INDEX_SUFFIXES", "STOCK_PREFIXES", "STOCK_SHORT",
-           "TABLES", "Layout", "TableMeta", "UnitConversion", "daily_table_of"]
+           "TABLES", "Layout", "TableMeta", "UnitConversion", "daily_table_of",
+           "factor_table_of"]

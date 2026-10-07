@@ -18,7 +18,13 @@
     python tools/run_v77_robustness.py                 # 默认矩阵（5 区间 × 2 参数）
     python tools/run_v77_robustness.py --params 10     # 只跑 top_k=10
     python tools/run_v77_robustness.py --periods 0,4   # 指定区间索引
+    python tools/run_v77_robustness.py --ee1           # EE-1 **双锚**对照（preRC+delivered）
 退出码：0=全部完成 / 1=有失败格
+
+**成本口径纪律（GG-1，19 号 §63）**：本工具的一切成本口径**显式声明**于
+`COST_PROFILES`，**不依赖全局默认值**——RC-02 变更默认（0.1% 滑点 + 5% 参与率）
+曾使"对账入口"静默漂移（P1-NEW-12：`--ee1` 必红）；`--ee1` 现按 **preRC /
+delivered 双锚**各跑一次并分别比对冻结参照（§63.2）。
 """
 from __future__ import annotations
 
@@ -50,18 +56,43 @@ PERIODS: list[tuple[str, str, str]] = [
 #: 参数档（top_k）
 K_VALUES = (10, 5)
 #: **EE-1 对照区间**（原 §23.2 唯一可采信结论的区间）——`--ee1` 直接复跑该单格，
-#: 与赤潮双路径参照值逐位比对（P1-NEW-9 的可复现入口；19 号 §55.1.3）
+#: 与双路径参照值逐位比对（P1-NEW-9 的可复现入口；19 号 §55.1.3 / §63.2）
 EE1 = {"label": "EE-1 Z-6 对照（原 §23.2 区间）",
        "start": "2023-01-01", "end": "2026-09-23", "top_k": 10}
-#: 参照值（赤潮 §54.3.1 双路径；容差 1e-4）
-EE1_REF = {"000300.SH|return": 0.161882, "000300.SH|excess": 0.071938,
-           "000300.SH|ir": 0.050426, "total_return": 0.233820,
-           "n_fills": 441, "n_days": 904}
+#: **成本口径档**（GG-1a；19 号 §63.1）：两档**均显式声明**、绝不依赖全局默认——
+#: RC-02 变更默认（`pct 0.001` + VPP 0.05）曾让本工具"对账语义"静默漂移
+#: （P1-NEW-12），显式声明是结构性防复发。
+COST_PROFILES: dict[str, dict] = {
+    "preRC": {"slippage": {"model": "none"},
+              "handler_params": {"volume_participation": None}},
+    "delivered": {"slippage": {"model": "pct", "params": {"pct": 0.001}},
+                  "handler_params": {"volume_participation": 0.05}},
+}
+#: **双锚参照值**（GG-1b；冻结于 19 号 §63.2；容差 1e-4）：
+#: `preRC` = 对账口径（赤潮 §54.3.1 双路径，零摩擦）｜
+#: `delivered` = 交付默认口径（0.1% 滑点 + 5% 参与率，**现实语义锚**）。
+#: `--ee1` 两档各跑一次、分别比对——**两个世界都绿灯才算通过**。
+EE1_REFS: dict[str, dict[str, float]] = {
+    "preRC": {"000300.SH|return": 0.161882, "000300.SH|excess": 0.071938,
+              "000300.SH|ir": 0.050426, "total_return": 0.233820,
+              "n_fills": 441, "n_days": 904},
+    "delivered": {"000300.SH|return": 0.161882, "000300.SH|excess": 0.060720,
+                  "000300.SH|ir": 0.030531, "total_return": 0.222602,
+                  "n_fills": 451, "n_days": 904},
+}
 #: 基准（须在 index_daily 内可读）
 BENCHMARKS = ("000300.SH", "000905.SH")
 
 
-def _config(start: str, end: str, top_k: int) -> dict:
+def _config(start: str, end: str, top_k: int, cost: str = "delivered") -> dict:
+    """单格/矩阵配置。
+
+    `cost` ∈ `COST_PROFILES`（**显式**成本口径）：默认 `"delivered"` 与 RC-02 后的
+    全局默认等值 ⇒ 矩阵既有语义不变；`--ee1` 双锚各取一档**显式**跑（GG-1）。
+    """
+    execution = {"handler": "next_open", "cost_model": "flat_rate",
+                 "rebalancer": "full"}
+    execution.update(COST_PROFILES[cost])
     return {
         "schema_version": "backtest.v1",
         "run": {
@@ -72,8 +103,7 @@ def _config(start: str, end: str, top_k: int) -> dict:
             "initial_cash": 1_000_000,
         },
         "data": {"feed": "tushare_parquet"},
-        "execution": {"handler": "next_open", "cost_model": "flat_rate",
-                      "rebalancer": "full"},
+        "execution": execution,
         "risk": {"rules": [{"name": "tradability"}, {"name": "max_weight"},
                            {"name": "cash_check"}]},
         "rules": {"source": "mirror_json", "path": str(MIRROR)},
@@ -163,12 +193,12 @@ def _excess_ir(nav: list[tuple[str, float]], bench: dict[str, float]
 
 
 def run_cell(label: str, start: str, end: str, top_k: int,
-             out_dir: Path) -> dict:
+             out_dir: Path, cost: str = "delivered") -> dict:
     """单格：真入口（`persist=True`）跑一次 → metrics.json + 相对基准。"""
     from btf.runtime import BTFRuntime, make_store
 
     t0 = time.perf_counter()
-    rt = BTFRuntime().load_config(_config(start, end, top_k)).build()
+    rt = BTFRuntime().load_config(_config(start, end, top_k, cost)).build()
     result = rt.run(store=make_store(out_dir / "runs"))
     wall = time.perf_counter() - t0
     nav = [(s.date.to_ymd(), s.total_value) for s in result.snapshots]
@@ -210,7 +240,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--params", default="", help="逗号分隔 top_k（默认 10,5）")
     parser.add_argument("--periods", default="", help="逗号分隔区间索引（默认全部）")
     parser.add_argument("--ee1", action="store_true",
-                        help="只复跑 EE-1 对照区间并与双路径参照值逐位比对")
+                        help="复跑 EE-1 对照区间：双锚（preRC/delivered）各跑一次，"
+                             "与 §63.2 冻结参照逐位比对")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -220,23 +251,32 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     out_dir = Path(args.out)
     if args.ee1:
-        # EE-1 复现入口（P1-NEW-9）：单格 + 与双路径参照值逐位比对 + 端点核对
+        # EE-1 复现入口（P1-NEW-9 / GG-1b **双锚**）：同格两跑（preRC、delivered），
+        # 两跑**均显式声明**成本档；各自与冻结参照逐位比对 + 端点核对
         out_dir.mkdir(parents=True, exist_ok=True)
-        row = run_cell(EE1["label"], EE1["start"], EE1["end"], EE1["top_k"],
-                       out_dir)
-        print(f"[ee1] run_id={row['run_id']} | 端点 "
-              f"策略 {row['000300.SH|strat_first']}→{row['000300.SH|strat_last']}"
-              f" / 基准 {row['000300.SH|bench_first']}→"
-              f"{row['000300.SH|bench_last']} | aligned="
-              f"{row['000300.SH|aligned']}")
-        for key, ref in EE1_REF.items():
-            got = row.get(key)
-            ok = got is not None and abs(float(got) - float(ref)) <= 1e-4
-            print(f"  {key:24s} 本机 {got!r:24s} 参照 {ref!r:14s} "
-                  f"{'✅' if ok else '❌'}")
-            if not ok:
-                return 1
-        print("[ee1] ✅ 与双路径参照值逐位一致（容差 1e-4）")
+        bad: list[str] = []
+        for profile, refs in EE1_REFS.items():
+            row = run_cell(EE1["label"], EE1["start"], EE1["end"],
+                           EE1["top_k"], out_dir, cost=profile)
+            print(f"[ee1/{profile}] run_id={row['run_id']} | "
+                  f"成本 {COST_PROFILES[profile]} | 端点 "
+                  f"策略 {row['000300.SH|strat_first']}→"
+                  f"{row['000300.SH|strat_last']}"
+                  f" / 基准 {row['000300.SH|bench_first']}→"
+                  f"{row['000300.SH|bench_last']} | aligned="
+                  f"{row['000300.SH|aligned']}")
+            for key, ref in refs.items():
+                got = row.get(key)
+                ok = got is not None and abs(float(got) - float(ref)) <= 1e-4
+                print(f"  {key:24s} 本机 {got!r:24s} 参照 {ref!r:14s} "
+                      f"{'✅' if ok else '❌'}")
+                if not ok:
+                    bad.append(f"{profile}:{key}")
+        if bad:
+            print(f"[ee1] ❌ 与冻结参照不一致：{bad}")
+            return 1
+        print("[ee1] ✅ 双锚（preRC / delivered）与 §63.2 冻结参照逐位一致"
+              "（容差 1e-4）")
         return 0
     ks = [int(x) for x in args.params.split(",") if x.strip()] or list(K_VALUES)
     idx = ([int(x) for x in args.periods.split(",") if x.strip()]

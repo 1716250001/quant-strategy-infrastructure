@@ -122,6 +122,38 @@ class TestCliBenchmarkEndToEnd:
         assert manifest["metrics_digest"]
         assert "report" in manifest["config_effective"]
 
+    def test_optimize_grid_includes_information_ratio(self, _feed_registered,
+                                                      tmp_path):
+        """RC-08（2026-10-05）：配 `report.benchmark` ⇒ **网格组合**含基准
+        相对项（IR / 超额），可作 `--objective information_ratio` 排序键
+        （与 `bt run` 同口径；未配基准不报错见 L1 用例）。"""
+        from btf.cli.main import main
+
+        cfg = _write_config(tmp_path)
+        out_json = tmp_path / "grid.json"
+        assert main(["optimize", "--config", str(cfg),
+                     "--grid", "run.params.weight=0.9",
+                     "--objective", "information_ratio",
+                     "--workers", "0", "--allow-short",
+                     "--out", str(out_json)]) == 0
+        report = json.loads(out_json.read_text(encoding="utf-8"))
+        metrics = report["results"][0]["metrics"]
+        for key in ("information_ratio", "annualized_excess",
+                    "tracking_error", "excess_return"):
+            assert key in metrics, key
+
+    def test_run_with_benchmark_no_no_benchmark_warn(self, _feed_registered,
+                                                     tmp_path, capsys):
+        """RC-09 反向探针：配了 benchmark ⇒ 终端**不得**出现「无基准对照」
+        （防披露"恒现"——与无基准用例构成双向对照）。"""
+        from btf.cli.main import main
+
+        cfg = _write_config(tmp_path)
+        assert main(["run", "--config", str(cfg),
+                     "--out", str(tmp_path / "runs")]) == 0
+        out = capsys.readouterr().out
+        assert "无基准对照" not in out
+
     def test_bad_benchmark_format_rejected_at_config_check(self, _feed_registered,
                                                           tmp_path):
         """P1-NEW-6：形制非法 → `bt config-check` 即拒（不必跑回测）。"""

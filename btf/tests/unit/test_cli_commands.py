@@ -2,7 +2,9 @@
 """CLI 命令族冒烟（M2 任务 5.9；18 号 5.9 验收 + CLI 审查报告-20260930 收编）。
 
 验收：
-    1. 十一命令登记（注册表式：加命令=加一行，不改动分发骨架）；
+    1. 十二命令登记（注册表式：加命令=加一行，不改动分发骨架）；
+       （**2026-10-05**：新增 `validate`——RC-15/16 派单要求的 `bt validate
+       walk-forward|mc`；守卫同步 11 → 12，属**有意扩面**而非回归）
     2. `--dry-run` 语义明确：装配完成但**不建 run 目录、不落盘**；
     3. run → report → verify 链路端到端可跑通（tmp 产物目录）；
     4. 失败路径显式退出码（配置缺失/未知 run）；
@@ -65,10 +67,10 @@ def config_path(tmp_path):
 
 
 class TestCommandRegistry:
-    def test_eleven_commands_registered(self):
+    def test_twelve_commands_registered(self):
         assert set(COMMANDS) == {"config-check", "run", "report", "verify",
                                  "test", "dataset", "optimize", "check",
-                                 "cold-backup", "runs", "show"}
+                                 "cold-backup", "runs", "show", "validate"}
 
     def test_each_command_has_help_and_args(self):
         for name, (handler, help_text, add_args) in COMMANDS.items():
@@ -164,11 +166,23 @@ class TestReportAndVerify:
 
 
 class TestTestCommand:
-    def test_runs_smoke_subset(self, capsys):
-        """bt test --layer all --pattern smoke：只跑冒烟子集（秒级）。"""
+    def test_runs_smoke_subset(self, capsys, tmp_path, monkeypatch):
+        """bt test --layer all --pattern smoke：只跑冒烟子集（秒级）。
+
+        **N8（19 号 §70.3，2026-10-06）**：本用例**自引用**（`bt test` 内部再跑
+        pytest）——嵌套 basetemp 若不隔离，会落在项目
+        `_scratch/pytest_tmp/bt_test/btf_bt_test_*` 并在**回收被环境守卫拦**时
+        **静默累积**（其 `[note]` 又被 capsys 捕获、父日志不可见）。
+        故**显式**把嵌套体隔离到本用例 `tmp_path`（随 pytest 会话回收），
+        并以输出断言锁定（隔离回归守卫）。
+        """
+        nested_root = tmp_path / "bt_test_root"
+        monkeypatch.setenv("BTFTOOL_TEST_PYTEST_BASETEMP", str(nested_root))
         code = main(["test", "--layer", "all", "--pattern", "smoke",
                      "--path", "tests/test_smoke.py"])
         assert code == 0
+        out = capsys.readouterr().out
+        assert str(nested_root) in out          # N8：嵌套 basetemp 已隔离（不回项目根）
 
 
 class TestDatasetCommand:
@@ -208,7 +222,7 @@ class TestGateAndBackupDelegation:
     """P0/P2：门禁与冷备**收编为子命令**——委托 `tools/` 单一真源。
 
     单测只验"转发到哪个脚本、参数怎么排、退出码怎么透传"；**真门禁不在此跑**
-    （九项动辄分钟级，跑它的地方是 `bt check` 自身与提交流程）。
+    （十项动辄分钟级，跑它的地方是 `bt check` 自身与提交流程）。
     """
 
     @staticmethod

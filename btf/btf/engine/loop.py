@@ -41,6 +41,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 from btf.data.feed import DataFeed
 from btf.domain.action import CorporateAction
@@ -55,7 +56,7 @@ from btf.domain.events import (
     SessionEndEvent,
 )
 from btf.domain.market import Bar
-from btf.domain.orders import Fill, Order, RejectCode, Rejection
+from btf.domain.orders import Fill, Order, OrderSide, RejectCode, Rejection
 from btf.domain.types import Instrument, TradingDate
 from btf.engine.clock import SimClock
 from btf.engine.events_log import EventLogWriter
@@ -81,6 +82,75 @@ class RunResult:
     n_days: int = 0
     events_path: Path | None = None
     events_sampled: bool = False                          # 事件日志采样降级标志
+    #: RC-11-A（2026-10-05）：**退市持仓残值披露**——区间末仍持仓且已退市的
+    #: 标的：`[{symbol, last_trade_date}]`。退市后无 bar ⇒ 市值沿用末次收盘价
+    #: （`portfolio.py` 残值携带语义，**数值零改动**，黄金集断言不受影响）；
+    #: 由 runtime 转成装配披露（manifest + 报告「假设与披露」可见）。
+    delisted_holdings: list[dict[str, str]] = field(default_factory=list)
+    #: **CL-3（19 号 §72.4）**：退市清算口径——`carry`（默认＝现状：残值按区间内
+    #: 末次可用收盘价携带、未清算）/ `writeoff`（按 0 核销，压力口径）。
+    delisted_settlement: str = "carry"
+    #: writeoff 的核销额（元；0 = 未核销/无退市持仓）——披露与手算校验锚点。
+    delisted_writeoff_amount: float = 0.0
+    #: **CL-2 第二段（R5′，19 号 §79.4）**：配股行权审计（逐事件：获配股数 /
+    #: 缴款额 / 现金缺口 / 理论除权价 / 上市日）——runtime 转 run 元数据与披露。
+    rights_events: list[dict[str, Any]] = field(default_factory=list)
+    #: 缩股（R6′ 代理）审计。
+    consolidations: list[dict[str, Any]] = field(default_factory=list)
+    #: 配股锁定期内卖出警告（获配股份上市日前卖出；**默认不建模锁定期**，
+    #: 故只警告、不阻断——§79.3 #3）。
+    lockup_sell_warnings: list[str] = field(default_factory=list)
+
+
+def _writeoff_settlement(portfolio: Portfolio, result: RunResult) -> float:
+    """`writeoff`：区间末按 0 核销退市持仓残值（**CL-3**，19 号 §72.4）。
+
+    口径出处：Q-1(a)＝清算价取「退市整理期末交易日收盘」＝ 区间内**末次可用
+    收盘价**（`_last_close`）；Q-2(b)＝默认现状 ＋ `--delisted-settlement` 显式
+    选择。**防前视**（§72.4 注解 3）：核销基准一律取 ≤ 区间末的末次收盘，
+    **不取任何区间外价**。
+
+    语义（只作用于**末日快照**，此前路径逐位不变）：
+      - 该标的市场价值 / 权重清零、`positions_qty` 置 0（"持仓视同清零"）；
+      - NAV 下调核销额；`daily_return / cumulative_return / drawdown` 按
+        N5-1 四式**重算**（保持 `audit_nav_four` 零漂移）；
+      - 引擎持仓对象 / 成交 / 事件日志**不改**（无成交、无现金流——纯估值口径）。
+
+    返回核销额（元）。
+    """
+    residual = 0.0
+    syms: list[str] = []
+    for item in result.delisted_holdings:
+        sym = str((item or {}).get("symbol"))
+        pos = portfolio.positions.get(sym)
+        if pos is None or not pos.qty:
+            continue
+        syms.append(sym)
+        residual += pos.qty * portfolio._last_close.get(sym, pos.avg_cost)
+    if not syms or not residual:
+        return 0.0
+
+    snapshots = result.snapshots
+    last = snapshots[-1]
+    new_tv = last.total_value - residual
+    base = snapshots[0].total_value
+    prev_tv = snapshots[-2].total_value if len(snapshots) > 1 else None
+    peak = max((s.total_value for s in snapshots[:-1]), default=new_tv)
+    peak = max(peak, new_tv)
+    scale = (last.total_value / new_tv) if new_tv else 0.0
+    drop = set(syms)
+    snapshots[-1] = replace(
+        last,
+        market_value=last.market_value - residual,
+        total_value=new_tv,
+        weights={k: v * scale for k, v in last.weights.items() if k not in drop},
+        positions_qty={k: v for k, v in last.positions_qty.items()
+                       if k not in drop},
+        daily_return=(0.0 if not prev_tv else new_tv / prev_tv - 1.0),
+        cumulative_return=(0.0 if not base else new_tv / base - 1.0),
+        drawdown=(0.0 if not peak else new_tv / peak - 1.0),
+    )
+    return residual
 
 
 class Engine:
@@ -101,7 +171,13 @@ class Engine:
         cross_section: Sequence[str] | None = None,
         event_log_path: Path | str | None = None,
         event_log_max_records: int = 500_000,
+        delisted_settlement: str = "carry",
     ):
+        if delisted_settlement not in ("carry", "writeoff"):
+            raise ValueError(
+                f"delisted_settlement 须为 carry|writeoff，得"
+                f" {delisted_settlement!r}（CL-3 / 19 号 §72.4）")
+        self._delisted_settlement = delisted_settlement
         self._feed = feed
         self._strategy = strategy
         self._start = start
@@ -143,6 +219,8 @@ class Engine:
                   if self._event_log_path else None)
         pending: list[Order] = []
         order_seq = 0
+        #: RC-11-A：持仓标的的末次有 bar 日（退市持仓披露用）
+        last_seen: dict[str, TradingDate] = {}
         # PF-9/P2-5：原无界 dict（键=策略查询过的标的；全市场口径可累积到
         # 全部标的 × 十年 Bar → 内存无上限）；今 LRU 有界（容量 ≫ 典型宇宙）。
         history_cache: BoundedDict[str, Sequence[Bar]] = BoundedDict(
@@ -220,6 +298,18 @@ class Engine:
             # ② 撮合 T-1 队列（③ 入账在 execute 内逐单）
             _emit(MarketOpenEvent(date=date, data=data))
             if pending:
+                # RC-10（2026-10-05）：**引擎级双时间戳断言**——信号日必须严格
+                # 早于执行日（`signal_time < execution_time`）。当前唯一注册
+                # 撮合路径是 next_open（T 收盘决策 → T+1 开盘成交），本断言是
+                # 对"将来新增同日/盘中撮合路径"的结构性防线（D 篇机械规则三）：
+                # 违反 ⇒ fail-closed，绝不静默按当日价成交。
+                for _o in pending:
+                    if not _o.created_at < date:
+                        raise RuntimeError(
+                            f"双时间戳断言失败：{_o.order_id} signal_time="
+                            f"{_o.created_at.to_ymd()} ≥ execution_time="
+                            f"{date.to_ymd()}——信号不得当日成交（RC-10，"
+                            f"撮合仅 next_open：T 决策 → T+1 开盘执行）")
                 involved = sorted({o.symbol for o in pending})
                 states = self._feed.trading_states(
                     date, involved, with_touch_flags=False)
@@ -249,6 +339,9 @@ class Engine:
                 LazyStates(lambda d=_date, s=_symbols: self._feed.trading_states(
                     d, s, with_touch_flags=False)),
                 _history_loader, _on_submit_target, _on_submit_order)
+            # RC-10：on_open 阶段——当日 bar 未收盘，ctx.bar() 拒访、
+            # history(end ≥ 当日) 拒（前视封堵；状态面板/持仓仍可读）
+            ctx._set_phase("open")
             self._strategy.on_open(ctx, date)
 
             # ⑤ 收盘重估（持仓标的）
@@ -266,11 +359,18 @@ class Engine:
                     if bar is not None:
                         closes[sym] = bar.close
             portfolio.mark_all(closes)
+            # RC-11-A：登记持仓标的的**末次有 bar 日**（退市持仓披露用；
+            # 无 bar 的日子不更新——末日仍缺 bar 且状态=退市 ⇒ 残值携带）
+            for _held in closes:
+                last_seen[_held] = date
 
             # ⑥ on_close（默认决策点）
             _emit(MarketCloseEvent(date=date, data=data))
             target = None
             explicit_orders = []
+            # RC-10：切回 close 阶段——收盘价已产生（⑤ 已重估），
+            # ctx.bar() 与 history(end == 当日) 恢复合法（既有契约）
+            ctx._set_phase("close")
             self._strategy.on_close(ctx, date)
 
             # ⑦ 目标 → 订单（草稿）
@@ -324,6 +424,61 @@ class Engine:
             result.snapshots.append(portfolio.snapshot(date))
             _emit(SessionEndEvent(date=date))
 
+        # RC-11-A（2026-10-05）：退市持仓残值披露——**只披露、不改数**。
+        # 候选 = 区间末仍持仓（qty>0）且末日无 bar 的标的；对候选做一次
+        # 状态查询，`is_delisted=True` 命中 ⇒ 登记（标的 / 末次交易日）。
+        # 提示：停牌（非退市）末日无 bar 的持仓**不进**本清单（反向探针依赖）。
+        if result.snapshots:
+            end_day = result.snapshots[-1].date
+            held = [s for s, pos in portfolio.positions.items() if pos.qty]
+            cands = sorted(s for s in held if last_seen.get(s) != end_day)
+            if cands:
+                end_states = self._feed.trading_states(
+                    end_day, cands, with_touch_flags=False)
+                for _sym in cands:
+                    _st = end_states.get(_sym)
+                    if _st is not None and _st.is_delisted:
+                        result.delisted_holdings.append({
+                            "symbol": _sym,
+                            "last_trade_date": (last_seen[_sym].to_ymd()
+                                                if _sym in last_seen else ""),
+                        })
+        # CL-3（19 号 §72.4；Q-2(b) 已裁）：清算口径登记 + writeoff 核销。
+        # carry（默认）＝ 现状（RC-11-A 只披露不改数）；writeoff ＝ 压力档：
+        # 区间末按 0 核销（末日快照清零、NAV 下调核销额；四式重算保一致）。
+        result.delisted_settlement = self._delisted_settlement
+        if (self._delisted_settlement == "writeoff"
+                and result.delisted_holdings and result.snapshots):
+            result.delisted_writeoff_amount = _writeoff_settlement(
+                portfolio, result)
+        # CL-2 第二段（R5′，19 号 §79.4）：审计转出 ＋ 锁定期卖出警告。
+        # 披露纪律：现金缺口 / 锁定期内卖出**必须可观测**（§79.3 #2/#3），
+        # 故 logger.warning（非静默）＋ 转 run 元数据（runtime 侧装配说明）。
+        result.rights_events = list(portfolio.rights_events)
+        result.consolidations = list(portfolio.consolidations)
+        for _ev in result.rights_events:
+            if _ev.get("cash_shortfall"):
+                logger.warning(
+                    "配股缴款现金缺口 %.2f 元（%s 除权 %s）——默认外部增资补足"
+                    "（CL-2 / §79.3 #2；非静默）", _ev["cash_shortfall"],
+                    _ev["symbol"], _ev["ex_date"])
+        if result.rights_events and result.fills:
+            for _ev in result.rights_events:
+                _listing = _ev.get("listing_date")
+                if not _listing:
+                    continue
+                for _f in result.fills:
+                    if (_f.symbol == _ev["symbol"]
+                            and _f.side is OrderSide.SELL
+                            and _ev["ex_date"] < _f.fill_date.to_ymd()
+                            < _listing):
+                        _msg = (f"配股锁定期内卖出：{_ev['symbol']} 于 "
+                                f"{_f.fill_date.to_ymd()}（除权 "
+                                f"{_ev['ex_date']} → 获配上市 {_listing}；"
+                                f"默认**不建模锁定期**——CL-2 / §79.3 #3）")
+                        if _msg not in result.lockup_sell_warnings:
+                            result.lockup_sell_warnings.append(_msg)
+                            logger.warning(_msg)
         result.n_days = clock.n_days
         if writer is not None:
             writer.close()

@@ -261,3 +261,72 @@ class ComponentAssembler:
             "tables_detail": detail,
             "mode": mode,
         }
+
+    def guard_dataset_version(self, period: Mapping[str, Any]) -> None:
+        """数据版本门禁（**RC-14**，2026-10-05）：声明版本 → 运行前校验哈希一致。
+
+        声明键：`data.dataset.version` / `data.dataset.expected_hash`（期望内容
+        哈希；同时声明须一致，否则自相矛盾即拒）与 `data.dataset.anchor_date`
+        （期望数据水位**下限**）。机制：
+
+          - **哈希门禁（严格相等）**：装配期实算 `content_hash`（档位 =
+            `data.fingerprint_mode`，缺省 meta）并比对；不一致 ⇒ ConfigError
+            （附两端哈希与档位——"拒绝静默换数"）；
+          - **水位门禁（≥ 声明）**：实算水位 = 各表 `date_max` 最大值
+            （**未裁剪**——与 manifest 披露的"裁剪到区间末"锚点不同义）；
+          - 内存 Feed（无文件指纹）声明任何版本键 ⇒ ConfigError（无法校验，
+            拒绝静默放行）；
+          - 通过 ⇒ 记装配披露（声明 vs 实算 + 档位）——"这条结论锚在哪份数据"。
+
+        **只在声明时计算**（opt-in；meta 档毫秒级 + 进程内 memo）——未声明
+        路径零成本（BB-1 纪律：网格搜索不因门禁变慢）。
+        """
+        cfg = self.rt.config or {}
+        data_cfg = cfg.get("data") or {}
+        ds_cfg = data_cfg.get("dataset") or {}
+        declared_version = str(ds_cfg.get("version") or "").strip()
+        declared_hash = str(ds_cfg.get("expected_hash") or "").strip()
+        declared_anchor = str(ds_cfg.get("anchor_date") or "").strip()
+        if not (declared_version or declared_hash or declared_anchor):
+            return
+        if (declared_version and declared_hash
+                and declared_version != declared_hash):
+            raise ConfigError([
+                "data.dataset.version 与 data.dataset.expected_hash 声明不一致"
+                f"（自相矛盾）：version={declared_version!r} / "
+                f"expected_hash={declared_hash!r}（RC-14）"])
+        declared = declared_version or declared_hash
+
+        info = self.compute_data_version(period)
+        mode = str(info.get("mode") or "?")
+        if mode == "in-memory" or not info.get("tables_detail"):
+            raise ConfigError([
+                "声明了 data.dataset.version/expected_hash/anchor_date，但当前 "
+                "Feed 为**内存 Feed**（无文件指纹）——数据版本门禁无法校验，"
+                "拒绝静默放行（RC-14：门禁的意义即「不一致即拒」）"])
+        computed_hash = str(info.get("content_hash") or "")
+        if declared and computed_hash != declared:
+            raise ConfigError([
+                f"数据版本门禁未通过（RC-14）：声明 {declared} ≠ 实算 "
+                f"{computed_hash}（档位 {mode}）——数据快照与声明不一致；"
+                f"如确认换数，请更新 data.dataset.version/expected_hash"])
+        watermarks = [d.get("date_max")
+                      for d in info.get("tables_detail", {}).values()
+                      if d.get("date_max")]
+        actual_anchor = max(watermarks) if watermarks else ""
+        if declared_anchor:
+            if not actual_anchor:
+                raise ConfigError([
+                    "数据版本门禁未通过（RC-14）：声明了 "
+                    f"data.dataset.anchor_date={declared_anchor}，但实算水位"
+                    "为空（tables_detail 无 date_max）"])
+            if actual_anchor < declared_anchor:
+                raise ConfigError([
+                    f"数据版本门禁未通过（RC-14）：数据水位 {actual_anchor} < "
+                    f"声明下限 {declared_anchor}——数据未更新到声明水位；"
+                    f"请先更新数据或下调声明"])
+        self.rt.assembly_notes.append(
+            "数据版本门禁通过（RC-14）：声明哈希 "
+            f"{declared or '（未声明）'} / 声明水位 "
+            f"{declared_anchor or '（未声明）'}；实算 {computed_hash}"
+            f"（档位 {mode}）、水位 {actual_anchor or '—'}")

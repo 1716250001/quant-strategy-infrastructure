@@ -29,6 +29,8 @@
     滑点（纯函数——确定性纪律，无随机源）：
         FixedSlippage:  fill_price = ref ± amount        [买 + / 卖 −]
         PctSlippage:    fill_price = ref × (1 ± pct)     [买 + / 卖 −]
+        SqrtImpactSlippage: fill_price = ref × (1 ± min(η·σ·√(Q/V), cap))
+                            [规模相关市场冲击近似；RC-12，2026-10-05]
 
 协议签名（04 §8.3.3 原文，M1 简化偏差本轮对齐——fees 含 date 分段选段所需；
 apply(order, ref_price, state, bar) 为 v0.5 VPP 成交量约束预留）。
@@ -229,6 +231,63 @@ class PctSlippage:
                 else ref_price * (1 - self.pct))
 
 
+@dataclass(frozen=True)
+class SqrtImpactSlippage:
+    """规模相关滑点（市场冲击近似，**RC-12，2026-10-05**；注册名 sqrt_impact）。
+
+    公式（平方根冲击模型；04 §8.3.3 协议、04 §8.2.4「宁可保守也不要乐观」）：
+
+        impact = min(η · σ · √(Q / V), impact_cap)
+        fill_price = ref × (1 + impact)   [买] / ref × (1 − impact)   [卖]
+
+    Q = 委托数量（股，`order.qty`）；V = 当日成交量（股，`bar.volume`）。
+
+    参数口径（**研究参数，须标定来源**——派单 §5 RC-12）：
+        `eta`（η）冲击系数（无量纲；缺省 0.1 = 业界常用平方根冲击量级）；
+        `sigma`（σ）日收益率波动率（分数；缺省 0.02 = 2%/日，
+              **A 股中高波动区间的典型量级——换标的/时期须重标定**）；
+        `impact_cap` 单边冲击上限（缺省 0.05 = 500bp，防小票极端值）。
+
+    边界（不施加，返回 ref_price）：`bar is None` / `volume ≤ 0` / `qty ≤ 0`。
+    口径注：Q 取**委托量**（协议 `apply(order, …)` 不含 VPP 受限后数量）；
+    VPP 缩量时冲击按委托量计 ⇒ 结果**偏保守**（冲击略高），符合
+    「宁可保守也不要乐观」。
+    确定性：纯函数、无随机源（与 `none/fixed/pct` 同纪律）。
+    **默认不启用**（缺省仍 `pct 0.001`）——本模型属成本敏感性研究的显式选择。
+    """
+
+    contract_version = CONTRACT_VERSION
+
+    eta: float = 0.1
+    sigma: float = 0.02
+    impact_cap: float = 0.05
+
+    def __post_init__(self) -> None:
+        if self.eta < 0 or self.sigma < 0 or self.impact_cap <= 0:
+            raise ValueError(
+                f"sqrt_impact 参数须 η≥0、σ≥0、impact_cap>0，得 "
+                f"eta={self.eta!r}, sigma={self.sigma!r}, "
+                f"impact_cap={self.impact_cap!r}")
+
+    def impact_of(self, qty: int, volume: float) -> float:
+        """单边冲击（分数；同公式单点，供单测/报告复算）。"""
+        if qty <= 0 or volume <= 0:
+            return 0.0
+        raw = self.eta * self.sigma * (qty / volume) ** 0.5
+        return min(raw, self.impact_cap)
+
+    def apply(self, order: Order, ref_price: float,
+              state: TradingState, bar: Bar | None) -> float:
+        if bar is None:
+            return ref_price
+        impact = self.impact_of(int(order.qty),
+                                float(getattr(bar, "volume", 0.0) or 0.0))
+        if impact == 0.0:
+            return ref_price
+        return (ref_price * (1 + impact) if order.side is OrderSide.BUY
+                else ref_price * (1 - impact))
+
+
 __all__ = [
     "A_SHARE_SEGMENTS",
     "AShareTieredFeeModel",
@@ -239,5 +298,6 @@ __all__ = [
     "NoSlippage",
     "PctSlippage",
     "SlippageModel",
+    "SqrtImpactSlippage",
     "ZeroCostModel",
 ]

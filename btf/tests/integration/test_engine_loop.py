@@ -169,6 +169,76 @@ class TestEngineLoop:
         engine.run()
         assert seen == [1, 2, 2]     # D1 首日仅 1 根；D2/D3 各 2 根
 
+    # ── RC-10（2026-10-05）：on_open 相位前视封堵 + 双时间戳断言 ──
+    def test_on_open_bar_blocked(self):
+        """on_open 阶段 `ctx.bar()` 拒访（当日 bar 未收盘，close 属未来）。"""
+        sc = t_plus1_scenario()
+
+        class BarPeek(StrategyBase):
+            def on_open(self, ctx: StrategyContext, date: TradingDate) -> None:
+                ctx.bar("000001.SZ")
+
+        engine = Engine(sc.feed, BarPeek(), start=D1, end=D3,
+                        initial_cash=100_000.0, instruments=sc.instruments)
+        with pytest.raises(RuntimeError, match="前视封堵"):
+            engine.run()
+
+    def test_on_open_history_current_blocked(self):
+        """on_open 阶段 `history(end == 当日)` 拒（RC-10 补拦等号）。"""
+        sc = t_plus1_scenario()
+
+        class HistPeek(StrategyBase):
+            def on_open(self, ctx: StrategyContext, date: TradingDate) -> None:
+                ctx.history("000001.SZ", date, n_bars=1)
+
+        engine = Engine(sc.feed, HistPeek(), start=D1, end=D3,
+                        initial_cash=100_000.0, instruments=sc.instruments)
+        with pytest.raises(RuntimeError, match="前视封堵"):
+            engine.run()
+
+    def test_phase_visible_close_still_legal(self):
+        """双向对照：相位可读；on_close 读当日 bar/history **仍合法**。"""
+        sc = t_plus1_scenario()
+        seen: list[tuple[str, str]] = []
+
+        class PhaseProbe(StrategyBase):
+            def on_open(self, ctx: StrategyContext, date: TradingDate) -> None:
+                seen.append(("open", ctx._phase))
+
+            def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
+                assert ctx.bar("000001.SZ") is not None
+                assert len(ctx.history("000001.SZ", date, n_bars=1)) == 1
+                seen.append(("close", ctx._phase))
+
+        engine = Engine(sc.feed, PhaseProbe(), start=D1, end=D3,
+                        initial_cash=100_000.0, instruments=sc.instruments)
+        engine.run()
+        assert seen == [("open", "open"), ("close", "close")] * 3
+
+    def test_double_timestamp_assertion_fails_closed(self):
+        """signal_time ≥ execution_time ⇒ 引擎级 fail-closed（RC-10）。
+
+        构造：D3 提交 `created_at=D5` 的显式订单 → D4 撮合前断言必红
+        （正常路径 T 决策 → T+1 执行不触发；本断言是对"将来新增同日
+        撮合路径"的结构性防线）。
+        """
+        from btf.domain.orders import Order, OrderSide, OrderType
+
+        sc = t_plus1_scenario()
+
+        class FutureDated(StrategyBase):
+            def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
+                if date == D3:
+                    ctx.submit_order(Order(
+                        order_id="", symbol="000001.SZ", side=OrderSide.BUY,
+                        order_type=OrderType.MARKET, qty=100,
+                        limit_price=None, created_at=D5))
+
+        engine = Engine(sc.feed, FutureDated(), start=D1, end=D5,
+                        initial_cash=100_000.0, instruments=sc.instruments)
+        with pytest.raises(RuntimeError, match="双时间戳"):
+            engine.run()
+
     def test_event_log_off_by_default(self):
         """不传 event_log_path → 不落盘（轻量路径）。"""
         sc = t_plus1_scenario()

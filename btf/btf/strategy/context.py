@@ -94,6 +94,11 @@ class StrategyContext:
         self._data = data
         self._states = states
         self._loader = history_loader
+        #: 阶段（RC-10）："close"（缺省；当日 bar 已收盘）/ "open"（on_open；
+        #: 当日 bar 未完成——`bar()` 拒访、`history(end >= 当日)` 拒）。
+        #: 引擎经 `_set_phase()` 在 on_open / on_close 前切换（引擎内部状态，
+        #: 不进策略公共 API——白名单守守卫见 `TestCtxApiBoundary`）。
+        self._phase: str = "close"
         # PF-9/P2-5：原无界 dict → LRU 有界（策略可见标的上限远小于 8k）
         self._cache: BoundedDict[str, Sequence[Bar]] = BoundedDict(
             maxsize=8_000, name="ctx.history")
@@ -114,21 +119,42 @@ class StrategyContext:
             raise RuntimeError("宇宙查询早于首个交易日（now=None）")
         return self._universe_loader(current)
     def bar(self, symbol: str) -> Bar | None:
-        """当日 bar（停牌缺席 → None）。"""
+        """当日 bar（停牌缺席 → None）。
+
+        **RC-10（2026-10-05）**：`on_open` 阶段**拒访**——T 日 bar 尚未收盘
+        （close/high/low 未产生，步骤⑤才重估），而 `data` 是**整日**截面，
+        直接暴露等于给"盘中前视"留通道。合规替代：状态面板 `ctx.state()`
+        （停牌/涨跌停/ST 已知）、`ctx.portfolio`（持仓/现金）；读价请在
+        `on_close`（默认决策点）或 `history(end < 当日)`。
+        """
+        if self._phase == "open":
+            raise RuntimeError(
+                f"前视封堵（on_open 阶段）：不得读当日 bar（symbol={symbol}）"
+                f"——close/high/low 在收盘重估（步骤⑤）后才产生；"
+                f"读状态请用 ctx.state()，读史请用 history(end < 当日)（RC-10）")
         return self._data.get(symbol)
 
     def history(self, symbol: str, end: TradingDate, fields: Sequence[str] | None = None,
                 n_bars: int = 1) -> list[Bar]:
         """截至 end（含）的最近 n_bars 个 bar（升序）。
 
-        前视封堵：end > 当前交易日 → RuntimeError（运行时断言，任务 2.5 验收）。
+        前视封堵（**RC-10，2026-10-05**——原实现只拦 `end > current`）：
+          - `end > current`：任何阶段拒（未来数据）；
+          - `end == current` ∧ **on_open 阶段**：拒——当日 bar 未收盘
+            （close 属未来信息）；`on_close` 阶段 `end == current` **合法**
+            （收盘价已产生；既有契约与用例 `test_history_within_current_ok`）。
         fields 预留（列裁剪优化，PoC 全字段返回）。
         """
         current = self._now()
-        if current is not None and end > current:
-            raise RuntimeError(
-                f"前视封堵：history end={end} 超过当前交易日 {current}"
-            )
+        if current is not None:
+            if end > current:
+                raise RuntimeError(
+                    f"前视封堵：history end={end} 超过当前交易日 {current}")
+            if end == current and self._phase == "open":
+                raise RuntimeError(
+                    f"前视封堵（on_open 阶段）：history end={end} 命中当日——"
+                    f"当日 bar 未收盘（close 在其后产生）；"
+                    f"请改用 end < {current}（RC-10）")
         bars = self._cache.get(symbol)
         if bars is None:
             bars = self._loader(symbol)
@@ -148,6 +174,19 @@ class StrategyContext:
     @property
     def current_date(self) -> TradingDate | None:
         return self._now()
+
+    # ── 阶段（RC-10：前视封堵的相位开关；引擎内部——**不进策略公共 API**）──
+    def _set_phase(self, phase: str) -> None:
+        """引擎专用（`engine/loop.py` 在 on_open/on_close 前调用）。
+
+        **刻意私有**：`StrategyContext` 公共成员受白名单守卫
+        （`tests/integration/test_rebalance_g7.py::TestCtxApiBoundary`）——
+        策略不需要感知相位（`bar()`/`history()` 的拒访即信号），
+        公开它属无必要的 API 扩面。
+        """
+        if phase not in ("open", "close"):
+            raise ValueError(f"phase 须为 open|close，得 {phase!r}")
+        self._phase = phase
 
     # ── 决策提交 ──
     def submit_target(self, target: TargetPortfolio) -> None:

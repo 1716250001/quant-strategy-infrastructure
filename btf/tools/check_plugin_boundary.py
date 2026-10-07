@@ -21,8 +21,9 @@
     python tools/check_plugin_boundary.py            # 检查（基线缺失时自动建立）
     python tools/check_plugin_boundary.py --update   # 开发变更后刷新基线
     python tools/check_plugin_boundary.py --update --reason "Z-1 报告转义修复 ..."
-注：**不在** `bt check` 九项内（核心文件变更后由人按 AA-3 显式刷新留痕，
-    故不并入常跑门禁——并入会让"基线漂移"被自动刷新掩盖；单跑本脚本）。
+注：**自 GG-6② 起为 `bt check` 第 10 项**（19 号 §63；常跑门禁的一部分）。
+     但**基线刷新仍不自动**——核心文件变更后须由人显式 `--update --reason` 留痕
+     （AA-3）；门禁只**比对**、绝不自动刷新（否则"基线漂移"会被静默掩盖）。
 """
 from __future__ import annotations
 
@@ -44,10 +45,16 @@ BASELINE_HISTORY = ROOT / "tools" / ".plugin_baseline_history.jsonl"
 #: `btf/runtime` 于 2026-09-29（R4 第一刀）由**单文件**升为**包**（`runtime.py`
 #: → `runtime/_runtime.py` + 4 个协作模块）⇒ 由 CORE_FILES 改入 CORE 整体跟踪
 #: （否则拆分后的新文件不进快照，"核心 diff 为零"在装配根不可证）。
+#: `btf/app`（应用层服务：R4 引入）与 `btf/optimize`（Walk-Forward/网格：
+#: `walkforward.py` 为 RC-15 新建）于 2026-10-06（GG-6③，19 号 §63）补入——
+#: 同 viz 先例：两包**从未进过快照**，其改动在"核心 diff 为零"下不可证。
+#: `btf/registry` 仍**刻意排除**（名字表本体 = 合法登记点；扩展登记必须可见，
+#: 另见 :74-84 的 AST 扫描豁免）。
 CORE = [
     "btf/domain", "btf/engine", "btf/execution", "btf/risk",
     "btf/portfolio", "btf/strategy", "btf/data", "btf/analytics",
     "btf/experiment", "btf/config", "btf/cli", "btf/viz", "btf/runtime",
+    "btf/app", "btf/optimize",
 ]
 CORE_FILES = ["btf/__init__.py"]
 

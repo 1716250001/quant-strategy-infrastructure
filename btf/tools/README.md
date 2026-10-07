@@ -2,14 +2,14 @@
 """开发工具目录（工具脚本不进 btf 包：核心包 diff 为零纪律）。
 
 常驻工具（可重复跑；多数已是 `bt` 子命令的**单一真源**，CLI 只转发不复制判定）：
-    check.py                  九项架构门禁（`bt check` 委托本脚本）
+    check.py                  十项架构门禁（`bt check` 委托本脚本；**逐项日志落盘** + 第 3 项冷启动复跑标注，N4）
     deps_budget.py            依赖预算 ≤8（门禁 4/9）
     check_domain_whitelist.py domain 白名单（门禁 6/9）
     check_report_render.py    报告渲染级结构（门禁 7/9）
     check_data_quality.py     数据不变量（门禁 8/9）
-    check_io_boundary.py      IO 单一入口（门禁 9/9）
-    check_plugin_boundary.py  插件边界基线（**不在九项内**：AA-3 显式刷新留痕）
-    check_rules_four_way.py   规则四方机检（**不在九项内**：需赤潮源码树）
+    check_io_boundary.py      IO 单一入口（门禁 9/10）
+    check_plugin_boundary.py  插件边界基线（**自 GG-6② 起为 `bt check` 第 10 项**；AA-3 显式刷新留痕）
+    check_rules_four_way.py   规则四方机检（**不在十项内**：需赤潮源码树）
     cold_backup.py            跨版本源码冷备（`bt cold-backup` 委托）
     build_golden.py           黄金集构建/对账/重算（`bt dataset` 委托）
     golden_refcalc.py         独立参考计算器（构建与校验共用；纯标准库，不 import btf）

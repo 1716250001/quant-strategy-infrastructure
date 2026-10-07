@@ -26,6 +26,13 @@ DXP 瘦身后取代 Cookiecutter 模板——终审轻微 3）。
    - 放到 btf 根目录下的包（如 `ext_strategy/`）；或
    - 经环境变量注入：`set PYTHONPATH=D:\\path\\to\\your_strategies`（PowerShell
      会话级；实测 `PYTHONPATH=…\\_scratch` 后 `ext_strategy.ma_cross:MaCross` 可解析）。
+   - **本仓库示例（`examples.rotation`）开箱提示（N15，19 号 §73.5）**：
+     **editable 安装（PEP 660）只暴露 `btf` 包、不暴露仓库根** ⇒ 直接
+     `bt run --config examples/config_rotation.yaml` 会报
+     `ModuleNotFoundError: No module named 'examples'`；运行**仓库内示例**前须显式
+     `set PYTHONPATH=D:\\量化策略\\代码\\btf`（＝仓库根），此后
+     `bt config-check examples/config_rotation.yaml --resolve-strategy` 可解析策略类。
+     （备选方案「把示例挪进包内」**未采**：示例刻意留在包外演示「项目外策略接入」。）
 
 3. **配置引用**：
 

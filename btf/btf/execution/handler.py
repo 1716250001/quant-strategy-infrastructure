@@ -206,6 +206,9 @@ class NextOpenHandler:
             fee=fee,
             fill_date=date,
             fill_timing="open",
+            # F9（2026-10-06）：记录**滑点前**基准价（本处理器为 bar.open）——
+            # 报告「假设与披露」由此可单列"价内滑点成本"（`Fill.impact_cost`）。
+            ref_price=float(bar.open),
         )
 
     # ── 品种规则 ──

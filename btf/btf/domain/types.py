@@ -214,6 +214,28 @@ def infer_instrument(symbol: str, name: str = "") -> Instrument:
                       etf_subclass=infer_etf_subclass(symbol, name), lot_size=100)
 
 
+def is_fund_code(symbol: str) -> bool:
+    """代码段是否属**基金**（ETF/LOF/封闭式；RC-11-A，2026-10-05）。
+
+    用途：explicit 宇宙中**不在 stock_basic 池**的代码分类——
+      - 基金段（沪市 `5xxxxx`；深市 `15x/16x/17x/18x`）⇒ 「非 stock_basic
+        池」属**预期**（ETF BoardRule 兜底是正常路径，不告警）；
+      - 股票段 ⇒ 可能是 退市 / 未上市 / 未登记，须 warn + 装配披露。
+
+    注：`infer_instrument` 对**任意**代码都返回 ETF 身份（兜底语义），
+    故不能反过来用 `asset_class` 判"是否基金"——本函数是独立代码段判据。
+    """
+    code, _, market = symbol.partition(".")
+    if not code.isdigit():
+        return False
+    market = market.upper()
+    if market == "SH":
+        return code.startswith("5")
+    if market == "SZ":
+        return code[:2] in ("15", "16", "17", "18")
+    return False
+
+
 __all__ = [
     "AssetClass",
     "BoardRule",
@@ -222,5 +244,6 @@ __all__ = [
     "TradingDate",
     "infer_etf_subclass",
     "infer_instrument",
+    "is_fund_code",
     "rule_for",
 ]

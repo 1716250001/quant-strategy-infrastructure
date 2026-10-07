@@ -508,9 +508,24 @@ BACKFILL_TARGETS = OrderedDict([
         "note": "单日约5540行; β四因子的资金流",
     }),
     ("fund_adj", {
-        "api": "fund_adj", "desc": "基金复权因子", "mode": "by_code",
-        "codes": "fund_etf", "max_rows": 5000, "tier": "A",
-        "note": "宽基ETF轮动必须用复权价",
+        "api": "fund_adj", "desc": "基金复权因子", "mode": "by_date",
+        "max_rows": 0, "tier": "A", "start": "19991022",
+        "note": "宽基ETF/LOF轮动**必须用复权价**（fund_daily 是未复权价，ETF 份额折算会"
+                "造成单日假暴涨，实证 159300.SZ 2024-06-25 +255.8%）。"
+                "★2026-10-01 纳入日更(extend组): mode 由 by_code 改 by_date —— "
+                "实测接口支持 trade_date 按日拉全市场（单日 2,183 行/2,183 只，"
+                "**1 请求/天**），与 fx_daily(09-23) 同款改造。"
+                "⚠ 库内 19991022~20260918（2,762 只/311 万行）系当年 by_code 建库产物，"
+                "日更只做增量、不受影响；**若整库重建需临时改回 by_code**——by_date 形态"
+                "按日拉取**不含已摘牌标的**，历史覆盖面会变窄，且 1999 起约 6,500 交易日"
+                "≈ 6,500 请求。start 与 SOURCE_START_BASELINE 一致（19991022）。"
+                "⚠ **漏网接口**（官方门槛 5000 分，本账号 2000 档）：进日更后由每日调用"
+                "兜住失效告警；日更失败须视为「可能已失效」，消费侧"
+                "**不得静默退回未复权价**（见 md_core.quotes.get_fund_daily_adj 的 stale 断言）。"
+                "⚠ **源端豁免面 21 只（0.7%）**：有 fund_daily 行情但源端**无** fund_adj 数据"
+                "（2026-10-01 实证：带 start/end 区间调用仍返 0，已用 510300.SH 对照组排除"
+                "调用形态问题），多为 7 位分级/派生码（1500011.SZ/1610221.SZ/5020561.SH…）"
+                "与个别 LOF（501049.SH/501063.SH…）——**属源端无数据，非入库缺口，勿重复排查**。",
     }),
     ("fund_share", {
         "api": "fund_share", "desc": "基金份额规模", "mode": "by_code",
@@ -589,7 +604,19 @@ BACKFILL_TARGETS = OrderedDict([
     }),
     ("share_float", {
         "api": "share_float", "desc": "限售股解禁", "mode": "by_code",
-        "codes": "stock_all", "max_rows": 5000, "tier": "B", "note": "解禁压力预判",
+        "codes": "stock_all", "max_rows": 5000, "tier": "B",
+        # ⚠⚠ 2026-10-01 实证：本接口**不可改 by_date**，与 fund_adj 不同 !
+        #   实测 trade_date='20260930' / '20250122' / '20230101' **返回完全相同的
+        #   6,000 行**，float_date 固定落在 20270914~20340120 —— 即 `trade_date`
+        #   参数**根本不起筛选作用**，接口只吐"未来解禁预约窗口"的首页。
+        #   ⇒ 若照 fund_adj 改 by_date：①拿不到 20060403~20270913 的历史（本地库
+        #     现有 4,521,447 行 / 5,535 标的，全靠 by_code 建的）②每天拉同一批
+        #     6,000 行未来日程，纯属无意义消耗。③by_code+daily_full_refresh 则需
+        #     5,535 请求/天，对 3,000 分漏网接口不可接受。
+        #   ⇒ **保持 by_code**，真实数据只能靠 ts_code 逐只拉（实测 600000.SH
+        #     单只 222 行 / 2007~2020 全历史）。新解禁按需补：
+        #     `main.py gap-update --only share_float` 或 akshare 五件套。
+        "note": "解禁压力预判｜⚠ by_date 不可用（trade_date 不生效，2026-10-01 实证）",
     }),
     ("repurchase", {
         "api": "repurchase", "desc": "股票回购", "mode": "by_code",
@@ -1754,8 +1781,11 @@ LEAKY_PERMISSIONS = {
     },
     "fund_adj": {
         "claimed": 5000, "kind": "quota",
-        "use": "★ 宽基 ETF 轮动复权价",
-        "alt": "净值 + 分红自算（**精度未验证**）→ **替代不完整**",
+        "use": "★ 宽基 ETF / LOF 轮动复权价（fund_daily 未复权价遇份额折算会假暴涨）",
+        "alt": "[2026-09-25 复核订正] fund_nav（2000 档**正式权限**）自带 **adj_nav 复权"
+               "净值**字段，直取即可、无需自算 —— 替代**基本完整**（原记「净值+分红自算、」"
+               "精度未验证」已过时）。⚠ 精度与 fund_adj 的等价性**未做逐日对账**，"
+               "失效时须先对账再切换，不得默认等价。",
         "monitor": True,
     },
     "opt_daily": {
@@ -1765,17 +1795,24 @@ LEAKY_PERMISSIONS = {
         "monitor": False,      # 未建库、无长期依赖，命中时不必告警刷屏
     },
     # ── 独立权限漏网（2 项）──
+    # ⚠ 2026-10-01 两者的 monitor 由 True 降为 **False**：它们**本地无表**（不走
+    #   Tushare 日更那条路），doctor 的空转判定对它们本来就是噪音 —— 既不在
+    #   DAILY_UPDATE_GROUPS 也不会被日更引擎触及，报「⛔ 空转」是误报。
+    #   新鲜度由**替代源侧**（akshare alt 库 66 表，落 D:\全量数据\alt_data）自带检查；
+    #   doctor 的「本地无表」分支仍会列出它们（信息，非告警）。
     "hk_daily": {
         "claimed": "独立权限 1000元/年", "kind": "indep",
         "use": "港股日线（港股二件套）",
-        "alt": "akshare stock_hk_daily（新浪源，实测 5476 行 / 2004 起）",
-        "monitor": True,
+        "alt": "akshare stock_hk_daily（新浪源，实测 5476 行 / 2004 起）"
+               "｜**替代源自带新鲜度检查**，无需 Tushare 侧漏网告警",
+        "monitor": False,
     },
     "us_daily": {
         "claimed": "独立权限 2000元/年", "kind": "indep",
         "use": "美股日线（三件套之一）",
-        "alt": "akshare stock_us_daily（新浪源，实测 10035 行 / 1984 起，延迟 15 分钟）",
-        "monitor": True,
+        "alt": "akshare stock_us_daily（新浪源，实测 10035 行 / 1984 起，延迟 15 分钟）"
+               "｜**替代源自带新鲜度检查**，无需 Tushare 侧漏网告警",
+        "monitor": False,
     },
     # ── 券商金股（官方表未列此档）──
     "broker_recommend": {
@@ -1851,11 +1888,45 @@ DAILY_UPDATE_GROUPS = OrderedDict([
                 #    当日已 09-23)。实测两接口均支持 trade_date 按日拉全市场
                 #   (fx 单日约101品种 / idb 单日约15指数)，1~2 请求/天，
                 #   且两表磁盘已是 by_year 布局，直接走标准 by_date 日更路径。
-                "fx_daily", "index_dailybasic"]),
+                "fx_daily", "index_dailybasic",
+                # 2026-10-01 新增: fund_adj（基金/ETF 复权因子，by_date 日更）
+                #   背景: 与 fx_daily 同一病症——mode 原为 by_code（日更引擎静默跳过）、
+                #   且不在本清单 ⇒ 库内停在 20260918 逐日变旧，而 fund_daily 已到 09-30。
+                #   实证: 接口支持 trade_date 按日拉全市场（单日 2,183 行/2,183 只），
+                #   **1 请求/天**（已同步改 mode=by_date）。
+                #   ⚠ 关键副作用修复: 它是 7 个漏网接口之一（官方 5000 分/本档 2000），
+                #   LEAKY_PERMISSIONS 登记 monitor=True，但告警依赖"接口被调用过"——
+                #   不进日更 ⇒ 无人调用 ⇒ **漏网告警空转**。纳入本组后失效才可被日发现。
+                "fund_adj"]),
 ])
 
 # 每日更新默认只跑 core（main.py gap-update）；--group all 时加上 extend
 DAILY_UPDATE_GROUPS_ALIASES = {"all": ["core", "extend"]}
+
+# ------------------------------------------------------------
+# 漏网接口「日更空转」豁免清单 — 2026-10-01 新增
+# ------------------------------------------------------------
+# 用途: LEAKY_PERMISSIONS 中 monitor=True 的接口，若**按设计就不该每日调用**
+#       （接口语义不支持 / 全量重拉代价不可接受 / 走替代源），必须在此登记并
+#       写明原因。doctor 的「漏网接口」检查据此把"设计豁免"与"真空转"分开：
+#       ⛔ 空转 = 本该每日调用却没人调（真风险，必须进日更组）；
+#       －  豁免 = 刻意不日更（可接受，但须有理由且可追溯）。
+# ⚠ 值为**豁免原因**，不是可选项。写不出正当理由的，说明它该进日更组。
+LEAKY_IDLE_EXEMPT = {
+    "share_float":
+        "⚠ 2026-10-01 实证：trade_date 参数**不起筛选作用**（传 20260930 / "
+        "20250122 / 20230101 均返回同一批 6,000 行，float_date 恒在 "
+        "20270914~20340120 未来窗口）⇒ by_date 日更既拿不到 20060403~20270913 "
+        "的历史（库内 4,521,447 行 / 5,535 标的全靠 by_code），又每天重复拉同一批。"
+        "真实数据只能 ts_code 逐只拉。by_code + daily_full_refresh 需 5,535 请求/天，"
+        "对 3,000 分漏网接口不可接受 ⇒ 登记为「按需补库 + 新鲜度人工关注」。",
+    "broker_recommend":
+        "★ 接口**必填 month**（非 trade_date/ts_code），mode 已是 by_month，"
+        "而日更引擎 engine_supports_daily 只放行 by_date / by_range / "
+        "by_code+daily_full_refresh ⇒ by_month 不在引擎日更范畴内，"
+        "结构上就不可能每日调用（非配置疏漏）。按月回补即可；"
+        "替代源 akshare stock_institute_recommend **实测返空、替代不成立**。",
+}
 
 # ------------------------------------------------------------
 # 每日更新豁免清单 — 2026-09-19 新增

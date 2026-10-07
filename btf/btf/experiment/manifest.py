@@ -126,13 +126,22 @@ def collect_env_version() -> dict[str, Any]:
 
 def collect_data_version(config: Mapping[str, Any],
                          fingerprint: str | None = None) -> dict[str, Any]:
-    """数据版本：配置声明 + 可选实测指纹注入。"""
+    """数据版本：配置声明 + 可选实测指纹注入。
+
+    **RC-14（2026-10-05）**：声明键归位到 `data.dataset.*`（`anchor_date` /
+    `expected_hash` / `version`——schema 现可达；原实现读顶层 `data.anchor_date`
+    等，而 schema `additionalProperties: false` 下**永远无法合法传入** ⇒ 死键）。
+    保留顶层旧位读取以兼容历史产物与直调（优先级：`dataset.*` > 顶层）。
+    """
     data_cfg = config.get("data") or {}
+    dataset_cfg = data_cfg.get("dataset") or {}
     return {
         "dataset": data_cfg.get("feed", "unknown"),
-        "anchor_date": data_cfg.get("anchor_date"),
-        "content_hash": fingerprint or data_cfg.get("expected_hash")
-                        or "sha256:unknown",
+        "anchor_date": (dataset_cfg.get("anchor_date")
+                        or data_cfg.get("anchor_date")),
+        "content_hash": (fingerprint or dataset_cfg.get("expected_hash")
+                         or data_cfg.get("expected_hash")
+                         or "sha256:unknown"),
         "tables": list(data_cfg.get("tables") or []),
         "completeness_level": data_cfg.get("completeness_level", "L0"),
     }

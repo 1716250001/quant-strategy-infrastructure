@@ -76,9 +76,16 @@ def _load_point(point: str) -> dict[str, PluginFactory] | None:
                 "zero": ZeroCostModel,
                 "flat_rate": FlatRateCostModel}
     if point == SLIPPAGE_MODEL:
-        from btf.execution.cost import FixedSlippage, NoSlippage, PctSlippage
+        from btf.execution.cost import (
+            FixedSlippage,
+            NoSlippage,
+            PctSlippage,
+            SqrtImpactSlippage,
+        )
 
-        return {"none": NoSlippage, "fixed": FixedSlippage, "pct": PctSlippage}
+        return {"none": NoSlippage, "fixed": FixedSlippage, "pct": PctSlippage,
+                # RC-12（2026-10-05）：规模相关滑点（研究参数，默认不启用）
+                "sqrt_impact": SqrtImpactSlippage}
     if point == EXECUTION_HANDLER:
         from btf.execution.handler import NextOpenHandler
 

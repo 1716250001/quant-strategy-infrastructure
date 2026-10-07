@@ -23,7 +23,9 @@ grid）、日期 helper（runtime/store/state 各一）——二者与 R4 的
 """
 from __future__ import annotations
 
+import json
 import os
+import stat
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -41,12 +43,16 @@ __all__ = [
     "build_report_file",
     "cold_backup",
     "filter_btf_env",
+    "freeze_dataset",
+    "freeze_payload",
     "list_runs",
     "parse_override_value",
     "parse_overrides",
     "run_backtest",
     "run_detail",
     "run_gate_check",
+    "run_mc",
+    "run_walk_forward",
 ]
 
 
@@ -120,20 +126,185 @@ def run_backtest(
     return RunOutcome(runtime=rt, result=rt.run(store=make_store(out)))
 
 
-def assemble_assumptions(store: Any, bundle: Any) -> Any:
-    """报告「假设与披露」装配（费率分段/规则版本/降级事件；CLI/api 同源）。"""
-    from btf.runtime import fee_segments
-    from btf.viz.report import Assumptions
+def freeze_payload(info: Mapping[str, Any], *, period: Mapping[str, str],
+                   root: str, created_at: str | None = None) -> dict[str, Any]:
+    """冻结清单载荷（**CL-4**，19 号 §72.5 S-2）——字段即契约：
 
+    `anchor_date` / `tables`（**名 ＋ 行数**＋日期域）/ `content_hash` /
+    `mode` / `created_at`（＋ `period` / `root` / `btf_version` 与有效边界注）。
+
+    `info` 必须来自 BB-1 实算（`BTFRuntime.dataset_fingerprint`）——R2
+    单一真值源：`content_hash` 与 `manifest.data_version` / RC-14 门禁同源。
+    """
+    from btf._version import __version__
+
+    detail = info.get("tables_detail") or {}
+    tables = [
+        {
+            "name": str(name),
+            "rows": int((detail.get(name) or {}).get("row_count") or 0),
+            "date_min": (detail.get(name) or {}).get("date_min"),
+            "date_max": (detail.get(name) or {}).get("date_max"),
+        }
+        for name in sorted(info.get("tables") or [])
+    ]
+    return {
+        "anchor_date": info.get("anchor_date"),
+        "tables": tables,
+        "content_hash": info.get("content_hash"),
+        "mode": info.get("mode"),
+        "created_at": created_at or datetime.now().isoformat(timespec="seconds"),
+        "period": {"start": str(period.get("start", "")),
+                   "end": str(period.get("end", ""))},
+        "root": str(root),
+        "btf_version": __version__,
+        "schema": "freeze.v1",
+        "source": "BB-1 实算（btf.data.version.compute；与 RC-14 门禁同源）",
+        "validity": ("S-2 只冻结「表清单 ＋ content_hash ＋ anchor_date」，"
+                     "依赖原始库不被改写；原始库回填/重算后旧清单不可自证"
+                     "（有效边界见 08 号 / 20 号）"),
+    }
+
+
+def write_freeze_manifest(payload: Mapping[str, Any],
+                          out_dir: str | Path) -> dict[str, Any]:
+    """落盘冻结清单（**只读**；R3 幂等/冲突——不静默覆写）。
+
+    返回 `{path, action, payload}`：`action` = `created`（新建）/
+    `idempotent`（同 `anchor_date` 且 `content_hash` 一致 ⇒ **不覆写**）。
+    同 `anchor_date` 但哈希不同 ⇒ `FileExistsError`（**显式冲突**，不追加版本）。
+    """
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    anchor = str(payload.get("anchor_date") or "unknown")
+    path = out / f"{anchor}.json"
+    if path.exists():
+        old = json.loads(path.read_text(encoding="utf-8"))
+        if old.get("content_hash") == payload.get("content_hash"):
+            return {"path": path, "action": "idempotent", "payload": old}
+        raise FileExistsError(
+            f"冻结冲突：{path.name} 已存在且 content_hash 不一致——"
+            f"旧 {old.get('content_hash')} / 新 {payload.get('content_hash')}；"
+            f"S-2 不静默覆写（R3：显式冲突报错），请先归档旧清单")
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2,
+                               sort_keys=True) + "\n", encoding="utf-8")
+    os.chmod(path, stat.S_IREAD)          # R3：落盘后置只读
+    return {"path": path, "action": "created", "payload": dict(payload)}
+
+
+def freeze_dataset(
+    config: str | Path | Mapping[str, Any],
+    *,
+    out: str | Path | None = None,
+    mode: str | None = None,
+    overrides: Mapping[str, Any] | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """`bt dataset freeze`（**CL-4**，19 号 §72.5）：数据不可变快照（S-2）。
+
+    触发方式**取独立命令**（不挂 `bt run`）——理由：① 每次回测落清单会与 R3
+    的「同 anchor 冲突语义」纠缠（同区间重复跑即冲突）；② 冻结是**显式动作**，
+    独立命令的时间/口径可追溯。用法：回测前（或结论定稿时）对所用区间执行一次。
+
+    实算经 `BTFRuntime.dataset_fingerprint`（BB-1 同源）；内存 Feed
+    （`mode=in-memory`）无法冻结 ⇒ 显式报错（不静默产出假清单）。
+    """
+    from btf.config.paths import FREEZE_DIR
+    from btf.runtime import BTFRuntime
+
+    ovr: dict[str, Any] = {k: v for k, v in (overrides or {}).items()}
+    if mode:
+        ovr.setdefault("data", {})["fingerprint_mode"] = mode
+    rt = BTFRuntime().load_config(config, environ=filter_btf_env(environ),
+                                  overrides=ovr or None)
+    rt.build()
+    info = rt.dataset_fingerprint()
+    if str(info.get("mode")) == "in-memory":
+        raise ValueError(
+            "内存 Feed 无文件级指纹（mode=in-memory）——冻结清单只对文件主库"
+            "（tushare_parquet）有意义；不产出假清单（CL-4 / 铁律新 16）")
+    payload = freeze_payload(info, period=rt.config["run"]["period"],
+                             root=str(getattr(rt.feed, "root", "") or ""))
+    return write_freeze_manifest(payload, out or FREEZE_DIR)
+
+
+def assemble_assumptions(store: Any, bundle: Any) -> Any:
+    """报告「假设与披露」装配（费率分段/规则版本/降级事件；CLI/api 同源）。
+
+    **RC-03（2026-10-05）**：`matching` / `slippage` 一律读
+    `manifest.config_effective`（生效配置）—— 原实现把两者**硬编码**为
+    `"next_open（T+1 开盘撮合）"` / `"none（回测基线）"`：用户配了 `pct`
+    报告仍显示 none，属**披露与事实相反**（13 §19.4 假设字段来源纪律）。
+    """
+    from btf.runtime import fee_segments
+    from btf.viz.report import Assumptions, format_matching, format_slippage
+
+    cfg = dict(getattr(bundle.manifest, "config_effective", None) or {})
+    exec_cfg = cfg.get("execution") or {}
+    slip_cfg = exec_cfg.get("slippage") or {}
+    model = str(slip_cfg.get("model", "none"))
     degraded = ("事件日志已采样（replay 不完整）"
                 if store.events_sampled(bundle.manifest.run_id) else "")
     return Assumptions(
-        matching="next_open（T+1 开盘撮合）", slippage="none（回测基线）",
+        matching=format_matching(exec_cfg.get("handler", "next_open")),
+        slippage=format_slippage(model, slip_cfg.get("params")),
+        slippage_cost=slippage_cost_text(bundle, model),
         fee_segments=tuple(fee_segments()),
         rules_version=bundle.manifest.rules_version,
         rules_overrides=tuple(bundle.manifest.rules_overrides),
         degraded=(degraded,) if degraded else (),
     )
+
+
+def slippage_cost_text(bundle: Any, model: str = "") -> str:
+    """「价内滑点成本」披露串（**F9，2026-10-06**；13 §19.4 假设字段）。
+
+    由 `bundle.fills` 的 `ref_price`（滑点前基准价）还原：
+
+        Σ qty × |price − ref_price|   （按方向取不利侧，单位：元）
+
+    并与**显性费用**（`Σ fee.total`）给出倍数——修正"`fee_ratio` 把占比较高的
+    价内滑点成本排除在外"的披露缺口（19 号 §65.5；`final_nav` 差额 − 显性费用
+    即为该项，实测 ≈2.08 倍于显性费用）。
+
+    **诚实边界**：旧产物（无 `ref_price`）返回**明确不可得说明**，不静默算 0。
+    """
+    fills = list(getattr(bundle, "fills", None) or [])
+    if not fills:
+        return "无成交（0 元）"
+    total = fees = 0.0
+    missing = 0
+    for f in fills:
+        if isinstance(f, dict):
+            ref, price, qty = f.get("ref_price"), f.get("price"), f.get("qty")
+            side = f.get("side")
+            fee = (f.get("fee") or {}).get("total")
+        else:
+            ref = getattr(f, "ref_price", None)
+            price = getattr(f, "price", None)
+            qty = getattr(f, "qty", None)
+            side = getattr(getattr(f, "side", None), "value", None)
+            fee = getattr(getattr(f, "fee", None), "total", None)
+        if fee is not None:
+            fees += float(fee)
+        if ref is None or price is None or qty is None:
+            missing += 1
+            continue
+        delta = float(price) - float(ref)
+        if side == "sell":
+            delta = -delta
+        total += float(qty) * delta
+    if missing == len(fills):
+        return "不可得（产物未记录 ref_price——重跑后可披露）"
+    notes: list[str] = []
+    if model == "none":
+        notes.append("零摩擦（滑点模型 none，显式声明）")
+    if fees > 0:
+        notes.append(f"= 显性费用 {fees:,.2f} 元的 {total / fees:.2f} 倍")
+    if missing:
+        notes.append(f"{missing}/{len(fills)} 笔无 ref_price 未计入")
+    tail = f"（{'；'.join(notes)}）" if notes else ""
+    return f"≈ {total:,.2f} 元{tail}"
 
 
 def build_report_file(
@@ -154,6 +325,179 @@ def build_report_file(
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(html, encoding="utf-8")
     return target
+
+
+def _trading_days_of(config: Mapping[str, Any]) -> list[Any]:
+    """交易日历（唯一真源；**RC-15**）：注入型 Feed 自带 `dates` 优先，否则 `trade_cal`。
+
+    为什么不用自然月/区间天数：窗口切分必须落在**真实交易日**上（派单纪律：
+    强制时间顺序、禁用随机划分）——`trade_cal`（is_open=1）是唯一真源；
+    内存/注入型 Feed（测试）以其 `dates` 为准（同一语义）。
+    """
+    from btf import registry
+    from btf.config.paths import MARKET_DATA_DIR
+    from btf.data.quality import calendar_days
+    from btf.domain.types import TradingDate
+
+    data_cfg = dict(config.get("data") or {})
+    period = dict((config.get("run") or {}).get("period") or {})
+    start, end = str(period["start"]), str(period["end"])
+    feed = None
+    try:
+        feed = registry.create(registry.DATA_FEED, str(data_cfg.get("feed")),
+                               dict(data_cfg.get("feed_params") or {}))
+    except Exception:            # 构造失败 ≠ 静默：走 trade_cal（缺失即 fail-closed）
+        feed = None
+    dates = getattr(feed, "dates", None)
+    if dates:
+        return [d for d in dates if start <= d.to_ymd() <= end]
+    root = (dict(data_cfg.get("feed_params") or {}).get("root")
+            or MARKET_DATA_DIR)
+    # `calendar_days` 的口径是 **YYYYMMDD**（与 runtime 质检同参——`start_ymd`），
+    # 而 period 是 `YYYY-MM-DD`：不转换会得到**空日历**（证据脚本实测抓出）
+    return [TradingDate.from_ymd(d) for d in sorted(
+        calendar_days(root, start.replace("-", ""), end.replace("-", "")))]
+
+
+def run_walk_forward(
+    config: str | Path,
+    *,
+    window: int,
+    test: int | None = None,
+    step: int | None = None,
+    mode: str = "rolling",
+    purge: int = 0,
+    embargo: int = 0,
+    persist: bool = True,
+    out: str | Path | None = None,
+    out_dir: str | Path | None = None,
+    overrides: Mapping[str, Any] | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Walk-Forward 编排（**RC-15**）：交易日历 → 逐折标准执行 → 全量分布。
+
+    - 窗口切分**只用交易日历**（`_trading_days_of`；MemoryFeed 用其 `dates`）；
+    - 每折走 `BTFRuntime` 标准装配与执行（与单跑同一代码路径），
+      窗口信息进该折 manifest 装配披露（`persist=True` 时落盘）；
+    - `--out` 落 JSON：`folds` 全量（含最差折）+ `summary`（mean/median/min/max）。
+    """
+    from btf.config.loader import load_config
+    from btf.optimize.walkforward import run_walk_forward as _run_wf
+    from btf.runtime import make_store
+
+    test_eff = test if test is not None else step
+    if test_eff is None:
+        raise ValueError("须提供测试窗长（--test 或 --step）")
+    if window is None or int(window) < 1:
+        raise ValueError(f"--window（训练窗长）须 ≥ 1，得 {window!r}")
+    cfg = load_config(Path(config), environ=filter_btf_env(environ),
+                      overrides=dict(overrides or {}))
+    days = _trading_days_of(cfg)
+    report = _run_wf(
+        cfg, days, train=int(window), test=int(test_eff),
+        step=(int(step) if step is not None else None), mode=str(mode),
+        purge=int(purge), embargo=int(embargo), persist=bool(persist),
+        store=(make_store(out_dir) if persist else None))
+    if out:
+        target = Path(out)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(report, ensure_ascii=False, indent=2,
+                                     default=str) + "\n", encoding="utf-8")
+    return report
+
+
+def run_mc(
+    run_id: str,
+    *,
+    n_resamples: int = 1000,
+    n_permutations: int = 1000,
+    seed: int | None = None,
+    out: str | Path | None = None,
+    out_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """蒙特卡洛 / 置换检验编排（**RC-16**）：读 run 产物 → 分布披露。
+
+    - **不进入引擎**（扰动只发生在收益序列层）⇒ 撮合规则逐位不变（09 #12）；
+    - 种子取 `manifest.seed.master`（单源；`seed=` 显式覆盖）；
+    - 产物：bootstrap CI（p05/p50/p95 + 是否跨 0）、置换检验双侧 p 值
+      （sign/夏普 + order/最大回撤）、随机择时对照（需基准；无则 `null` 不伪造）。
+    """
+    from btf.analytics.bootstrap import (
+        annualized_sharpe,
+        bootstrap_ci,
+        max_drawdown,
+        noise_baseline,
+        permutation_pvalue,
+    )
+    from btf.analytics.metrics import build_nav_series
+    from btf.runtime import BTFRuntime, make_store
+
+    store = make_store(out_dir)
+    bundle = BTFRuntime().load_run(run_id, store=store)
+    cfg = dict(bundle.manifest.config_effective or {})
+    ann = int((cfg.get("analysis") or {}).get("annualization_factor", 252))
+    master = int((bundle.manifest.seed or {}).get("master", 0) or 0)
+    seed_used = master if seed is None else int(seed)
+    returns = list(build_nav_series(bundle.snapshots).effective_returns())
+    if len(returns) < 3:
+        raise ValueError(
+            f"样本不足（有效日收益 {len(returns)} 个 < 3）——MC/置换不适用")
+    observed = {
+        "sharpe": annualized_sharpe(returns, annualization=ann),
+        "max_drawdown": max_drawdown(returns),
+        "metrics": {k: bundle.metrics.get(k) for k in (
+            "sharpe_ratio", "annualized_return", "total_return",
+            "max_drawdown", "information_ratio", "annualized_excess")
+            if k in bundle.metrics},
+    }
+    report: dict[str, Any] = {
+        "run_id": run_id,
+        "seed": {"master": master, "used": seed_used,
+                 "source": "manifest" if seed is None else "explicit"},
+        "n_periods": len(returns),
+        "annualization": ann,
+        "observed": observed,
+        "bootstrap": bootstrap_ci(returns, n_resamples=int(n_resamples),
+                                  seed=seed_used, annualization=ann),
+        "permutation": {
+            "sign_sharpe": permutation_pvalue(
+                returns, scheme="sign", statistic="sharpe",
+                n_permutations=int(n_permutations), seed=seed_used,
+                annualization=ann),
+            "order_max_drawdown": permutation_pvalue(
+                returns, scheme="order", statistic="max_drawdown",
+                n_permutations=int(n_permutations), seed=seed_used,
+                annualization=ann),
+        },
+        "note": ("分布披露（p05/p50/p95 + 双侧 p 值）；只报数字不判定"
+                 "（ADR-13）；扰动在收益序列层，撮合规则逐位不变（09 #12）"),
+    }
+    bench = (cfg.get("report") or {}).get("benchmark")
+    n_hold = max(1, sum(1 for s in bundle.snapshots
+                        if getattr(s, "positions_qty", None)))
+    if bench:
+        from btf.data.index_series import load_index_closes
+
+        days = [str(s.date) for s in bundle.snapshots]
+        _days, closes = load_index_closes(
+            str(bench), days[0], days[-1], trading_days=days)
+        pool = [closes[i] / closes[i - 1] - 1.0
+                for i in range(1, len(closes)) if closes[i - 1]]
+        report["noise_baseline"] = noise_baseline(
+            pool, n_hold=n_hold, observed=observed["sharpe"],
+            n_draws=int(n_resamples), seed=seed_used, statistic="sharpe",
+            annualization=ann)
+    else:
+        report["noise_baseline"] = None
+        report["noise_note"] = (
+            "无基准（report.benchmark 未配）⇒ 随机择时对照不可得——null 而非"
+            "伪造；配基准后可用（RC-16）")
+    if out:
+        target = Path(out)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(report, ensure_ascii=False, indent=2,
+                                     default=str) + "\n", encoding="utf-8")
+    return report
 
 
 def build_dataset(
@@ -209,7 +553,7 @@ def _run_tool_script(script_name: str, args: Sequence[str]) -> int:
 
 
 def run_gate_check() -> int:
-    """`bt check`：九项架构门禁（委托 `tools/check.py`；退出码原样透传）。"""
+    """`bt check`：十项架构门禁（委托 `tools/check.py`；退出码原样透传）。"""
     return _run_tool_script("check.py", [])
 
 

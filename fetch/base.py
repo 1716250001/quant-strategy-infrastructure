@@ -141,6 +141,41 @@ def get_latest_trade_date(target_date_str=None):
     return datetime.now().strftime("%Y%m%d")
 
 
+def is_trading_day(date_str=None):
+    """判断指定日期（默认今天）是否为 A 股交易日。
+
+    返回 (bool, str)：是否交易日 + 判断依据说明。
+
+    判定优先级：
+      1) tushare trade_cal（权威，含未来已公布的休市安排）
+      2) 回退：本地/接口的「最近交易日」是否等于目标日
+         （注意：回退路径无法区分「休市」与「数据尚未更新」，
+           故仅在 trade_cal 不可用时使用，并在说明中标注）
+
+    用途：定时任务在非交易日应跳过扫描与推送，
+          避免以「最近交易日」为基准把上一交易日的信号重复推一遍。
+    """
+    target = date_str or datetime.now().strftime("%Y%m%d")
+    pro = get_pro()
+    try:
+        cal = pro.trade_cal(exchange="SSE", start_date=target, end_date=target)
+        if cal is not None and not cal.empty:
+            row = cal[cal["cal_date"] == target]
+            if not row.empty:
+                is_open = int(row.iloc[0]["is_open"]) == 1
+                return is_open, f"trade_cal: {target} is_open={int(is_open)}"
+            # 目标日不在返回区间（异常），退化为区间内是否有该日
+    except Exception as e:
+        print(f"  [WARN] trade_cal 查询失败: {e}")
+
+    # 回退：以「最近交易日是否等于目标日」近似判断
+    latest = get_latest_trade_date(target)
+    ok = str(latest) == str(target)
+    reason = (f"回退判断(无 trade_cal): 最近交易日={latest}，目标日={target}"
+              f" → {'交易日' if ok else '非交易日或数据未更新'}")
+    return ok, reason
+
+
 def safe_fetch(func, name, **kwargs):
     """统一异常包装，返回DataFrame"""
     try:

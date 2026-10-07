@@ -115,6 +115,26 @@ class TestLayeredMerge:
         deep_merge(base, {"a": {"y": 9, "z": 3}, "b": [2]})
         assert base == {"a": {"x": 1, "y": 9, "z": 3}, "b": [2]}
 
+    def test_deep_merge_empty_dict_clears(self):
+        """RC-02（2026-10-05）：**空 dict = 显式清空**（深合并原本只覆盖键、
+        不删键 ⇒ 默认层自带参数的键无法被用户取消，如 `handler_params`）。"""
+        base = {"a": {"x": 1, "y": 2}, "b": 1}
+        deep_merge(base, {"a": {}})
+        assert base == {"a": {}, "b": 1}
+        deep_merge(base, {"b": {"k": 1}})          # 非 dict base → 整替
+        assert base["b"] == {"k": 1}
+        deep_merge(base, {"b": {}})                # 空 dict 亦整替
+        assert base["b"] == {}
+
+    def test_empty_handler_params_clears_default(self):
+        """RC-02 端到端（配置层）：显式 `handler_params: {}` ⇒ 取消默认 VPP。"""
+        cfg = load_config(None)
+        assert cfg["execution"]["handler_params"] == {
+            "volume_participation": 0.05}          # 默认启用
+        merged = load_config(
+            None, overrides={"execution": {"handler_params": {}}})
+        assert merged["execution"]["handler_params"] == {}
+
 
 class TestH2RulesLiteralRejection:
     def _rules_cfg(self, rules_section: dict) -> dict:

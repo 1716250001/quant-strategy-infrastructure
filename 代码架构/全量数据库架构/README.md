@@ -1,11 +1,21 @@
 # 全量市场数据库架构设计文档（导航 · 现状锚定 + 目标架构）
 
 > 项目代号：**MD-Foundation（mdf）**——A 股/基金/债券/期货/期权/海外多口径的**全量市场数据库**体系，覆盖采集 → 落盘 → 治理 → 服务四段。
-> 文档体系版本：**v0.1（首版设计稿，未冻结）** ｜ 创建：2026-09-30 ｜ 蓝本：`代码/代码架构/回测工具架构/`（33 章同构映射）
+> 文档体系版本：**v1.1（已定版，冻结态）** ｜ 创建：2026-09-30 ｜ 修订：2026-10-01 ｜ 蓝本：`代码/代码架构/回测工具架构/`（33 章同构映射）
 > 体系定位：本目录回答"**数据怎么存、怎么取、怎么保证可信、怎么不崩**"；`文档/数据与工程/` 回答"某张表某天怎么取、某接口什么权限"。两者**引用不复制**，避免口径漂移。
 > **当前状态**：主库在线服役（日更 17:30 在跑）、读侧契约已固化、写侧为**单机 Parquet 数据湖（目录即分区）**；本文档同时给出**现状架构（as-is）**与**目标架构（to-be）**，目标态边界见 §11 路线图与 §21 PoC 清单。
+> **定版含义（v1.1）**：本版把 v0.1 中的**三条"to-be 建议"兑现为"已落地事实"**——① 漏网接口从"被动告警"升级为"**日更真调用 + doctor 心跳双判据**"；② ETF/基金复权收敛为唯一消费函数 `md_core.get_fund_daily_adj`；③ 库版本标识 `db_version` 规范定版 **V1.1**（08 §13.5）。**此后非结构性修订不再升版本，只登记变更表。**
 
-**现状交付快照（2026-09-30 实测，只读 Footer 编目）**
+**v1.1 变更摘要（2026-10-01 实测驱动，详见 §七 变更表）**
+
+| # | 变更 | 涉及章节 |
+|:--|---|---|
+| 1 | `fund_adj` 出漏网空转：`mode: by_code → by_date` + 纳入 **extend**（35 张）+ 回补 10 交易日 ⇒ 库新鲜度 0918 → **0930**，单请求 1 次/天 | 05 §20.2、06 F1、09 §14.2 |
+| 2 | 新增 `doctor` 第 8 项「漏网接口」检查（**空转 + 新鲜度双判据**）+ 新增 `config.LEAKY_IDLE_EXEMPT` 设计豁免登记 | 09 §14.4、15 §28.1、§28.2、14 §26.3 |
+| 3 | `share_float` 按日更**实证否决**（`trade_date` 不生效会毁库）⇒ 转设计豁免；`broker_recommend`（必填 `month`，结构上不可能日更）一并登记 | 05 §20.2、10 §15.3、14 §26.3 |
+| 4 | ETF/基金复权收敛为 `md_core.get_fund_daily_adj`（fail-closed：无因子/落后即抛错，禁静默退回未复权价） | 14 §23.1、§23.3、04 |
+
+**现状交付快照（2026-10-01 实测，只读 Footer 编目；2026-09-30 基线保留于 §七 变更表）**
 
 | 维度 | 实测事实 |
 |---|---|
@@ -15,12 +25,13 @@
 | 指数线 | `market_data\wind_index`：**3,182 文件 / 534.75 MB / 10,096,713 行**，覆盖 1990-12-19 ~ **2026-09-21（停更）**；`D:\全量数据\wind_index` 并列目录已不存在 |
 | 派生线 | `market_state`（跌停状态）：19 文件 / 21.43 MB / 15,067,360 行，2008-01-02~2026-09-29 · `custom_index` · `signals` |
 | 覆盖锚点 | `daily` 1990-12-19~2026-09-29｜`adj_factor` 1991-07-03~｜`stk_limit` 2008-01-02~（**涨跌停约束类研究的现实起点**）｜`index_daily` 1993-10-14~｜财务四表报告期至 2026-06-30 |
-| 断点事实 | `.backfill_checkpoint.json` 4.32 MB · `.bak_20260925_220428` 4.05 MB · `.checkpoint.json` 1.91 MB · `.cb_checkpoint.json` 23 KB · `.missing_funds.txt` |
-| 代码侧 | `代码/`（不含 btf）**375 py / 33,957 行**：`common` 8/1,636 · `fetch` 12/4,986 · `alt` 11/5,062 · `tools` 23/6,943；`赤潮/` 46/9,497（消费侧） |
+| 漏网接口（7 项） | 今日分化：**1 项已日更**（`fund_adj`，extend）｜**2 项设计豁免**（`share_float` / `broker_recommend`，原因见 `LEAKY_IDLE_EXEMPT`）｜**2 项降 monitor=False**（`hk_daily` / `us_daily`，走 akshare 替代源自带检查）｜**2 项在日更组内**（`index_dailybasic` / `opt_daily`） |
+| 断点事实 | `.backfill_checkpoint.json` **3.59 MB / 104 接口 / 227,818 条**（v1.1 已回填 `fund_adj` 日期键）· `.checkpoint.json` 1.86 MB / 12 接口 · `.cb_checkpoint.json` 23 KB · `.missing_funds.txt` |
+| 代码侧 | `代码/`（不含 btf）**375 py / 33,957 行**：`common` 8/1,636 · `fetch` 12/4,986 · `alt` 11/5,062 · `tools` 23/6,943；`赤潮/` **46 → 49 py**（新增 `md_core.get_fund_daily_adj` 复权收敛） |
 | CLI | `代码/main.py` 注册表式子命令 **36 个**（`gap-update`/`backfill`/`db-audit`/`db-schema`/`db-migrate`/`ckpt`/`regress`/`freshness`/`doctor`/`alt-*` …） |
-| 配置口径 | `TABLE_DATE_COL` **79** · `DB_AUDIT_PKEYS` **114** · 日更组 `core` **7** + `extend` **34** + 豁免 **5** · `BACKFILL_TARGETS` **101**（A25/B51/C16/D3/X6；enabled 95 / disabled 6）· 分页表 **18** · 漏网接口 **7** |
-| 取数模式分布 | `by_date` 32 · `by_code` 27 · `once` 13 · `by_range` 13 · `paged` 7 · `by_param` 4 · `by_period` 3 · `by_month` 2（合计 101） |
-| 质量门 | `regress` **16 断言组 / 28 检查项** · `db-audit` 四类体检（断点/重复/缺口/规模）· `alt-audit` 规格一致性 |
+| 配置口径 | `TABLE_DATE_COL` **79** · `DB_AUDIT_PKEYS` **114** · 日更组 `core` **7** + `extend` **35**（`fund_adj` 入）· 不日更豁免 **5** · 漏网设计豁免 **2**（`LEAKY_IDLE_EXEMPT`）· `BACKFILL_TARGETS` **101**（A25/B51/C16/D3/X6；enabled 95 / disabled 6）· 分页表 **18** · 漏网接口 **7** |
+| 取数模式分布 | `by_date` **33** · `by_code` **26** · `once` 13 · `by_range` 13 · `paged` 7 · `by_param` 4 · `by_period` 3 · `by_month` 2（合计 101） |
+| 质量门 | `regress` **16 断言组 / 28 检查项**（28/28 绿）· `doctor` **8 项环境自检（第 8 项＝漏网接口，v1.1 新增）** · `db-audit` 四类体检（断点/重复/缺口/规模）· `alt-audit` 规格一致性 |
 | 只读纪律 | `market_data` 对回测/消费侧**只读**（打捞 §4.3）；`alt_data` 由 `config_alt.assert_writable()` 硬保护，**严禁写主库** |
 
 ---
@@ -37,6 +48,7 @@
 | 2 | **存储形态** | **单机 Parquet 数据湖，目录即分区**（`by_year` 主流 + `single` 元数据 + 仅 `stock_company` 保留 `by_code`）；MVP 不引入 OLTP/列存引擎（ADR-1） |
 | 3 | **读写分离** | 写侧只经 `fetch/backfill.py` 引擎 + `common/parquet_store.py` 落盘器；读侧双分支：维护层 `common/reader.py`（纯本地、fail-fast）与决策层 `赤潮/market_data.py`（线上 API ↔ 本地库、可降级） |
 | 4 | **可信基线** | 单一真源（`config.py` 规格 / `common/paths.py` 路径 / `common/calendar.py` 日历）+ 断点三态 + **落盘先于记断点** + 回归断言守卫，库可被独立复算与验收 |
+| 5 | **漏网可观测（v1.1 增补）** | `monitor=True` **不是**监控（它只在"接口被调用失败"时才告警）；凡依赖漏网接口保鲜的表，必须**真的每天被调用**，否则失效不可发现 ⇒ 双路径：① 能按日拉的接口进 `DAILY_UPDATE_GROUPS`（`fund_adj` 样板）② 结构上不可能日更的（`share_float` 参数失效、`broker_recommend` 必填 `month`）显式登记进 `LEAKY_IDLE_EXEMPT`，由 `doctor` 第 8 项以「空转 / 设计豁免」分列呈现 |
 
 ### 文档写作纪律（继承蓝本）
 
@@ -106,7 +118,7 @@
 |---|---|---|
 | A（约 30 分钟） | 决策者 | 01 → 03（结论章）→ 11（MVP/路线）→ 12（决策一览） |
 | B（约 2 小时） | 架构评审者 | 01 → 17 顺序通读，配合 16 号 Checklist 逐项核对 |
-| C | 库维护者 | 01 → 06（日更/补数/迁移）→ 08（幂等与版本）→ 15（可观测性与恢复）→ 17（状态机） |
+| C | 库维护者 | 01 → 06（日更/补数/迁移）→ 08（幂等与版本）→ **15 §28（可观测性与漏网心跳）** → 14 §26（治理与豁免）→ 17（状态机） |
 | D | 消费侧开发者 | 05（字典）→ 04（读侧 API）→ 14（消费契约）→ 09（黄金数据集） |
 | E | 数据源/权限管理员 | 10（凭据/权限档/漏网）→ 14（多源主备）→ 02（替代源策略） |
 
@@ -123,6 +135,8 @@
 | 日历真源 | `common/calendar.py`（含美股日历，`recent_trade_dates`/`open_dates`）；**三处 `get_latest_trade_date` 语义不同，禁止合并**（读取层分工文档 §第三处日期工具） |
 | 派生产物 | `market_data/market_state/derived`（跌停状态）、`market_data/custom_index`、`market_data/signals`（背离扫描信号）；生产侧**不写主库主干** |
 | 消费侧 | 决策层门面 `赤潮/market_data.py`（re-export `md_core` 包）+ 回测侧 btf（只读，`btf 14 §26.1`） |
+| 复权真源（v1.1 新增） | **股票**：`read_stock_daily` + `adj_factor`（消费侧自算）；**ETF/基金/LOF**：唯一入口 `md_core.get_fund_daily_adj`（`赤潮/market_data.py` 透出），无因子或落后基准日即 `RuntimeError`，**禁止静默退回未复权价** |
+| 漏网心跳（v1.1 新增） | `doctor` 第 8 项：① 受监控漏网接口是否在任一 `DAILY_UPDATE_GROUPS` 内（空转检测）② 库内新鲜度是否落后基准 ≥ 3 天；**「空转」与「设计豁免」分开计列**（`config.LEAKY_IDLE_EXEMPT`） |
 
 ---
 
@@ -139,11 +153,12 @@
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | v0.1 | 2026-09-30 | 首版：全 17 文件 / 33 章初稿；锚定 2026-09-30 实测库编目（113 目录 / 10,852 文件 / 7,366 MB / 2.914 亿行）；四候选架构对比；12 项 ADR；6 项 PoC |
+| **v1.1** | 2026-10-01 | **定版**（8 处章节实质修订）：① `fund_adj` 改 `by_date` + 入 extend 35 + 回补 10 交易日（库覆盖 0918→**0930**，2,762→**2,781** 标的 / 3,117,585→**3,132,797** 行）② `doctor` 新增第 8 项「漏网接口」双判据检查 ③ 新增 `config.LEAKY_IDLE_EXEMPT` 设计豁免登记（`share_float` / `broker_recommend`）④ `share_float` 改 by_date **实证否决**（`trade_date` 不起筛选作用）⑤ `hk_daily`/`us_daily` 的 `monitor` 降 `False` ⑥ 复权收敛为 `md_core.get_fund_daily_adj`（fail-closed 双闸）⑦ `db_version` 规范定版 **V1.1**（08 §13.5）⑧ 基线事实重锚（extend 34→35、by_date 32→33、by_code 27→26、漏网 4 态分化）。门禁：`regress` 28/28、`doctor` 8 项全绿 |
 
 **变更纪律**：
 
 1. 章节可合并到文件，**不可凭空消失**；33 章映射必须可追溯。
-2. 每次修订在 README 变更表登记；超过 3 处实质修订升 minor 版本（v0.1 → v0.2）。
+2. 每次修订在 README 变更表登记；超过 3 处实质修订升 minor 版本（**v0.1 → v1.1，已定版**）。v1.1 之后仅亏缺陷（事实错记/判据失效）才升 v1.2；纯新增观测项、新增豁免登记记入变更表**不升版**。
 3. `[假设]` 被验证或推翻后须改写为结论并删除标注，同时在 12 号 ADR 登记决策。
 4. 文档间交叉引用一律使用**相对链接**；重命名文件前先更新本 README 映射表。
 5. 与 `文档/数据与工程/` 的关系：该目录为**事实来源**（取数口径、权限总账），本目录为**架构结论**；数字冲突时以**实测 + 带日期**者为准，并在冲突处双标注。

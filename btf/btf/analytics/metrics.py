@@ -310,6 +310,25 @@ class SharpeRatio(MetricBase):
         return excess / sd * math.sqrt(factor)
 
 
+class SharpeStderr(MetricBase):
+    """夏普**标准误**（**RC-06，2026-10-05：可选指标——不进默认 15 项**）。
+
+    口径：`analytics.inference.sharpe_stderr`（B&LdP 方差式，含偏度/峰度修正）——
+    入参为**单期**夏普。样本 < 3 或方差为 0 时抛错 ⇒ 由 `compute_all` 统一降级 NaN。
+
+    用途：把"夏普的点估计"变成"点估计 ± 不确定性"；须在
+    `analysis.metrics` 中**显式声明**才计算（默认指标集不变）。
+    """
+
+    name = "sharpe_stderr"
+
+    def _value(self, series: NavSeries, config: Mapping[str, Any]) -> float:
+        from btf.analytics.inference import sharpe_moments, sharpe_stderr
+
+        n, sr_period, skew, kurt = sharpe_moments(series.effective_returns())
+        return sharpe_stderr(sr_period, n_periods=n, skew=skew, kurt=kurt)
+
+
 class MaxDrawdown(MetricBase):
     """最大回撤 = min(dd_t)（四式第四式序列最小值，≤0）。"""
 
@@ -426,10 +445,15 @@ METRIC_CLASSES: tuple[type[MetricBase], ...] = (
     NTradingDays,
 )
 
-#: 指标名 → 类（配置声明制：用户侧只写名字）
-METRICS: Mapping[str, type[MetricBase]] = {cls.name: cls for cls in METRIC_CLASSES}
+#: **可选指标**（RC-06，2026-10-05）：须在 `analysis.metrics` **显式声明**才计算，
+#: **不进默认 15 项**（默认指标集与 `metrics_digest` 口径因此保持不变）。
+OPTIONAL_METRIC_CLASSES: tuple[type[MetricBase], ...] = (SharpeStderr,)
 
-#: 15 项指标名（有序=上表顺序）
+#: 指标名 → 类（配置声明制：用户侧只写名字；含可选指标）
+METRICS: Mapping[str, type[MetricBase]] = {
+    cls.name: cls for cls in (*METRIC_CLASSES, *OPTIONAL_METRIC_CLASSES)}
+
+#: 15 项**默认**指标名（有序=上表顺序；可选指标不在此列）
 METRIC_NAMES: tuple[str, ...] = tuple(cls.name for cls in METRIC_CLASSES)
 
 
@@ -448,7 +472,10 @@ def compute_all(
     缺省（None）保持"内置全集"语义不变（RK-6 缓解）。
     """
     cfg = config or {}
-    names = list(analyzer_names) if analyzer_names is not None else list(METRICS)
+    # 缺省 = **默认 15 项**（`METRIC_NAMES`）——不含 `OPTIONAL_METRIC_CLASSES`
+    # （RC-06：可选指标须显式声明；默认集与 digest 口径不变）
+    names = (list(analyzer_names) if analyzer_names is not None
+             else list(METRIC_NAMES))
     resolve = resolver or (lambda name: METRICS[name])
     series = build_nav_series(snapshots, trades)
     out: dict[str, float] = {}
@@ -470,6 +497,7 @@ __all__ = [
     "METRIC_CLASSES",
     "METRIC_NAMES",
     "NAN",
+    "OPTIONAL_METRIC_CLASSES",
     "AnnualizedReturn",
     "AnnualizedVolatility",
     "CalmarRatio",
@@ -483,6 +511,7 @@ __all__ = [
     "NavSeries",
     "ProfitLossRatio",
     "SharpeRatio",
+    "SharpeStderr",
     "TotalFees",
     "TotalReturn",
     "TotalTurnover",

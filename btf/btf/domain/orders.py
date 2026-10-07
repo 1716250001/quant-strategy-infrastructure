@@ -93,6 +93,25 @@ class Fill:
     fee: Fee                       # 费用明细（分项，成本归因用）
     fill_date: TradingDate
     fill_timing: str               # "open"|"close"（撮合基准，报告披露用）
+    #: 撮合基准价（**滑点前**：`next_open` 时为当 bar open）——**F9（2026-10-06）**：
+    #: 用于把"价内滑点成本"从成交价里**还原出来**（`price − ref_price`），
+    #: 供报告「假设与披露」单列（此前该成本**只在价内**、`fee` 不计入 ⇒
+    #: `fee_ratio` 系统性低估真实交易成本，19 号 §65.5 / §67.3 N4-adjacent）。
+    #: **可空**：`None` = 旧产物/旧事件日志（未记录），此时价内成本不可得。
+    ref_price: float | None = None
+
+    @property
+    def impact_cost(self) -> float | None:
+        """价内滑点成本（元，**正数＝不利**）：`qty × (price − ref) × 方向号`。
+
+        `ref_price is None` 时返回 `None`（旧产物不可得）；零摩擦时≈0。
+        """
+        if self.ref_price is None:
+            return None
+        signed = (self.price - self.ref_price)
+        if self.side is OrderSide.SELL:
+            signed = -signed
+        return self.qty * signed
 
 
 @dataclass(frozen=True)

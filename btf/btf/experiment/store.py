@@ -123,6 +123,10 @@ def _enc_fill(fill: Any) -> dict[str, Any]:
         "symbol": fill.symbol, "side": fill.side.value, "qty": fill.qty,
         "price": float(fill.price), "fee": _enc_fee(fill.fee),
         "fill_date": _ymd(fill.fill_date), "fill_timing": fill.fill_timing,
+        # F9（2026-10-06）：**滑点前基准价**（可空=旧产物）——报告据此单列
+        # 「价内滑点成本」（`Fill.impact_cost`），修正 fee_ratio 低估。
+        "ref_price": (None if getattr(fill, "ref_price", None) is None
+                      else float(fill.ref_price)),
     }
 
 

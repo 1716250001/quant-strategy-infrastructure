@@ -84,10 +84,17 @@ def _reference_actions(start: str, end: str) -> set[tuple]:
 
 @requires_mainlib
 def test_padded_read_equals_full_read():
-    """② 超集等价性：区间化读 == 全量读（逐条一致，无静默漏行）。"""
+    """② 超集等价性：区间化读 == 全量读（逐条一致，无静默漏行）。
+
+    **CL-2 第二段（2026-10-07）**：`feed.corporate_actions` 现另含**配股/缩股**
+    事件（离线清单 adapter）⇒ 本防线**只锁 dividend 侧**（`rights_ratio == 0`
+    且 `consolidation_ratio == 1.0`）；配股/缩股侧另有两项断言（区间性与字段）。
+    """
     feed = TushareParquetFeed(ROOT)
-    got = feed.corporate_actions(TradingDate.from_ymd(START),
-                                 TradingDate.from_ymd(END))
+    got_all = feed.corporate_actions(TradingDate.from_ymd(START),
+                                     TradingDate.from_ymd(END))
+    got = [a for a in got_all
+           if a.rights_ratio == 0.0 and a.consolidation_ratio == 1.0]
     # 规范键：(symbol, ex_date, pay, record, stk 合计, cash)——两侧同口径
     got_keys = {(a.symbol, a.ex_date.to_ymd(),
                  a.pay_date.to_ymd() if a.pay_date else None,
@@ -102,6 +109,16 @@ def test_padded_read_equals_full_read():
     print(f"\n区间化 {len(got_keys)} 条 vs 全量参照 {len(ref_keys)} 条")
     assert not missing, f"区间化**漏行** {len(missing)} 条（样例 {sorted(missing)[:3]}）"
     assert not extra, f"区间化多出 {len(extra)} 条（样例 {sorted(extra)[:3]}）"
+
+    # CL-2 第二段：配股/缩股侧两项断言（区间性 + 字段自洽）
+    extra_src = [a for a in got_all
+                 if a.rights_ratio > 0.0 or a.consolidation_ratio != 1.0]
+    for a in extra_src:
+        ymd = a.ex_date.to_ymd()
+        assert START <= ymd <= END, f"配股/缩股事件越界：{a.symbol} {ymd}"
+        assert (a.rights_ratio > 0.0) != (a.consolidation_ratio != 1.0), (
+            f"事件既非纯配股亦非纯缩股（口径混淆）：{a.symbol} {ymd}")
+    print(f"配股/缩股事件 {len(extra_src)} 条（区间内；与 dividend 侧互斥）")
 
 
 @requires_mainlib

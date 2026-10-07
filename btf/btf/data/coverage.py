@@ -20,12 +20,36 @@ from dataclasses import dataclass
 
 from btf.data.tables_meta import TABLES
 
-__all__ = ["CoverageReport", "check_coverage"]
+__all__ = [
+    "ETF_FACTOR_TABLE",
+    "CoverageReport",
+    "check_coverage",
+    "check_etf_adjust_coverage",
+]
 
 #: 股票涨跌停约束的必需表（缺失 = 成交乐观偏差，默认 fatal）
 REQUIRED_TABLES: tuple[str, ...] = ("stk_limit",)
 #: 缺失仅登记降级的表（研究层/历史区间常见）
 DEGRADED_TABLES: tuple[str, ...] = ("etf_limit", "adj_factor")
+#: **条件降级表（RC-04，2026-10-05）**：仅当**宇宙含 ETF** 时才检查——
+#: `fund_adj` 起点 19991022；若无条件加入 `DEGRADED_TABLES`，任何 1999 年前
+#: 的**纯股票**回测都会误报"降级"（该表与股票结论无关）。故走
+#: `check_etf_adjust_coverage()`（同降级披露机制，但按宇宙条件触发）。
+ETF_FACTOR_TABLE: str = "fund_adj"
+
+
+def check_etf_adjust_coverage(start_ymd: str) -> str | None:
+    """ETF 复权因子区间覆盖（RC-04）：区间早于 `fund_adj` 起点 → 降级说明。
+
+    调用方（runtime 装配期）在**宇宙解析之后**调用，且仅在宇宙含 ETF 时。
+    返回 `None` = 无降级；返回说明串 = 应记入降级/披露通道（不阻断）。
+    """
+    meta = TABLES.get(ETF_FACTOR_TABLE)
+    if meta is None or not meta.start or start_ymd >= meta.start:
+        return None
+    return (f"{ETF_FACTOR_TABLE} 未覆盖 {start_ymd}~{meta.start}"
+            f"（起点 {meta.start}）——ETF 复权因子缺失将回落 1.0，"
+            f"份额折算/不定期折算的价格跳变**不被抹平**（RC-04）")
 
 
 @dataclass(frozen=True)

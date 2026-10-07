@@ -10,25 +10,37 @@
     - ref = 回测起点日 → 区间前复权（回测内一致性）；
       ref = 最新日 → 全历史前复权（仅研究层；引擎不用）。
 
-adj_factor 缺失降级（11 §21.1 PoC-3 验证点）：
+复权因子表路由（**RC-04，2026-10-05**）：
+    - **股票 → `adj_factor`**（1991-07-03 起）；**ETF/LOF → `fund_adj`**
+      （1999-10-22 起）——路由复用 `tables_meta.factor_table_of`
+      （与行情路由同一套代码段判定，禁止第二套 = 双真源）。
+    - 原实现对**任意**标的都读 `adj_factor`（只含股票）⇒ ETF 必然无行 ⇒
+      静默回落 1.0，**份额折算/不定期折算的价格跳变不被抹平**。
+
+因子缺失降级（11 §21.1 PoC-3 验证点；RC-04 起**不得静默**）：
     - 标的当日无因子行（新上市前/停牌残行/数据缺失）→ 回退**最近先前
       因子**（前向填充，除权静默期语义：因子在两次除权间恒定）；
-    - 起点前无任何因子（早于 adj_factor 表起点 1991-07-03）→ 1.0 并
-      计数登记（caller 决定 Strict/Warn），不中断研究层计算。
+    - 起点前无任何因子（早于表起点）→ 表内最早因子（相对锚）；
+    - 表内全无该标的 → 1.0 + 计数 + **`logger.warning`**（原实现只计数），
+      并经 `degraded_notes()` 供报告「假设与披露」消费。
 
 依赖：pyarrow（data 层允许；domain 零依赖纪律不受影响）。
 """
 from __future__ import annotations
 
+import logging
 from bisect import bisect_right
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 
 from btf.config.paths import MARKET_DATA_DIR
+from btf.data.tables_meta import factor_table_of
 from btf.domain.cache import BoundedDict
 from btf.domain.market import Bar
 from btf.domain.types import TradingDate
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["AdjustService", "TushareAdjustService"]
 
@@ -42,7 +54,10 @@ class AdjustService(Protocol):
 
 
 class TushareAdjustService:
-    """基于主库 adj_factor 表的消费侧换算（单标的缓存，同参数可重复调用）。
+    """基于主库**复权因子表**的消费侧换算（单标的缓存，同参数可重复调用）。
+
+    因子表按标的**自动路由**（RC-04）：股票 `adj_factor` / ETF·LOF `fund_adj`
+    （`tables_meta.factor_table_of`）。
 
     缓存粒度：per symbol 的 (日期升序因子列表)，首次访问装载该标的
     全历史（read_range 区间=表全量），后续 adj_factor 查询 bisect——
@@ -58,6 +73,9 @@ class TushareAdjustService:
         # (symbol, ymd) 命中计数 / 回退计数（降级行为审计，11 §21.1 验证点）
         self.n_missing_fallback = 0
         self.n_fill_forward = 0
+        # RC-04：**表内全无**该标的的集合（回落 1.0）——供 `degraded_notes()`
+        # 生成报告披露（原实现只计数、无告警、无披露通道）。
+        self.missing_factor_symbols: set[str] = set()
 
     # ── 装载 ──
     def _store(self):
@@ -72,8 +90,9 @@ class TushareAdjustService:
 
     def _load(self, symbol: str) -> tuple[list[str], list[float]]:
         if symbol not in self._cache:
+            table = factor_table_of(symbol)          # RC-04：股票/ETF 双表路由
             t = self._store().symbol_range(
-                "adj_factor", symbol, "19900101", "20991231",
+                table, symbol, "19900101", "20991231",
                 ["adj_factor"])
             if t.num_rows:
                 t = t.sort_by([("trade_date", "ascending")])
@@ -81,6 +100,13 @@ class TushareAdjustService:
                                        t.column("adj_factor").to_pylist())
             else:
                 self._cache[symbol] = ([], [])
+                # RC-04：缺失**必须告警**（原实现静默回落 1.0）——含表名与
+                # 口径说明；同一标的只告警一次（`_load` 命中缓存后不再进此）。
+                self.missing_factor_symbols.add(symbol)
+                logger.warning(
+                    "复权因子缺失：%s 在 `%s` 表无任何行 → 因子按 1.0 回落"
+                    "（未复权序列的份额折算跳变**不被抹平**）；"
+                    "报告披露见 degraded_notes()（RC-04）", symbol, table)
         return self._cache[symbol]
 
     # ── 协议实现 ──
@@ -146,3 +172,23 @@ class TushareAdjustService:
 
     def _af_ymd(self, symbol: str, date: TradingDate) -> float:
         return self.adj_factor(symbol, date)
+
+    # ── 降级披露（RC-04；与 `StateSynthesizer.degraded_notes()` 同机制）──
+    def degraded_notes(self) -> tuple[str, ...]:
+        """复权降级说明（供报告「假设与披露」消费；viz 不 import 本模块）。
+
+        形制与 `data.state.StateSynthesizer.degraded_notes()` 一致（`tuple[str]`），
+        由调用方注入 `Assumptions.degraded`——「缺失即披露」，不静默。
+        """
+        if not self.missing_factor_symbols:
+            return ()
+        shown = sorted(self.missing_factor_symbols)[:5]
+        suffix = "…" if len(self.missing_factor_symbols) > len(shown) else ""
+        tables = sorted({factor_table_of(s) for s in self.missing_factor_symbols})
+        return (
+            f"复权因子缺失回退：{self.n_missing_fallback} 次 / "
+            f"{len(self.missing_factor_symbols)} 只标的"
+            f"（{', '.join(shown)}{suffix}；查表 {'/'.join(tables)}）"
+            f"——因子按 1.0 回落，份额折算/不定期折算的价格跳变**未被抹平**"
+            f"（RC-04）",
+        )

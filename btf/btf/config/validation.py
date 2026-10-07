@@ -29,6 +29,18 @@ class ConfigError(ValueError):
         head = f"配置校验失败（{len(problems)} 处）：" if problems else "配置校验失败"
         super().__init__("\n".join([head] + [f"  [{i}] {p}" for i, p in enumerate(problems, 1)]))
 
+    def __reduce__(self):
+        """pickle 往返协议（**N11**，19 号 §73.4 / §75.1）——`(类, (problems,))` 重建。
+
+        为什么必须实现：默认协议以 `args=(已格式化消息字符串,)` 重放
+        `__init__` ⇒ **字符串被当 list**：`len()` 取**字符数**（假计数）＋
+        `enumerate()` **逐字符**（`bt optimize` 进程池实测「1 处 ⇒ 62 处」——
+        与 N8-bis 同属「量级失真 / 静默失真」家族）。显式 `__reduce__` 后
+        往返 `str()` 与原始**逐字相等**（构造签名 / `problems` 属性 /
+        `__str__` 格式**均不变**）。
+        """
+        return (self.__class__, (list(self.problems),))
+
 
 def _fmt_path(error) -> str:
     parts = [str(p) for p in error.absolute_path]

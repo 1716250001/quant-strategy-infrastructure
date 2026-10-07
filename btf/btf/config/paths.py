@@ -21,7 +21,9 @@ from pathlib import Path
 
 __all__ = [
     "ALT_DATA_DIR",
+    "CORP_ACTION_DIR",
     "DATASETS_DIR",
+    "FREEZE_DIR",
     "MARKET_DATA_DIR",
     "OUTPUT_DIR",
     "PACKAGE_ROOT",
@@ -68,6 +70,22 @@ RUNS_DIR = OUTPUT_DIR / "runs"
 
 # 黄金/示例数据集（05 §20.1 三层数据集体系的落盘位）
 DATASETS_DIR = _from_env("BTF_DATASETS_DIR", PACKAGE_ROOT / "btf_datasets")
+
+# 公司行动离线清单根（**CL-2 第二段 R1′/R2′**；19 号 §79.4）：配股/缩股事件
+# 清单（JSON，含来源哈希与校验统计）——由 `python -m btf.data.corp_action_probe`
+# 生成，feed 侧 adapter 读取（**不写主库** `market_data`；含 IRREVERSIBLE 无关）。
+#: ⚠ 变量名**必须** `BTFTOOL_` 前缀（**N7**，19 号 §69.4）：`BTF_` 前缀会被
+#: 配置层当覆盖键注入（`BTF_CORP_ACTION_DIR` ⇒ 顶层 `corp_action_dir` 非法键，
+#: 一设即**全平台配置校验崩**——本批实测踩中一次，见 18 号 §九·X）。
+CORP_ACTION_DIR = _from_env("BTFTOOL_CORP_ACTION_DIR",
+                            PACKAGE_ROOT / "btf_datasets" / "corp_actions")
+
+# 数据冻结清单根（**CL-4**，19 号 §72.5 S-2）：**项目内只读目录**——每回测落一份
+# 「表清单 ＋ content_hash ＋ anchor_date」不可变清单（`bt dataset freeze`）。
+# ⚠ S-2 固有风险：**依赖原始库不被改写**——有效边界与原始库变更留痕要求见
+# 08 号（数据）与 20 号（使用纪律）。`BTFTOOL_FREEZE_DIR` 可覆盖（**N7 前缀纪律**，
+# 19 号 §69.4：`BTF_` 前缀会被配置层当覆盖键注入 ⇒ 校验崩）。
+FREEZE_DIR = _from_env("BTFTOOL_FREEZE_DIR", PROJECT_ROOT / "_freeze")
 
 # 奇点战法信号层真源（M3 6.3；赤潮侧 `代码/strategies/qidian.py`）——标的池与
 # 阈值常量**运行时读取**，不在 btf 复制清单。BTF_QIDIAN_REF 可覆盖。

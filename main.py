@@ -388,15 +388,28 @@ def cmd_manager_profile(args):
 # 【分析扫描】
 # ============================================================
 def cmd_qidian(args):
-    """奇点战法每日双重信号扫描"""
+    """奇点战法 · A 类观察池信号扫描（2026-10-01 起默认，替代旧池）"""
+    from strategies.qidian_pool_scan import run_pool_scan
+    _banner("qidian 奇点战法 A类观察池信号扫描")
+    run_pool_scan(
+        date=args.date,
+        dry_run=args.dry_run,
+        force=getattr(args, "force", False),
+        save=getattr(args, "save", False),
+    )
+
+
+def cmd_qidian_legacy(args):
+    """奇点战法 · 旧池（QIDIAN_POOL）扫描 — 仅为 btf 真源对账/历史回溯保留"""
     from strategies.qidian_daily_scan import run_scan_pipeline
-    _banner("qidian 奇点战法每日双重信号扫描")
+    _banner("qidian-legacy 奇点战法旧池扫描（副官时代 30 ETF）")
     run_scan_pipeline(
         date=args.date,
         dry_run=args.dry_run,
         report=args.report,
         push_single_buy=args.push_single_buy,
         push_single_sell=args.push_single_sell,
+        force=getattr(args, "force", False),
     )
 
 
@@ -1020,7 +1033,16 @@ def build_parser():
     p.set_defaults(func=cmd_manager_profile)
 
     # ── 分析扫描 ──
-    p = sub.add_parser("qidian", help="奇点战法每日双重信号扫描")
+    p = sub.add_parser("qidian", help="奇点战法 A类观察池信号扫描（默认 · 25指数/54ETF）")
+    _add_date(p, help_text="扫描日期 YYYYMMDD (默认: 最近交易日)")
+    _add_dry_run(p, help_text="仅扫描不推送")
+    p.add_argument("--save", action="store_true", help="保存消息到文档目录")
+    p.add_argument("--force", action="store_true",
+                   help="跳过交易日闸门（非交易日也照常扫描推送，默认关闭）")
+    p.set_defaults(func=cmd_qidian)
+
+    p = sub.add_parser("qidian-legacy",
+                       help="奇点战法旧池（QIDIAN_POOL，副官时代30ETF）扫描 — 历史回溯/btf对账用")
     _add_date(p, help_text="扫描日期 YYYYMMDD (默认: 最近交易日)")
     _add_dry_run(p, help_text="仅扫描不推送")
     p.add_argument("--report", action="store_true", help="生成HTML报告")
@@ -1028,7 +1050,9 @@ def build_parser():
                    help="方案B: 加推单边买入信号（带观察标记+纪律提示）")
     p.add_argument("--push-single-sell", action="store_true",
                    help="方案C: 加推单边卖出信号（带仅观察标注）")
-    p.set_defaults(func=cmd_qidian)
+    p.add_argument("--force", action="store_true",
+                   help="跳过交易日闸门（非交易日也照常扫描推送，默认关闭）")
+    p.set_defaults(func=cmd_qidian_legacy)
 
     # ── 监控推送 ──
     p = sub.add_parser("push-test", help="PushPlus推送测试/发送")

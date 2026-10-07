@@ -20,6 +20,7 @@ from btf.domain.types import (
     Instrument,
     TradingDate,
     infer_instrument,
+    is_fund_code,
     parse_trading_date,
     rule_for,
 )
@@ -66,19 +67,63 @@ class UniverseResolver:
     def _explicit(
         self, universe_cfg: Mapping[str, Any], start: TradingDate,
     ) -> dict[str, Instrument]:
+        """explicit 清单解析。
+
+        **RC-11-A（2026-10-05）**：不在 `stock_basic` 在册池的代码**分流**——
+        基金段（`is_fund_code`）→ 身份推断属**正常路径**（INFO，维持原行为）；
+        股票段 → 判定 **退市 / 未上市 / 未登记**，`logger.warning` + 记入
+        装配披露（`self.notes`）。**不阻断**、返回的 `Instrument` 不变
+        （保留 `infer_instrument` 兜底语义）——原实现两类共用一条 INFO 且
+        措辞写作"ETF 身份推断"，退市/拼错代码零告警（审查 D1-b）。
+        """
         as_of = parse_trading_date(universe_cfg.get("as_of") or start.to_ymd())
         pool = {i.symbol: i for i in self.feed.universe(as_of)}
         out: dict[str, Instrument] = {}
+        # 并集缓存（惰性——只有真出现缺失代码才读 stock_basic；多个缺失
+        # 代码共用一次读）
+        spans: dict[str, set[str]] = {}
+
+        def _ever_listed() -> set[str]:
+            if "ever" not in spans:
+                spans["ever"] = {i.symbol for i in self.feed.universe_span(
+                    TradingDate.from_ymd("19900101"), as_of)}
+            return spans["ever"]
+
+        def _future_listed() -> set[str]:
+            if "future" not in spans:
+                spans["future"] = {i.symbol for i in self.feed.universe_span(
+                    as_of, TradingDate.from_ymd("20991231"))}
+            return spans["future"]
+
+        def _classify(sym: str) -> str:
+            if not callable(getattr(self.feed, "universe_span", None)):
+                return "未判定（该 Feed 不支持 universe_span）"
+            if sym in _ever_listed():
+                return "退市（stock_basic 曾收录，as_of 前已退出）"
+            if sym in _future_listed():
+                return "未上市（list_date > as_of）"
+            return "未登记（stock_basic 任何时点均无此代码）"
+
         for sym in universe_cfg.get("symbols", []):
             if sym in pool:
                 out[sym] = pool[sym]
-            else:
-                inst = infer_instrument(sym)
+                continue
+            inst = infer_instrument(sym)
+            if is_fund_code(sym):
+                # 基金段：非 stock_basic 池属**预期**（ETF BoardRule 兜底）
                 logger.info(
                     "%s 不在 stock_basic 宇宙 → ETF 身份推断（子类=%s，"
                     "T+%d；M3 6.3 ETF BoardRule）",
                     sym, inst.etf_subclass.value, rule_for(inst).t_plus)
-                out[sym] = inst
+            else:
+                kind = _classify(sym)
+                note = (f"explicit 宇宙代码 {sym} 不在 stock_basic 在册池"
+                        f"（as_of={as_of.to_ymd()}）：判定 = {kind}——"
+                        f"保留身份推断兜底（**不阻断**；该标的读价将全程"
+                        f"缺席，结论大概率无效；RC-11-A）")
+                logger.warning("%s", note)
+                self.notes.append(note)
+            out[sym] = inst
         return out
 
     # ── all（期间并集）──

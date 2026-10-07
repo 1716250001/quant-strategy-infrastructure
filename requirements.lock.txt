@@ -1,0 +1,97 @@
+# 赤潮项目 · Python 环境精确快照
+# ─────────────────────────────────────────────────────────────
+# 快照时间  ：2026-10-05 17:16 (GMT+8)
+# 目标 venv ：D:\量化策略\代码\_venv  (Python 3.13.15, include-system-site-packages=false)
+# 解释器底座：D:\量化策略\代码\_python  —— 便携解释器，随 D 盘走，不依赖系统 Python / PATH
+#
+# ★ 生成方式（务必照抄，不要用 pip freeze —— 见下方警告）：
+#     D:/量化策略/代码/_venv/Scripts/python.exe -m pip list --format=freeze > requirements.lock.txt
+#
+# ★ 重建步骤（换新机 / 重装后）：
+#     1) 新建 venv  ：D:\量化策略\代码\_python\python.exe -m venv D:\量化策略\代码\_venv
+#     2) 还原第三方 ：D:\量化策略\代码\_venv\Scripts\python.exe -m pip install -r requirements.lock.txt
+#     3) 还原本地项目（不进本文件的两个 editable 项，须各自从源码装）：
+#                     cd D:\量化策略\代码      →  pip install -e .      # pyramid-strategy
+#                     cd D:\量化策略\代码\btf  →  pip install -e .      # btf
+#     4) 凭据      ：恢复 代码\.env（TS_TOKEN / PUSHPLUS_TOKEN / WIND_API_KEY），勿进仓
+#
+# ⚠ 已知缺陷：本项目路径含中文，`pip freeze` 在此环境必然崩溃
+#   （pip 处理 editable 安装时调 git 读仓库根路径，中文路径被错解为 'D:\閲忓寲绛栫暐\浂鐮'，
+#    报 FileNotFoundError: [WinError 3]，stdout 全空）。设 PYTHONUTF8=1 亦无效 —— 已实测。
+#   `pip list --format=freeze` 纯遍历 dist-info、不走 VCS 检测，输出等价且不受影响，故用它。
+#
+# 说明：本文件为全量 pin（含传递依赖），是"状态忠实记录"而非"最小依赖声明"。
+#       最小依赖声明请看 pyproject.toml 的 dependencies。
+# ─────────────────────────────────────────────────────────────
+akshare==1.18.95
+attrs==26.1.0
+beautifulsoup4==4.14.3
+bs4==0.0.2
+# btf==1.1.0            ← 本地 editable 项目（源码在 代码\btf），PyPI 上没有同名包，
+                       #   换新机时勿据此行安装，须按头部第 3 步 `pip install -e .` 还原
+certifi==2026.5.20
+cffi==2.1.1
+charset-normalizer==3.4.7
+click==8.5.0
+colorama==0.4.6
+curl_cffi==0.15.0
+decorator==5.3.1
+et_xmlfile==2.0.0
+grimp==3.17
+html5lib==1.1
+hypothesis==6.168.1
+idna==3.16
+import-linter==2.15
+iniconfig==2.3.0
+Jinja2==3.1.6
+jsonpath==0.82.2
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+lxml==6.1.1
+markdown-it-py==4.2.0
+MarkupSafe==3.0.3
+mdurl==0.1.2
+mini-racer==0.14.1
+multitasking==0.0.13
+narwhals==2.26.0
+numpy==2.4.6
+openpyxl==3.1.5
+packaging==26.3
+pandas==3.0.3
+peewee==4.5.2
+pip==26.2.1
+platformdirs==4.12.3
+plotly==7.1.0
+pluggy==1.6.0
+protobuf==7.36.2
+py-cpuinfo2==10.1.1
+pyarrow==25.0.1
+pycparser==3.0
+Pygments==2.21.0
+# pyramid-strategy==5.0.0 ← 同上，本地 editable 项目，须按头部第 3 步 `pip install -e .` 还原
+pytest==9.1.1
+pytest-benchmark==5.3.0
+python-dateutil==2.9.0.post0
+pytz==2026.5
+PyYAML==6.0.3
+referencing==0.37.0
+requests==2.34.2
+rich==15.0.0
+rpds-py==2026.6.3
+ruff==0.16.9
+scipy==1.18.0
+simplejson==4.1.1
+six==1.17.0
+sortedcontainers==2.4.0
+soupsieve==2.10
+tabulate==0.10.0
+tqdm==4.67.3
+tushare==1.4.29
+typing_extensions==4.16.0
+tzdata==2026.2
+urllib3==2.7.0
+webencodings==0.6.1
+websocket-client==1.9.0
+websockets==17.2
+xlrd==2.0.2
+yfinance==1.7.0

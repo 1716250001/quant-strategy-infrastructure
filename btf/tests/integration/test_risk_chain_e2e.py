@@ -53,6 +53,11 @@ def _config(rules: list[dict]) -> dict:
             "initial_cash": 1_000_000,
         },
         "data": {"feed": FEED_NAME},
+        # RC-02（2026-10-05）：本文件测的是**风控链**语义（成交/拒单/缩量的
+        # 归因），默认 VPP=0.05 会先按成交量缩量、改变风控侧可见数量
+        # （实测：`weight=1.2` 的"现金不足拒单"变为"按受限量成交 50,000 股"）
+        # ⇒ 显式关闭 VPP，保持风控用例语义独立（改入参、不改断言数值）。
+        "execution": {"handler_params": {"volume_participation": None}},
         "risk": {"rules": rules},          # 真实链（无 allow_empty_chain）
     }
 

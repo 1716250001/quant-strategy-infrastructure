@@ -51,17 +51,68 @@ def _section(feed: MemoryFeed, day: TradingDate) -> dict:
 
 
 class TestVppDisabled:
-    """volume_participation=None → v0.2 语义（回归保护）。"""
+    """`volume_participation=None` → v0.2 语义（**显式**不启用的回归保护）。
+
+    RC-02（2026-10-05）：本用例保护的是「**显式 None 不启用**」这一语义
+    （配置层缺省已改 0.05）——故入参改为显式 `volume_participation=None`，
+    断言数值不动。
+    """
 
     def test_no_vpp_fills_full_qty(self):
         feed, inst = _feed(vol=1_000.0)        # 量再小也全额成交（v0.2 语义）
         pf = Portfolio(cash=2_000_000.0)
-        h = NextOpenHandler(cost_model=FlatRateCostModel(), instruments=inst)
+        h = NextOpenHandler(cost_model=FlatRateCostModel(), instruments=inst,
+                            volume_participation=None)   # 显式不启用（RC-02）
         fills, rejs = h.execute([_order(OrderSide.BUY, 100_000)], D1,
                                 _section(feed, D1),
                                 feed.trading_states(D1), pf)
         assert not rejs and fills[0].qty == 100_000
         assert h.vpp_stats == {"partial_fills": 0, "unfilled_qty": 0}
+
+
+class TestVppDefaultRc02:
+    """RC-02（2026-10-05）：配置层缺省 = `0.05`（默认启用，不再零冲击）。
+
+    口径注（与派单验收锚点的偏差，已报告）：派单写"成交 1000 股 → 应只成交
+    50 股"；但**买入**受整手约束（cap 50 < 一手 100 → `VOLUME_CAP` 拒单），
+    "只成交 50 股"只在**卖出**侧成立（零股了结允许）。两侧各一条用例。
+    """
+
+    def test_defaults_declare_vpp(self):
+        from btf.config.loader import DEFAULTS
+
+        assert DEFAULTS["execution"]["handler_params"] == {
+            "volume_participation": 0.05}
+
+    def test_buy_no_longer_fills_fully(self):
+        """派单锚点（买入侧）：当日成交 1000 股 / 买入 100,000 股 → cap=50 < 一手
+        ⇒ **VOLUME_CAP 拒单**，不再全额成交（旧缺省=None 会 100,000 全额成交）。"""
+        feed, inst = _feed(vol=1_000.0)
+        pf = Portfolio(cash=2_000_000.0)
+        h = NextOpenHandler(cost_model=FlatRateCostModel(), instruments=inst,
+                            volume_participation=0.05)
+        fills, rejs = h.execute([_order(OrderSide.BUY, 100_000)], D1,
+                                _section(feed, D1),
+                                feed.trading_states(D1), pf)
+        assert not fills
+        assert rejs[0][1].code is RejectCode.VOLUME_CAP
+
+    def test_sell_capped_to_exactly_50_shares(self):
+        """派单锚点（卖出侧）：当日成交 1000 股 → 卖出只成交 **50 股**（零股允许）。"""
+        feed, inst = _feed(vol=1_000.0)
+        pf = Portfolio(cash=1_000_000.0)
+        h0 = NextOpenHandler(cost_model=FlatRateCostModel(), instruments=inst)
+        fills, _ = h0.execute([_order(OrderSide.BUY, 1_000)], D1,
+                              _section(feed, D1), feed.trading_states(D1), pf)
+        assert fills[0].qty == 1_000
+        pf.advance_day()
+        h = NextOpenHandler(cost_model=FlatRateCostModel(), instruments=inst,
+                            volume_participation=0.05)
+        fills, rejs = h.execute([_order(OrderSide.SELL, 1_000)], D2,
+                                _section(feed, D2),
+                                feed.trading_states(D2), pf)
+        assert not rejs and fills[0].qty == 50
+        assert h.vpp_stats == {"partial_fills": 1, "unfilled_qty": 950}
 
 
 class TestVppPartialFill:
