@@ -539,20 +539,45 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
         x_act = last[1] if last else None
         # **R13′（N19）**：股本级披露——`r_effective` ＝ 配股数量/配股前总股本
         #（**实际发行比例**）；`subscription_ratio` ＝ r_eff/名义 r（认购率）。
-        # **R19′（Q-6 §85.3）**：r_eff 亦作 `pex` L2 取值来源（份额仍用名义 r——
-        # 两口径分离）；判定仍用名义 r（挂起披露口径不变）。
+        # **R12′（19 号 §88.5.1；开工令已下达）**：**判定改用 r_eff 正推**——
+        # 认购率不足使名义口径系统性偏大（000516：0.983% → 0.0507%，降 19 倍）；
+        # **守卫（必做）**：`r_eff/r_nom < 0.85` ⇒ 分母错（**A+H 陷阱**：H 股不参与
+        # A 股配股，002948 形态 0.578）⇒ **降级回名义 r** 并标注（D5，禁静默）。
+        # ⚠ 两处纪律（§88.5.1 澄清）：① `amp > 5` **只禁反推**，不是挂起条件
+        #（002682 amp 20.93 而正推 0.0098% 仍救回）；② 份额 `M = floor(N × r_nom)`
+        # **不变**（Q-4(a) 股东权利口径；**不碰入账侧**）。
         r_eff = (rec["shares_issued"] / rec["shares_pre"]
                  if rec.get("shares_issued") and rec.get("shares_pre") else None)
         m_eff = (_validate_right_math(r_eff, pr, j.chg, x_act)
                  if r_eff is not None else None)
+        ratio_guard = (r_eff / r) if (r_eff is not None and r > 0) else None
+        use_eff = ratio_guard is not None and ratio_guard >= 0.85
         # **R8′（19 号 §80.3 / §81.2 G1+G2）**：正推判定 ＋ 放大因子守卫
-        #（数学核心抽到 `_validate_right_math`，可单测）。
+        #（数学核心抽到 `_validate_right_math`，可单测）。**amp/反推沿用名义 r**
+        #（§80.3 语义不变——反推的病态性与名义口径绑定；>5 只禁反推、**不拦救回**）。
         m = _validate_right_math(r, pr, j.chg, x_act)
         chg_pred = m["chg_pred"]
-        fwd_rel = m["forward_err"]
+        fwd_rel = m["forward_err"]          # 名义误差（既有字段语义不变——G1 两列）
         amp = m["amp_factor"]
         x_pred = m["x_pred"]
         rel = m["rel_err"]
+        # **R12′（§88.5.1）判定（不改既有集、只救回）**：
+        #   `validated ⇔ 名义误差 ≤ tol` 或 `（守卫内 r_eff）误差 ≤ tol`；
+        #   **已通过名义者一律保持 validated**（D1 目标 175 要求既有 165 不被降级）；
+        #   `validation_basis` 记录实际依据（D5 可见）；挂起 = 两者皆不过。
+        pass_nom = fwd_rel is not None and fwd_rel <= VALIDATION_TOL
+        err_eff_v = (m_eff["forward_err"] if m_eff else None)
+        pass_eff = bool(use_eff and err_eff_v is not None
+                        and err_eff_v <= VALIDATION_TOL)
+        validated = pass_nom or pass_eff
+        if pass_nom:
+            basis = "nominal_fallback" if (
+                ratio_guard is not None and ratio_guard < 0.85) else "nominal"
+        elif pass_eff:
+            basis = "effective_ratio"       # 靠股本级误差**救回**
+        else:
+            basis = "nominal_fallback" if (
+                ratio_guard is not None and ratio_guard < 0.85) else "nominal"
         # **R19′（Q-6）**：`pex` 三级取值（L1 pre_close → L2 r_eff → L3 r_nom）
         # ＋ A+H/B 分母守卫（`r_eff/r_nom < 0.85` ⇒ 降级 L3 并标注）。
         nxt = resume_rows.get((j.symbol, j.ex_date))
@@ -563,9 +588,12 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
             "ratio": r, "price": pr, "record_date": rec["record_date"],
             "listing_date": rec["listing_date"] or None,
             "chg": round(j.chg, 6),
-            # 正推（**判定依据**，G1）
+            # 正推（**判定依据**，G1；名义口径——R12′ 救回依据见 forward_err_eff）
             "chg_pred": round(chg_pred, 6) if chg_pred is not None else None,
             "forward_err": round(fwd_rel, 6) if fwd_rel is not None else None,
+            # **R12′（D5）**：判定依据——`nominal`（名义通过）／`effective_ratio`
+            #（名义挂起、股本级误差 ≤0.5% 救回）／`nominal_fallback`（守卫触发，按名义判）
+            "validation_basis": basis,
             # 放大因子（**两列标注**，G1/G2；>5 ⇒ 反推字段为空）
             "amp_factor": round(amp, 3) if amp is not None else None,
             # 反推（仅辅助；amp ≤ 5 才计算）
@@ -573,8 +601,7 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
             "x_actual": x_act,
             "x_actual_date": last[0] if last else None,
             "rel_err": round(rel, 6) if rel is not None else None,
-            "status": ("validated" if fwd_rel is not None
-                       and fwd_rel <= VALIDATION_TOL else "suspended"),
+            "status": "validated" if validated else "suspended",
             # 股本级披露（R13′/N19）
             "r_effective": round(r_eff, 6) if r_eff is not None else None,
             "subscription_ratio": (round(r_eff / r, 6)
@@ -588,6 +615,11 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
         }
         if pex_guard:
             item["pex_guard"] = pex_guard
+        if ratio_guard is not None and ratio_guard < 0.85:
+            # D5：分母守卫触发 ⇒ 降级回名义并**显式标注**（禁静默采用）
+            item["denominator_guard"] = (
+                f"r_eff/r_nom={ratio_guard:.4f} < 0.85（A+H/B 分母陷阱？）"
+                f"⇒ 判定降级回名义 r（R12′/§88.5.1；D5）")
         if (j.symbol, j.ex_date) in _PEX_ANOMALIES:
             item["anomaly"] = _PEX_ANOMALIES[(j.symbol, j.ex_date)]
         (rights if item["status"] == "validated" else suspended).append(item)

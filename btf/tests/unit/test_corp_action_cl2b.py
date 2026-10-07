@@ -382,22 +382,25 @@ class TestForwardValidationR8c:
         assert m["x_pred"] is None
 
     def test_repo_artifact_present_and_direction_ok(self):
-        """判据 E ＋ R8′/R9′（G1/G3/G5）：清单存在、正推字段齐、方向不反；
-        rights＝**165**（G1）、known-16 全部在 rights、挂起 11 条带两列、
-        缩股门槛后 **0 存活**（全部入 uncorroborated 带 reason）。"""
+        """判据 E ＋ R8′/R9′/R12′（G1/G3/G5）：清单存在、正推字段齐、方向不反；
+        rights＝**175**（R12′ 救回 10）、挂起 **1**（300176 真噪声）、known-16 全在
+        rights、A+H 守卫可见、缩股门槛后 **0 存活**（全部入 uncorroborated 带 reason）。"""
         from btf.data.corp_action_probe import PROBE_SCHEMA, load_actions
 
         data = load_actions()
         assert data is not None, "仓库内缺 corp_actions.json（feed adapter 将报未加载）"
         assert data["schema"] == PROBE_SCHEMA
-        # G1：86 → 165（正推判据救回 79 条被病态反推误杀的真配股）
-        assert data["stats"]["rights_validated"] == 165
-        assert data["stats"]["rights_suspended"] == 11
+        # G1 → R12′（§88.5.1）：**175/1** —— 86→165（正推救回 79 条被病态反推
+        # 误杀的真配股）；R12′ r_eff 判定**再救回 10**（既有 165 **零降级**）。
+        assert data["stats"]["rights_validated"] == 175
+        assert data["stats"]["rights_suspended"] == 1
         for x in data["rights"]:
             assert {"symbol", "ex_date", "ratio", "price",
-                    "chg_pred", "forward_err", "amp_factor"} <= set(x)
+                    "chg_pred", "forward_err", "amp_factor",
+                    "validation_basis"} <= set(x)
             assert x["ratio"] > 0 and x["chg"] > 1.0      # 向上＝除权类
-            assert 0.0 <= x["forward_err"] <= 0.005       # 正推容差
+            assert x["validation_basis"] in ("nominal", "effective_ratio",
+                                             "nominal_fallback")
         for x in data["rights_suspended"]:                # 挂起带两列（G1）
             assert {"amp_factor", "forward_err"} <= set(x)
             assert x["forward_err"] > 0.005
@@ -412,24 +415,46 @@ class TestForwardValidationR8c:
         in_rights = {(x["symbol"], x["ex_date"]) for x in data["rights"]}
         missing = known - in_rights
         assert not missing, f"known-16 未全部进入 rights：{missing}"
-        # G5：000816 / 002232 已入建模集；000516 正推误差 0.98% ⇒ 按纪律仍挂起
-        #（与 N16「11 条真口径差」自洽；「三条全入建模」与 G1 容差冲突处待裁——§九·Z）
+        # **G5 闭合（3/3）**：000816／002232／**000516** 全部在建模集；
+        # 000516 以 r_eff 救回（名义 0.983% 挂起 → 股本级 0.0507% 通过——§88.5.1）
         assert ("000816.SZ", "20110209") in in_rights
         assert ("002232.SZ", "20100322") in in_rights
-        susp516 = [x for x in data["rights_suspended"]
-                   if x["symbol"] == "000516.SZ" and x["ex_date"] == "20091020"]
-        assert susp516 and susp516[0]["forward_err"] == pytest.approx(
-            0.009831, abs=1e-5)
+        v516 = next(x for x in data["rights"]
+                    if x["symbol"] == "000516.SZ"
+                    and x["ex_date"] == "20091020")
+        assert v516["validation_basis"] == "effective_ratio"
+        assert v516["r_effective"] == pytest.approx(0.267196, abs=1e-5)
+        assert v516["subscription_ratio"] == pytest.approx(0.890652, abs=1e-5)
+        assert v516["forward_err_eff"] == pytest.approx(0.000507, abs=1e-5)
+        # 名义字段语义保留（两列并存：forward_err＝名义、forward_err_eff＝股本级）
+        assert v516["forward_err"] == pytest.approx(0.009831, abs=1e-5)
+        # R12′ 十条救回表（§88.5.1 逐位）：全部 basis=effective_ratio、err_eff ≤0.0739%
+        r10 = {"000507.SZ", "000516.SZ", "000589.SZ", "000758.SZ",
+               "002017.SZ", "002130.SZ", "002500.SZ", "002634.SZ",
+               "002682.SZ", "300374.SZ"}
+        for sym in r10:
+            x10 = next(x for x in data["rights"]
+                       if x["symbol"] == sym
+                       and x["validation_basis"] == "effective_ratio")
+            assert x10["forward_err_eff"] <= 0.000739
+        # **D5 守卫可见**：A+H 形态（002948）降级回名义并标注（禁静默采用）
+        v948 = next(x for x in data["rights"]
+                    if x["symbol"] == "002948.SZ" and x["ex_date"] == "20220113")
+        assert v948["validation_basis"] == "nominal_fallback"
+        assert "denominator_guard" in v948
+        # 300176.SZ：真噪声（err_eff 3.09% 反而变大）⇒ **保持挂起**（禁强建模）
+        v300 = data["rights_suspended"][0]
+        assert v300["symbol"] == "300176.SZ"
+        assert v300["forward_err_eff"] > v300["forward_err"]
         # G3（R9′）：门槛后缩股 **0 存活**；未过者全量保留披露（带 reason）
         assert data["stats"]["consolidation_corroborated"] == 0
         assert len(data["consolidations"]) == 0
         for x in data["consolidations_uncorroborated"]:
             assert x["consolidation_ratio"] > 0.95 or x.get("reason")
             assert "reason" in x
-        # G4 补录（R13′/N19）：挂起条目带股本级披露（**仅披露不建模**——§82.4②）；
-        # 000516 三值与审查方逐位（0.26720/0.8907/0.0507%）；10 条 r_eff 误差 ≤0.0739%、
-        # 300176 反而变大（真噪声保持挂起）。
-        for x in data["rights_suspended"]:
+        # R13′/R12′：股本级三字段在**全部 176 条**上齐备（救回 10 条入 rights 后
+        # 仍保留披露；挂起仅 1 条＝300176）。
+        for x in (*data["rights"], *data["rights_suspended"]):
             assert {"r_effective", "subscription_ratio",
                     "forward_err_eff"} <= set(x)
         # R18′（B⁽⁴⁾-1/2）：`consolidations_confirmed` ＝ **1 条**（000887.SZ
@@ -458,17 +483,4 @@ class TestForwardValidationR8c:
         assert v600["pex"] is not None
         assert not any(x.get("pex_guard") for x in allr
                        if x.get("pex_source") == "exchange_preclose")
-        v516 = next(x for x in data["rights_suspended"]
-                    if x["symbol"] == "000516.SZ")
-        assert v516["r_effective"] == pytest.approx(0.267196, abs=1e-5)
-        assert v516["subscription_ratio"] == pytest.approx(0.890652, abs=1e-5)
-        assert v516["forward_err_eff"] == pytest.approx(0.000507, abs=1e-5)
-        r10 = {"000507.SZ", "000516.SZ", "000589.SZ", "000758.SZ",
-               "002017.SZ", "002130.SZ", "002500.SZ", "002634.SZ",
-               "002682.SZ", "300374.SZ"}
-        for x in data["rights_suspended"]:
-            if x["symbol"] in r10:
-                assert x["forward_err_eff"] <= 0.000739
-        v300 = next(x for x in data["rights_suspended"]
-                    if x["symbol"] == "300176.SZ")
-        assert v300["forward_err_eff"] > v300["forward_err"]
+

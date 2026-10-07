@@ -8792,7 +8792,7 @@
       "symbol": "920819.BJ"
     }
   ],
-  "created_at": "2026-10-07T15:14:45",
+  "created_at": "2026-10-07T18:24:11",
   "rights": [
     {
       "amp_factor": 6.546,
@@ -8813,6 +8813,7 @@
       "status": "validated",
       "subscription_ratio": 0.919031,
       "symbol": "600079.SH",
+      "validation_basis": "nominal",
       "x_actual": 5.77,
       "x_actual_date": "20060727",
       "x_pred": null
@@ -8836,6 +8837,7 @@
       "status": "validated",
       "subscription_ratio": 0.941714,
       "symbol": "600824.SH",
+      "validation_basis": "nominal",
       "x_actual": 5.84,
       "x_actual_date": "20061130",
       "x_pred": null
@@ -8859,6 +8861,7 @@
       "status": "validated",
       "subscription_ratio": 0.988449,
       "symbol": "000031.SZ",
+      "validation_basis": "nominal",
       "x_actual": 43.2,
       "x_actual_date": "20070810",
       "x_pred": null
@@ -8867,6 +8870,7 @@
       "amp_factor": 12.923,
       "chg": 1.114764,
       "chg_pred": 1.115326,
+      "denominator_guard": "r_eff/r_nom=0.8474 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20071018",
       "forward_err": 0.000504,
       "forward_err_eff": 0.014123,
@@ -8882,6 +8886,7 @@
       "status": "validated",
       "subscription_ratio": 0.84736,
       "symbol": "000898.SZ",
+      "validation_basis": "nominal_fallback",
       "x_actual": 36.1,
       "x_actual_date": "20071009",
       "x_pred": null
@@ -8905,6 +8910,7 @@
       "status": "validated",
       "subscription_ratio": 0.972962,
       "symbol": "600118.SH",
+      "validation_basis": "nominal",
       "x_actual": 39.98,
       "x_actual_date": "20071219",
       "x_pred": null
@@ -8928,6 +8934,7 @@
       "status": "validated",
       "subscription_ratio": 0.975457,
       "symbol": "600509.SH",
+      "validation_basis": "nominal",
       "x_actual": 31.52,
       "x_actual_date": "20071204",
       "x_pred": null
@@ -8951,6 +8958,7 @@
       "status": "validated",
       "subscription_ratio": 0.930211,
       "symbol": "600601.SH",
+      "validation_basis": "nominal",
       "x_actual": 4.19,
       "x_actual_date": "20061221",
       "x_pred": null
@@ -8974,6 +8982,7 @@
       "status": "validated",
       "subscription_ratio": 0.971753,
       "symbol": "600858.SH",
+      "validation_basis": "nominal",
       "x_actual": 40.69,
       "x_actual_date": "20071016",
       "x_pred": null
@@ -8997,6 +9006,7 @@
       "status": "validated",
       "subscription_ratio": 0.987472,
       "symbol": "600880.SH",
+      "validation_basis": "nominal",
       "x_actual": 31.17,
       "x_actual_date": "20071107",
       "x_pred": null
@@ -9020,6 +9030,7 @@
       "status": "validated",
       "subscription_ratio": 0.988073,
       "symbol": "600886.SH",
+      "validation_basis": "nominal",
       "x_actual": 21.8,
       "x_actual_date": "20070906",
       "x_pred": null
@@ -9043,6 +9054,7 @@
       "status": "validated",
       "subscription_ratio": 0.962345,
       "symbol": "000680.SZ",
+      "validation_basis": "nominal",
       "x_actual": 18.81,
       "x_actual_date": "20080220",
       "x_pred": null
@@ -9066,6 +9078,7 @@
       "status": "validated",
       "subscription_ratio": 0.970778,
       "symbol": "000759.SZ",
+      "validation_basis": "nominal",
       "x_actual": 21.78,
       "x_actual_date": "20080110",
       "x_pred": null
@@ -9089,6 +9102,7 @@
       "status": "validated",
       "subscription_ratio": 0.987286,
       "symbol": "600058.SH",
+      "validation_basis": "nominal",
       "x_actual": 47.19,
       "x_actual_date": "20080221",
       "x_pred": null
@@ -9112,6 +9126,7 @@
       "status": "validated",
       "subscription_ratio": 0.977578,
       "symbol": "600100.SH",
+      "validation_basis": "nominal",
       "x_actual": 32.16,
       "x_actual_date": "20080515",
       "x_pred": null
@@ -9135,6 +9150,7 @@
       "status": "validated",
       "subscription_ratio": 0.976558,
       "symbol": "600325.SH",
+      "validation_basis": "nominal",
       "x_actual": 19.9,
       "x_actual_date": "20080509",
       "x_pred": null
@@ -9158,6 +9174,7 @@
       "status": "validated",
       "subscription_ratio": 0.978753,
       "symbol": "600540.SH",
+      "validation_basis": "nominal",
       "x_actual": 20.37,
       "x_actual_date": "20080227",
       "x_pred": null
@@ -9181,6 +9198,7 @@
       "status": "validated",
       "subscription_ratio": 0.96353,
       "symbol": "600820.SH",
+      "validation_basis": "nominal",
       "x_actual": 13.09,
       "x_actual_date": "20080430",
       "x_pred": null
@@ -9204,8 +9222,33 @@
       "status": "validated",
       "subscription_ratio": 0.944621,
       "symbol": "600895.SH",
+      "validation_basis": "nominal",
       "x_actual": 10.64,
       "x_actual_date": "20080806",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 7.034,
+      "chg": 1.097205,
+      "chg_pred": 1.107991,
+      "ex_date": "20091020",
+      "forward_err": 0.009831,
+      "forward_err_eff": 0.000507,
+      "listing_date": "20091029",
+      "name": "国际医学",
+      "pex": 6.28,
+      "pex_source": "exchange_preclose",
+      "price": 3.98,
+      "r_effective": 0.267196,
+      "ratio": 0.3,
+      "record_date": "20091009",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.890652,
+      "symbol": "000516.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 6.89,
+      "x_actual_date": "20091009",
       "x_pred": null
     },
     {
@@ -9227,6 +9270,7 @@
       "status": "validated",
       "subscription_ratio": 0.959857,
       "symbol": "000635.SZ",
+      "validation_basis": "nominal",
       "x_actual": 23.09,
       "x_actual_date": "20090805",
       "x_pred": null
@@ -9250,6 +9294,7 @@
       "status": "validated",
       "subscription_ratio": 0.988046,
       "symbol": "000783.SZ",
+      "validation_basis": "nominal",
       "x_actual": 21.36,
       "x_actual_date": "20091106",
       "x_pred": null
@@ -9273,6 +9318,7 @@
       "status": "validated",
       "subscription_ratio": 0.957225,
       "symbol": "000988.SZ",
+      "validation_basis": "nominal",
       "x_actual": 12.7,
       "x_actual_date": "20090918",
       "x_pred": null
@@ -9296,6 +9342,7 @@
       "status": "validated",
       "subscription_ratio": 0.979905,
       "symbol": "002017.SZ",
+      "validation_basis": "nominal",
       "x_actual": 21.6,
       "x_actual_date": "20091204",
       "x_pred": null
@@ -9319,6 +9366,7 @@
       "status": "validated",
       "subscription_ratio": 0.973359,
       "symbol": "600497.SH",
+      "validation_basis": "nominal",
       "x_actual": 31.84,
       "x_actual_date": "20091130",
       "x_pred": null
@@ -9342,6 +9390,7 @@
       "status": "validated",
       "subscription_ratio": 0.986297,
       "symbol": "600525.SH",
+      "validation_basis": "nominal",
       "x_actual": 19.04,
       "x_actual_date": "20090818",
       "x_pred": null
@@ -9365,6 +9414,7 @@
       "status": "validated",
       "subscription_ratio": 0.961446,
       "symbol": "600590.SH",
+      "validation_basis": "nominal",
       "x_actual": 14.02,
       "x_actual_date": "20090729",
       "x_pred": null
@@ -9388,6 +9438,7 @@
       "status": "validated",
       "subscription_ratio": 0.962356,
       "symbol": "600755.SH",
+      "validation_basis": "nominal",
       "x_actual": 16.53,
       "x_actual_date": "20091209",
       "x_pred": null
@@ -9411,6 +9462,7 @@
       "status": "validated",
       "subscription_ratio": 0.977334,
       "symbol": "000759.SZ",
+      "validation_basis": "nominal",
       "x_actual": 12.88,
       "x_actual_date": "20100125",
       "x_pred": null
@@ -9434,6 +9486,7 @@
       "status": "validated",
       "subscription_ratio": 0.964187,
       "symbol": "000960.SZ",
+      "validation_basis": "nominal",
       "x_actual": 32.98,
       "x_actual_date": "20100118",
       "x_pred": null
@@ -9457,6 +9510,7 @@
       "status": "validated",
       "subscription_ratio": 0.985429,
       "symbol": "002232.SZ",
+      "validation_basis": "nominal",
       "x_actual": 17.59,
       "x_actual_date": "20100311",
       "x_pred": null
@@ -9465,6 +9519,7 @@
       "amp_factor": 15.895,
       "chg": 1.055,
       "chg_pred": 1.054723,
+      "denominator_guard": "r_eff/r_nom=0.8076 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20100315",
       "forward_err": 0.000262,
       "forward_err_eff": 0.0097,
@@ -9480,6 +9535,7 @@
       "status": "validated",
       "subscription_ratio": 0.807569,
       "symbol": "600036.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 16.12,
       "x_actual_date": "20100304",
       "x_pred": null
@@ -9503,6 +9559,7 @@
       "status": "validated",
       "subscription_ratio": 0.930387,
       "symbol": "600151.SH",
+      "validation_basis": "nominal",
       "x_actual": 8.76,
       "x_actual_date": "20100702",
       "x_pred": null
@@ -9526,6 +9583,7 @@
       "status": "validated",
       "subscription_ratio": 0.979775,
       "symbol": "600303.SH",
+      "validation_basis": "nominal",
       "x_actual": 19.77,
       "x_actual_date": "20101129",
       "x_pred": null
@@ -9549,6 +9607,7 @@
       "status": "validated",
       "subscription_ratio": 0.985282,
       "symbol": "600343.SH",
+      "validation_basis": "nominal",
       "x_actual": 19.69,
       "x_actual_date": "20100713",
       "x_pred": null
@@ -9572,6 +9631,7 @@
       "status": "validated",
       "subscription_ratio": 0.98216,
       "symbol": "600416.SH",
+      "validation_basis": "nominal",
       "x_actual": 25.69,
       "x_actual_date": "20100820",
       "x_pred": null
@@ -9595,6 +9655,7 @@
       "status": "validated",
       "subscription_ratio": 0.992197,
       "symbol": "600425.SH",
+      "validation_basis": "nominal",
       "x_actual": 23.65,
       "x_actual_date": "20100820",
       "x_pred": null
@@ -9618,6 +9679,7 @@
       "status": "validated",
       "subscription_ratio": 0.978109,
       "symbol": "600531.SH",
+      "validation_basis": "nominal",
       "x_actual": 39.45,
       "x_actual_date": "20101213",
       "x_pred": null
@@ -9641,6 +9703,7 @@
       "status": "validated",
       "subscription_ratio": 0.965754,
       "symbol": "600584.SH",
+      "validation_basis": "nominal",
       "x_actual": 13.36,
       "x_actual_date": "20101013",
       "x_pred": null
@@ -9664,6 +9727,7 @@
       "status": "validated",
       "subscription_ratio": 0.90435,
       "symbol": "600601.SH",
+      "validation_basis": "nominal",
       "x_actual": 4.6,
       "x_actual_date": "20100701",
       "x_pred": null
@@ -9687,6 +9751,7 @@
       "status": "validated",
       "subscription_ratio": 0.975974,
       "symbol": "600963.SH",
+      "validation_basis": "nominal",
       "x_actual": 11.76,
       "x_actual_date": "20101217",
       "x_pred": null
@@ -9710,6 +9775,7 @@
       "status": "validated",
       "subscription_ratio": 0.973552,
       "symbol": "601009.SH",
+      "validation_basis": "nominal",
       "x_actual": 11.78,
       "x_actual_date": "20101115",
       "x_pred": null
@@ -9733,6 +9799,7 @@
       "status": "validated",
       "subscription_ratio": 0.992451,
       "symbol": "601166.SH",
+      "validation_basis": "nominal",
       "x_actual": 28.06,
       "x_actual_date": "20100524",
       "x_pred": null
@@ -9741,6 +9808,7 @@
       "amp_factor": 10.95,
       "chg": 1.040703,
       "chg_pred": 1.039972,
+      "denominator_guard": "r_eff/r_nom=0.5178 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20100623",
       "forward_err": 0.000703,
       "forward_err_eff": 0.01826,
@@ -9756,6 +9824,7 @@
       "status": "validated",
       "subscription_ratio": 0.517826,
       "symbol": "601328.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 6.38,
       "x_actual_date": "20100609",
       "x_pred": null
@@ -9764,6 +9833,7 @@
       "amp_factor": 39.476,
       "chg": 1.018051,
       "chg_pred": 1.017616,
+      "denominator_guard": "r_eff/r_nom=0.7493 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20101124",
       "forward_err": 0.000427,
       "forward_err_eff": 0.00468,
@@ -9779,6 +9849,7 @@
       "status": "validated",
       "subscription_ratio": 0.749269,
       "symbol": "601398.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 5.0,
       "x_actual_date": "20101115",
       "x_pred": null
@@ -9787,6 +9858,7 @@
       "amp_factor": 21.074,
       "chg": 1.018298,
       "chg_pred": 1.019611,
+      "denominator_guard": "r_eff/r_nom=0.0363 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20101115",
       "forward_err": 0.001289,
       "forward_err_eff": 0.017237,
@@ -9802,6 +9874,7 @@
       "status": "validated",
       "subscription_ratio": 0.036291,
       "symbol": "601939.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 5.34,
       "x_actual_date": "20101104",
       "x_pred": null
@@ -9810,6 +9883,7 @@
       "amp_factor": 16.406,
       "chg": 1.030881,
       "chg_pred": 1.032325,
+      "denominator_guard": "r_eff/r_nom=0.6975 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20101111",
       "forward_err": 0.001401,
       "forward_err_eff": 0.007669,
@@ -9825,6 +9899,7 @@
       "status": "validated",
       "subscription_ratio": 0.697527,
       "symbol": "601988.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 3.6,
       "x_actual_date": "20101102",
       "x_pred": null
@@ -9848,8 +9923,33 @@
       "status": "validated",
       "subscription_ratio": 0.968324,
       "symbol": "000419.SZ",
+      "validation_basis": "nominal",
       "x_actual": 9.71,
       "x_actual_date": "20110411",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 7.266,
+      "chg": 1.102706,
+      "chg_pred": 1.108325,
+      "ex_date": "20110119",
+      "forward_err": 0.005095,
+      "forward_err_eff": 9.9e-05,
+      "listing_date": "20110131",
+      "name": "贵州轮胎",
+      "pex": 10.79,
+      "pex_source": "exchange_preclose",
+      "price": 6.86,
+      "r_effective": 0.281563,
+      "ratio": 0.3,
+      "record_date": "20110110",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.938544,
+      "symbol": "000589.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 11.9,
+      "x_actual_date": "20110110",
       "x_pred": null
     },
     {
@@ -9871,6 +9971,7 @@
       "status": "validated",
       "subscription_ratio": 0.956672,
       "symbol": "000816.SZ",
+      "validation_basis": "nominal",
       "x_actual": 6.94,
       "x_actual_date": "20110124",
       "x_pred": null
@@ -9894,6 +9995,7 @@
       "status": "validated",
       "subscription_ratio": 0.947617,
       "symbol": "000962.SZ",
+      "validation_basis": "nominal",
       "x_actual": 18.32,
       "x_actual_date": "20111024",
       "x_pred": null
@@ -9917,6 +10019,7 @@
       "status": "validated",
       "subscription_ratio": 0.994681,
       "symbol": "002003.SZ",
+      "validation_basis": "nominal",
       "x_actual": 26.9,
       "x_actual_date": "20110216",
       "x_pred": null
@@ -9940,8 +10043,33 @@
       "status": "validated",
       "subscription_ratio": 0.966105,
       "symbol": "002015.SZ",
+      "validation_basis": "nominal",
       "x_actual": 11.88,
       "x_actual_date": "20110222",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 14.338,
+      "chg": 1.107322,
+      "chg_pred": 1.112864,
+      "ex_date": "20110603",
+      "forward_err": 0.005005,
+      "forward_err_eff": 4.6e-05,
+      "listing_date": "20110613",
+      "name": "沃尔核材",
+      "pex": 16.56,
+      "pex_source": "exchange_preclose",
+      "price": 7.18,
+      "r_effective": 0.189354,
+      "ratio": 0.2,
+      "record_date": "20110525",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.946772,
+      "symbol": "002130.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 18.34,
+      "x_actual_date": "20110525",
       "x_pred": null
     },
     {
@@ -9963,6 +10091,7 @@
       "status": "validated",
       "subscription_ratio": 0.965694,
       "symbol": "002203.SZ",
+      "validation_basis": "nominal",
       "x_actual": 12.1,
       "x_actual_date": "20111215",
       "x_pred": null
@@ -9986,6 +10115,7 @@
       "status": "validated",
       "subscription_ratio": 0.966666,
       "symbol": "600428.SH",
+      "validation_basis": "nominal",
       "x_actual": 8.55,
       "x_actual_date": "20110104",
       "x_pred": null
@@ -10009,6 +10139,7 @@
       "status": "validated",
       "subscription_ratio": 0.992197,
       "symbol": "600518.SH",
+      "validation_basis": "nominal",
       "x_actual": 19.71,
       "x_actual_date": "20101227",
       "x_pred": null
@@ -10032,6 +10163,7 @@
       "status": "validated",
       "subscription_ratio": 0.975033,
       "symbol": "600550.SH",
+      "validation_basis": "nominal",
       "x_actual": 23.58,
       "x_actual_date": "20110406",
       "x_pred": null
@@ -10055,6 +10187,7 @@
       "status": "validated",
       "subscription_ratio": 0.934902,
       "symbol": "600595.SH",
+      "validation_basis": "nominal",
       "x_actual": 13.19,
       "x_actual_date": "20110110",
       "x_pred": null
@@ -10063,6 +10196,7 @@
       "amp_factor": 8.588,
       "chg": 1.052885,
       "chg_pred": 1.052437,
+      "denominator_guard": "r_eff/r_nom=0.6755 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20110707",
       "forward_err": 0.000425,
       "forward_err_eff": 0.015187,
@@ -10078,6 +10212,7 @@
       "status": "validated",
       "subscription_ratio": 0.675528,
       "symbol": "601998.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 4.75,
       "x_actual_date": "20110628",
       "x_pred": null
@@ -10101,6 +10236,7 @@
       "status": "validated",
       "subscription_ratio": 0.974341,
       "symbol": "000826.SZ",
+      "validation_basis": "nominal",
       "x_actual": 23.29,
       "x_actual_date": "20121220",
       "x_pred": null
@@ -10124,6 +10260,7 @@
       "status": "validated",
       "subscription_ratio": 0.962537,
       "symbol": "002046.SZ",
+      "validation_basis": "nominal",
       "x_actual": 18.14,
       "x_actual_date": "20120302",
       "x_pred": null
@@ -10147,6 +10284,7 @@
       "status": "validated",
       "subscription_ratio": 0.985903,
       "symbol": "600066.SH",
+      "validation_basis": "nominal",
       "x_actual": 24.6,
       "x_actual_date": "20120210",
       "x_pred": null
@@ -10170,6 +10308,7 @@
       "status": "validated",
       "subscription_ratio": 0.983653,
       "symbol": "600587.SH",
+      "validation_basis": "nominal",
       "x_actual": 28.4,
       "x_actual_date": "20120412",
       "x_pred": null
@@ -10193,6 +10332,7 @@
       "status": "validated",
       "subscription_ratio": 0.9017,
       "symbol": "600667.SH",
+      "validation_basis": "nominal",
       "x_actual": 3.31,
       "x_actual_date": "20121024",
       "x_pred": null
@@ -10216,8 +10356,33 @@
       "status": "validated",
       "subscription_ratio": 0.858029,
       "symbol": "600720.SH",
+      "validation_basis": "nominal",
       "x_actual": 8.76,
       "x_actual_date": "20121126",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 6.652,
+      "chg": 1.087488,
+      "chg_pred": 1.09595,
+      "ex_date": "20130308",
+      "forward_err": 0.007782,
+      "forward_err_eff": 0.000586,
+      "listing_date": "20130314",
+      "name": "珠海港",
+      "pex": 4.46,
+      "pex_source": "exchange_preclose",
+      "price": 3.01,
+      "r_effective": 0.271412,
+      "ratio": 0.3,
+      "record_date": "20130227",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.904707,
+      "symbol": "000507.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 4.85,
+      "x_actual_date": "20130227",
       "x_pred": null
     },
     {
@@ -10239,6 +10404,7 @@
       "status": "validated",
       "subscription_ratio": 0.98112,
       "symbol": "000598.SZ",
+      "validation_basis": "nominal",
       "x_actual": 8.81,
       "x_actual_date": "20130221",
       "x_pred": null
@@ -10262,14 +10428,40 @@
       "status": "validated",
       "subscription_ratio": 0.96433,
       "symbol": "000750.SZ",
+      "validation_basis": "nominal",
       "x_actual": 10.74,
       "x_actual_date": "20131115",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 9.176,
+      "chg": 1.138678,
+      "chg_pred": 1.14563,
+      "ex_date": "20130319",
+      "forward_err": 0.006105,
+      "forward_err_eff": 0.000206,
+      "listing_date": "20130326",
+      "name": "中色股份",
+      "pex": 16.15,
+      "pex_source": "exchange_preclose",
+      "price": 8.26,
+      "r_effective": 0.284395,
+      "ratio": 0.3,
+      "record_date": "20130308",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.947984,
+      "symbol": "000758.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 18.39,
+      "x_actual_date": "20130308",
       "x_pred": null
     },
     {
       "amp_factor": 7.723,
       "chg": 1.01909,
       "chg_pred": 1.019418,
+      "denominator_guard": "r_eff/r_nom=0.7892 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20130905",
       "forward_err": 0.000322,
       "forward_err_eff": 0.003266,
@@ -10285,6 +10477,7 @@
       "status": "validated",
       "subscription_ratio": 0.789172,
       "symbol": "600036.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 10.66,
       "x_actual_date": "20130827",
       "x_pred": null
@@ -10308,6 +10501,7 @@
       "status": "validated",
       "subscription_ratio": 0.966946,
       "symbol": "600118.SH",
+      "validation_basis": "nominal",
       "x_actual": 15.36,
       "x_actual_date": "20130805",
       "x_pred": null
@@ -10331,6 +10525,7 @@
       "status": "validated",
       "subscription_ratio": 0.926888,
       "symbol": "600160.SH",
+      "validation_basis": "nominal",
       "x_actual": 6.33,
       "x_actual_date": "20131213",
       "x_pred": null
@@ -10354,6 +10549,7 @@
       "status": "validated",
       "subscription_ratio": 0.994504,
       "symbol": "600436.SH",
+      "validation_basis": "nominal",
       "x_actual": 136.82,
       "x_actual_date": "20130620",
       "x_pred": null
@@ -10377,6 +10573,7 @@
       "status": "validated",
       "subscription_ratio": 0.92834,
       "symbol": "600458.SH",
+      "validation_basis": "nominal",
       "x_actual": 12.51,
       "x_actual_date": "20130531",
       "x_pred": null
@@ -10400,6 +10597,7 @@
       "status": "validated",
       "subscription_ratio": 0.900269,
       "symbol": "600459.SH",
+      "validation_basis": "nominal",
       "x_actual": 21.59,
       "x_actual_date": "20130311",
       "x_pred": null
@@ -10423,6 +10621,7 @@
       "status": "validated",
       "subscription_ratio": 0.909514,
       "symbol": "600497.SH",
+      "validation_basis": "nominal",
       "x_actual": 12.47,
       "x_actual_date": "20130402",
       "x_pred": null
@@ -10446,6 +10645,7 @@
       "status": "validated",
       "subscription_ratio": 0.939107,
       "symbol": "600879.SH",
+      "validation_basis": "nominal",
       "x_actual": 10.24,
       "x_actual_date": "20130524",
       "x_pred": null
@@ -10469,6 +10669,7 @@
       "status": "validated",
       "subscription_ratio": 0.975467,
       "symbol": "000901.SZ",
+      "validation_basis": "nominal",
       "x_actual": 34.72,
       "x_actual_date": "20141015",
       "x_pred": null
@@ -10492,6 +10693,7 @@
       "status": "validated",
       "subscription_ratio": 0.964702,
       "symbol": "002036.SZ",
+      "validation_basis": "nominal",
       "x_actual": 10.86,
       "x_actual_date": "20141021",
       "x_pred": null
@@ -10515,6 +10717,7 @@
       "status": "validated",
       "subscription_ratio": 0.966957,
       "symbol": "002046.SZ",
+      "validation_basis": "nominal",
       "x_actual": 8.89,
       "x_actual_date": "20140811",
       "x_pred": null
@@ -10538,6 +10741,7 @@
       "status": "validated",
       "subscription_ratio": 0.975282,
       "symbol": "002151.SZ",
+      "validation_basis": "nominal",
       "x_actual": 35.75,
       "x_actual_date": "20140103",
       "x_pred": null
@@ -10561,6 +10765,7 @@
       "status": "validated",
       "subscription_ratio": 0.979898,
       "symbol": "002312.SZ",
+      "validation_basis": "nominal",
       "x_actual": 28.1,
       "x_actual_date": "20141014",
       "x_pred": null
@@ -10584,8 +10789,33 @@
       "status": "validated",
       "subscription_ratio": 0.979433,
       "symbol": "002522.SZ",
+      "validation_basis": "nominal",
       "x_actual": 14.99,
       "x_actual_date": "20140109",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 14.135,
+      "chg": 1.190506,
+      "chg_pred": 1.202861,
+      "ex_date": "20141231",
+      "forward_err": 0.010378,
+      "forward_err_eff": 0.000227,
+      "listing_date": "20150112",
+      "name": "*ST棒杰",
+      "pex": 15.54,
+      "pex_source": "exchange_preclose",
+      "price": 4.98,
+      "r_effective": 0.279923,
+      "ratio": 0.3,
+      "record_date": "20141222",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.933076,
+      "symbol": "002634.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 18.5,
+      "x_actual_date": "20141222",
       "x_pred": null
     },
     {
@@ -10607,6 +10837,7 @@
       "status": "validated",
       "subscription_ratio": 0.911848,
       "symbol": "600059.SH",
+      "validation_basis": "nominal",
       "x_actual": 7.86,
       "x_actual_date": "20140603",
       "x_pred": null
@@ -10630,6 +10861,7 @@
       "status": "validated",
       "subscription_ratio": 0.914681,
       "symbol": "600089.SH",
+      "validation_basis": "nominal",
       "x_actual": 10.24,
       "x_actual_date": "20140116",
       "x_pred": null
@@ -10653,6 +10885,7 @@
       "status": "validated",
       "subscription_ratio": 0.964547,
       "symbol": "600153.SH",
+      "validation_basis": "nominal",
       "x_actual": 6.42,
       "x_actual_date": "20140418",
       "x_pred": null
@@ -10676,6 +10909,7 @@
       "status": "validated",
       "subscription_ratio": 0.89534,
       "symbol": "600755.SH",
+      "validation_basis": "nominal",
       "x_actual": 4.85,
       "x_actual_date": "20140626",
       "x_pred": null
@@ -10699,6 +10933,7 @@
       "status": "validated",
       "subscription_ratio": 0.980915,
       "symbol": "601798.SH",
+      "validation_basis": "nominal",
       "x_actual": 11.22,
       "x_actual_date": "20140113",
       "x_pred": null
@@ -10722,6 +10957,7 @@
       "status": "validated",
       "subscription_ratio": 0.983366,
       "symbol": "002068.SZ",
+      "validation_basis": "nominal",
       "x_actual": 8.71,
       "x_actual_date": "20141229",
       "x_pred": null
@@ -10745,6 +10981,7 @@
       "status": "validated",
       "subscription_ratio": 0.97278,
       "symbol": "002132.SZ",
+      "validation_basis": "nominal",
       "x_actual": 10.18,
       "x_actual_date": "20150408",
       "x_pred": null
@@ -10768,8 +11005,33 @@
       "status": "validated",
       "subscription_ratio": 0.981371,
       "symbol": "002496.SZ",
+      "validation_basis": "nominal",
       "x_actual": 27.3,
       "x_actual_date": "20150313",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 20.925,
+      "chg": 1.223958,
+      "chg_pred": 1.230402,
+      "ex_date": "20150703",
+      "forward_err": 0.005264,
+      "forward_err_eff": 9.8e-05,
+      "listing_date": "20150716",
+      "name": "龙洲股份",
+      "pex": 24.26,
+      "pex_source": "exchange_preclose",
+      "price": 5.6,
+      "r_effective": 0.291314,
+      "ratio": 0.3,
+      "record_date": "20150624",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.971045,
+      "symbol": "002682.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 29.7,
+      "x_actual_date": "20150624",
       "x_pred": null
     },
     {
@@ -10791,6 +11053,7 @@
       "status": "validated",
       "subscription_ratio": 0.993661,
       "symbol": "300147.SZ",
+      "validation_basis": "nominal",
       "x_actual": 41.25,
       "x_actual_date": "20150609",
       "x_pred": null
@@ -10814,6 +11077,7 @@
       "status": "validated",
       "subscription_ratio": 0.984459,
       "symbol": "000661.SZ",
+      "validation_basis": "nominal",
       "x_actual": 103.2,
       "x_actual_date": "20160418",
       "x_pred": null
@@ -10837,6 +11101,7 @@
       "status": "validated",
       "subscription_ratio": 0.979188,
       "symbol": "000686.SZ",
+      "validation_basis": "nominal",
       "x_actual": 13.77,
       "x_actual_date": "20160406",
       "x_pred": null
@@ -10860,6 +11125,7 @@
       "status": "validated",
       "subscription_ratio": 0.944451,
       "symbol": "000797.SZ",
+      "validation_basis": "nominal",
       "x_actual": 15.06,
       "x_actual_date": "20160127",
       "x_pred": null
@@ -10883,6 +11149,7 @@
       "status": "validated",
       "subscription_ratio": 0.97936,
       "symbol": "002101.SZ",
+      "validation_basis": "nominal",
       "x_actual": 25.0,
       "x_actual_date": "20160412",
       "x_pred": null
@@ -10906,6 +11173,7 @@
       "status": "validated",
       "subscription_ratio": 0.983687,
       "symbol": "002258.SZ",
+      "validation_basis": "nominal",
       "x_actual": 18.55,
       "x_actual_date": "20160115",
       "x_pred": null
@@ -10929,6 +11197,7 @@
       "status": "validated",
       "subscription_ratio": 0.97137,
       "symbol": "002363.SZ",
+      "validation_basis": "nominal",
       "x_actual": 14.63,
       "x_actual_date": "20160121",
       "x_pred": null
@@ -10952,6 +11221,7 @@
       "status": "validated",
       "subscription_ratio": 0.967283,
       "symbol": "300106.SZ",
+      "validation_basis": "nominal",
       "x_actual": 12.31,
       "x_actual_date": "20160127",
       "x_pred": null
@@ -10975,6 +11245,7 @@
       "status": "validated",
       "subscription_ratio": 0.958714,
       "symbol": "600489.SH",
+      "validation_basis": "nominal",
       "x_actual": 10.59,
       "x_actual_date": "20160513",
       "x_pred": null
@@ -10998,6 +11269,7 @@
       "status": "validated",
       "subscription_ratio": 0.969084,
       "symbol": "600743.SH",
+      "validation_basis": "nominal",
       "x_actual": 4.7,
       "x_actual_date": "20160712",
       "x_pred": null
@@ -11021,6 +11293,7 @@
       "status": "validated",
       "subscription_ratio": 0.957139,
       "symbol": "601099.SH",
+      "validation_basis": "nominal",
       "x_actual": 7.57,
       "x_actual_date": "20160114",
       "x_pred": null
@@ -11044,6 +11317,7 @@
       "status": "validated",
       "subscription_ratio": 0.959405,
       "symbol": "601377.SH",
+      "validation_basis": "nominal",
       "x_actual": 11.0,
       "x_actual_date": "20151228",
       "x_pred": null
@@ -11067,6 +11341,7 @@
       "status": "validated",
       "subscription_ratio": 0.97474,
       "symbol": "000404.SZ",
+      "validation_basis": "nominal",
       "x_actual": 8.58,
       "x_actual_date": "20170518",
       "x_pred": null
@@ -11090,6 +11365,7 @@
       "status": "validated",
       "subscription_ratio": 0.967259,
       "symbol": "000977.SZ",
+      "validation_basis": "nominal",
       "x_actual": 16.54,
       "x_actual_date": "20170718",
       "x_pred": null
@@ -11113,6 +11389,7 @@
       "status": "validated",
       "subscription_ratio": 0.989749,
       "symbol": "002074.SZ",
+      "validation_basis": "nominal",
       "x_actual": 29.63,
       "x_actual_date": "20171116",
       "x_pred": null
@@ -11136,6 +11413,7 @@
       "status": "validated",
       "subscription_ratio": 0.99023,
       "symbol": "002466.SZ",
+      "validation_basis": "nominal",
       "x_actual": 58.13,
       "x_actual_date": "20171215",
       "x_pred": null
@@ -11159,8 +11437,33 @@
       "status": "validated",
       "subscription_ratio": 0.971689,
       "symbol": "002673.SZ",
+      "validation_basis": "nominal",
       "x_actual": 18.28,
       "x_actual_date": "20170329",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 6.34,
+      "chg": 1.078803,
+      "chg_pred": 1.088097,
+      "ex_date": "20171227",
+      "forward_err": 0.008615,
+      "forward_err_eff": 5.1e-05,
+      "listing_date": "20180112",
+      "name": "中铁装配",
+      "pex": 15.88,
+      "pex_source": "exchange_preclose",
+      "price": 11.12,
+      "r_effective": 0.263162,
+      "ratio": 0.3,
+      "record_date": "20171218",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.877206,
+      "symbol": "300374.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 17.13,
+      "x_actual_date": "20171218",
       "x_pred": null
     },
     {
@@ -11182,6 +11485,7 @@
       "status": "validated",
       "subscription_ratio": 0.991819,
       "symbol": "300444.SZ",
+      "validation_basis": "nominal",
       "x_actual": 23.14,
       "x_actual_date": "20170721",
       "x_pred": null
@@ -11205,6 +11509,7 @@
       "status": "validated",
       "subscription_ratio": 0.980406,
       "symbol": "600057.SH",
+      "validation_basis": "nominal",
       "x_actual": 8.28,
       "x_actual_date": "20171219",
       "x_pred": null
@@ -11228,6 +11533,7 @@
       "status": "validated",
       "subscription_ratio": 0.950159,
       "symbol": "600089.SH",
+      "validation_basis": "nominal",
       "x_actual": 9.66,
       "x_actual_date": "20170531",
       "x_pred": null
@@ -11251,6 +11557,7 @@
       "status": "validated",
       "subscription_ratio": 0.942533,
       "symbol": "600405.SH",
+      "validation_basis": "nominal",
       "x_actual": 8.21,
       "x_actual_date": "20170526",
       "x_pred": null
@@ -11274,6 +11581,7 @@
       "status": "validated",
       "subscription_ratio": 0.94216,
       "symbol": "000563.SZ",
+      "validation_basis": "nominal",
       "x_actual": 3.04,
       "x_actual_date": "20180716",
       "x_pred": null
@@ -11297,6 +11605,7 @@
       "status": "validated",
       "subscription_ratio": 0.969386,
       "symbol": "002350.SZ",
+      "validation_basis": "nominal",
       "x_actual": 8.74,
       "x_actual_date": "20180517",
       "x_pred": null
@@ -11320,6 +11629,7 @@
       "status": "validated",
       "subscription_ratio": 0.984492,
       "symbol": "002775.SZ",
+      "validation_basis": "nominal",
       "x_actual": 17.0,
       "x_actual_date": "20180323",
       "x_pred": null
@@ -11343,6 +11653,7 @@
       "status": "validated",
       "subscription_ratio": 0.994356,
       "symbol": "300110.SZ",
+      "validation_basis": "nominal",
       "x_actual": 15.8,
       "x_actual_date": "20180131",
       "x_pred": null
@@ -11366,6 +11677,7 @@
       "status": "validated",
       "subscription_ratio": 0.990154,
       "symbol": "300121.SZ",
+      "validation_basis": "nominal",
       "x_actual": 13.49,
       "x_actual_date": "20180201",
       "x_pred": null
@@ -11389,6 +11701,7 @@
       "status": "validated",
       "subscription_ratio": 0.969225,
       "symbol": "300231.SZ",
+      "validation_basis": "nominal",
       "x_actual": 10.48,
       "x_actual_date": "20180305",
       "x_pred": null
@@ -11412,6 +11725,7 @@
       "status": "validated",
       "subscription_ratio": 0.984094,
       "symbol": "300387.SZ",
+      "validation_basis": "nominal",
       "x_actual": 7.33,
       "x_actual_date": "20180620",
       "x_pred": null
@@ -11435,6 +11749,7 @@
       "status": "validated",
       "subscription_ratio": 0.972633,
       "symbol": "600219.SH",
+      "validation_basis": "nominal",
       "x_actual": 2.65,
       "x_actual_date": "20181023",
       "x_pred": null
@@ -11458,6 +11773,7 @@
       "status": "validated",
       "subscription_ratio": 0.967602,
       "symbol": "600256.SH",
+      "validation_basis": "nominal",
       "x_actual": 4.19,
       "x_actual_date": "20180319",
       "x_pred": null
@@ -11481,6 +11797,7 @@
       "status": "validated",
       "subscription_ratio": 0.967159,
       "symbol": "600380.SH",
+      "validation_basis": "nominal",
       "x_actual": 9.24,
       "x_actual_date": "20180928",
       "x_pred": null
@@ -11504,6 +11821,7 @@
       "status": "validated",
       "subscription_ratio": 0.988332,
       "symbol": "600803.SH",
+      "validation_basis": "nominal",
       "x_actual": 14.54,
       "x_actual_date": "20180201",
       "x_pred": null
@@ -11527,8 +11845,33 @@
       "status": "validated",
       "subscription_ratio": 0.984515,
       "symbol": "603636.SH",
+      "validation_basis": "nominal",
       "x_actual": 10.79,
       "x_actual_date": "20180312",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 13.932,
+      "chg": 1.18905,
+      "chg_pred": 1.195323,
+      "ex_date": "20190228",
+      "forward_err": 0.005276,
+      "forward_err_eff": 0.000173,
+      "listing_date": "20190313",
+      "name": "东信和平",
+      "pex": 11.64,
+      "pex_source": "exchange_preclose",
+      "price": 4.04,
+      "r_effective": 0.28921,
+      "ratio": 0.3,
+      "record_date": "20190219",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.964033,
+      "symbol": "002017.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 13.84,
+      "x_actual_date": "20190219",
       "x_pred": null
     },
     {
@@ -11550,6 +11893,7 @@
       "status": "validated",
       "subscription_ratio": 0.975218,
       "symbol": "002166.SZ",
+      "validation_basis": "nominal",
       "x_actual": 10.14,
       "x_actual_date": "20190408",
       "x_pred": null
@@ -11573,6 +11917,7 @@
       "status": "validated",
       "subscription_ratio": 0.974239,
       "symbol": "002185.SZ",
+      "validation_basis": "nominal",
       "x_actual": 5.1,
       "x_actual_date": "20190702",
       "x_pred": null
@@ -11581,6 +11926,7 @@
       "amp_factor": 14.186,
       "chg": 1.097902,
       "chg_pred": 1.098695,
+      "denominator_guard": "r_eff/r_nom=0.8071 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20190329",
       "forward_err": 0.000723,
       "forward_err_eff": 0.015527,
@@ -11596,6 +11942,7 @@
       "status": "validated",
       "subscription_ratio": 0.807119,
       "symbol": "002202.SZ",
+      "validation_basis": "nominal_fallback",
       "x_actual": 16.05,
       "x_actual_date": "20190320",
       "x_pred": null
@@ -11619,6 +11966,7 @@
       "status": "validated",
       "subscription_ratio": 0.978152,
       "symbol": "002466.SZ",
+      "validation_basis": "nominal",
       "x_actual": 29.06,
       "x_actual_date": "20191217",
       "x_pred": null
@@ -11642,6 +11990,7 @@
       "status": "validated",
       "subscription_ratio": 0.98798,
       "symbol": "300715.SZ",
+      "validation_basis": "nominal",
       "x_actual": 23.3,
       "x_actual_date": "20191219",
       "x_pred": null
@@ -11665,6 +12014,7 @@
       "status": "validated",
       "subscription_ratio": 0.97124,
       "symbol": "600113.SH",
+      "validation_basis": "nominal",
       "x_actual": 8.61,
       "x_actual_date": "20190225",
       "x_pred": null
@@ -11688,6 +12038,7 @@
       "status": "validated",
       "subscription_ratio": 0.944765,
       "symbol": "600360.SH",
+      "validation_basis": "nominal",
       "x_actual": 7.54,
       "x_actual_date": "20190403",
       "x_pred": null
@@ -11711,6 +12062,7 @@
       "status": "validated",
       "subscription_ratio": 0.967142,
       "symbol": "600459.SH",
+      "validation_basis": "nominal",
       "x_actual": 14.49,
       "x_actual_date": "20190220",
       "x_pred": null
@@ -11720,6 +12072,7 @@
       "anomaly": "r_imp=0.375 > r_nom=0.30（比值 1.25，唯一反向偏离）——疑配股与送转同日或快照匹配错位；Q-6 §85.3 单独登记，不改口径",
       "chg": 1.003426,
       "chg_pred": 1.002877,
+      "denominator_guard": "r_eff/r_nom=0.7001 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20190620",
       "forward_err": 0.000548,
       "forward_err_eff": 0.00126,
@@ -11735,6 +12088,7 @@
       "status": "validated",
       "subscription_ratio": 0.700144,
       "symbol": "600480.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 8.85,
       "x_actual_date": "20190611",
       "x_pred": 8.8713
@@ -11758,6 +12112,7 @@
       "status": "validated",
       "subscription_ratio": 0.995435,
       "symbol": "601012.SH",
+      "validation_basis": "nominal",
       "x_actual": 27.09,
       "x_actual_date": "20190408",
       "x_pred": null
@@ -11781,6 +12136,7 @@
       "status": "validated",
       "subscription_ratio": 0.987803,
       "symbol": "000088.SZ",
+      "validation_basis": "nominal",
       "x_actual": 9.36,
       "x_actual_date": "20200810",
       "x_pred": null
@@ -11804,6 +12160,7 @@
       "status": "validated",
       "subscription_ratio": 0.988805,
       "symbol": "000728.SZ",
+      "validation_basis": "nominal",
       "x_actual": 10.52,
       "x_actual_date": "20201013",
       "x_pred": null
@@ -11827,6 +12184,7 @@
       "status": "validated",
       "subscription_ratio": 0.971788,
       "symbol": "000750.SZ",
+      "validation_basis": "nominal",
       "x_actual": 5.26,
       "x_actual_date": "20200103",
       "x_pred": null
@@ -11850,6 +12208,7 @@
       "status": "validated",
       "subscription_ratio": 0.978388,
       "symbol": "000885.SZ",
+      "validation_basis": "nominal",
       "x_actual": 12.84,
       "x_actual_date": "20200804",
       "x_pred": null
@@ -11873,6 +12232,7 @@
       "status": "validated",
       "subscription_ratio": 0.970537,
       "symbol": "000901.SZ",
+      "validation_basis": "nominal",
       "x_actual": 12.82,
       "x_actual_date": "20200226",
       "x_pred": null
@@ -11896,8 +12256,33 @@
       "status": "validated",
       "subscription_ratio": 0.981621,
       "symbol": "000977.SZ",
+      "validation_basis": "nominal",
       "x_actual": 43.72,
       "x_actual_date": "20200310",
+      "x_pred": null
+    },
+    {
+      "amp_factor": 5.395,
+      "chg": 1.047572,
+      "chg_pred": 1.052852,
+      "ex_date": "20200629",
+      "forward_err": 0.00504,
+      "forward_err_eff": 0.000739,
+      "listing_date": "20200710",
+      "name": "山西证券",
+      "pex": 6.1,
+      "pex_source": "exchange_preclose",
+      "price": 5.0,
+      "r_effective": 0.269042,
+      "ratio": 0.3,
+      "record_date": "20200616",
+      "rel_err": null,
+      "status": "validated",
+      "subscription_ratio": 0.896807,
+      "symbol": "002500.SZ",
+      "validation_basis": "effective_ratio",
+      "x_actual": 6.39,
+      "x_actual_date": "20200616",
       "x_pred": null
     },
     {
@@ -11919,6 +12304,7 @@
       "status": "validated",
       "subscription_ratio": 0.967902,
       "symbol": "002788.SZ",
+      "validation_basis": "nominal",
       "x_actual": 9.5,
       "x_actual_date": "20200908",
       "x_pred": null
@@ -11942,6 +12328,7 @@
       "status": "validated",
       "subscription_ratio": 0.992199,
       "symbol": "002884.SZ",
+      "validation_basis": "nominal",
       "x_actual": 15.89,
       "x_actual_date": "20200320",
       "x_pred": null
@@ -11965,6 +12352,7 @@
       "status": "validated",
       "subscription_ratio": 0.970397,
       "symbol": "600008.SH",
+      "validation_basis": "nominal",
       "x_actual": 3.15,
       "x_actual_date": "20200918",
       "x_pred": null
@@ -11988,6 +12376,7 @@
       "status": "validated",
       "subscription_ratio": 0.989548,
       "symbol": "600419.SH",
+      "validation_basis": "nominal",
       "x_actual": 15.1,
       "x_actual_date": "20200103",
       "x_pred": null
@@ -12011,6 +12400,7 @@
       "status": "validated",
       "subscription_ratio": 0.931202,
       "symbol": "600919.SH",
+      "validation_basis": "nominal",
       "x_actual": 5.93,
       "x_actual_date": "20201208",
       "x_pred": null
@@ -12019,6 +12409,7 @@
       "amp_factor": 16.646,
       "chg": 1.20583,
       "chg_pred": 1.205625,
+      "denominator_guard": "r_eff/r_nom=0.8473 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20200720",
       "forward_err": 0.00017,
       "forward_err_eff": 0.024584,
@@ -12034,6 +12425,7 @@
       "status": "validated",
       "subscription_ratio": 0.847337,
       "symbol": "600999.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 28.59,
       "x_actual_date": "20200709",
       "x_pred": null
@@ -12057,6 +12449,7 @@
       "status": "validated",
       "subscription_ratio": 0.956221,
       "symbol": "601162.SH",
+      "validation_basis": "nominal",
       "x_actual": 7.15,
       "x_actual_date": "20200310",
       "x_pred": null
@@ -12080,6 +12473,7 @@
       "status": "validated",
       "subscription_ratio": 0.978354,
       "symbol": "601555.SH",
+      "validation_basis": "nominal",
       "x_actual": 9.21,
       "x_actual_date": "20200312",
       "x_pred": null
@@ -12103,6 +12497,7 @@
       "status": "validated",
       "subscription_ratio": 0.920471,
       "symbol": "603269.SH",
+      "validation_basis": "nominal",
       "x_actual": 13.92,
       "x_actual_date": "20200717",
       "x_pred": null
@@ -12126,6 +12521,7 @@
       "status": "validated",
       "subscription_ratio": 0.985123,
       "symbol": "603633.SH",
+      "validation_basis": "nominal",
       "x_actual": 20.96,
       "x_actual_date": "20200710",
       "x_pred": null
@@ -12149,6 +12545,7 @@
       "status": "validated",
       "subscription_ratio": 0.9913,
       "symbol": "002142.SZ",
+      "validation_basis": "nominal",
       "x_actual": 38.88,
       "x_actual_date": "20211123",
       "x_pred": null
@@ -12172,6 +12569,7 @@
       "status": "validated",
       "subscription_ratio": 0.980469,
       "symbol": "600888.SH",
+      "validation_basis": "nominal",
       "x_actual": 6.29,
       "x_actual_date": "20210412",
       "x_pred": null
@@ -12195,6 +12593,7 @@
       "status": "validated",
       "subscription_ratio": 0.99106,
       "symbol": "600909.SH",
+      "validation_basis": "nominal",
       "x_actual": 6.22,
       "x_actual_date": "20210601",
       "x_pred": null
@@ -12203,6 +12602,7 @@
       "amp_factor": 10.975,
       "chg": 1.162319,
       "chg_pred": 1.162454,
+      "denominator_guard": "r_eff/r_nom=0.8441 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20210708",
       "forward_err": 0.000116,
       "forward_err_eff": 0.019696,
@@ -12218,6 +12618,7 @@
       "status": "validated",
       "subscription_ratio": 0.844093,
       "symbol": "601015.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 8.95,
       "x_actual_date": "20210629",
       "x_pred": null
@@ -12241,6 +12642,7 @@
       "status": "validated",
       "subscription_ratio": 0.993909,
       "symbol": "601236.SH",
+      "validation_basis": "nominal",
       "x_actual": 13.36,
       "x_actual_date": "20210726",
       "x_pred": null
@@ -12264,6 +12666,7 @@
       "status": "validated",
       "subscription_ratio": 0.96807,
       "symbol": "601555.SH",
+      "validation_basis": "nominal",
       "x_actual": 8.87,
       "x_actual_date": "20211214",
       "x_pred": null
@@ -12287,6 +12690,7 @@
       "status": "validated",
       "subscription_ratio": 0.977809,
       "symbol": "000065.SZ",
+      "validation_basis": "nominal",
       "x_actual": 9.32,
       "x_actual_date": "20220401",
       "x_pred": null
@@ -12310,6 +12714,7 @@
       "status": "validated",
       "subscription_ratio": 0.942081,
       "symbol": "000970.SZ",
+      "validation_basis": "nominal",
       "x_actual": 13.87,
       "x_actual_date": "20220215",
       "x_pred": null
@@ -12318,6 +12723,7 @@
       "amp_factor": 6.229,
       "chg": 1.07554,
       "chg_pred": 1.079505,
+      "denominator_guard": "r_eff/r_nom=0.5778 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20220113",
       "forward_err": 0.003687,
       "forward_err_eff": 0.024226,
@@ -12333,6 +12739,7 @@
       "status": "validated",
       "subscription_ratio": 0.577833,
       "symbol": "002948.SZ",
+      "validation_basis": "nominal_fallback",
       "x_actual": 4.7,
       "x_actual_date": "20220104",
       "x_pred": null
@@ -12356,6 +12763,7 @@
       "status": "validated",
       "subscription_ratio": 0.982451,
       "symbol": "300772.SZ",
+      "validation_basis": "nominal",
       "x_actual": 17.75,
       "x_actual_date": "20221109",
       "x_pred": null
@@ -12364,6 +12772,7 @@
       "amp_factor": 13.641,
       "chg": 1.06059,
       "chg_pred": 1.060669,
+      "denominator_guard": "r_eff/r_nom=0.8004 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20220127",
       "forward_err": 7.4e-05,
       "forward_err_eff": 0.010622,
@@ -12379,6 +12788,7 @@
       "status": "validated",
       "subscription_ratio": 0.800417,
       "symbol": "600030.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 25.7,
       "x_actual_date": "20220118",
       "x_pred": null
@@ -12402,6 +12812,7 @@
       "status": "validated",
       "subscription_ratio": 0.95807,
       "symbol": "600459.SH",
+      "validation_basis": "nominal",
       "x_actual": 15.36,
       "x_actual_date": "20221213",
       "x_pred": null
@@ -12410,6 +12821,7 @@
       "amp_factor": 4.991,
       "chg": 1.01875,
       "chg_pred": 1.018363,
+      "denominator_guard": "r_eff/r_nom=0.7675 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20220429",
       "forward_err": 0.00038,
       "forward_err_eff": 0.003881,
@@ -12425,6 +12837,7 @@
       "status": "validated",
       "subscription_ratio": 0.767485,
       "symbol": "600958.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 9.22,
       "x_actual_date": "20220420",
       "x_pred": 9.2372
@@ -12448,6 +12861,7 @@
       "status": "validated",
       "subscription_ratio": 0.972575,
       "symbol": "601016.SH",
+      "validation_basis": "nominal",
       "x_actual": 4.43,
       "x_actual_date": "20221117",
       "x_pred": null
@@ -12471,6 +12885,7 @@
       "status": "validated",
       "subscription_ratio": 0.979575,
       "symbol": "601108.SH",
+      "validation_basis": "nominal",
       "x_actual": 8.48,
       "x_actual_date": "20220330",
       "x_pred": null
@@ -12494,6 +12909,7 @@
       "status": "validated",
       "subscription_ratio": 0.965313,
       "symbol": "601377.SH",
+      "validation_basis": "nominal",
       "x_actual": 6.31,
       "x_actual_date": "20220816",
       "x_pred": null
@@ -12517,6 +12933,7 @@
       "status": "validated",
       "subscription_ratio": 0.949181,
       "symbol": "000049.SZ",
+      "validation_basis": "nominal",
       "x_actual": 31.54,
       "x_actual_date": "20231129",
       "x_pred": null
@@ -12540,6 +12957,7 @@
       "status": "validated",
       "subscription_ratio": 0.894423,
       "symbol": "300475.SZ",
+      "validation_basis": "nominal",
       "x_actual": 19.1,
       "x_actual_date": "20230207",
       "x_pred": null
@@ -12563,6 +12981,7 @@
       "status": "validated",
       "subscription_ratio": 0.97678,
       "symbol": "600081.SH",
+      "validation_basis": "nominal",
       "x_actual": 11.64,
       "x_actual_date": "20230801",
       "x_pred": null
@@ -12571,6 +12990,7 @@
       "amp_factor": 5.941,
       "chg": 1.06661,
       "chg_pred": 1.064555,
+      "denominator_guard": "r_eff/r_nom=0.7569 < 0.85（A+H/B 分母陷阱？）⇒ 判定降级回名义 r（R12′/§88.5.1；D5）",
       "ex_date": "20230627",
       "forward_err": 0.001927,
       "forward_err_eff": 0.014528,
@@ -12586,242 +13006,13 @@
       "status": "validated",
       "subscription_ratio": 0.75694,
       "symbol": "601916.SH",
+      "validation_basis": "nominal_fallback",
       "x_actual": 2.74,
       "x_actual_date": "20230614",
       "x_pred": null
     }
   ],
   "rights_suspended": [
-    {
-      "amp_factor": 7.034,
-      "chg": 1.097205,
-      "chg_pred": 1.107991,
-      "ex_date": "20091020",
-      "forward_err": 0.009831,
-      "forward_err_eff": 0.000507,
-      "listing_date": "20091029",
-      "name": "国际医学",
-      "pex": 6.28,
-      "pex_source": "exchange_preclose",
-      "price": 3.98,
-      "r_effective": 0.267196,
-      "ratio": 0.3,
-      "record_date": "20091009",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.890652,
-      "symbol": "000516.SZ",
-      "x_actual": 6.89,
-      "x_actual_date": "20091009",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 7.266,
-      "chg": 1.102706,
-      "chg_pred": 1.108325,
-      "ex_date": "20110119",
-      "forward_err": 0.005095,
-      "forward_err_eff": 9.9e-05,
-      "listing_date": "20110131",
-      "name": "贵州轮胎",
-      "pex": 10.79,
-      "pex_source": "exchange_preclose",
-      "price": 6.86,
-      "r_effective": 0.281563,
-      "ratio": 0.3,
-      "record_date": "20110110",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.938544,
-      "symbol": "000589.SZ",
-      "x_actual": 11.9,
-      "x_actual_date": "20110110",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 14.338,
-      "chg": 1.107322,
-      "chg_pred": 1.112864,
-      "ex_date": "20110603",
-      "forward_err": 0.005005,
-      "forward_err_eff": 4.6e-05,
-      "listing_date": "20110613",
-      "name": "沃尔核材",
-      "pex": 16.56,
-      "pex_source": "exchange_preclose",
-      "price": 7.18,
-      "r_effective": 0.189354,
-      "ratio": 0.2,
-      "record_date": "20110525",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.946772,
-      "symbol": "002130.SZ",
-      "x_actual": 18.34,
-      "x_actual_date": "20110525",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 6.652,
-      "chg": 1.087488,
-      "chg_pred": 1.09595,
-      "ex_date": "20130308",
-      "forward_err": 0.007782,
-      "forward_err_eff": 0.000586,
-      "listing_date": "20130314",
-      "name": "珠海港",
-      "pex": 4.46,
-      "pex_source": "exchange_preclose",
-      "price": 3.01,
-      "r_effective": 0.271412,
-      "ratio": 0.3,
-      "record_date": "20130227",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.904707,
-      "symbol": "000507.SZ",
-      "x_actual": 4.85,
-      "x_actual_date": "20130227",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 9.176,
-      "chg": 1.138678,
-      "chg_pred": 1.14563,
-      "ex_date": "20130319",
-      "forward_err": 0.006105,
-      "forward_err_eff": 0.000206,
-      "listing_date": "20130326",
-      "name": "中色股份",
-      "pex": 16.15,
-      "pex_source": "exchange_preclose",
-      "price": 8.26,
-      "r_effective": 0.284395,
-      "ratio": 0.3,
-      "record_date": "20130308",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.947984,
-      "symbol": "000758.SZ",
-      "x_actual": 18.39,
-      "x_actual_date": "20130308",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 14.135,
-      "chg": 1.190506,
-      "chg_pred": 1.202861,
-      "ex_date": "20141231",
-      "forward_err": 0.010378,
-      "forward_err_eff": 0.000227,
-      "listing_date": "20150112",
-      "name": "*ST棒杰",
-      "pex": 15.54,
-      "pex_source": "exchange_preclose",
-      "price": 4.98,
-      "r_effective": 0.279923,
-      "ratio": 0.3,
-      "record_date": "20141222",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.933076,
-      "symbol": "002634.SZ",
-      "x_actual": 18.5,
-      "x_actual_date": "20141222",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 20.925,
-      "chg": 1.223958,
-      "chg_pred": 1.230402,
-      "ex_date": "20150703",
-      "forward_err": 0.005264,
-      "forward_err_eff": 9.8e-05,
-      "listing_date": "20150716",
-      "name": "龙洲股份",
-      "pex": 24.26,
-      "pex_source": "exchange_preclose",
-      "price": 5.6,
-      "r_effective": 0.291314,
-      "ratio": 0.3,
-      "record_date": "20150624",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.971045,
-      "symbol": "002682.SZ",
-      "x_actual": 29.7,
-      "x_actual_date": "20150624",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 6.34,
-      "chg": 1.078803,
-      "chg_pred": 1.088097,
-      "ex_date": "20171227",
-      "forward_err": 0.008615,
-      "forward_err_eff": 5.1e-05,
-      "listing_date": "20180112",
-      "name": "中铁装配",
-      "pex": 15.88,
-      "pex_source": "exchange_preclose",
-      "price": 11.12,
-      "r_effective": 0.263162,
-      "ratio": 0.3,
-      "record_date": "20171218",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.877206,
-      "symbol": "300374.SZ",
-      "x_actual": 17.13,
-      "x_actual_date": "20171218",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 13.932,
-      "chg": 1.18905,
-      "chg_pred": 1.195323,
-      "ex_date": "20190228",
-      "forward_err": 0.005276,
-      "forward_err_eff": 0.000173,
-      "listing_date": "20190313",
-      "name": "东信和平",
-      "pex": 11.64,
-      "pex_source": "exchange_preclose",
-      "price": 4.04,
-      "r_effective": 0.28921,
-      "ratio": 0.3,
-      "record_date": "20190219",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.964033,
-      "symbol": "002017.SZ",
-      "x_actual": 13.84,
-      "x_actual_date": "20190219",
-      "x_pred": null
-    },
-    {
-      "amp_factor": 5.395,
-      "chg": 1.047572,
-      "chg_pred": 1.052852,
-      "ex_date": "20200629",
-      "forward_err": 0.00504,
-      "forward_err_eff": 0.000739,
-      "listing_date": "20200710",
-      "name": "山西证券",
-      "pex": 6.1,
-      "pex_source": "exchange_preclose",
-      "price": 5.0,
-      "r_effective": 0.269042,
-      "ratio": 0.3,
-      "record_date": "20200616",
-      "rel_err": null,
-      "status": "suspended",
-      "subscription_ratio": 0.896807,
-      "symbol": "002500.SZ",
-      "x_actual": 6.39,
-      "x_actual_date": "20200616",
-      "x_pred": null
-    },
     {
       "amp_factor": 5.313,
       "chg": 1.108043,
@@ -12841,6 +13032,7 @@
       "status": "suspended",
       "subscription_ratio": 0.930676,
       "symbol": "300176.SZ",
+      "validation_basis": "nominal",
       "x_actual": 4.5,
       "x_actual_date": "20260907",
       "x_pred": null
@@ -26284,9 +26476,9 @@
     "down_explained_by_dividend": 1,
     "down_total": 513,
     "jumps_total": 54380,
-    "rights_suspended": 11,
+    "rights_suspended": 1,
     "rights_unmatched": 2683,
-    "rights_validated": 165,
+    "rights_validated": 175,
     "up_candidates": 2859,
     "up_explained_by_dividend": 51008,
     "up_total": 53867
