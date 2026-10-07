@@ -217,12 +217,20 @@ class Portfolio:
                     "listing_date": (listing.to_ymd() if listing else None),
                 })
 
-        # 缩股（**R6′**，19 号 §78.5 代理检测；默认不触发）：qty 按比例减少、
-        # **无现金流**；成本总额守恒 ⇒ 每股成本按 1/ratio 放大；理论价同步
-        # 上移 `P0 / ratio`（有 bar 时被真实收盘覆盖）。`ratio == 1` 跳过。
+        # 缩股（**R6′** 代理检测 / **R18′** 股本级确证；默认不触发）：qty 按比例
+        # 减少、**无现金流**；成本总额守恒 ⇒ 每股成本按 1/ratio 放大；理论价
+        # 同步上移 `P0 / ratio`（有 bar 时被真实收盘覆盖）。`ratio == 1` 跳过。
+        # **R21′（19 号 §87.8.1；N22）保底分支**（`int(qty×cons) == 0`）：
+        #   ① `avg_cost` **保持不变**（每股成本守恒——放大与理论价上移叠加会
+        #      「凭空造股＋浮盈」）；② 事件 `qty_after` 取**保底后实际值**；
+        #   ③ 置 `forced_min_qty: true`（WARN 披露，不静默）。
+        # **R22′（§87.8.2）**：事件带 `source`（`confirmed`／`proxy`），供逐事件
+        #   披露按来源分措辞（确证缩股不得被写成「代理／未确证」）。
         cons = float(getattr(action, "consolidation_ratio", 1.0) or 1.0)
         if cons != 1.0 and qty_at_ex > 0:
-            new_qty = int(qty_at_ex * cons)
+            raw_qty = int(qty_at_ex * cons)
+            forced = raw_qty <= 0                      # R21′ 保底判定（保底前）
+            new_qty = 1 if forced else raw_qty
             p0c = self._last_close.get(action.symbol)
             if p0c is None or p0c <= 0:
                 p0c = pos.avg_cost
@@ -232,12 +240,14 @@ class Portfolio:
                 "ratio": cons, "qty_before": qty_at_ex, "qty_after": new_qty,
                 "p0": p0c,
                 "p_resume_theory": (p0c / cons if p0c > 0 and cons > 0 else None),
+                "source": str(getattr(action, "consolidation_source", "proxy")
+                              or "proxy"),
+                **({"forced_min_qty": True} if forced else {}),
             })
-            if new_qty <= 0:
-                # 极端代理值（如 0.033）：不做核销，保留 1 股并如实披露
-                new_qty = 1
-            pos.avg_cost = (pos.avg_cost * qty_at_ex / new_qty
-                            if new_qty else 0.0)
+            if not forced:
+                # 正常路径（**逐位不变**——R21′-C1）：成本总额守恒 ⇒ 每股放大
+                pos.avg_cost = pos.avg_cost * qty_at_ex / new_qty
+            # 保底路径：`avg_cost` 保持不变（R21′①——每股成本守恒）
             pos.available_qty = int(pos.available_qty * cons)
             pos.qty = new_qty
             pos.available_qty = min(pos.available_qty, pos.qty)

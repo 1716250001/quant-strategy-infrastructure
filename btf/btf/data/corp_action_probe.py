@@ -767,6 +767,7 @@ def to_corporate_actions(data: dict[str, Any] | None, start: TradingDate,
             pay_date=None, record_date=None,
             cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
             consolidation_ratio=float(item.get("consolidation_ratio") or 1.0),
+            consolidation_source="confirmed",       # R22′：来源标记
         ))
     for item in (data.get("consolidations") or ()
                  if consolidations_modeled() else ()):

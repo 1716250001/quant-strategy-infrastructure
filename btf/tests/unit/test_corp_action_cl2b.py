@@ -53,9 +53,10 @@ class TestCorporateActionExt:
         cons = CorporateAction(symbol="000887.SZ", ex_date=D2, pay_date=None,
                             record_date=None, cash_div_per_share=0.0,
                             stk_div_per_share=0.0, ann_date=None,
-                            consolidation_ratio=0.5, pex_override=12.65)
+                            consolidation_ratio=0.5, pex_override=12.65,
+                            consolidation_source="confirmed")
         assert _dec_action(_enc_action(cons)) == cons
-        # 旧日志（无 pex_override 键）⇒ 解码 None（向后兼容）
+        # 旧日志（无新键）⇒ 解码默认（pex_override=None / source="proxy"）
         # 旧日志（无新键）⇒ 解码为默认值（行为与改动前一致）
         legacy_payload = {
             "symbol": "000001.SZ", "ex_date": D2.to_ymd(), "pay_date": None,
@@ -196,6 +197,103 @@ class TestProbeArtifactCl2b:
                                     TradingDate.from_ymd("20261231"))
         assert len(acts) == 2
         assert any(x.consolidation_ratio == 0.5 for x in acts)
+
+
+class TestConsolidationFloorR21c:
+    """R21′（19 号 §87.8.1；N22）：缩股**保底分支**——成本不放大、`qty_after`
+    取保底后实际值、`forced_min_qty` 标记；**正常路径（C1）逐位不变**。"""
+
+    def _p(self, qty: int = 100, cost: float = 10.0) -> Portfolio:
+        p = Portfolio(cash=0.0)
+        p.positions["000887.SZ"] = Position(symbol="000887.SZ", qty=qty,
+                                            available_qty=qty, avg_cost=cost)
+        p._last_close["000887.SZ"] = cost
+        return p
+
+    def _act(self, cons: float, source: str = "proxy") -> CorporateAction:
+        return CorporateAction(symbol="000887.SZ", ex_date=D2, pay_date=None,
+                               record_date=None, cash_div_per_share=0.0,
+                               stk_div_per_share=0.0, ann_date=None,
+                               consolidation_ratio=cons,
+                               consolidation_source=source)
+
+    def test_c1_normal_path_bitwise_unchanged(self):
+        """G11/C1：qty=100/cost=10/cons=0.3266 ⇒ 32 股、avg_cost 31.25、总额 1000.00。"""
+        p = self._p()
+        p.apply_ex_date(self._act(0.3266))
+        pos = p.positions["000887.SZ"]
+        assert pos.qty == 32
+        assert pos.avg_cost == pytest.approx(31.25, rel=1e-12)
+        assert pos.qty * pos.avg_cost == pytest.approx(1000.0, rel=1e-12)
+        ev = p.consolidations[0]
+        assert ev["qty_after"] == 32 and "forced_min_qty" not in ev
+        assert ev["source"] == "proxy"
+
+    def test_c2_floor_branch_cost_not_amplified(self):
+        """G12/C2（N22）：cons=0.005 ⇒ 1 股保底、`avg_cost` **不放大**（10.00，非 1000）、
+        `qty_after == 1`、`forced_min_qty` 存在。"""
+        p = self._p()
+        p.apply_ex_date(self._act(0.005))
+        pos = p.positions["000887.SZ"]
+        assert pos.qty == 1
+        assert pos.avg_cost == pytest.approx(10.0)          # R21′①（非 1000）
+        assert pos.qty * pos.avg_cost == pytest.approx(10.0)
+        ev = p.consolidations[0]
+        assert ev["qty_after"] == 1                         # R21′②（非 0）
+        assert ev["forced_min_qty"] is True                 # R21′③
+
+    def test_c2b_extreme_ratio_no_exception_no_negative(self):
+        """档二：cons=0.001 ⇒ 同上；不得抛异常、不得负 qty。"""
+        p = self._p()
+        p.apply_ex_date(self._act(0.001))
+        pos = p.positions["000887.SZ"]
+        assert pos.qty == 1 and pos.qty > 0
+        assert pos.avg_cost == pytest.approx(10.0)
+        assert p.consolidations[0]["forced_min_qty"] is True
+
+    def test_confirmed_source_roundtrip_and_event(self):
+        """R22′：`consolidation_source` 随事件字典下发（确证 → confirmed）。"""
+        p = self._p()
+        p.apply_ex_date(self._act(0.3266, source="confirmed"))
+        assert p.consolidations[0]["source"] == "confirmed"
+
+
+class TestConsolidationSourceWordingR22c:
+    """R22′（19 号 §87.8.2 修订版；N24）：逐事件披露**按来源分措辞**——
+    `confirmed` 行**不得**出现「代理／未确证」字样；`proxy` 行维持原口径；
+    保底事件附 WARN（R21′③）。"""
+
+    class _R:
+        from typing import ClassVar
+
+        rights_events: ClassVar[list] = []
+        lockup_sell_warnings: ClassVar[list] = []
+        consolidations: ClassVar[list] = [
+            {"symbol": "000887.SZ", "ex_date": "20070330", "ratio": 0.3266,
+             "qty_before": 100, "qty_after": 32, "source": "confirmed"},
+            {"symbol": "000011.SZ", "ex_date": "20230601", "ratio": 0.997971,
+             "qty_before": 5400, "qty_after": 5389, "source": "proxy"},
+            {"symbol": "920375.BJ", "ex_date": "20150630", "ratio": 0.997606,
+             "qty_before": 2, "qty_after": 1, "source": "proxy",
+             "forced_min_qty": True},
+        ]
+
+    def test_wording_by_source_and_floor_warn(self):
+        from btf.runtime.run_orchestrator import _corp_action_notes
+
+        notes = _corp_action_notes(self._R())
+        confirmed = next(n for n in notes if "000887" in n)
+        assert "确证缩股" in confirmed and "已建模" in confirmed
+        assert "代理" not in confirmed
+        assert "未被交易所公告确证" not in confirmed
+        proxy = next(n for n in notes if "000011" in n)
+        assert "代理口径，未被交易所公告确证" in proxy
+        assert "仅披露不建模" in proxy
+        floor = next(n for n in notes if "920375" in n)
+        assert "WARN" in floor and "forced_min_qty" in floor
+        # §87.7 已完工部分（分别计数）反向探针：防回归
+        joined = " | ".join(notes)
+        assert "确证缩股 1 条" in joined and "0 条缩股（佐证" in joined
 
 
 class TestConfirmedConsolidationR18:

@@ -98,6 +98,7 @@ def _enc_action(a: CorporateAction) -> dict[str, Any]:
         "rights_ex_date": _d(a.rights_ex_date),
         "rights_listing_date": _d(a.rights_listing_date),
         "consolidation_ratio": a.consolidation_ratio,
+        "consolidation_source": a.consolidation_source,
         "pex_override": a.pex_override,
     }
 
@@ -171,6 +172,7 @@ def _dec_action(p: dict[str, Any]) -> CorporateAction:
         rights_ex_date=_td(p.get("rights_ex_date")),
         rights_listing_date=_td(p.get("rights_listing_date")),
         consolidation_ratio=float(p.get("consolidation_ratio") or 1.0),
+        consolidation_source=str(p.get("consolidation_source") or "proxy"),
         pex_override=(float(p["pex_override"])
                       if p.get("pex_override") is not None else None),
         symbol=p["symbol"],

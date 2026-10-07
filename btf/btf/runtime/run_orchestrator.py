@@ -123,11 +123,24 @@ def _corp_action_notes(result: Any) -> list[str]:
     for msg in getattr(result, "lockup_sell_warnings", ()) or ():
         notes.append(str(msg))
     for ev in cons:
-        notes.append(
-            f"缩股披露（CL-2 第二段 R6′ 代理检测；19 号 §78.5）："
-            f"{ev['symbol']} 除权 {ev['ex_date']} 比例 {ev['ratio']:.6g} ⇒ "
-            f"持仓 {ev['qty_before']} → {ev['qty_after']} 股（无现金流；"
-            f"代理口径，未被交易所公告确证）")
+        # **R22′（19 号 §87.8.2 修订版；N24）**：逐事件按**来源**分措辞——
+        # `confirmed`（股本级三重证据，R18′）**不得**写成「代理／未确证」；
+        # `proxy`（价格代理检测）维持原口径。
+        src = str(ev.get("source") or "proxy")
+        body = (f"{ev['symbol']} 除权 {ev['ex_date']} 比例 {ev['ratio']:.6g} ⇒ "
+                f"持仓 {ev['qty_before']} → {ev['qty_after']} 股（无现金流；")
+        if src == "confirmed":
+            line = (f"缩股披露（**确证缩股**：股本级三重证据——"
+                    f"`total_share`↓ ∩ `adj_factor`↓ 同窗比例一致，R18′；"
+                    f"19 号 §85.1）：{body}"
+                    f"**已建模**）")
+        else:
+            line = (f"缩股披露（CL-2 第二段 R6′ 代理检测；19 号 §78.5）：{body}"
+                    f"代理口径，未被交易所公告确证；**仅披露不建模**）")
+        if ev.get("forced_min_qty"):
+            line += ("；⚠ **WARN** 保底生效：可缩股数 `int(qty×ratio)==0` ⇒ "
+                     "保留 1 股且 `avg_cost` 不放大（`forced_min_qty`，R21′）")
+        notes.append(line)
     if not rights and not cons:
         notes.append("本 run 未命中配股/缩股事件（清单已加载；披露不得恒现）")
     return notes
