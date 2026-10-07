@@ -51,10 +51,11 @@ class TestCorporateActionExt:
         a = _rights_action()
         assert _dec_action(_enc_action(a)) == a
         cons = CorporateAction(symbol="000887.SZ", ex_date=D2, pay_date=None,
-                               record_date=None, cash_div_per_share=0.0,
-                               stk_div_per_share=0.0, ann_date=None,
-                               consolidation_ratio=0.5)
+                            record_date=None, cash_div_per_share=0.0,
+                            stk_div_per_share=0.0, ann_date=None,
+                            consolidation_ratio=0.5, pex_override=12.65)
         assert _dec_action(_enc_action(cons)) == cons
+        # 旧日志（无 pex_override 键）⇒ 解码 None（向后兼容）
         # 旧日志（无新键）⇒ 解码为默认值（行为与改动前一致）
         legacy_payload = {
             "symbol": "000001.SZ", "ex_date": D2.to_ymd(), "pay_date": None,
@@ -112,9 +113,16 @@ class TestRightsBookingCl2b:
                   dict(p._last_close))
         p.apply_ex_date(_rights_action(rights_ratio=0.0, rights_price=0.0))
         after = (dict(p.positions["600030.SH"].__dict__), p.cash,
-                 dict(p._last_close))
+                  dict(p._last_close))
         assert before == after
         assert p.rights_events == []
+
+    def test_pex_override_used_as_fallback_mark(self):
+        """R19′（Q-6）：清单 L2 下发的 `pex_override` 在**无 bar** 时作为重估价
+        （Q-6：现行名义口径在无 bar 情形会低估除权价约 0.9%——000516 实证）。"""
+        p = self._portfolio()
+        p.apply_ex_date(_rights_action(pex_override=24.30))
+        assert p._last_close["600030.SH"] == pytest.approx(24.30)
 
 
 class TestConsolidationCl2b:
@@ -188,6 +196,56 @@ class TestProbeArtifactCl2b:
                                     TradingDate.from_ymd("20261231"))
         assert len(acts) == 2
         assert any(x.consolidation_ratio == 0.5 for x in acts)
+
+
+class TestConfirmedConsolidationR18:
+    """R18′（19 号 §85.5）：股本级确证缩股**默认建模**（不受代理开关约束）；
+    价格代理只配做候选生成，判定走「股本 × 复权因子交叉」（§85.2 方法论定论）。"""
+
+    def test_confirmed_modeled_regardless_of_switch(self, monkeypatch):
+        from btf.data.corp_action_probe import to_corporate_actions
+
+        monkeypatch.delenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS",
+                           raising=False)
+        data = {"rights": [], "consolidations": [],
+                "consolidations_confirmed": [
+                    {"symbol": "000887.SZ", "ex_date": "20070330",
+                     "consolidation_ratio": 0.326653}]}
+        acts = to_corporate_actions(data, TradingDate.from_ymd("19910101"),
+                                    TradingDate.from_ymd("20261231"))
+        assert len(acts) == 1
+        assert acts[0].consolidation_ratio == pytest.approx(0.326653)
+        assert acts[0].symbol == "000887.SZ"
+
+
+class TestPexSelectionR19:
+    """R19′（19 号 §85.3 Q-6）：`pex` 三级取值 ＋ A+H/B 分母守卫。"""
+
+    def test_l1_exchange_preclose(self):
+        from btf.data.corp_action_probe import _choose_pex
+
+        pex, src, guard = _choose_pex(
+            17.75, 0.25, 7.55, 0.23, ("20200728", 12.76, 12.65))
+        assert src == "exchange_preclose" and guard is None
+        assert pex == 12.65                      # 交易所公布值（零推断）
+
+    def test_l2_effective_ratio_when_no_bar(self):
+        from btf.data.corp_action_probe import _choose_pex
+
+        # 000516 形态：r_eff=0.26720 ⇒ pex=(6.89+0.2672×3.98)/1.2672 ≈ 6.286
+        pex, src, guard = _choose_pex(6.89, 0.3, 3.98, 0.26720, None)
+        assert src == "effective_ratio" and guard is None
+        assert pex == pytest.approx(6.2764, abs=0.001)
+        # ＝ 审查方 §85.3 股本级除权价 6.2765（与本地 pre_close 6.28 差 0.05%）
+
+    def test_l3_guard_denominator_mismatch_ah(self):
+        from btf.data.corp_action_probe import _choose_pex
+
+        # 002948 形态（A+H）：r_eff/r_nom = 0.17335/0.30 ≈ 0.578 < 0.85 ⇒ 强制 L3
+        pex, src, guard = _choose_pex(10.0, 0.30, 5.0, 0.17335, None)
+        assert src == "nominal_fallback"
+        assert guard == "denominator_mismatch_AH"
+        assert pex == pytest.approx((10.0 + 0.30 * 5.0) / 1.30)
 
 
 class TestForwardValidationR8c:
@@ -276,6 +334,32 @@ class TestForwardValidationR8c:
         for x in data["rights_suspended"]:
             assert {"r_effective", "subscription_ratio",
                     "forward_err_eff"} <= set(x)
+        # R18′（B⁽⁴⁾-1/2）：`consolidations_confirmed` ＝ **1 条**（000887.SZ
+        # 2007-03-30、比例 0.326653）；511+1 条未佐证**条数不变**且 000887 标注
+        # `proxy_captured`（价格代理已捕获但无法佐证——§85.2）。
+        assert data["stats"]["consolidations_confirmed"] == 1
+        conf = data["consolidations_confirmed"][0]
+        assert conf["symbol"] == "000887.SZ"
+        assert conf["ex_date"] == "20070330"
+        assert conf["consolidation_ratio"] == pytest.approx(0.326653, abs=1e-5)
+        # ⚠ 本地 daily_basic 实算 31,462.928/96,320.000 = 0.3266502；审查方文本
+        # 0.326653 系舍入差 3e-6（回执 §九·AB 已注明），以数据实算为准。
+        assert len(data["consolidations_uncorroborated"]) == 512
+        v887 = [x for x in data["consolidations_uncorroborated"]
+                if x["symbol"] == "000887.SZ" and x["ex_date"] == "20070330"]
+        assert v887 and v887[0].get("proxy_captured") is True
+        # R19′（B⁽⁴⁾-5）：`pex_source` 175 条 `exchange_preclose` ＋ 1 条回退
+        #（600256.SH 20180328 无 bar）；A+H 守卫不触发的条目无 `pex_guard`。
+        allr = (*data["rights"], *data["rights_suspended"])
+        srcs = [x.get("pex_source") for x in allr]
+        assert srcs.count("exchange_preclose") == 175
+        assert srcs.count("effective_ratio") == 1      # 唯一无 bar：600256.SH
+        assert srcs.count("nominal_fallback") == 0
+        v600 = next(x for x in allr if x["symbol"] == "600256.SH")
+        assert v600["pex_source"] == "effective_ratio"
+        assert v600["pex"] is not None
+        assert not any(x.get("pex_guard") for x in allr
+                       if x.get("pex_source") == "exchange_preclose")
         v516 = next(x for x in data["rights_suspended"]
                     if x["symbol"] == "000516.SZ")
         assert v516["r_effective"] == pytest.approx(0.267196, abs=1e-5)

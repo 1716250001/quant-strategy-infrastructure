@@ -43,6 +43,9 @@ class CorporateAction:
     rights_ex_date: TradingDate | None = None      # 配股除权日（= 跳变真值）
     rights_listing_date: TradingDate | None = None  # 获配股份上市日（缺 ⇒ None）
     consolidation_ratio: float = 1.0  # 缩股比例（qty 乘数；1.0 = 无）
+    # ── R19′（Q-6，1.2.0 修订）──清单 L2（effective_ratio）下发的 `pex`；
+    # 引擎**仅在除权日无 bar** 时采用（有 bar 真实收盘胜，G7）；None = 引擎自算。
+    pex_override: float | None = None
 
 
 __all__ = ["CorporateAction"]

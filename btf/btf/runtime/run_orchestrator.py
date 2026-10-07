@@ -98,9 +98,13 @@ def _corp_action_notes(result: Any) -> list[str]:
                  "**已建模**）" if consolidations_modeled()
                  else f"{st.get('consolidation_corroborated', '?')} 条缩股（佐证；"
                       "**只披露不建模**——开关关闭）")
+    conf_n = st.get("consolidations_confirmed", 0)
+    conf_note = (f"；确证缩股 {conf_n} 条（股本级三重证据，**已建模**——R18′）"
+                 if conf_n else "")
     notes = [
         f"配股/缩股清单（CL-2 第二段；19 号 §79.4）：已加载 "
-        f"{st.get('rights_validated', '?')} 条配股（校验通过）＋ {cons_note}；"
+        f"{st.get('rights_validated', '?')} 条配股（校验通过）＋ {cons_note}"
+        f"{conf_note}；"
         f"来源哈希 {str((data.get('source') or {}).get('snapshot_sha256', ''))[:16]}…"
     ]
     for ev in rights:

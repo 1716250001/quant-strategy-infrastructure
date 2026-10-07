@@ -153,26 +153,30 @@ def load_dividend_ex_dates(root: str | pathlib.Path, years: Sequence[int]
 
 
 def _daily_index(root: str | pathlib.Path, year: int, symbols: Iterable[str]
-                 ) -> dict[str, list[tuple[str, float]]]:
-    """(symbol → 升序 [(trade_date, close)])——**只含真实 bar**。
+                 ) -> dict[str, list[tuple[str, float, float]]]:
+    """(symbol → 升序 [(trade_date, close, pre_close)])——**只含真实 bar**。
 
     关键：`adj_factor` 在**停牌日仍有行**（实测 600079.SH 2006-07-28..08-04
     有 adj_factor 无 daily）⇒ 「除权前收盘价」必须取 **`daily` 中 ≤ 除权日的
     最后真实 bar**，不能取 adj_factor 的前一行。
+    **R19′（§85.3 Q-6）**：行元组扩为三元，附 `pre_close`（交易所公布的除权
+    参考价——L1 取值的零推断来源）。
     """
     from btf.data.core import YearTableStore
 
     store = YearTableStore(pathlib.Path(root))
     want = set(symbols)
-    out: dict[str, list[tuple[str, float]]] = {}
+    out: dict[str, list[tuple[str, float, float]]] = {}
     t = store.read_file("daily", year=year,
-                        columns=["ts_code", "trade_date", "close"])
+                        columns=["ts_code", "trade_date", "close", "pre_close"])
     if t is None or t.num_rows == 0:
         return out
     for r in t.to_pylist():
         if r["ts_code"] in want and r["close"] is not None:
+            pc = r.get("pre_close")
             out.setdefault(str(r["ts_code"]), []).append(
-                (str(r["trade_date"]), float(r["close"])))
+                (str(r["trade_date"]), float(r["close"]),
+                 float(pc) if pc is not None else float("nan")))
     for rows in out.values():
         rows.sort()
     return out
@@ -186,7 +190,7 @@ def _last_close_lt(rows: Sequence[tuple[str, float]], ymd: str
     如中信 600030 除权日 close=24.15），把它当"前收盘"会让校验全盘错位。
     """
     best = None
-    for d, c in rows:
+    for d, c, *_ in rows:
         if d < ymd:
             best = (d, c)
         else:
@@ -194,11 +198,11 @@ def _last_close_lt(rows: Sequence[tuple[str, float]], ymd: str
     return best
 
 
-def _first_close_ge(rows: Sequence[tuple[str, float]], ymd: str
-                    ) -> tuple[str, float] | None:
-    for d, c in rows:
-        if d >= ymd:
-            return (d, c)
+def _first_close_ge(rows: Sequence[tuple], ymd: str
+                    ) -> tuple | None:
+    for row in rows:
+        if row[0] >= ymd:
+            return row                      # 整行（含 pre_close——R19′ L1 来源）
     return None
 
 
@@ -328,6 +332,157 @@ def _validate_right_math(r: float, pr: float, chg: float,
             "amp_factor": amp, "x_pred": x_pred, "rel_err": rel}
 
 
+#: **R19′（19 号 §85.3）**：Q-6 单独登记的异常条目——`r_imp > r_nom` 反向偏离
+#:（疑配股与送转同日或快照匹配错位）；**保持现状、不改口径**。
+_PEX_ANOMALIES: dict[tuple[str, str], str] = {
+    ("600480.SH", "20190620"):
+        "r_imp=0.375 > r_nom=0.30（比值 1.25，唯一反向偏离）——疑配股与送转同日"
+        "或快照匹配错位；Q-6 §85.3 单独登记，不改口径",
+}
+
+
+def _choose_pex(x_act: float | None, r_nom: float, pr: float,
+                r_eff: float | None, ex_bar: tuple | None,
+                guard_min: float = 0.85) -> tuple:
+    """R19′（19 号 §85.3 Q-6）：`pex` **三级取值**——份额与除权价口径**分离**。
+
+    - **L1 `exchange_preclose`**：除权日当日真实 bar 的 `pre_close`（交易所公布
+      除权参考价，零推断；覆盖 175/176）；
+    - **L2 `effective_ratio`**：无 bar 且股本可得 ⇒ `(X + r_eff·Pr)/(1+r_eff)`；
+    - **L3 `nominal_fallback`**：现状口径 `(X + r_nom·Pr)/(1+r_nom)`。
+    **守卫**：`r_eff / r_nom < guard_min` ⇒ 分母口径错（A+H/B：H 股不参与 A 股
+    配股，如 002948.SZ 总股本含 H 股）⇒ **强制降级 L3** 并标注（禁静默采用）。
+    份额 `M = floor(N × r_nom)` **不受本函数影响**（Q-4(a) 股东权利口径）。
+    """
+    guard = None
+    if ex_bar is not None:
+        pc = ex_bar[2]
+        if pc == pc and pc > 0:                          # NaN/非正 ⇒ 不可用
+            return pc, "exchange_preclose", None
+    if (r_eff is not None and r_nom and x_act
+            and r_eff / r_nom >= guard_min):
+        return ((x_act + r_eff * pr) / (1.0 + r_eff), "effective_ratio", None)
+    if r_eff is not None and r_nom and r_eff / r_nom < guard_min:
+        guard = "denominator_mismatch_AH"
+    pex = ((x_act + r_nom * pr) / (1.0 + r_nom)) if x_act else None
+    return pex, "nominal_fallback", guard
+
+
+def confirm_consolidations(root: str | pathlib.Path, *,
+                           years: tuple[int, int] = (1990, 2026),
+                           min_drop: float = 0.03,
+                           max_ratio_gap: float = 0.01,
+                           window: int = 10) -> dict[str, Any]:
+    """**股本级缩股确证扫描**（R18′-a；19 号 §84.1/§85.1 判据，全区间 1990–2026）。
+
+    真缩股的定义性后果：**总股本与复权因子同窗口同比例减少**（股东持股数同减）。
+    判据（三者同时成立）：① `daily_basic.total_share` 单日减少 ≥ `min_drop`；
+    ② `adj_factor` 同窗口（±`window` 日）向下跳变 ≥ `min_drop`（按 (标的,前值,新值)
+    去重——同跳变多日重复是数据噪声，N17 同源）；③ 两比例差 ≤ `max_ratio_gap`。
+    仅股本减少 ⇒ 回购注销/股改等（股东持股数不变，`adj_factor` 不动，不影响记账）；
+    仅因子跳变 ⇒ 数据噪声。
+    """
+    from itertools import pairwise
+
+    from btf.data.core import YearTableStore
+
+    store = YearTableStore(pathlib.Path(root))
+    y0, y1 = years
+
+    def _scan(table: str, value_col: str) -> list[dict[str, Any]]:
+        drops: list[dict[str, Any]] = []
+        prev_tail: dict[str, tuple[str, float]] = {}
+        for y in range(y0, y1 + 1):
+            t = store.read_file(table, year=y,
+                                columns=["ts_code", "trade_date", value_col])
+            if t is None or t.num_rows == 0:
+                continue
+            series: dict[str, list[tuple[str, float]]] = {}
+            for r in t.to_pylist():
+                sym, td, v = (r.get("ts_code"), r.get("trade_date"),
+                              r.get(value_col))
+                if sym and td and v is not None:
+                    series.setdefault(str(sym), []).append(
+                        (str(td), float(v)))
+            cur_tail: dict[str, tuple[str, float]] = {}
+            for sym, rows in series.items():
+                rows.sort()
+                pairs = []
+                if sym in prev_tail:
+                    pairs.append((prev_tail[sym], rows[0]))
+                pairs.extend(pairwise(rows))
+                for (_d0, v0), (d1, v1) in pairs:
+                    if v0 > 0 and v1 / v0 - 1.0 <= -min_drop:
+                        drops.append({"symbol": sym, "date": d1,
+                                      "value_pre": v0, "value_post": v1,
+                                      "ratio": round(v1 / v0, 6)})
+                cur_tail[sym] = rows[-1]
+            prev_tail = cur_tail
+        return drops
+
+    share_drops = _scan("daily_basic", "total_share")
+    # 复权因子向下跳变：按 (标的, 前值, 新值) 去重（同跳变多日重复＝噪声）
+    adj_drops = _scan("adj_factor", "adj_factor")
+    adj_jumps: dict[tuple, dict[str, Any]] = {}
+    for d in adj_drops:
+        key = (d["symbol"], round(d["value_pre"], 6), round(d["value_post"], 6))
+        if key in adj_jumps:
+            adj_jumps[key]["dates"].append(d["date"])
+        else:
+            adj_jumps[key] = {"symbol": d["symbol"], "ratio": d["ratio"],
+                              "adj_pre": d["value_pre"],
+                              "adj_post": d["value_post"],
+                              "dates": [d["date"]]}
+
+    from datetime import date as _date
+
+    def _days(s: str) -> _date:
+        return _date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+
+    confirmed: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    for d in share_drops:
+        rs = d["ratio"]
+        best = None
+        for j in adj_jumps.values():
+            if j["symbol"] != d["symbol"]:
+                continue
+            gap = min(abs((_days(x) - _days(d["date"])).days)
+                      for x in j["dates"])
+            if (gap <= window and rs
+                    and abs(j["ratio"] - rs) / rs <= max_ratio_gap
+                    and (best is None or gap < best[0])):
+                best = (gap, j)
+        if best:
+            j = best[1]
+            confirmed.append({
+                "symbol": d["symbol"], "ex_date": d["date"],
+                "consolidation_ratio": rs,
+                "share_pre": d["value_pre"], "share_post": d["value_post"],
+                "adj_pre": j["adj_pre"], "adj_post": j["adj_post"],
+                "adj_ratio": j["ratio"], "adj_dates": j["dates"],
+                "ratio_gap": round(abs(j["ratio"] - rs) / rs, 6),
+            })
+        else:
+            rejected.append({
+                "symbol": d["symbol"], "date": d["date"], "ratio": rs,
+                "share_pre": d["value_pre"], "share_post": d["value_post"],
+                "reason": "share_reform_or_buyback",
+                "note": ("股权分置改革集中期（2005-2007）：总股本减而股东持股数"
+                         "不变，adj_factor 不动 ⇒ 非股东层面缩股"
+                         if d["date"][:4] in ("2005", "2006", "2007") else
+                         "无同窗口 adj_factor 向下跳变（股东持股数不变的股本"
+                         "减少——回购注销/股改/吸收合并等）"),
+            })
+    return {"confirmed": confirmed, "rejected": rejected,
+            "stats": {"share_drops": len(share_drops),
+                      "adj_jumps_dedup": len(adj_jumps),
+                      "confirmed": len(confirmed),
+                      "rejected": len(rejected),
+                      "years": [y0, y1], "min_drop": min_drop,
+                      "max_ratio_gap": max_ratio_gap, "window": window}}
+
+
 def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
                    *, years: Sequence[int] | None = None,
                    threshold: float = JUMP_THRESHOLD) -> dict[str, Any]:
@@ -382,6 +537,14 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
         r, pr = rec["ratio"], rec["price"]
         last = price_rows.get((j.symbol, j.ex_date))
         x_act = last[1] if last else None
+        # **R13′（N19）**：股本级披露——`r_effective` ＝ 配股数量/配股前总股本
+        #（**实际发行比例**）；`subscription_ratio` ＝ r_eff/名义 r（认购率）。
+        # **R19′（Q-6 §85.3）**：r_eff 亦作 `pex` L2 取值来源（份额仍用名义 r——
+        # 两口径分离）；判定仍用名义 r（挂起披露口径不变）。
+        r_eff = (rec["shares_issued"] / rec["shares_pre"]
+                 if rec.get("shares_issued") and rec.get("shares_pre") else None)
+        m_eff = (_validate_right_math(r_eff, pr, j.chg, x_act)
+                 if r_eff is not None else None)
         # **R8′（19 号 §80.3 / §81.2 G1+G2）**：正推判定 ＋ 放大因子守卫
         #（数学核心抽到 `_validate_right_math`，可单测）。
         m = _validate_right_math(r, pr, j.chg, x_act)
@@ -390,6 +553,11 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
         amp = m["amp_factor"]
         x_pred = m["x_pred"]
         rel = m["rel_err"]
+        # **R19′（Q-6）**：`pex` 三级取值（L1 pre_close → L2 r_eff → L3 r_nom）
+        # ＋ A+H/B 分母守卫（`r_eff/r_nom < 0.85` ⇒ 降级 L3 并标注）。
+        nxt = resume_rows.get((j.symbol, j.ex_date))
+        ex_bar = nxt if (nxt is not None and nxt[0] == j.ex_date) else None
+        pex_val, pex_src, pex_guard = _choose_pex(x_act, r, pr, r_eff, ex_bar)
         item = {
             "symbol": j.symbol, "name": rec["name"], "ex_date": j.ex_date,
             "ratio": r, "price": pr, "record_date": rec["record_date"],
@@ -407,25 +575,22 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
             "rel_err": round(rel, 6) if rel is not None else None,
             "status": ("validated" if fwd_rel is not None
                        and fwd_rel <= VALIDATION_TOL else "suspended"),
-        }
-        (rights if item["status"] == "validated" else suspended).append(item)
-        # **R13′（19 号 §82.2 N19／§82.4②／§82.6）**：股本级披露——`r_effective`
-        # ＝ 配股数量/配股前总股本（**实际发行比例**）；`subscription_ratio` ＝
-        # r_eff/名义 r（认购率）；`forward_err_eff` ＝ 用 r_eff 的正推误差。
-        # **仅披露、不建模**：判定仍用名义 r（引入 r_eff 属 R15′/1.2.1，Q-6 待裁）；
-        # 补披露使挂起成为**可解释的挂起**（N19：11 条中 10 条 r_eff 误差 ≤0.074%）。
-        r_eff = (rec["shares_issued"] / rec["shares_pre"]
-                 if rec.get("shares_issued") and rec.get("shares_pre") else None)
-        m_eff = (_validate_right_math(r_eff, pr, j.chg, x_act)
-                 if r_eff is not None else None)
-        item.update({
+            # 股本级披露（R13′/N19）
             "r_effective": round(r_eff, 6) if r_eff is not None else None,
             "subscription_ratio": (round(r_eff / r, 6)
                                    if r_eff is not None and r else None),
             "forward_err_eff": (round(m_eff["forward_err"], 6)
                                 if m_eff and m_eff["forward_err"] is not None
                                 else None),
-        })
+            # pex 三级取值（R19′/Q-6）
+            "pex": round(pex_val, 6) if pex_val is not None else None,
+            "pex_source": pex_src,
+        }
+        if pex_guard:
+            item["pex_guard"] = pex_guard
+        if (j.symbol, j.ex_date) in _PEX_ANOMALIES:
+            item["anomaly"] = _PEX_ANOMALIES[(j.symbol, j.ex_date)]
+        (rights if item["status"] == "validated" else suspended).append(item)
 
     # 缩股候选（R6′ 代理）：向下跳变 ∩ 非分红解释；**hfq 连续性佐证**
     # （close_resume ≈ close_pre / chg ⇒ 该跳变在价格侧自洽，方可建模）。
@@ -462,6 +627,19 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
             item["reason"] = reason
             cons_uncorroborated.append(item)
 
+    # **R18′（19 号 §85.5）**：股本级缩股确证扫描（全区间 1990–2026）——
+    # 价格代理只配做**候选生成**，判定走「股本 × 复权因子交叉」（§85.2 方法论定论）；
+    # 确证者入 `consolidations_confirmed`（**默认建模**——三重证据，非造数）；
+    # 未交叉的股本减少显式标注 `share_reform_or_buyback`（**禁**当缩股——R18′-e）。
+    confirmation = confirm_consolidations(root)
+    confirmed_keys = {(c["symbol"], c["ex_date"])
+                      for c in confirmation["confirmed"]}
+    for item in cons_uncorroborated:
+        if (item["symbol"], item["ex_date"]) in confirmed_keys:
+            item["proxy_captured"] = True
+            item["note"] = ("价格代理已捕获本事件但佐证判据无法佐证；经股本级"
+                            "确证入 consolidations_confirmed（R18′/§85.2）")
+
     snap_bytes = pathlib.Path(snapshot_csv).read_bytes()
     return {
         "schema": PROBE_SCHEMA,
@@ -486,12 +664,15 @@ def build_artifact(root: str | pathlib.Path, snapshot_csv: str | pathlib.Path,
             "consolidation_candidates": len(down_cand),
             "consolidation_corroborated": len(consolidations),
             "consolidation_uncorroborated": len(cons_uncorroborated),
+            "consolidations_confirmed": len(confirmation["confirmed"]),
         },
         "rights": rights,
         "rights_suspended": suspended,
         "rights_unmatched": unmatched,
         "consolidations": consolidations,
+        "consolidations_confirmed": confirmation["confirmed"],
         "consolidations_uncorroborated": cons_uncorroborated,
+        "consolidation_confirmation_report": confirmation,
     }
 
 
@@ -552,6 +733,12 @@ def to_corporate_actions(data: dict[str, Any] | None, start: TradingDate,
         ex = str(item.get("ex_date") or "")
         if not (lo <= ex <= hi):
             continue
+        # **R19′（Q-6）**：清单 L2（effective_ratio）的 `pex` 随事件下发——引擎仅在
+        # **无 bar** 时采用（有 bar 真实收盘胜）；L1（有 bar）与 L3（与引擎公式同式）
+        # 不下发，避免冗余/漂移。
+        pex_ov = (float(item["pex"])
+                  if item.get("pex_source") == "effective_ratio"
+                  and item.get("pex") is not None else None)
         out.append(CorporateAction(
             symbol=str(item["symbol"]),
             ex_date=TradingDate.from_ymd(ex),
@@ -566,6 +753,20 @@ def to_corporate_actions(data: dict[str, Any] | None, start: TradingDate,
             rights_ex_date=TradingDate.from_ymd(ex),
             rights_listing_date=(TradingDate.from_ymd(str(item["listing_date"]))
                                  if item.get("listing_date") else None),
+            pex_override=pex_ov,
+        ))
+    # **R18′-b**：`consolidations_confirmed`（股本级三重证据确证）**默认建模**——
+    # 不受代理开关约束（确证 ≠ 造数；§85.2 方法论定论：判定走股本 × 因子交叉）。
+    for item in data.get("consolidations_confirmed") or ():
+        ex = str(item.get("ex_date") or "")
+        if not (lo <= ex <= hi):
+            continue
+        out.append(CorporateAction(
+            symbol=str(item["symbol"]),
+            ex_date=TradingDate.from_ymd(ex),
+            pay_date=None, record_date=None,
+            cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
+            consolidation_ratio=float(item.get("consolidation_ratio") or 1.0),
         ))
     for item in (data.get("consolidations") or ()
                  if consolidations_modeled() else ()):
@@ -603,6 +804,11 @@ def main(argv: list[str] | None = None) -> int:
     path = out / "corp_actions.json"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2,
                                sort_keys=True) + "\n", encoding="utf-8")
+    # **R18′-a**：确证扫描全报告归档（confirmed/rejected 全量，可复现）
+    (out / "consolidations_confirmation.json").write_text(
+        json.dumps(data.get("consolidation_confirmation_report") or {},
+                   ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8")
     st = data["stats"]
     print(f"[ok] 清单落盘：{path}")
     print(f"     跳变总 {st['jumps_total']}（向上 {st['up_total']} / 向下 "
@@ -611,6 +817,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"     配股候选 {st['up_candidates']} ⇒ 校验通过 "
           f"{st['rights_validated']} / 挂起 {st['rights_suspended']} / 无快照匹配 "
           f"{st['rights_unmatched']}；缩股候选 {st['consolidation_candidates']}")
+    cr = data.get("consolidation_confirmation_report") or {}
+    cst = cr.get("stats") or {}
+    print(f"     缩股确证（股本级，{cst.get('years')}）：股本减少 "
+          f"{cst.get('share_drops')} / 因子跳变(去重) {cst.get('adj_jumps_dedup')}"
+          f" ⇒ 确证 {cst.get('confirmed')}（{[c['symbol'] + ' ' + c['ex_date'] for c in cr.get('confirmed') or []]}）"
+          f" / 排除 {cst.get('rejected')}")
     return 0
 
 

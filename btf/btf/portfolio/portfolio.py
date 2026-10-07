@@ -198,6 +198,12 @@ class Portfolio:
                 pos.avg_cost = ((old_cost * qty_at_ex + cost)
                                 / (qty_at_ex + m))
                 pex = (p0 + ratio * price) / (1.0 + ratio) if p0 > 0 else None
+                # **R19′（Q-6 §85.3）**：清单 L2（effective_ratio）下发的 `pex`
+                # 优先——**仅无 bar 时生效**（有 bar ⇒ 步骤⑤ mark_all 以真实收盘
+                # 覆盖，真实价胜；G7）；None ⇒ 引擎自算（L3 同式，零回归）。
+                override = getattr(action, "pex_override", None)
+                if override:
+                    pex = float(override)
                 if pex is not None:
                     self._last_close[action.symbol] = pex
                 listing = getattr(action, "rights_listing_date", None)
