@@ -90,13 +90,33 @@ def _segment(date: str) -> dict[str, Any]:
     return hit
 
 
+def _is_fund_code(symbol: str) -> bool:
+    """ETF/LOF 代码段（**独立抄录** `btf.domain.types.is_fund_code` 同规则——
+    本文件纪律「不 import btf」）。
+
+    **R36′/ADR-20 第 7 条（2026-10-07）**：ETF/LOF 免印花税（境内二级市场免征）
+    ⇒ 引擎与参考计算器同步加入**品种维度**（双实现同规格；segments 亦为本文件
+    独立抄录的既有先例）。
+    """
+    code, _, market = symbol.partition(".")
+    if not code.isdigit():
+        return False
+    market = market.upper()
+    if market == "SH":
+        return code.startswith("5")
+    if market == "SZ":
+        return code[:2] in ("15", "16", "17", "18")
+    return False
+
+
 def fees_of(symbol: str, side: str, qty: int, price: float, date: str
             ) -> dict[str, float]:
     """费用分项（元，四舍五入至分；与引擎 AShareTieredFeeModel 同规则）。"""
     seg = _segment(date)
     turnover = qty * price
     commission = max(turnover * COMMISSION_RATE, COMMISSION_MIN)
-    stamp = turnover * seg["stamp_sell"] if side == "sell" else 0.0
+    stamp = (turnover * seg["stamp_sell"]
+             if (side == "sell" and not _is_fund_code(symbol)) else 0.0)
     if seg["scope"] == "sh_only" and not symbol.endswith(".SH"):
         transfer = 0.0
     elif seg["basis"] == "par":

@@ -79,13 +79,18 @@ class DataFeed(Protocol):
         ...
 
     def corporate_actions(
-        self, start: TradingDate, end: TradingDate
+        self, start: TradingDate, end: TradingDate,
+        symbols: Sequence[str] | None = None,
     ) -> list[CorporateAction]:
         """区间全市场实施态行动（PoC-3 任务 3.2；引擎步骤①装载源）。
 
         返回升序（ex_date, symbol）；仅 div_proc='实施' 行进入引擎
         （05 §9.6：预案/股东大会等状态含未落定参数）。pay_date 缺失
         回退语义（E5）由引擎落地，此处保留 None 原样传递。
+
+        **CL-2-H（R32′）**：`symbols`（显式宇宙）给出时并入 **ETF/LOF 公司行动**
+        （`fund_div` 分红 ＋ 双证据份额折算，`btf.data.etf_corp_actions`）；
+        `None` = 全市场口径（股票侧语义不变）。
         """
         ...
 
@@ -333,6 +338,12 @@ class TushareParquetFeed:
         self._store = YearTableStore(self.root)
         #: stock_basic 原始行缓存（IO-6 / P1-3b）：整表读一次，逐日 universe() 免费
         self._stock_basic_rows_cache: list[dict] | None = None
+        #: **CL-2-H（R32′/R35′/R36′）**：ETF/LOF 公司行动装载的**披露通道**——
+        #: 最近一次 `corporate_actions(..., symbols=…)` 产生的披露（回退链/顺延/
+        #: fail-closed 未建模）与覆盖段统计（供 `run_orchestrator` 注入
+        #: `assembly_notes`；空 = 本次无 ETF 事件/未请求）。
+        self.etf_action_notes: list[str] = []
+        self.etf_scan_summary: dict[str, Any] = {}
 
     def attach_state_provider(self, provider: Any) -> None:
         """注入状态面板合成器（装配根调用；幂等——后注入覆盖前者）。"""
@@ -533,7 +544,8 @@ class TushareParquetFeed:
 
     # ── 公司行动（PoC-3 任务 3.2：dividend 实施态 → CorporateAction）──
     def corporate_actions(
-        self, start: TradingDate, end: TradingDate
+        self, start: TradingDate, end: TradingDate,
+        symbols: Sequence[str] | None = None,
     ) -> list[CorporateAction]:
         """区间全市场实施态行动（升序 ex_date；引擎步骤①装载源）。
 
@@ -569,7 +581,12 @@ class TushareParquetFeed:
         结果按 (root, start, end) **进程内 memo**（PF-9 同款有界缓存）：
         网格搜索逐组合调用同一区间，原每组合全表读 ≈0.7s。
         """
-        memo_key = (str(self.root), start.to_ymd(), end.to_ymd())
+        # **CL-2-H（R32′，19 号 §96.4）**：`symbols`（显式宇宙）给出时**并入
+        # ETF/LOF 公司行动**（`fund_div` 分红 ＋ `fund_adj` 双证据折算）——
+        # 仅对 `is_fund_code` 标的装载；全市场口径（symbols=None）维持股票侧
+        # 原语义（全市场宇宙来自 `stock_basic`，**不含 ETF** ⇒ 无需 ETF 事件）。
+        sym_key = tuple(sorted(set(symbols))) if symbols else None
+        memo_key = (str(self.root), start.to_ymd(), end.to_ymd(), sym_key)
         cached = _CORPORATE_ACTIONS_CACHE.get(memo_key)
         if cached is not None:
             return list(cached)
@@ -624,7 +641,25 @@ class TushareParquetFeed:
         extra = to_corporate_actions(load_actions(), start, end)
         if extra:
             out.extend(extra)
-        out.sort(key=lambda a: (a.ex_date, a.symbol))
+        # ── CL-2-H（R32′/R35′；ADR-20）：ETF/LOF 公司行动并入 ──
+        self.etf_action_notes = []
+        self.etf_scan_summary = {}
+        if sym_key:
+            from btf.data.etf_corp_actions import to_etf_corporate_actions
+
+            etf_acts, etf_notes, etf_summary = to_etf_corporate_actions(
+                self.root, sym_key, start, end)
+            if etf_acts:
+                out.extend(etf_acts)
+            self.etf_action_notes = list(etf_notes)
+            self.etf_scan_summary = dict(etf_summary)
+        # **R49′（N53，2026-10-08）**：排序键**显式第三键**（先折算后分红——
+        # `action_order_key`，ADR-20 第 ⑩ 条）——原实现仅 `(ex_date, symbol)`，
+        # 靠 Python **稳定排序**保留 `to_etf_corporate_actions` 的次序
+        # （隐式契约：任一环节改排序方式即静默失效）。
+        from btf.data.etf_corp_actions import action_order_key
+
+        out.sort(key=action_order_key)
         _CORPORATE_ACTIONS_CACHE[memo_key] = tuple(out)     # IO-3 进程内 memo
         return out
 
@@ -790,8 +825,19 @@ class MixedDailyFeed:
         return self._delegate.trading_states(
             date, symbols, with_touch_flags=with_touch_flags)
 
-    def corporate_actions(self, start: TradingDate, end: TradingDate):
-        return self._delegate.corporate_actions(start, end)
+    def corporate_actions(self, start: TradingDate, end: TradingDate,
+                          symbols: Sequence[str] | None = None):
+        return self._delegate.corporate_actions(start, end, symbols=symbols)
+
+    @property
+    def etf_action_notes(self) -> list[str]:
+        """CL-2-H 披露通道（透传股票侧原型；空 = 本次无 ETF 事件/未请求）。"""
+        return list(getattr(self._delegate, "etf_action_notes", ()) or ())
+
+    @property
+    def etf_scan_summary(self) -> dict[str, Any]:
+        """CL-2-H 覆盖段统计（透传；空 = 未请求）。"""
+        return dict(getattr(self._delegate, "etf_scan_summary", {}) or {})
 
     def history(self, symbol: str, end: TradingDate,
                 fields: Sequence[str] | None = None, n_bars: int = 1) -> list[Bar]:

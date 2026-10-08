@@ -17,13 +17,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, TextIO
 
-from btf.domain.action import CorporateAction
+from btf.domain.action import CorporateAction, ratio_or_default
 from btf.domain.events import (
     EVENT_KINDS,
     CorporateActionEvent,
@@ -45,6 +46,8 @@ from btf.domain.orders import (
     Rejection,
 )
 from btf.domain.types import TradingDate
+
+logger = logging.getLogger(__name__)
 
 #: 采样哨兵行类型标签（非事件；reader 跳过并登记降级状态）
 _SAMPLED_MARK = "_sampled"
@@ -171,7 +174,12 @@ def _dec_action(p: dict[str, Any]) -> CorporateAction:
         rights_price=float(p.get("rights_price") or 0.0),
         rights_ex_date=_td(p.get("rights_ex_date")),
         rights_listing_date=_td(p.get("rights_listing_date")),
-        consolidation_ratio=float(p.get("consolidation_ratio") or 1.0),
+        # **R54′（N58/N59 合并）**：回读路径统一归一化——`""`/`"abc"` 取默认＋
+        # WARN（禁崩）；`≤0` 视为无效值 ⇒ 不建模＋WARN（禁清零）
+        consolidation_ratio=ratio_or_default(
+            p.get("consolidation_ratio"),
+            context=f"events_log:{p.get('symbol')}",
+            warn=logger.warning),
         consolidation_source=str(p.get("consolidation_source") or "proxy"),
         pex_override=(float(p["pex_override"])
                       if p.get("pex_override") is not None else None),

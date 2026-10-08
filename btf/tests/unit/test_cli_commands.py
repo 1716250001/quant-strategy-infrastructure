@@ -68,9 +68,12 @@ def config_path(tmp_path):
 
 class TestCommandRegistry:
     def test_twelve_commands_registered(self):
+        # **CL-2-H/R34′（2026-10-07）**：12 → 13——新增 `data`（数据专项扫描；
+        # `bt data scan-consolidation`，ADR-20/21 号 §4.13）。
         assert set(COMMANDS) == {"config-check", "run", "report", "verify",
                                  "test", "dataset", "optimize", "check",
-                                 "cold-backup", "runs", "show", "validate"}
+                                 "cold-backup", "runs", "show", "validate",
+                                 "data"}
 
     def test_each_command_has_help_and_args(self):
         for name, (handler, help_text, add_args) in COMMANDS.items():

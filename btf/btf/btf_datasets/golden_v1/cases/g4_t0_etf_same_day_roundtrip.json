@@ -20,8 +20,8 @@
         "date": "20210531",
         "fee": {
           "commission": 5.0,
-          "stamp_duty": 10.5,
-          "total": 15.7,
+          "stamp_duty": 0.0,
+          "total": 5.21,
           "transfer_fee": 0.21
         },
         "price": 10.495,
@@ -32,36 +32,36 @@
     ],
     "invariants": {
       "event_days": [],
-      "final_cash": 999979.0900000001,
+      "final_cash": 999989.5800000001,
       "nav_last": {
         "20210527": 1000000.0,
         "20210528": 1000000.0,
-        "20210531": 999979.0900000001,
-        "20210601": 999979.0900000001,
-        "20210602": 999979.0900000001,
-        "20210603": 999979.0900000001,
-        "20210604": 999979.0900000001,
-        "20210607": 999979.0900000001,
-        "20210608": 999979.0900000001
+        "20210531": 999989.5800000001,
+        "20210601": 999989.5800000001,
+        "20210602": 999989.5800000001,
+        "20210603": 999989.5800000001,
+        "20210604": 999989.5800000001,
+        "20210607": 999989.5800000001,
+        "20210608": 999989.5800000001
       },
-      "realized_pnl_total": -20.909999999999936,
+      "realized_pnl_total": -10.419999999999938,
       "windows": []
     },
     "metrics": {
-      "annualized_return": -0.0006584550097288311,
-      "annualized_volatility": 0.00011735708393576953,
-      "calmar_ratio": -31.489957423770832,
-      "fee_ratio": 2.09103400718307e-05,
-      "final_nav": 999979.0900000001,
-      "max_drawdown": -2.0909999999929596e-05,
+      "annualized_return": -0.0003281778479542474,
+      "annualized_volatility": 5.848210495502675e-05,
+      "calmar_ratio": -31.494995005340698,
+      "fee_ratio": 1.0420084448995523e-05,
+      "final_nav": 999989.5800000001,
+      "max_drawdown": -1.0419999999955465e-05,
       "n_fills": 2.0,
       "n_trading_days": 9.0,
       "profit_loss_ratio": NaN,
       "sharpe_ratio": -5.612486080160913,
-      "total_fees": 20.91,
-      "total_return": -2.0909999999929596e-05,
+      "total_fees": 10.42,
+      "total_return": -1.0419999999955465e-05,
       "total_turnover": 20990.0,
-      "turnover_annualized": 0.6611957532469336,
+      "turnover_annualized": 0.6611903585805282,
       "win_rate": 0.0
     },
     "rejected_counts": {},
@@ -91,80 +91,80 @@
       },
       {
         "avg_cost": {},
-        "cash": 999979.0900000001,
-        "cumulative_return": -2.0909999999929596e-05,
-        "daily_return": -2.0909999999929596e-05,
+        "cash": 999989.5800000001,
+        "cumulative_return": -1.0419999999955465e-05,
+        "daily_return": -1.0419999999955465e-05,
         "date": "20210531",
-        "drawdown": -2.0909999999929596e-05,
+        "drawdown": -1.0419999999955465e-05,
         "market_value": 0.0,
         "positions_qty": {},
-        "total_value": 999979.0900000001
+        "total_value": 999989.5800000001
       },
       {
         "avg_cost": {},
-        "cash": 999979.0900000001,
-        "cumulative_return": -2.0909999999929596e-05,
+        "cash": 999989.5800000001,
+        "cumulative_return": -1.0419999999955465e-05,
         "daily_return": 0.0,
         "date": "20210601",
-        "drawdown": -2.0909999999929596e-05,
+        "drawdown": -1.0419999999955465e-05,
         "market_value": 0.0,
         "positions_qty": {},
-        "total_value": 999979.0900000001
+        "total_value": 999989.5800000001
       },
       {
         "avg_cost": {},
-        "cash": 999979.0900000001,
-        "cumulative_return": -2.0909999999929596e-05,
+        "cash": 999989.5800000001,
+        "cumulative_return": -1.0419999999955465e-05,
         "daily_return": 0.0,
         "date": "20210602",
-        "drawdown": -2.0909999999929596e-05,
+        "drawdown": -1.0419999999955465e-05,
         "market_value": 0.0,
         "positions_qty": {},
-        "total_value": 999979.0900000001
+        "total_value": 999989.5800000001
       },
       {
         "avg_cost": {},
-        "cash": 999979.0900000001,
-        "cumulative_return": -2.0909999999929596e-05,
+        "cash": 999989.5800000001,
+        "cumulative_return": -1.0419999999955465e-05,
         "daily_return": 0.0,
         "date": "20210603",
-        "drawdown": -2.0909999999929596e-05,
+        "drawdown": -1.0419999999955465e-05,
         "market_value": 0.0,
         "positions_qty": {},
-        "total_value": 999979.0900000001
+        "total_value": 999989.5800000001
       },
       {
         "avg_cost": {},
-        "cash": 999979.0900000001,
-        "cumulative_return": -2.0909999999929596e-05,
+        "cash": 999989.5800000001,
+        "cumulative_return": -1.0419999999955465e-05,
         "daily_return": 0.0,
         "date": "20210604",
-        "drawdown": -2.0909999999929596e-05,
+        "drawdown": -1.0419999999955465e-05,
         "market_value": 0.0,
         "positions_qty": {},
-        "total_value": 999979.0900000001
+        "total_value": 999989.5800000001
       },
       {
         "avg_cost": {},
-        "cash": 999979.0900000001,
-        "cumulative_return": -2.0909999999929596e-05,
+        "cash": 999989.5800000001,
+        "cumulative_return": -1.0419999999955465e-05,
         "daily_return": 0.0,
         "date": "20210607",
-        "drawdown": -2.0909999999929596e-05,
+        "drawdown": -1.0419999999955465e-05,
         "market_value": 0.0,
         "positions_qty": {},
-        "total_value": 999979.0900000001
+        "total_value": 999989.5800000001
       },
       {
         "avg_cost": {},
-        "cash": 999979.0900000001,
-        "cumulative_return": -2.0909999999929596e-05,
+        "cash": 999989.5800000001,
+        "cumulative_return": -1.0419999999955465e-05,
         "daily_return": 0.0,
         "date": "20210608",
-        "drawdown": -2.0909999999929596e-05,
+        "drawdown": -1.0419999999955465e-05,
         "market_value": 0.0,
         "positions_qty": {},
-        "total_value": 999979.0900000001
+        "total_value": 999989.5800000001
       }
     ],
     "state_expectations": {

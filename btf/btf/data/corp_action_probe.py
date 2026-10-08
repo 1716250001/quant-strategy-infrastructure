@@ -32,6 +32,7 @@ import argparse
 import csv
 import hashlib
 import json
+import logging
 import pathlib
 import re
 from collections.abc import Iterable, Sequence
@@ -40,8 +41,10 @@ from datetime import datetime
 from typing import Any
 
 from btf.config.paths import CORP_ACTION_DIR, MARKET_DATA_DIR
-from btf.domain.action import CorporateAction
+from btf.domain.action import CorporateAction, ratio_or_default
 from btf.domain.types import TradingDate
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "PROBE_SCHEMA",
@@ -798,7 +801,12 @@ def to_corporate_actions(data: dict[str, Any] | None, start: TradingDate,
             ex_date=TradingDate.from_ymd(ex),
             pay_date=None, record_date=None,
             cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
-            consolidation_ratio=float(item.get("consolidation_ratio") or 1.0),
+            # **R54′（N58/N59 合并，§102.8）**：统一归一化（None⇒1.0；
+            # 不可转⇒1.0+WARN；≤0⇒无效值不建模+WARN）——禁崩、禁清零
+            consolidation_ratio=ratio_or_default(
+                item.get("consolidation_ratio"),
+                context=f"probe.confirmed:{item.get('symbol')}:{ex}",
+                warn=logger.warning),
             consolidation_source="confirmed",       # R22′：来源标记
         ))
     for item in (data.get("consolidations") or ()
@@ -811,7 +819,11 @@ def to_corporate_actions(data: dict[str, Any] | None, start: TradingDate,
             ex_date=TradingDate.from_ymd(ex),
             pay_date=None, record_date=None,
             cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
-            consolidation_ratio=float(item.get("consolidation_ratio") or 1.0),
+            # **R54′（N58/N59 合并）**：代理装载同一 helper（开关打开时路径）
+            consolidation_ratio=ratio_or_default(
+                item.get("consolidation_ratio"),
+                context=f"probe.proxy:{item.get('symbol')}:{ex}",
+                warn=logger.warning),
         ))
     out.sort(key=lambda a: (a.ex_date, a.symbol))
     return out

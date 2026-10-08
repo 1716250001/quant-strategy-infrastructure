@@ -9,9 +9,67 @@ PoC-2 仅冻结值对象（事件类型引用它）；引擎接入（ex_date/pay
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from btf.domain.types import TradingDate
+
+
+def ratio_or_default(
+    value: Any,
+    *,
+    default: float = 1.0,
+    field: str = "consolidation_ratio",
+    context: str = "",
+    warn: Callable[[str], None] | None = None,
+) -> float:
+    """**R54′（N58＋N59 合并，2026-10-08；19 号 §102.8）**：比率字段**统一归一化**。
+
+    三态语义（**禁崩、禁静默、禁清零**）：
+
+    1. `None` ⇒ `default`（无值＝无该行动，静默——旧行为不变）；
+    2. **不可转换为 float**（`""`／`"abc"`／NaN／∞ 等）⇒ `default` ＋ **WARN**
+       （N58：`is not None` 只兜 `None`，`float("")` 直接 `ValueError` 崩溃）；
+    3. **转换后 ≤ 0** ⇒ 视为**无效值 ⇒ 不建模（份额不变）**⇒ 取 `default`
+       ＋ **WARN**——**禁止**流入缩股分支的 R21′ 保底（`int(qty×0)=0` ⇒ 持仓被
+       清零至 1 股）。**老大 2026-10-08 裁决 (a)**：宁可漏记一次缩股，
+       不可摧毁持仓（§102.1）。
+
+    背景（§102.6 自我勘误 #17）：此处既不该用 `float(x or 1.0)`（吞 `0.0`），
+    也不该用 `is not None`（不兜 falsy 脏值）——**读写同一入口**才是正确形态。
+
+    **告警注入 `warn`**（`Callable[[str], None] | None`）：决定「何时告警」的策略
+    在本函数**单点**；**发射**由调用方注入（通常 `logger.warning`）——`btf/domain`
+    受 03 §7.3 铁律 3 白名单约束（不得 import `logging`），且域层不持全局副作用。
+    `warn=None` ⇒ 静默（仅取值）。
+
+    注意：本函数假设 `default` 本身合法且 `> 0`（当前唯一用途＝缩股比，
+    `default` 恒为 1.0＝「无该行动」）。
+    """
+    tag = field + (f"@{context}" if context else "")
+
+    def _emit(msg: str) -> None:
+        if warn is not None:
+            warn(msg)
+
+    if value is None:
+        return float(default)
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        _emit(f"公司行动 {tag} 不可转换为数值（{value!r}）⇒ 取默认 {default}"
+              f"（R54′/N58：禁崩、禁静默）")
+        return float(default)
+    # NaN／±∞（不依赖 math：NaN 自比不相等；±inf 显式比较）
+    if num != num or num in (float("inf"), float("-inf")):
+        _emit(f"公司行动 {tag} 非有限值（{value!r}）⇒ 取默认 {default}（R54′）")
+        return float(default)
+    if num <= 0:
+        _emit(f"公司行动 {tag} ≤0（{value!r}）⇒ 视为**无效值、不建模**"
+              f"（份额不变）＋WARN（R54′/N59 裁决 (a)：禁走保底清零）")
+        return float(default)
+    return num
 
 
 @dataclass(frozen=True)
@@ -51,4 +109,4 @@ class CorporateAction:
     pex_override: float | None = None
 
 
-__all__ = ["CorporateAction"]
+__all__ = ["CorporateAction", "ratio_or_default"]

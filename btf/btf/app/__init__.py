@@ -23,6 +23,7 @@ from btf.app.services import (
     run_gate_check,
     run_mc,
     run_walk_forward,
+    scan_consolidation,
 )
 
 __all__ = [
@@ -44,4 +45,5 @@ __all__ = [
     "run_gate_check",
     "run_mc",
     "run_walk_forward",
+    "scan_consolidation",
 ]

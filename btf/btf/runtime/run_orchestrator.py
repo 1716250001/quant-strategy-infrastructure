@@ -74,6 +74,71 @@ def _delisted_holding_notes(result: Any) -> list[str]:
     return notes
 
 
+def _etf_action_notes(result: Any, feed: Any) -> list[str]:
+    """**CL-2-H（R32′/R35′/R36′；ADR-20）**：ETF/LOF 公司行动披露 ＋ 覆盖段。
+
+    输出（报告「假设与披露」消费）：
+      ① **ETF 分红逐事件**（标的 / 除息日 / 到账日 / `qty × div_cash`）；
+      ② **覆盖段 7 项**（命中分红笔数／命中折算次数／未建模项清单／指标口径／
+         记账口径／告警列表／作废横幅）；`作废横幅` 的渲染归报告层（R36′——
+         命中 `回测产物/runs/作废登记-*.md` 即顶部显示）；
+      ③ **名义价告警**（宇宙含 ETF/LOF 且区间跨越除息/折算日——§92.12 N33
+         改判后的工具侧责任）；
+      ④ feed 侧 note（回退链 / 非交易日顺延 / fail-closed 未建模）。
+    **披露不得恒现（R38′/N40，2026-10-08）**：宇宙内无 ETF/LOF（`is_fund_code`
+    数 = 0）或本次未做 ETF/LOF 扫描（summary 空）⇒ **逐事件行与覆盖段均不出现**
+    （纯股票 run 上恒显「命中 0 笔」违反 §93/§95 纪律）；ETF 宇宙 ⇒ 覆盖段
+    输出（口径可见，无事件时命中数如实为 0）。
+    """
+    from btf.domain.types import is_fund_code
+
+    divs = [e for e in (getattr(result, "dividend_events", ()) or ())
+            if is_fund_code(str(e.get("symbol", "")))]
+    cons = [e for e in (getattr(result, "consolidations", ()) or ())
+            if str(e.get("source")) == "fund_conv"]
+    notes: list[str] = []
+    for ev in divs:
+        notes.append(
+            f"基金分红披露（ADR-20 第 2/3 条 / R32′）：{ev['symbol']} 除息 "
+            f"{ev['ex_date']}——派息日 {ev['pay_date']} 现金到账 "
+            f"{ev['qty_at_ex']} 份 × {ev['cash_div']:.6g} = "
+            f"{ev['amount']:.2f} 元（`div_cash` 即每份金额、**未除 `base_unit`**；"
+            f"`ex_date` 份额不变）")
+    feed_notes = list(getattr(feed, "etf_action_notes", ()) or ())
+    summary = dict(getattr(feed, "etf_scan_summary", {}) or {})
+    # **R38′（N40，2026-10-08）**：**无非空守卫**——宇宙内 `is_fund_code` 数
+    # 为 0（`n_symbols=0`：`source=all` 等纯股票宇宙，实测 v77 preRC 恒显
+    # 「命中分红 0 笔…」）或本次未做 ETF/LOF 扫描（summary 空）⇒ **不输出
+    # 覆盖段**（披露不得恒现——19 号 §93/§95 纪律；N40 负向对照）。
+    n_funds = summary.get("n_symbols")
+    if n_funds is None or int(n_funds) == 0:
+        return list(feed_notes)
+    n_div = int(summary.get("n_div", len(divs)) or 0)
+    n_conv = int(summary.get("n_conv", len(cons)) or 0)
+    n_unmodeled = int(summary.get("n_unmodeled", 0) or 0)
+    n_alerts = n_unmodeled
+    unmodeled = ([f"{n_unmodeled} 项（fail-closed：双证据不符/因子缺失 ⇒ 不建模）"]
+                 if n_unmodeled else ["无"])
+    warning = "无"
+    if n_div or n_conv:
+        warning = ("1 条：**本 run 策略信号基于名义价，存在跳变失真**"
+                   "（ADR-20 第 8 条；Q-9=(a′) 保持名义价——与真源/B1 一致）")
+        n_alerts += 1
+    notes.append(
+        f"ETF/LOF 公司行动覆盖段（ADR-20/R36′；19 号 §96.4）：命中分红 "
+        f"{n_div} 笔（载入；其中**入账 {len(divs)} 笔**——除息日无持仓者不入账）／ "
+        f"命中折算 {n_conv} 次（载入；其中**入账 {len(cons)} 次**）／ "
+        f"未建模项 {unmodeled[0]} ／ "
+        f"指标口径＝名义价（Q-9=(a′)；信号未复权）＋ win_rate＝在场日口径"
+        f"（R26′/DOC-11；逐笔辅助＝`win_rate_trades`，须显式声明）、Sharpe/波动＝"
+        f"全样本含空仓日（显式标注） ／ 记账口径＝现金到账"
+        f"（Q-7 默认；再投未启用） ／ 告警列表＝{warning} ／ 作废横幅＝"
+        f"由报告层按作废登记表渲染（命中即顶部显示「本 run 已作废：原因＋"
+        f"重跑条件」——R36′/§95.3-A4）")
+    notes.extend(feed_notes)
+    return notes
+
+
 def _corp_action_notes(result: Any) -> list[str]:
     """**CL-2 第二段（R5′；19 号 §79.4）**披露：配股行权 / 缩股 / 清单状态。
 
@@ -127,6 +192,26 @@ def _corp_action_notes(result: Any) -> list[str]:
         # `confirmed`（股本级三重证据，R18′）**不得**写成「代理／未确证」；
         # `proxy`（价格代理检测）维持原口径。
         src = str(ev.get("source") or "proxy")
+        if src == "fund_conv":
+            # **CL-2-H（R35′）**：ETF/LOF 份额折算（双证据，已建模）——与股票
+            # 缩股同构（qty ×= ratio、成本总额守恒），措辞按来源三分。
+            notes.append(
+                f"基金份额折算披露（ADR-20 第 5 条 / R35′；19 号 §96.4）："
+                f"{ev['symbol']} 折算 {ev['ex_date']} 比例 {ev.get('ratio', 0):.6g} ⇒ "
+                f"持仓 {ev['qty_before']} → {ev['qty_after']} 份（无现金流；"
+                f"`shares÷=R`、`avg_cost×=R`、成本总额守恒）；**已建模**"
+                f"（双证据：`pre_close÷前收` ⇄ `fund_adj` 跳变倒数，容差 0.5%）")
+            if ev.get("forced_min_qty"):
+                notes[-1] += (
+                    "；⚠ **WARN** 保底生效：可缩股数 `int(qty×ratio)==0` ⇒ "
+                    "保留 1 股且 `avg_cost` 不放大（`forced_min_qty`，R21′）")
+            frac = ev.get("qty_fraction_dropped")
+            if frac:
+                # **R45′（N48）**：碎份口径显式披露（ADR-20 第 ⑪ 条）
+                notes[-1] += (
+                    f"；碎份口径：向下取整**丢弃 {frac:g} 份**（不补偿——"
+                    f"ADR-20 第 ⑪ 条/R45′）")
+            continue
         body = (f"{ev['symbol']} 除权 {ev['ex_date']} 比例 {ev['ratio']:.6g} ⇒ "
                 f"持仓 {ev['qty_before']} → {ev['qty_after']} 股（无现金流；")
         if src == "confirmed":
@@ -175,6 +260,8 @@ class RunOrchestrator:
             # RC-11-A / CL-2 第二段：不落盘路径同样登记披露（装配说明可被调用方读取）
             self.rt.assembly_notes.extend(_delisted_holding_notes(result))
             self.rt.assembly_notes.extend(_corp_action_notes(result))
+            self.rt.assembly_notes.extend(
+                _etf_action_notes(result, self.rt.feed))
             self.rt._warn_if_short_period(result)
             return result
 
@@ -217,7 +304,8 @@ class RunOrchestrator:
             # 骨架 manifest 已写 ⇒ 追加装配披露并**补写 manifest**
             # （`complete()` 读盘补全 → 终态 manifest 含该披露）。只披露不改数。
             _rc11_notes = (_delisted_holding_notes(result)
-                           + _corp_action_notes(result))
+                           + _corp_action_notes(result)
+                           + _etf_action_notes(result, self.rt.feed))
             if _rc11_notes:
                 self.rt.assembly_notes.extend(_rc11_notes)
                 manifest = replace(

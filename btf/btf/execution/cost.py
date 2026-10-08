@@ -43,7 +43,7 @@ from typing import ClassVar, Protocol
 from btf.domain.contracts import CONTRACT_VERSION
 from btf.domain.market import Bar, TradingState
 from btf.domain.orders import Fee, Order, OrderSide
-from btf.domain.types import TradingDate
+from btf.domain.types import TradingDate, is_fund_code
 
 #: A 股面值简化（元/股；过户费面额口径基数）
 PAR_VALUE = 1.0
@@ -151,7 +151,13 @@ class AShareTieredFeeModel:
         seg = _segment_at(self.segments, date)
         turnover = qty * price
         commission = max(turnover * self.commission_rate, self.commission_min)
-        stamp = turnover * seg.stamp_duty_sell if side is OrderSide.SELL else 0.0
+        # **CL-2-H（R36′＝并入 R24′；19 号 §96.4；ADR-20 第 7 条）**：ETF/LOF
+        # **免印花税**（境内二级市场免征）——判定复用 `is_fund_code`（品种维度，
+        # 禁第二套判定）；其余科目不变；股票侧逐位不变。
+        # N30 实证：510880 曾误收印花税 11,448.88 元（占费用总额 61.2%）。
+        stamp = (turnover * seg.stamp_duty_sell
+                 if (side is OrderSide.SELL and not is_fund_code(symbol))
+                 else 0.0)
         if seg.transfer_scope == "sh_only" and not symbol.endswith(".SH"):
             transfer = 0.0                     # 2015-08 前深市不收过户费
         elif seg.transfer_basis == "par":

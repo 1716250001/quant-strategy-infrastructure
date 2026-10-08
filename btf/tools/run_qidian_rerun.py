@@ -8,14 +8,21 @@ V3-2 ETF 限价通道就位后补做，产出净值曲线级验收证据。
 
 用法::
 
-    python tools/run_qidian_rerun.py                     # 2019-06-26 → 今日
+    python tools/run_qidian_rerun.py                     # 2019-06-26 → 固定锚 20260923
     python tools/run_qidian_rerun.py --start 20190626 --end 20260923
+    python tools/run_qidian_rerun.py --end today         # 显式取今日（**须显式**）
     python tools/run_qidian_rerun.py --out <RunStore 根>  # 默认 回测产物/runs
     python tools/run_qidian_rerun.py --dry-run            # 只装配不执行
 
 区间声明（E3）：ETF 涨跌停取 `etf_limit`（**起点 2019-06-26**）；更早区间由
 BoardRule ±10% 依 pre_close 计算回退并计数披露（`fallback_limit_dates`）。
 默认起点即 2019-06-26——避免落在回退区，同时满足"≥2019-06-26"验收口径。
+
+**区间末端锚定（R52′/N56，2026-10-08）**：`--end` 缺省**不再取 `date.today()`**
+（原缺省每跑一日即静默生成一个新区间档——09-23／09-30／10-08 三档并存即由此
+产生）——缺省改为**固定锚 `PINNED_END=20260923`**（20 号纪律六），并在
+stdout／manifest／报告「假设与披露」标注 **`period_end_source`**
+（`pinned_default`／`explicit`／`today(opt-in)`）；跨区间数字**不可比**。
 """
 from __future__ import annotations
 
@@ -32,10 +39,20 @@ KEY_METRICS = ("final_nav", "total_return", "annualized_return", "sharpe_ratio",
                "max_drawdown", "calmar_ratio", "n_fills", "total_fees",
                "turnover_annualized", "n_trading_days")
 
+#: **R52′（N56）**：区间末端**固定锚**（缺省值；20 号纪律六三档之 09-23 档）
+PINNED_END = "20260923"
+
 
 def build_config(pool_symbols: list[str], start: str, end: str,
                  cash: float, weight: float) -> dict:
-    """回测配置（registry 声明制：feed=mixed / 策略 module:Class）。"""
+    """回测配置（registry 声明制：feed=mixed / 策略 module:Class）。
+
+    **CL-2-H/R26′（19 号 §96.4）**：`analysis.metrics` 声明 15 项默认指标 ＋
+    `win_rate_trades`（**可选指标**，逐笔口径辅助；默认指标集与 `metrics_digest`
+    口径不变——声明制，见 metrics.OPTIONAL_METRIC_CLASSES）。
+    """
+    from btf.analytics.metrics import METRIC_NAMES
+
     return {
         "schema_version": "backtest.v1",
         "run": {
@@ -46,6 +63,11 @@ def build_config(pool_symbols: list[str], start: str, end: str,
             "initial_cash": cash,
         },
         "data": {"feed": "mixed"},
+        "analysis": {"metrics": [*METRIC_NAMES, "win_rate_trades"]},
+        # 与旧 43 池 run（20260927_163148_7ecdb4）生效配置对齐：空风控链
+        # （显式放行——运行时强制 `allow_empty_chain=true` 并在报告披露；
+        # 该 flag 为复核期新增的 fail-closed 守卫）。
+        "risk": {"rules": [], "allow_empty_chain": True},
         "seed": {"master": 20260927},
     }
 
@@ -54,8 +76,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="奇点战法引擎级全区间净值复跑")
     parser.add_argument("--start", default="20190626",
                         help="起点（默认 2019-06-26 = etf_limit 起点，E3）")
-    parser.add_argument("--end", default=date.today().strftime("%Y%m%d"),
-                        help="终点（默认今日；数据自然截断于主库最新日）")
+    parser.add_argument("--end", default=None,
+                        help=f"终点（缺省 ⇒ **固定锚** {PINNED_END}；"
+                             f"传 `today` 或 YYYYMMDD 显式指定——R52′/N56，"
+                             f"跨区间数字不可比）")
     parser.add_argument("--cash", type=float, default=1_000_000.0)
     parser.add_argument("--weight", type=float, default=0.02,
                         help="单标的权重（43 池 × 0.02 = 0.86 ≤ 1）")
@@ -81,12 +105,30 @@ def main(argv: list[str] | None = None) -> int:
     print(f"标的池：{len(instruments)} 只 ETF/LOF + {len(index_codes)} 条配对指数"
           f"（真源 {reference.__file__}）")
 
+    # **R52′（N56）**：末端解析与来源标注（缺省＝固定锚；today 须显式）
+    if args.end is None:
+        end_s, end_src = PINNED_END, "pinned_default"
+    elif str(args.end).lower() == "today":
+        end_s, end_src = date.today().strftime("%Y%m%d"), "today(opt-in)"
+    else:
+        end_s, end_src = str(args.end), "explicit"
+    print(f"[区间] start={args.start} end={end_s} | "
+          f"period_end_source={end_src}"
+          + ("（缺省＝固定锚——如需当日请显式 `--end today`）"
+             if end_src == "pinned_default" else "")
+          + " | ⚠ 跨区间数字**不可比**（20 号纪律六）")
+
     config = build_config(instruments, f"{args.start[:4]}-{args.start[4:6]}-"
-                          f"{args.start[6:]}", f"{args.end[:4]}-"
-                          f"{args.end[4:6]}-{args.end[6:]}",
+                          f"{args.start[6:]}", f"{end_s[:4]}-"
+                          f"{end_s[4:6]}-{end_s[6:]}",
                           args.cash, args.weight)
-    start, end = TradingDate.from_ymd(args.start), TradingDate.from_ymd(args.end)
+    start, end = TradingDate.from_ymd(args.start), TradingDate.from_ymd(end_s)
     runtime = BTFRuntime().load_config(config).build()
+    # 区间口径披露进装配说明 ⇒ **manifest ＋ 报告**（「假设与披露」）同载
+    runtime.assembly_notes.append(
+        f"区间口径（R52′/N56）：period_end_source={end_src}——"
+        f"start={args.start}／end={end_s}；**跨区间数字不可比**，"
+        f"引用必标区间（20 号纪律六）")
     print(f"装配：{len(runtime.instruments)} 标的（ETF 身份推断 + BoardRule T+N）")
 
     if args.dry_run:

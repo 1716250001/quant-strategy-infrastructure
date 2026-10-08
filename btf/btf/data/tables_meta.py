@@ -152,14 +152,24 @@ FUND_ADJ = TableMeta(
     pk=("ts_code", "trade_date"),
     note="ETF 复权因子；ETF/LOF 复权唯一口径（股票走 adj_factor；RC-04）",
 )
+#: **ETF/LOF 分红（CL-2-H / R32′；19 号 §96.4；20 → 21 表，DOC-8 先行）**：
+#: `ex_date` 份额不变、`pay_date` 现金到账 `qty × div_cash`；`div_cash` **即每份
+#: 金额（禁除 base_unit）**；按 `(ts_code, ex_date)` 去重、只消费 `div_proc='实施'`。
+#: 起点经主库实测（`fund_div` 最小 ex_date = 20070426，19 号 §92.2）。
+FUND_DIV = TableMeta(
+    name="fund_div", layout=Layout.BY_YEAR, date_col="ex_date", start="20070426",
+    pk=("ts_code", "ex_date"),
+    note="ETF/LOF 分红；div_cash 即每份金额；pay_date 两时点（ADR-20/R32′）",
+)
 
-#: 全部 19 表注册表（05 §9.4：T-01..T-19——15 BY_YEAR / 2 SINGLE / 2 METADATA）
+#: 全部 20 表注册表（05 §9.4：T-01..T-20——16 BY_YEAR / 2 SINGLE / 2 METADATA；
+#: T-20 `fund_div` 为 CL-2-H/R32′ 新增；T-21 `fund_share` 仅披露不判折算，暂不注册）
 TABLES: dict[str, TableMeta] = {
     t.name: t for t in (
         DAILY, ADJ_FACTOR, STK_LIMIT, SUSPEND_D, NAMECHANGE, DIVIDEND,
         STOCK_BASIC, TRADE_CAL, INDEX_DAILY, DAILY_BASIC, INDEX_WEIGHT,
         INDEX_DAILYBASIC, NEW_SHARE, MONEYFLOW, FINA_INDICATOR, FX_DAILY,
-        FUND_DAILY, ETF_LIMIT, FUND_ADJ,
+        FUND_DAILY, ETF_LIMIT, FUND_ADJ, FUND_DIV,
     )
 }
 

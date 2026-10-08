@@ -37,6 +37,7 @@ ctx states 惰性装载（LazyStates：不查不触发），实际查询限定�
 """
 from __future__ import annotations
 
+import inspect
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -97,6 +98,9 @@ class RunResult:
     rights_events: list[dict[str, Any]] = field(default_factory=list)
     #: 缩股（R6′ 代理）审计。
     consolidations: list[dict[str, Any]] = field(default_factory=list)
+    #: **CL-2-H（R32′；ADR-20 第 2 条）**：派息现金到账审计（逐事件：标的 /
+    #: 除息日 / 到账日 / `qty_at_ex` / 每份金额 / 到账额）——覆盖段与归因消费。
+    dividend_events: list[dict[str, Any]] = field(default_factory=list)
     #: 配股锁定期内卖出警告（获配股份上市日前卖出；**默认不建模锁定期**，
     #: 故只警告、不阻断——§79.3 #3）。
     lockup_sell_warnings: list[str] = field(default_factory=list)
@@ -236,7 +240,16 @@ class Engine:
         # 19960730 送转/派息拆 3 行）不会互相覆盖丢分红。
         actions_by_ex: dict[str, list[tuple[int, CorporateAction]]] = {}
         actions_by_pay: dict[str, list[tuple[int, CorporateAction]]] = {}
-        for idx, act in enumerate(self._feed.corporate_actions(self._start, self._end)):
+        # **CL-2-H（R32′）**：显式宇宙（`_cross_section`）给出时随装载一并传入
+        # ——ETF/LOF 公司行动按宇宙内 `is_fund_code` 标的上限装载（避免全 ETF
+        # 扫描）；**签名探测**兼容未扩参的自定义/Memory Feed（无 `symbols`
+        # 形参 ⇒ 原两参调用，语义不变）。
+        _ca = self._feed.corporate_actions
+        if "symbols" in inspect.signature(_ca).parameters:
+            _ca_iter = _ca(self._start, self._end, symbols=self._cross_section)
+        else:
+            _ca_iter = _ca(self._start, self._end)
+        for idx, act in enumerate(_ca_iter):
             actions_by_ex.setdefault(act.ex_date.to_ymd(), []).append((idx, act))
             if act.pay_date is not None and act.pay_date != act.ex_date:
                 actions_by_pay.setdefault(act.pay_date.to_ymd(), []).append((idx, act))
@@ -285,6 +298,14 @@ class Engine:
                         if qty_at_ex:
                             portfolio.apply_pay_date(
                                 act.symbol, qty_at_ex, act.cash_div_per_share)
+                            portfolio.dividend_events.append({
+                                "symbol": act.symbol,
+                                "ex_date": act.ex_date.to_ymd(),
+                                "pay_date": ymd,
+                                "qty_at_ex": int(qty_at_ex),
+                                "cash_div": act.cash_div_per_share,
+                                "amount": qty_at_ex * act.cash_div_per_share,
+                            })
                             _emit(CorporateActionEvent(action=act))  # pay 时点
                     else:
                         pending_divs[idx] = (qty_at_ex, act.cash_div_per_share)
@@ -293,6 +314,14 @@ class Engine:
                 if reg is not None:
                     qty_at_ex, cash_div = reg
                     portfolio.apply_pay_date(act.symbol, qty_at_ex, cash_div)
+                    portfolio.dividend_events.append({
+                        "symbol": act.symbol,
+                        "ex_date": act.ex_date.to_ymd(),
+                        "pay_date": ymd,
+                        "qty_at_ex": int(qty_at_ex),
+                        "cash_div": cash_div,
+                        "amount": qty_at_ex * cash_div,
+                    })
                     _emit(CorporateActionEvent(action=act))    # pay 时点
 
             # ② 撮合 T-1 队列（③ 入账在 execute 内逐单）
@@ -456,6 +485,8 @@ class Engine:
         # 故 logger.warning（非静默）＋ 转 run 元数据（runtime 侧装配说明）。
         result.rights_events = list(portfolio.rights_events)
         result.consolidations = list(portfolio.consolidations)
+        # CL-2-H（R32′；ADR-20 第 2 条）：派息现金到账审计转出（覆盖段消费）。
+        result.dividend_events = list(portfolio.dividend_events)
         for _ev in result.rights_events:
             if _ev.get("cash_shortfall"):
                 logger.warning(

@@ -28,13 +28,16 @@ T+1 冻结：买入不增 available_qty（t_plus=1），advance_day() 于新交�
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from btf.domain.action import CorporateAction
+from btf.domain.action import CorporateAction, ratio_or_default
 from btf.domain.orders import Fill, OrderSide
 from btf.domain.types import TradingDate
+
+logger = logging.getLogger(__name__)
 
 #: 快照权重表中现金项的保留键（04 §8.2.6 "当日权重（含现金）"）
 CASH_KEY = "@CASH"
@@ -111,6 +114,9 @@ class Portfolio:
     rights_events: list[dict[str, Any]] = field(default_factory=list)
     #: 缩股（R6′ 代理检测）审计（逐事件）。
     consolidations: list[dict[str, Any]] = field(default_factory=list)
+    #: **CL-2-H（R32′；ADR-20 第 2 条）**：派息现金到账审计（逐事件：标的 /
+    #: 除息日 / 到账日 / `qty_at_ex` / 每份金额 / 到账额）——覆盖段与归因消费。
+    dividend_events: list[dict[str, Any]] = field(default_factory=list)
 
     # ── 入账（唯一路径：撮合成交 → apply_fill）──
     def apply_fill(self, fill: Fill, *, t_plus: int = 1) -> None:
@@ -226,9 +232,20 @@ class Portfolio:
         #   ③ 置 `forced_min_qty: true`（WARN 披露，不静默）。
         # **R22′（§87.8.2）**：事件带 `source`（`confirmed`／`proxy`），供逐事件
         #   披露按来源分措辞（确证缩股不得被写成「代理／未确证」）。
-        cons = float(getattr(action, "consolidation_ratio", 1.0) or 1.0)
+        # **R54′（N58/N59 合并，2026-10-08；§102.8）**：消费端经**统一归一化**——
+        # `None` ⇒ 1.0（无缩股）；不可转换/非有限 ⇒ 1.0 ＋ WARN（禁崩）；
+        # **`≤0` ⇒ 视为无效值 ⇒ 不建模（份额不变）＋ WARN**（老大裁决 (a)：
+        # **禁走 R21′ 保底清零**——清零持仓是不可逆的资产级破坏）。
+        cons = ratio_or_default(
+            getattr(action, "consolidation_ratio", None),
+            context=f"portfolio:{action.symbol}:{action.ex_date.to_ymd()}",
+            warn=logger.warning)
         if cons != 1.0 and qty_at_ex > 0:
             raw_qty = int(qty_at_ex * cons)
+            # **R45′（N48，2026-10-08）**：碎份口径＝**向下取整、丢弃不补偿**
+            #（ADR-20 第 ⑪ 条）——丢弃量逐事件披露（`qty_fraction_dropped`），
+            # 不得静默消失（510310 实测 777,700 × 0.499844 = 388,728.7 ⇒ 丢 0.7 份）。
+            frac_dropped = qty_at_ex * cons - raw_qty
             forced = raw_qty <= 0                      # R21′ 保底判定（保底前）
             new_qty = 1 if forced else raw_qty
             p0c = self._last_close.get(action.symbol)
@@ -243,6 +260,9 @@ class Portfolio:
                 "source": str(getattr(action, "consolidation_source", "proxy")
                               or "proxy"),
                 **({"forced_min_qty": True} if forced else {}),
+                # R45′（N48）：碎份丢弃量（向下取整差；保底路径不适用）
+                **({"qty_fraction_dropped": round(frac_dropped, 6)}
+                   if not forced and frac_dropped > 1e-9 else {}),
             })
             if not forced:
                 # 正常路径（**逐位不变**——R21′-C1）：成本总额守恒 ⇒ 每股放大

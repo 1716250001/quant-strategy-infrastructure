@@ -148,6 +148,12 @@ class NavSeries:
     fees: float = 0.0            # Σ fee.total（元）
     turnover: float = 0.0        # Σ price×qty（元，双边）
     n_fills: int = 0
+    #: **R26′（19 号 §96.4；N31）**：在场日掩码（与快照对齐；空 = 无信息 ⇒
+    #: 口径回落全样本——向后兼容）。在场判定＝该日快照 `positions_qty` 非空。
+    in_market: tuple[bool, ...] = ()
+    #: **R26′**：FIFO 开平配对交易（`analytics.trades.pair_fills_to_trades`；
+    #: 逐笔口径指标消费；空 = 未传入成交）。
+    trades: tuple[Any, ...] = ()
 
     @property
     def n_days(self) -> int:
@@ -172,6 +178,18 @@ class NavSeries:
         """有效日收益（排除首日——首日 daily_return=0 非真实收益）。"""
         return self.daily_returns[1:] if self.n_days > 1 else ()
 
+    def in_market_returns(self) -> tuple[float, ...]:
+        """**在场日**日收益序列（R26′/N31：排除空仓日；无掩码 ⇒ 回落全样本）。
+
+        在场判定＝快照当日 `positions_qty` 非空（持仓日）；首日仍排除
+        （daily_return=0 非真实收益）。全时段持仓 ⇒ 与 `effective_returns()`
+        **逐位相同**（v77 等满仓 run 的 `metrics_digest` 因此零变更）。
+        """
+        if not self.in_market or len(self.in_market) != self.n_days:
+            return self.effective_returns()
+        return tuple(r for r, m in zip(self.daily_returns[1:],
+                                       self.in_market[1:], strict=True) if m)
+
     def total_return(self) -> float:
         """累计收益 = 第三式期末值（NAV 口径，空 → IndexError 降级）。"""
         return self.cumulative_returns[-1]
@@ -179,9 +197,26 @@ class NavSeries:
 
 def build_nav_series(snapshots: Sequence[Any], trades: Sequence[Any] = ()
                      ) -> NavSeries:
-    """快照 + 成交 → 指标基座（NAV 四式 + 成交汇总；纯函数）。"""
+    """快照 + 成交 → 指标基座（NAV 四式 + 成交汇总；纯函数）。
+
+    **R26′（19 号 §96.4；N31）**：另派生
+    ① **在场日掩码**（快照 `positions_qty` 非空——`win_rate` 分母口径）；
+    ② **FIFO 开平配对交易**（逐笔口径辅助指标 `win_rate_trades` 消费）。
+    """
     nav = nav_total_values(snapshots)
     fills = list(trades or ())
+    in_market = tuple(
+        bool(getattr(s, "positions_qty", None)) for s in snapshots)
+    if not any(in_market):
+        # 全部快照无持仓 **或** 快照对象未携带 `positions_qty`——两者不可区分 ⇒
+        # 保守回落「全样本」口径（`in_market_returns` 回落分支；向后兼容：
+        # 老快照/自定义对象的 `win_rate` 取值逐位不变）。
+        in_market = ()
+    paired: tuple[Any, ...] = ()
+    if fills:
+        from btf.analytics.trades import pair_fills_to_trades
+
+        paired = tuple(pair_fills_to_trades(fills))
     return NavSeries(
         nav=tuple(nav),
         daily_returns=tuple(nav_daily_returns(nav)),
@@ -190,6 +225,8 @@ def build_nav_series(snapshots: Sequence[Any], trades: Sequence[Any] = ()
         fees=sum(_fee_total(f) for f in fills),
         turnover=sum(_fill_amount(f) for f in fills),
         n_fills=len(fills),
+        in_market=in_market,
+        trades=paired,
     )
 
 
@@ -351,15 +388,41 @@ class CalmarRatio(MetricBase):
 
 
 class WinRate(MetricBase):
-    """胜率 = 盈利日数 / 有效收益日数（排除首日；平盘日计入分母）。"""
+    """胜率 = 盈利日数 / **在场日**数（R26′/N31；排除首日；平盘日计入分母）。
+
+    **口径变更（19 号 §96.4 R26′；DOC-11）**：分母**禁含空仓日**——原实现
+    为「盈利日 ÷ 全部快照日」（510880 实测 26.93%＝把择时策略胜率系统性稀释；
+    在场日真实胜率 ≈52.8%）。全时段持仓 run（如 v77 股票轮动）在场日＝全部日
+    ⇒ 取值与原口径**逐位相同**（`metrics_digest` 零变更）。报告须标注所用口径
+    （R26′；20 号纪律四）；逐笔口径＝`win_rate_trades`（可选指标，辅助并列）。
+    """
 
     name = "win_rate"
 
     def _value(self, series: NavSeries, config: Mapping[str, Any]) -> float:
-        eff = series.effective_returns()
+        eff = series.in_market_returns()
         if not eff:
             raise ValueError("无有效收益日，胜率无定义")
         return sum(1 for r in eff if r > 0) / len(eff)
+
+
+class WinRateTrades(MetricBase):
+    """**逐笔口径胜率（R26′ 辅助指标）**：盈利平仓笔数 ÷ 平仓笔数。
+
+    平仓判定＝FIFO 配对 `Trade.close_fill is not None`（未平仓不入分母）；
+    平盘（pnl=0）计入分母不计盈利。须在 `analysis.metrics` **显式声明**
+    （**可选指标**——不进默认 15 项，护 `metrics_digest` 口径不变）。
+    """
+
+    name = "win_rate_trades"
+
+    def _value(self, series: NavSeries, config: Mapping[str, Any]) -> float:
+        closed = [t for t in series.trades
+                  if getattr(t, "close_fill", None) is not None]
+        if not closed:
+            raise ValueError("无平仓交易，逐笔胜率无定义")
+        return (sum(1 for t in closed if float(getattr(t, "pnl", 0.0)) > 0.0)
+                / len(closed))
 
 
 class ProfitLossRatio(MetricBase):
@@ -447,7 +510,9 @@ METRIC_CLASSES: tuple[type[MetricBase], ...] = (
 
 #: **可选指标**（RC-06，2026-10-05）：须在 `analysis.metrics` **显式声明**才计算，
 #: **不进默认 15 项**（默认指标集与 `metrics_digest` 口径因此保持不变）。
-OPTIONAL_METRIC_CLASSES: tuple[type[MetricBase], ...] = (SharpeStderr,)
+#: `WinRateTrades`（R26′，2026-10-07）：逐笔口径胜率辅助指标（N31 修复配套）。
+OPTIONAL_METRIC_CLASSES: tuple[type[MetricBase], ...] = (SharpeStderr,
+                                                         WinRateTrades)
 
 #: 指标名 → 类（配置声明制：用户侧只写名字；含可选指标）
 METRICS: Mapping[str, type[MetricBase]] = {

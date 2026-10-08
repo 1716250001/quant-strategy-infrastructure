@@ -470,6 +470,72 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
 _DATASET_ACTIONS = ("build-golden", "verify", "refcalc", "freeze")
 
 
+def _cmd_data(args: argparse.Namespace) -> int:
+    """bt data <scan-consolidation>：数据专项扫描（**R34′**；21 号 §4.13）。
+
+    判据＝**双证据 ＋ 容差 ＋ fail-closed**（ADR-20 第 5 条）；
+    退出码：0（全部一致）／1（存在 fail-closed 事件——门禁语义阻断）／
+    2（参数用法/前置错误）。输出逐事件 `ts_code / 事件日 / R / 证据1 /
+    证据2 / 偏差 / 结论` ＋ 未建模项清单。
+    """
+    from btf.app import scan_consolidation
+
+    if args.data_action not in _DATA_ACTIONS:
+        print(f"[error] 未知 data 动作：{args.data_action!r}"
+              f"（可选 {_DATA_ACTIONS}）", file=sys.stderr)
+        return 2
+    if not args.config:
+        print("[error] data scan-consolidation 需 --config <yaml>"
+              "（取 run.universe 显式 ETF 池与 run.period）", file=sys.stderr)
+        return 2
+    try:
+        report = scan_consolidation(args.config, out=args.out,
+                                    tolerance=args.tolerance)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"[error] 用法/前置错误：{exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:                    # 主库不可用等
+        print(f"[error] 扫描失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print(f"[ok] scan-consolidation：{report['n_symbols']} 只 ETF/LOF | "
+          f"区间 {report['start']}~{report['end']} | 事件 {report['n_events']} "
+          f"（fail-closed {report['n_fail_closed']}）| 容差 "
+          f"{report['tolerance']}")
+    print(f"{'ts_code':<12}{'事件日':<10}{'R':>10}{'证据1':>10}"
+          f"{'证据2':>10}{'偏差':>10}  结论")
+    for ev in report["events"]:
+        dev = "—" if ev.get("dev") is None else f"{ev['dev']:.6f}"
+        ev2 = "—" if ev.get("evidence2") is None else f"{ev['evidence2']:.6f}"
+        print(f"{ev['ts_code']:<12}{ev['date']:<10}{ev['R']:>10.6f}"
+              f"{ev['evidence1']:>10.6f}{ev2:>10}{dev:>10}  "
+              f"{'一致' if ev.get('ok') else 'fail-closed'}")
+    for note in report.get("notes") or ():
+        print(f"[warn] {note}")
+    # **R47′（N51）**：降级项（如 trade_cal 缺失）⇒ 告警 + **退出码 2**
+    # （前置不完整；扫描结果仍打印——不静默、不抛未捕获异常）
+    for item in report.get("degraded") or ():
+        print(f"[warn] 降级：{item}")
+    if report.get("degraded"):
+        return 2
+    if report["n_fail_closed"]:
+        return 1
+    return 0
+
+
+#: data 子动作（R34′；21 号 §4.13）
+_DATA_ACTIONS = ("scan-consolidation",)
+
+
+def _args_data(p: argparse.ArgumentParser) -> None:
+    p.add_argument("data_action", nargs="?", default="scan-consolidation",
+                   choices=_DATA_ACTIONS,
+                   help="子动作：scan-consolidation（ETF/LOF 份额折算双证据扫描）")
+    p.add_argument("--config", help="回测配置 YAML（取 universe/period）")
+    p.add_argument("--out", help="结果 JSON 路径（缺省只打印）")
+    p.add_argument("--tolerance", type=float, default=0.005,
+                   help="双证据偏差容差（缺省 0.005＝0.5%%，ADR-20 第 5 条）")
+
+
 def _args_dataset(p: argparse.ArgumentParser) -> None:
     p.add_argument("action", nargs="?", default="build-golden",
                    choices=_DATASET_ACTIONS,
@@ -958,14 +1024,18 @@ COMMANDS: dict[str, tuple[CommandHandler, str, ArgAdder]] = {
     "validate": (_cmd_validate,
                  "滚动验证 / 蒙特卡洛：walk-forward（RC-15）| mc（RC-16）",
                  _args_validate),
+    "data": (_cmd_data,
+             "数据专项扫描：scan-consolidation（ETF/LOF 份额折算双证据；"
+             "R34′/ADR-20）",
+             _args_data),
 }
 
 
 def main(argv: list[str] | None = None) -> int:
     _utf8()
     parser = argparse.ArgumentParser(
-        prog="bt", description="btf 回测工具（十二命令族：config-check/run/report/"
-                               "verify/test/dataset/optimize/validate + check/"
+        prog="bt", description="btf 回测工具（十三命令族：config-check/run/report/"
+                               "verify/test/dataset/optimize/validate/data + check/"
                                "cold-backup/runs/show）")
     parser.add_argument("--version", action="version",
                         version=f"btf {__version__}",

@@ -500,6 +500,96 @@ def run_mc(
     return report
 
 
+def scan_consolidation(
+    config: str | Path,
+    *,
+    out: str | Path | None = None,
+    tolerance: float = 0.005,
+) -> dict[str, Any]:
+    """`bt data scan-consolidation`（**R34′**；21 号 §4.13；ADR-20 第 5 条）。
+
+    判据：**双证据**（证据 1 `pre_close(t)÷close(t−1)`；证据 2 `fund_adj`
+    跳变**倒数** `f_{t−1}÷f_t`）＋容差 `tolerance`（缺省 0.5%）＋不符
+    **fail-closed**（`ok=False`，不建模）；输出逐事件
+    `ts_code / 事件日 / R / 证据1 / 证据2 / 偏差 / 结论` ＋**未建模项清单**。
+    配置需 `run.universe.source='explicit'`（ETF/LOF 池）＋`run.period`。
+    """
+    import yaml
+
+    from btf.config.paths import MARKET_DATA_DIR
+    from btf.data.etf_corp_actions import scan_consolidations, trading_days_span
+    from btf.domain.types import TradingDate, is_fund_code
+
+    path = Path(config)
+    if not path.is_file():
+        raise FileNotFoundError(f"配置不存在：{path}")
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    run = cfg.get("run") or {}
+    period = run.get("period") or {}
+    start_s, end_s = str(period.get("start") or ""), str(period.get("end") or "")
+    if not start_s or not end_s:
+        raise ValueError("配置缺 run.period.start/end（scan-consolidation 前置）")
+    uni = run.get("universe") or {}
+    if uni.get("source") != "explicit":
+        raise ValueError(
+            "scan-consolidation 需 run.universe.source='explicit'（ETF/LOF 池）"
+            "——全市场/指数宇宙无 ETF 分摊语义")
+    symbols = [str(s) for s in (uni.get("symbols") or [])]
+    funds = [s for s in symbols if is_fund_code(s)]
+    if not funds:
+        raise ValueError(
+            "scan-consolidation：显式宇宙内无 ETF/LOF 标的（is_fund_code 判定）")
+
+    start = TradingDate.from_ymd(start_s.replace("-", ""))
+    end = TradingDate.from_ymd(end_s.replace("-", ""))
+    # **R51′（N55）**：交叉防线失能标志（`fund_div` 表缺失/不可读 ⇒ 除息日
+    # 交叉判别不可用——与 `trade_cal` 同强度降级：告警 ＋ 退出码 2，禁静默放行）。
+    cross_state: dict[str, Any] = {}
+    events, notes = scan_consolidations(
+        MARKET_DATA_DIR, funds, start, end, tolerance=tolerance,
+        cross_state=cross_state)
+    # 顺延/回退提示也一并输出（扫描器只报折算；分红侧由 R32′ 装载时披露）
+    # **R47′（N51，2026-10-08）**：`trade_cal` 缺失 ⇒ **降级为告警**（不得
+    # 未捕获异常）——`n_trading_days` 不可算；CLI 以**退出码 2** 提示
+    # 「前置不完整」（非静默；扫描本身不依赖日历——交叉判别 only ex_date）。
+    degraded: list[str] = []
+    try:
+        cal = trading_days_span(MARKET_DATA_DIR, start.to_ymd(), end.to_ymd())
+    except FileNotFoundError as exc:
+        cal = []
+        degraded.append(
+            f"trade_cal 缺失 ⇒ `n_trading_days` 不可算（降级；扫描不依赖日历"
+            f"——R47′）：{exc}")
+    if cross_state.get("disabled"):
+        degraded.append(
+            "交叉防线**不可用**（`fund_div` 表缺失/不可读）⇒ 折算候选**未经"
+            "除息日判别**（幅度阈值单防线——N46 威胁面回归；R51′/N55）"
+            "——请补 `fund_div` 后重跑")
+    n_fail = sum(1 for e in events if not e.get("ok"))
+    report = {
+        "schema": "btf.data.scan_consolidation.v1",
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "config": str(path),
+        "tolerance": tolerance,
+        "start": start.to_ymd(), "end": end.to_ymd(),
+        "n_symbols": len(funds),
+        "n_trading_days": (len(cal) if cal else None),
+        "n_events": len(events), "n_fail_closed": n_fail,
+        "events": events,
+        "notes": notes,
+        "degraded": degraded,
+        # R51′/N55：交叉防线状态（disabled=true ⇒ 折算未经除息判别）
+        "cross_disabled": bool(cross_state.get("disabled")),
+        "cross_stats": dict(cross_state.get("stats") or {}),
+    }
+    if out:
+        target = Path(out)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(report, ensure_ascii=False, indent=2)
+                          + "\n", encoding="utf-8")
+    return report
+
+
 def build_dataset(
     cases: str = "g1",
     *,

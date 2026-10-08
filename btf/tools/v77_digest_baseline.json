@@ -1,0 +1,43 @@
+{
+  "schema": "v77-three-tier-digest-baseline/v1",
+  "frozen_at": "2026-10-08",
+  "frozen_for": "btf 1.2.3（V1.2.3 定版，2026-10-09；CL-2-H 全量落版＋收口五轮十九单全清；§97.8/§103 验收通过）——1.3.0 不再立版",
+  "reason": "R37′/N43：R26′（DOC-11）`win_rate` 改**在场日口径**（v77 在场率 97.57%，22 个空仓日移出分母）⇒ `metrics_digest` 中**唯一差异项**为 win_rate（preRC 0.521594684385382 → 0.5340136054421769；delivered 0.5204872646733112 → 0.5328798185941043）；EE-1 六项锚（excess/IR/n_fills/n_days/total_return）逐位不变。属授权口径变更，非回归破坏——按新口径重冻结。",
+  "previous_baseline": {
+    "era": "2e8f933 时代（旧 win_rate＝全样本口径；19 号 §97.4 留痕）",
+    "preRC": "sha256:b265d1141209f76f2d28d80c982c35079d9fef649ce584eaf6ada3c39bfb8def",
+    "delivered": "sha256:f6aec074720a01c127802db880c0d8496b5a1211e470032c1d5bd0bd14c284d7",
+    "stress": "sha256:2bab55ba404cd071b9c372003a625a844ec25ad5a41e9d0b4ddff9abc5c8fad7"
+  },
+  "baselines": {
+    "preRC": {
+      "metrics_digest": "sha256:a5fddbb8c12f477bcce74502ccc0580e95b4e6dd7190f149b4b9ee54d289d032",
+      "excess": 0.071938,
+      "ir": 0.050426,
+      "total_return": 0.23382,
+      "n_fills": 441,
+      "n_days": 904
+    },
+    "delivered": {
+      "metrics_digest": "sha256:c29df7ecbdc362dffeb63bc803bc9babe2d6a912b0082338f5e4baa12337e960",
+      "excess": 0.06072,
+      "ir": 0.030531,
+      "total_return": 0.222602,
+      "n_fills": 451,
+      "n_days": 904
+    },
+    "stress": {
+      "metrics_digest": "sha256:8f1c2e5054fea06f759573415450d458f9143e3b2be8ba3981921a80318f1362",
+      "excess": 0.0428,
+      "ir": -0.0013,
+      "total_return": 0.2047,
+      "n_fills": 444,
+      "n_days": 904
+    }
+  },
+  "notes": [
+    "v77 三档口径（19 号 §62.3 / 20 号纪律二）：preRC＝零摩擦；delivered＝0.1% 滑点＋5% VPP；stress＝0.3% 滑点＋5% VPP。",
+    "digest 由 `btf.experiment.manifest.metrics_digest_of(res.metrics)` 计算（与落盘 manifest.metrics_digest 同式）。",
+    "复跑：`python tools/check_v77_digest.py`（本 JSON 为唯一基线真源；比对失败退出码 1）。"
+  ]
+}

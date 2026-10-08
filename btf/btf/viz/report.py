@@ -17,7 +17,10 @@
 """
 from __future__ import annotations
 
+import html
 import json
+import pathlib
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -153,6 +156,57 @@ def _derived_disclosures(manifest: Any) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _voided_banner(run_id: str) -> str | None:
+    """**R36′（§95.3-A4；20 号纪律四「作废横幅」）**：本 run 是否已作废。
+
+    判定源＝`回测产物/runs/作废登记-*.md`（审查方落盘；Q-8=(a) 裁定——
+    既往受污染 run 全部标注作废）。命中 ⇒ 返回「原因 ＋ 重跑条件」文案，
+    报告顶部渲染红色横幅（**不得静默**——被作废的结论不可当有效结果引用）。
+    登记表缺失 / 未命中 ⇒ None（披露不得恒现）。
+    """
+    try:
+        from btf.config import paths as _paths
+
+        runs_dir = pathlib.Path(_paths.RUNS_DIR)
+    except Exception:                     # 配置不可用（纯单元场景）
+        return None
+    if not runs_dir.is_dir():
+        return None
+    for reg in sorted(runs_dir.glob("作废登记-*.md")):
+        try:
+            text = reg.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if run_id not in text:
+            continue
+        row = next((ln.strip() for ln in text.splitlines()
+                    if run_id in ln and ln.strip().startswith("|")), "")
+        cells = [c.strip() for c in row.strip("|").split("|")] if row else []
+        reason = cells[-1] if cells else "见登记表"
+        return (f"本 run 已作废：{reason}；重跑条件＝修复后重跑（先执行 "
+                f"`bt data scan-consolidation` 确认无遗漏折算）；"
+                f"登记源：{reg.name}（19 号 §95.2–§95.3）")
+    return None
+
+
+_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_MD_CODE = re.compile(r"`([^`]+)`")
+
+
+def _md_lite(text: str) -> str:
+    """**R40′（N42，2026-10-08）**：横幅文案的**轻量 Markdown 渲染**。
+
+    作废登记表（`回测产物/runs/作废登记-*.md`）的原因单元格含 `**粗体**`
+    与 `` `行内代码` ``——原样进 Jinja（autoescape）会显示为字符（DOM 级
+    负向对照 N42）。先 `html.escape`（防注入）再替换，仅支持两式；
+    登记表纯文本仍可读（渲染不依赖登记表格式）。
+    """
+    out = html.escape(text)
+    out = _MD_BOLD.sub(r"<strong>\1</strong>", out)
+    out = _MD_CODE.sub(r"<code>\1</code>", out)
+    return out
+
+
 def _assembly_disclosures(manifest: Any) -> tuple[str, ...]:
     """口径披露（P1-NEW-5）：装配期笔记 + 宇宙/基准口径。
 
@@ -203,6 +257,7 @@ _TEMPLATE = """<!DOCTYPE html>
     <tr><th>契约版本</th><td>{{ manifest.contract_version }}</td></tr>
   </table>
 </header>
+{% if voided %}<div class="void-banner">⚠ {{ voided | safe }}</div>{% endif %}
 {% for section in sections %}
 <section id="{{ section.id }}">
   <h2>{{ section.title }}</h2>
@@ -226,6 +281,8 @@ code{background:#edf2f7;padding:.1rem .3rem}
 .note{color:#718096;font-size:.85rem}
 .sparkline{width:100%;height:120px;border:1px solid #e2e8f0}
 .missing{color:#c53030;font-size:.9rem}
+.void-banner{background:#fff5f5;border:2px solid #c53030;color:#c53030;
+  padding:.8rem 1rem;margin:1rem 0;border-radius:.4rem;font-weight:600}
 """
 
 
@@ -283,6 +340,9 @@ class ReportBuilder:
             + _assembly_disclosures(bundle.manifest))
         self.charts = tuple(charts)
         self.title = title or f"回测报告 · {bundle.run_id}"
+        # **R36′（§95.3-A4）**：作废横幅（命中作废登记表 ⇒ 报告顶部红条，
+        # 构造期一次性求值——同 `_assembly_disclosures` 的幂等纪律）。
+        self.voided_banner = _voided_banner(str(bundle.run_id))
         self._plotlyjs_done = False      # plotly.js 全报告只内联一次（自包含）
 
     # ── 构建 ──
@@ -341,6 +401,9 @@ class ReportBuilder:
         manifest = self.bundle.manifest
         return template.render(
             title=self.title, manifest=manifest, css=_CSS, sections=sections,
+            # R40′（N42）：轻量 MD 渲染（粗体/行内代码）；空 ⇒ 不渲染横幅
+            voided=(_md_lite(self.voided_banner) if self.voided_banner
+                    else None),
             period=self._period(), data_version=self._data_version(),
             code_version=f"{manifest.code_version.get('package_version', '—')}"
                          f" @ {manifest.code_version.get('git_commit', '—')}"

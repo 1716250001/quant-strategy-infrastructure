@@ -120,9 +120,14 @@ class MemoryFeed:
         }
 
     def corporate_actions(
-        self, start: TradingDate, end: TradingDate
+        self, start: TradingDate, end: TradingDate,
+        symbols: Sequence[str] | None = None,
     ) -> list[CorporateAction]:
-        """区间行动流（升序确定性；签名=DataFeed 协议批量口径）。"""
+        """区间行动流（升序确定性；签名=DataFeed 协议批量口径）。
+
+        **CL-2-H（R32′）**：`symbols` 为协议扩参（显式宇宙）；内存 Feed 为
+        **合成数据**（无 ETF 扫描语义）——接受但**不消费**（原行为逐位不变）。
+        """
         return [a for a in self._actions if start <= a.ex_date <= end]
 
     # ── 测试便捷 ──

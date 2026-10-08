@@ -22,7 +22,9 @@ pytestmark = [pytest.mark.l1]
 class TestFundAdjRegistration:
     def test_registered_and_19_tables(self):
         assert "fund_adj" in TABLES
-        assert len(TABLES) == 19                 # RC-04：18 → 19
+        # RC-04：18 → 19；**CL-2-H/R32′（2026-10-07）**：19 → 20（新增基金
+        # 分红表 `fund_div`——ADR-20；断言随规范变更更新，非弱化）。
+        assert len(TABLES) == 20
 
     def test_meta_fields(self):
         meta = TABLES["fund_adj"]

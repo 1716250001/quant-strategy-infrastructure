@@ -1,8 +1,8 @@
-# btf 回测平台 · CLI 功能手册（v1.2.0）
+# btf 回测平台 · CLI 功能手册（V1.2.3）
 
 > **定位**：`bt` 命令行的**完整功能参考**——逐命令给出用途、语法、参数表、行为分步、输出样例、退出码与限制。
 > **只用工具**请看 [20-回测平台使用指引.md](20-回测平台使用指引.md)（5 分钟上手向）；本手册面向「查参数、排故障、写自动化脚本」。
-> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **1.2.0**；2026-10-07 配股/缩股入链路落版）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测。
+> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **1.2.3**；**V1.2.3 定版 2026-10-09**）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**（`bt --version` → `btf 1.2.3`；13 命令族含 `data`）。
 > **维护**：CLI 改动必须同步本手册；相邻文档：装配/引擎语义见 04/06 号，产物契约见 08 号，门禁口径见 09 号。
 > 2026-10-05 补 §0「输出解读纪律」（Q3 裁决 · 纪律类立即生效）。
 
@@ -67,12 +67,12 @@
 
 ## 2. 全局概览
 
-### 2.1 命令族地图（12 命令，按场景分组）
+### 2.1 命令族地图（13 命令，按场景分组）
 
 ```
 ① 核心回测链路   config-check → run → runs → show → report → verify
 ② 研究调优       optimize
-③ 数据资产       dataset
+③ 数据资产       dataset / data（专项扫描 scan-consolidation；R34′）
 ④ 工程门禁       check / test / cold-backup
 ⑤ 推断校验       validate（walk-forward | mc；RC-15/16）
 ```
@@ -89,6 +89,7 @@
 | `verify` | R1 复核：产物重算指标 vs `manifest.metrics_digest` | `--run` `--out-dir` | 否 | 0/1/2 |
 | `optimize` | 参数网格搜索（`grid_search` 进程池） | `--config` `--grid` `--objective` `--workers` `--top` `--out` `--allow-short` | **是**（多次 run） | 0/1/2/**3** |
 | `dataset` | 黄金集：构建 / 主库对账 / 内嵌重算 / **数据冻结清单** | `build-golden\|verify\|refcalc\|freeze` `--cases` `--list` `--force` `--config` `--mode` `--out` | 视动作（`freeze` 写只读清单） | 0/1/2 |
+| `data` | 数据专项扫描（`scan-consolidation`：ETF/LOF 份额折算**双证据互校** ＋ fail-closed；R34′ 已交付） | `scan-consolidation` `--config` `--out` `--tolerance` | 写结果 JSON（`--out`） | 0/1/2 |
 | `test` | 运行测试层（pytest 执行器） | `--layer` `--pattern` `--path` | 否 | pytest 码 |
 | `check` | 十项架构门禁（提交前必跑，无参数） | — | 否 | 0/1 |
 | `validate` | 滚动验证 / 蒙特卡洛（`walk-forward` / `mc`） | `walk-forward\\|mc` `--config` `--window` `--test` `--step` `--mode` `--purge` `--embargo` `--no-persist` `--run` `--n` `--seed` `--out` `--out-dir` `--set` | `mc` 否；`walk-forward` **是**（每折落盘） | 0/1/2 |
@@ -118,7 +119,7 @@ flowchart LR
 | 项 | 值 |
 |---|---|
 | 解释器 | `D:\量化策略\代码\_venv\Scripts\python.exe` |
-| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.2.0`） |
+| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.2.3`） |
 | 等价调用 | `python -m btf.cli.main <命令>`（脚本化推荐，不依赖 console script） |
 | 仓库根 | `D:\量化策略\代码\btf`（含 `btf/` 包、`tests/`、`tools/`、`schemas/`、`examples/`） |
 
@@ -127,15 +128,15 @@ flowchart LR
 | 选项 | 说明 |
 |---|---|
 | `-h`, `--help` | 打印帮助（顶层或任意子命令；退出码 0） |
-| `--version` | 打印 `btf 1.2.0`（版本单一真源 `btf/_version.py`） |
+| `--version` | 打印 `btf 1.2.3`（版本单一真源 `btf/_version.py`） |
 
 ```bash
 $ bt --version
-btf 1.2.0
+btf 1.2.3
 
 $ bt --help
 usage: bt [-h] [--version]
-          {check,cold-backup,config-check,dataset,optimize,report,run,runs,show,test,verify} ...
+          {check,cold-backup,config-check,data,dataset,optimize,report,run,runs,show,test,validate,verify} ...
 ```
 
 > 不给子命令、或给未知子命令 → argparse 报错并**退出码 2**（脚本中可据此区分「用法错误」与「业务失败」）。
@@ -173,6 +174,15 @@ $env:BTF_RISK__ALLOW_EMPTY_CHAIN = "true"
 ```
 
 > `BTF_DATA_DIR` / `BTF_OUTPUT_DIR` 属**路径层专用**，不进入配置合并；其余 `BTF_*` 按 L2 覆盖处理（空值视为未设置）。
+
+### 3.5 产物落点与跨区间口径约定（**R50′**，2026-10-08；N50/N54）
+
+- **产物落点**：一切**批次/验证 run 统一落 `回测产物/runs/`**（`BTF_OUTPUT_DIR` 下；`bt runs` 可列）；
+  `_scratch/` 仅作**过程件**（不承诺保留、不作溯源依赖）——引用 run 一律给 `回测产物/runs/<run_id>`。
+- **跨区间口径禁混用（N50）**：任何指标引用**必须标注区间**（起止＋交易日数）；**禁止跨区间比较或
+  混算**。实例：43 池 **09-23 档**（2019-06-26~2026-09-23，1761 日）`total_return=0.2379` 与审查方
+  **09-30 档**（~2026-09-30，1765 日）`0.21924` —— 差异＝**区间口径**（+4 交易日净值回落 1.87pct），
+  **不是非确定性**（两档各自逐位可复现）。差异表/报告/对外引用**逐对带 `interval` 字段**（R46′）。
 
 ---
 
@@ -952,10 +962,11 @@ bootstrap（200 次重采样）:
 
 ---
 
-### 4.13 `bt data` —— 数据专项扫描（⏳ 目标态，2026-10-07；DOC-12/R34′）
+### 4.13 `bt data` —— 数据专项扫描（R34′ 已交付，2026-10-08；DOC-12）
 
-> ⏳ **本命令尚未交付**（CL-2-H 编码冻结中，19 号 §93/§94.5）——以下为**目标态规格**（ADR-14）。
-> 交付后 §2 命令总表与「12 命令」计数一并更新（本条目暂不计入）。
+> ✅ **已交付**（CL-2-H 第二阶段/R34′，2026-10-08；19 号 §97.3/§97.5-1 实跑取证——本机
+> `510310.SH 20240923 R=2.000625` 与 §92.3 文档锚点逐位吻合）。本条目**已计入** §2 命令总表
+> 与「13 命令」计数；退出码 0/1/2 已实测（含 `--config` 缺失与未知动作的用法拦截）。
 
 **用途**：数据层专项扫描（首个子命令 `scan-consolidation`）：对配置宇宙逐标的检出 **ETF/LOF 份额折算**事件，
 **双证据互校**（证据 1＝`pre_close(t) ÷ close(t−1)`；证据 2＝`fund_adj` 因子跳变），容差 **0.5%**，
@@ -976,18 +987,30 @@ bt data scan-consolidation --config <yaml> [--out <json>] [--tolerance 0.005]
 | `--out` | 结果 JSON 路径 | 产物目录 |
 | `--tolerance` | 双证据偏差容差 | `0.005`（0.5%） |
 
-**输出（目标态字段）**：逐事件 `ts_code / 事件日 / R / 证据1 / 证据2 / 偏差 / 结论（一致｜fail-closed）`；
+**输出（字段）**：逐事件 `ts_code / 事件日 / R / 证据1 / 证据2 / 偏差 / 结论（一致｜fail-closed）`；
 汇总含**未建模项清单**（供报告披露段消费）。
 
-**退出码**：0（全部一致）；1（存在 fail-closed 事件——按门禁语义阻断）；2（参数用法错误）。
+**退出码**：0（全部一致）；1（存在 fail-closed 事件——按门禁语义阻断）；
+2（参数用法错误 ／ **前置降级**——如 `trade_cal` 缺失 ⇒ 告警＋退出码 2，**不得未捕获异常**；R47′）。
 
 **注意**
 
 - **判据为双证据＋容差 0.5%＋fail-closed**；**禁止使用 `fund_share` 判定折算**（ADR-20 第 6 条，仅辅助披露）；
+- **分红/折算交叉判别（R43′，2026-10-08；N46）**：分红与折算在双证据上数学同构（除息日
+  `f_t=f_{t−1}÷R`），故**候选日与 `fund_div` 除息日交叉 ⇒ 判为分红、不计折算**（语义优先于
+  幅度阈值；全库可比分红 >12% 共 218 笔、最高 70.47%——误判将致份额与现金双错）；
+- **扫描路径不依赖日历（R47′；N51）**：交叉判别只需 `(ts_code, ex_date)` 集合 ⇒ 本命令
+  **不读 `trade_cal`**（缺日历仅令 `n_trading_days` 降级为 `null`）；`fund_div` **目录缺失/文件空**
+  均走**禁静默告警**（R44′/R48′；N52——`peek_columns` 的 `ReaderError` 已捕获、等同表缺失）；
+- **交叉防线 fail-safe（R51′；N55）**：`fund_div` 表**缺失/不可读** ⇒ 报告置
+  `cross_disabled=true` 并进 `degraded` ⇒ **退出码 2**（与 `trade_cal` 同强度——折算候选
+  **未经除息判别**不得按成功结果引用）；**「有行但过滤后为空」**（`div_proc`/`div_cash<=0`
+  全滤）⇒ **三元计数披露**（原始行数／过滤跳过数／最终入账数），消除原零告警静默；
 - 扫描器**进 CI**（R34′ 验收口径）；
 - 输出直接供报告「假设与披露 · 公司行动覆盖段」消费（20 号纪律四）；
 - 实测锚点（8 只折算标的，R 双证据偏差 < 0.1%，19 号 §92.3）：510310＝2.0006／512200＝2.7937／
-  515880＝0.33323＋0.50013／515580＝0.51003（复现脚本 `_scratch/audit_etf_corp_action.py`）。
+  515880＝0.33323＋**0.50032**／515580＝0.51003（复现脚本 `_scratch/audit_etf_corp_action.py`；二次值经 DOC-13 订正——
+  2026-10-07，N39：原引 0.50013 系早期估计，实测 `pre_close÷前收` ＝ **0.50032**，容差内但以实测为准）。
 
 ---
 
@@ -1214,7 +1237,7 @@ $ bt cold-backup --verify <冷备目录>                  # ⑤ 异地校验（�
 ### 附录 A：速查卡（一屏带走）
 
 ```
-bt --version                                          # btf 1.2.0
+bt --version                                          # btf 1.2.3
 bt config-check <yaml> [--dump] [--resolve-strategy]  # 静态校验
 bt run --config <yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 bt runs [--latest N] [--out-dir DIR]                  # 只读清单
@@ -1274,4 +1297,4 @@ bt cold-backup [--reason R] [--out DIR] [--verify DIR]
 
 ---
 
-*本手册覆盖 `bt` 全部 12 命令；任意命令加 `--help` 可获得与本文一致的即时参数说明。*
+*本手册覆盖 `bt` 全部 13 命令；任意命令加 `--help` 可获得与本文一致的即时参数说明。*
