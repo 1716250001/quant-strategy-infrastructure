@@ -660,6 +660,10 @@ class BTFRuntime:
             # `--delisted-settlement writeoff` / `--set run__delisted_settlement=…`）
             delisted_settlement=str(
                 run_cfg.get("delisted_settlement") or "carry"),
+            # **R62′（N64，19 号 §118）**：消费侧价格视图（schema 声明；
+            # 缺省 `adjusted`＝喂给策略的 bar 走 qfq（ref＝区间起点）——
+            # 记账侧恒名义价（ADR-6 不动）；`nominal` 供对照与回归比对。
+            price_view=str(run_cfg.get("price_view") or "adjusted"),
         )
         return engine.run()
 
@@ -704,12 +708,19 @@ class BTFRuntime:
         # manifest 生效配置（与落盘同源，不依赖当前 runtime.config）。
         symbol = ((bundle.manifest.config_effective.get("report") or {})
                   .get("benchmark"))
+        # **R61′（N63；§114.2 第 1 条）**：复核路径的折算序列**从产物还原**
+        # （`events.jsonl` 的已应用 `corporate_action`——与落盘路径同源；
+        # 采样降级日志缺事件时 WARN，见 `consolidations_from_events`）。
+        from btf.runtime.run_orchestrator import consolidations_from_events
+
         metrics = compute_run_metrics(
             bundle.snapshots, fills, self._metrics_config(bundle),
             analyzer_names=self._analyzer_names(),
             resolver=lambda name: registry.resolve(registry.ANALYZER, name),
             extras=lambda snaps: self._relative_metrics_for(
-                symbol, snaps, analysis=self._metrics_config(bundle)))
+                symbol, snaps, analysis=self._metrics_config(bundle)),
+            consolidations=consolidations_from_events(
+                store.events_path(run_id)))
         digest = metrics_digest_of(metrics)
         expected = bundle.manifest.metrics_digest
         # 产物完整性：metrics.json 回读的摘要亦须与 manifest 一致（篡改可检出）

@@ -1,8 +1,8 @@
-# btf 回测平台 · CLI 功能手册（V1.2.3）
+# btf 回测平台 · CLI 功能手册（**V1.2.4**；2026-10-10 发版）
 
 > **定位**：`bt` 命令行的**完整功能参考**——逐命令给出用途、语法、参数表、行为分步、输出样例、退出码与限制。
 > **只用工具**请看 [20-回测平台使用指引.md](20-回测平台使用指引.md)（5 分钟上手向）；本手册面向「查参数、排故障、写自动化脚本」。
-> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **1.2.3**；**V1.2.3 定版 2026-10-09**）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**（`bt --version` → `btf 1.2.3`；13 命令族含 `data`）。
+> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **1.2.4**；**V1.2.4 发版 2026-10-10**）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**；**2026-10-10 复核实测**（`bt --version` → `btf 1.2.4`；13 命令族含 `data`）。
 > **维护**：CLI 改动必须同步本手册；相邻文档：装配/引擎语义见 04/06 号，产物契约见 08 号，门禁口径见 09 号。
 > 2026-10-05 补 §0「输出解读纪律」（Q3 裁决 · 纪律类立即生效）。
 
@@ -119,7 +119,7 @@ flowchart LR
 | 项 | 值 |
 |---|---|
 | 解释器 | `D:\量化策略\代码\_venv\Scripts\python.exe` |
-| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.2.3`） |
+| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.2.4`） |
 | 等价调用 | `python -m btf.cli.main <命令>`（脚本化推荐，不依赖 console script） |
 | 仓库根 | `D:\量化策略\代码\btf`（含 `btf/` 包、`tests/`、`tools/`、`schemas/`、`examples/`） |
 
@@ -128,11 +128,11 @@ flowchart LR
 | 选项 | 说明 |
 |---|---|
 | `-h`, `--help` | 打印帮助（顶层或任意子命令；退出码 0） |
-| `--version` | 打印 `btf 1.2.3`（版本单一真源 `btf/_version.py`） |
+| `--version` | 打印 `btf 1.2.4`（版本单一真源 `btf/_version.py`） |
 
 ```bash
 $ bt --version
-btf 1.2.3
+btf 1.2.4
 
 $ bt --help
 usage: bt [-h] [--version]
@@ -346,8 +346,13 @@ bt run --config <config.yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 $ bt run --config config.yaml --dry-run                          # 新配置先预演
 $ bt run --config config.yaml                                    # 正式跑
 $ bt run --config config.yaml --set run.params.top_k=10          # 临时改参数（不改 YAML）
+$ bt run --config config.yaml --set run.price_view=nominal       # 旧行为对照档（默认 adjusted）
 $ bt run --config config.yaml --out E:\bt_runs --verbose         # 换产物根 + 诊断输出
 ```
+
+> **`run.price_view`（R62′/N64，2026-10-10；19 号 §118）**：`adjusted`（**默认**）＝喂给策略的
+> bar 走 **qfq 后复权**（`ref＝period.start`，PIT 合规；**禁 hfq**）；`nominal` ＝名义价（旧行为，
+> 供对照）。**ADR-6 记账口径不变**——撮合/成本/费用/NAV/快照恒名义价。跨视图的 run 数字不可直接比较。
 
 **注意**
 
@@ -539,6 +544,14 @@ bt verify --run <run_id> [--out-dir DIR]
 
 **行为**：`snapshots.jsonl + fills.jsonl` → 重算指标 → 计算摘要 → 与 manifest 摘要、落盘 `metrics.json`
 摘要**双向比对**（复核路径与生成路径分离，报告/归档后仍可自校验）。
+
+> **复核路径的折算来源（R61′/N63，2026-10-10）**：逐笔口径（`trades`/`win_rate_trades`）配对需感知份额折算，
+> 复核侧**从 `events.jsonl` 的已应用 `corporate_action` 还原**（与落盘路径**同源**——`result.consolidations` 同集）；
+> **采样降级**日志（超预算 stride 抽 1＋尾部 1000 全保）可能缺事件 ⇒ 该场景会打 **WARN** 且摘要可能不符
+> （已知边界，登记在案；**禁静默**）。
+>
+> **价格视图与复核（R62′/N64，2026-10-10）**：视图是**指标口径**的一部分（进 `manifest.config_effective` ⇒ 进
+> config_hash）；复核按产物配置重算，**跨 `price_view` 的摘要不可比**（`nominal` 档用于回归比对）。
 
 **输出（实测）**
 
@@ -1237,7 +1250,7 @@ $ bt cold-backup --verify <冷备目录>                  # ⑤ 异地校验（�
 ### 附录 A：速查卡（一屏带走）
 
 ```
-bt --version                                          # btf 1.2.3
+bt --version                                          # btf 1.2.4
 bt config-check <yaml> [--dump] [--resolve-strategy]  # 静态校验
 bt run --config <yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 bt runs [--latest N] [--out-dir DIR]                  # 只读清单

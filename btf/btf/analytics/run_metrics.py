@@ -32,6 +32,7 @@ def compute_run_metrics(
     analyzer_names: Sequence[str] | None = None,
     resolver: Callable[[str], Any] | None = None,
     extras: Callable[[Sequence[Any]], Mapping[str, Any]] | None = None,
+    consolidations: Sequence[Any] | None = None,
 ) -> dict[str, float]:
     """一次运行的指标 = 基础指标（+ 自定义名字表）+ 可选 extras（基准相对项）。
 
@@ -40,12 +41,16 @@ def compute_run_metrics(
         config：`analysis` 段（年化/无风险利率/指标参数）；
         analyzer_names：生效指标名字表（None = 全量 15 项）；
         resolver：自定义指标的解析器（registry 名字表）；
-        extras：`(snapshots) -> {指标名: 值}`（如基准相对指标），**可空**。
+        extras：`(snapshots) -> {指标名: 值}`（如基准相对指标），**可空**；
+        consolidations（**R61′/N63**）：份额折算序列（`(symbol, ex_date, ratio)`
+            或 portfolio/事件日志映射）——逐笔口径 `win_rate_trades` 的配对
+            须感知折算；缺省 `None`＝旧行为（**NAV 口径 15 项不受影响**）。
     """
     metrics = compute_all(snapshots, fills, config or {},
                           analyzer_names=list(analyzer_names)
                           if analyzer_names is not None else None,
-                          resolver=resolver)
+                          resolver=resolver,
+                          consolidations=consolidations)
     if extras is not None:
         metrics.update(extras(snapshots) or {})
     return metrics

@@ -68,6 +68,11 @@
         "event_log": {
           "type": ["string", "null"],
           "description": "事件溯源 JSONL 路径（缺省 = 不落盘；RunStore 托管归 M2 任务 5.5）"
+        },
+        "price_view": {
+          "enum": ["nominal", "adjusted"],
+          "default": "adjusted",
+          "description": "**消费侧价格视图（R62′/N64，2026-10-10；19 号 §118）**：adjusted（默认）= 喂给策略的 bar 走 **qfq 后复权（ref＝run.period.start，PIT 合规）**——抹平公司行动处的价格跳变；nominal = 名义价（旧行为，供对照）。**ADR-6 记账口径不变**：撮合价/持仓成本/费用/NAV/snapshots 恒为名义价（引擎内部不消费本视图）"
         }
       }
     },

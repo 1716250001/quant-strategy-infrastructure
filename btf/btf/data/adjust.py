@@ -32,7 +32,7 @@ import logging
 from bisect import bisect_right
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from btf.config.paths import MARKET_DATA_DIR
 from btf.data.tables_meta import factor_table_of
@@ -66,9 +66,11 @@ class TushareAdjustService:
 
     def __init__(self, root: Path | None = None):
         self.root = Path(root) if root else MARKET_DATA_DIR
-        # symbol → (ymd 升序列表, factor 平行列表)；PF-9/P2-5：LRU 有界
-        self._cache: BoundedDict[str, tuple[list[str], list[float]]] = BoundedDict(
-            maxsize=8_000, name="adjust.factor")
+        #: **实例级因子行覆盖点**（`{symbol: (ymd 升序, factor 平行)}`）：`_load`
+        #: **先查此表**——测试以「覆盖 `_cache`」实现无 IO 纯数学（`tests/unit/
+        #: test_adjust.py` 既有契约），自定义调用方亦可注入；未命中才走
+        #: **进程级共享缓存**（`_SHARED_ROWS`，R62′）。
+        self._cache: dict[str, tuple[list[str], list[float]]] = {}
         self._tstore: object | None = None      # 表级共享装载（P1-9）
         # (symbol, ymd) 命中计数 / 回退计数（降级行为审计，11 §21.1 验证点）
         self.n_missing_fallback = 0
@@ -76,8 +78,19 @@ class TushareAdjustService:
         # RC-04：**表内全无**该标的的集合（回落 1.0）——供 `degraded_notes()`
         # 生成报告披露（原实现只计数、无告警、无披露通道）。
         self.missing_factor_symbols: set[str] = set()
+        #: 缺表 WARN 的**实例级**去重（同一实例同一标的只告警一次，避免刷屏；
+        #: 跨实例不去重——缺失披露按 run 独立，测试/报告口径不受进程历史影响）。
+        self._warned: set[str] = set()
 
-    # ── 装载 ──
+    #: **R62′（N64，2026-10-10；19 号 §118.3-3）**：因子行**进程级共享缓存**
+    #: （键 = `{root}|{symbol}` ⇒ 多库安全）。动机（自查实测）：引擎消费侧视图
+    #: 每个 run 新建服务，若逐实例装载，**每标的首次装载 ≈1.5–1.9s**（全历史
+    #: `adj_factor`/`fund_adj` 扫描）⇒ 43 池/网格/滚动验证（每折一 run）线性放大；
+    #: 共享后**同进程重复访问 ≈0.04s/标的**（纯换算）。**计数与披露仍 per 实例**
+    #: （`missing_factor_symbols`/`n_*` 逐 run 登记——共享缓存不得吞掉降级披露）。
+    _SHARED_ROWS: ClassVar[BoundedDict[str, tuple[list[str], list[float]]]] = BoundedDict(
+        maxsize=8_000, name="adjust.factor.shared")
+
     def _store(self):
         """共享表级资源（19 号审查 P1-9：原实现逐标的 read_range 全历史
         （36 年文件、1,690 万行/标的）——N 标的 = N 次全表装载；经
@@ -89,25 +102,38 @@ class TushareAdjustService:
         return self._tstore
 
     def _load(self, symbol: str) -> tuple[list[str], list[float]]:
-        if symbol not in self._cache:
+        # ① 实例级覆盖点（测试/自定义注入——无 IO 纯数学路径，**不走缺失告警**）
+        rows = self._cache.get(symbol)
+        if rows is not None:
+            return rows
+        # ② **R62′**：进程级共享缓存（见 `_SHARED_ROWS` 注）；缺失登记与 WARN
+        # 仍**逐实例**（披露不得因缓存命中而丢——RC-04 口径不变）。
+        key = f"{self.root}|{symbol}"
+        rows = self._SHARED_ROWS.get(key)
+        if rows is None:
             table = factor_table_of(symbol)          # RC-04：股票/ETF 双表路由
             t = self._store().symbol_range(
                 table, symbol, "19900101", "20991231",
                 ["adj_factor"])
             if t.num_rows:
                 t = t.sort_by([("trade_date", "ascending")])
-                self._cache[symbol] = (t.column("trade_date").to_pylist(),
-                                       t.column("adj_factor").to_pylist())
+                rows = (t.column("trade_date").to_pylist(),
+                        t.column("adj_factor").to_pylist())
             else:
-                self._cache[symbol] = ([], [])
-                # RC-04：缺失**必须告警**（原实现静默回落 1.0）——含表名与
-                # 口径说明；同一标的只告警一次（`_load` 命中缓存后不再进此）。
-                self.missing_factor_symbols.add(symbol)
+                rows = ([], [])
+            self._SHARED_ROWS[key] = rows
+        if not rows[0]:
+            # RC-04：缺失**必须告警**（原实现静默回落 1.0）——含表名与口径说明；
+            # 逐实例登记（degraded_notes 用），进程级只 WARN 一次（防刷屏）。
+            self.missing_factor_symbols.add(symbol)
+            if symbol not in self._warned:
+                self._warned.add(symbol)
                 logger.warning(
                     "复权因子缺失：%s 在 `%s` 表无任何行 → 因子按 1.0 回落"
                     "（未复权序列的份额折算跳变**不被抹平**）；"
-                    "报告披露见 degraded_notes()（RC-04）", symbol, table)
-        return self._cache[symbol]
+                    "报告披露见 degraded_notes()（RC-04）",
+                    symbol, factor_table_of(symbol))
+        return rows
 
     # ── 协议实现 ──
     def adj_factor(self, symbol: str, date: TradingDate) -> float:

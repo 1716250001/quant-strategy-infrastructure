@@ -69,12 +69,16 @@ def _metrics_legal(rt, res) -> dict:
     """**R42′（N45）**：不落盘路径的**合法指标入口**（与落盘路径同一函数）。"""
     from btf import registry
     from btf.analytics.run_metrics import compute_run_metrics
+    from btf.analytics.trades import normalize_consolidations  # R61′
 
     return compute_run_metrics(
         res.snapshots, res.fills, rt._analysis_config(),
         analyzer_names=rt._analyzer_names(),
         resolver=lambda name: registry.resolve(registry.ANALYZER, name),
-        extras=rt._benchmark_metrics)
+        extras=rt._benchmark_metrics,
+        # R61′（N63）：逐笔口径与落盘路径同源（v77 为纯股票、无折算 ⇒ 空序列）
+        consolidations=normalize_consolidations(
+            getattr(res, "consolidations", ())))
 
 
 def main() -> int:

@@ -50,6 +50,35 @@ ADJ_CACHE = Path(r"D:\量化策略\数据\fund_adj")
 # ============================================================
 # 池配置
 # ============================================================
+def audit_pool_listing(cfg: dict) -> list:
+    """核验池内 ETF 的上市状态，返回非在市清单。
+
+    背景（2026-10-09 教训）：池构建基于历史回测，未检查"当前是否还能买到"——
+    结果 A1 的 CS京津冀 唯一 ETF（512780.SH，2023-01-12 退市）已消失却仍在池内。
+    这与幸存者偏差方向相反：用了"已消失的标的"。故增设本检查。
+    """
+    from fetch.base import get_pro
+    pro = get_pro()
+    bad = []
+    for k in ("A1", "A2"):
+        for x in cfg.get(k, []):
+            for e in x.get("etfs", []):
+                try:
+                    d = pro.fund_basic(ts_code=e)
+                    if d is None or not len(d):
+                        bad.append((k, x["index_name"], e, "查询无记录", ""))
+                        continue
+                    r = d.iloc[0]
+                    if str(r.get("status")) != "L":
+                        bad.append((k, x["index_name"], e,
+                                    f"status={r.get('status')}",
+                                    str(r.get("delist_date") or "")))
+                except Exception as ex:
+                    bad.append((k, x["index_name"], e, f"查询异常:{str(ex)[:30]}", ""))
+                time.sleep(0.12)
+    return bad
+
+
 def load_pool() -> dict:
     if not POOL_JSON.exists():
         raise FileNotFoundError(f"池配置不存在: {POOL_JSON}")
@@ -304,11 +333,23 @@ def build_message(rows, end_date: str) -> str:
 # ============================================================
 # 主流程
 # ============================================================
-def run_pool_scan(date=None, dry_run=False, force=False, save=False):
+def run_pool_scan(date=None, dry_run=False, force=False, save=False, check_listing=False):
     """执行一轮 A 类观察池扫描。供本文件 CLI 与 main.py 的 qidian 子命令共用。
 
     返回 dict：{"end_date":..., "rows":[...], "n_signal":int, "skipped":str|None}
     """
+    if check_listing:
+        cfg = load_pool()
+        print("[池健康检查] 核验池内 ETF 上市状态（约 53 次接口调用）...")
+        bad = audit_pool_listing(cfg)
+        if bad:
+            print(f"  ⚠ 发现 {len(bad)} 个非在市/异常 ETF：")
+            for k, inm, e, st, dl in bad:
+                print(f"    [{k}] {inm} → {e}  {st}  退市日={dl}")
+            print("  ⇒ 请修正池配置后重跑；本次扫描将继续，但上述标的信号不可交易。")
+        else:
+            print("  ✓ 全部在市")
+
     # 交易日闸门
     if date is None and not force:
         ok, why = is_trading_day()
@@ -364,9 +405,11 @@ def main():
     ap.add_argument("--date", type=str, default=None, help="扫描日期 YYYYMMDD（默认最近交易日）")
     ap.add_argument("--force", action="store_true", help="跳过交易日闸门")
     ap.add_argument("--save", action="store_true", help="保存消息到文档目录")
+    ap.add_argument("--check-listing", action="store_true",
+                    help="扫描前核验池内 ETF 上市状态（发现已退市标的）")
     args = ap.parse_args()
-    run_pool_scan(date=args.date, dry_run=args.dry_run,
-                  force=args.force, save=args.save)
+    run_pool_scan(date=args.date, dry_run=args.dry_run, force=args.force,
+                  save=args.save, check_listing=args.check_listing)
 
 
 if __name__ == "__main__":

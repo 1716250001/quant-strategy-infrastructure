@@ -195,13 +195,17 @@ class NavSeries:
         return self.cumulative_returns[-1]
 
 
-def build_nav_series(snapshots: Sequence[Any], trades: Sequence[Any] = ()
-                     ) -> NavSeries:
+def build_nav_series(snapshots: Sequence[Any], trades: Sequence[Any] = (), *,
+                     consolidations: Sequence[Any] | None = None) -> NavSeries:
     """快照 + 成交 → 指标基座（NAV 四式 + 成交汇总；纯函数）。
 
     **R26′（19 号 §96.4；N31）**：另派生
     ① **在场日掩码**（快照 `positions_qty` 非空——`win_rate` 分母口径）；
     ② **FIFO 开平配对交易**（逐笔口径辅助指标 `win_rate_trades` 消费）。
+
+    **`consolidations`（R61′/N63；19 号 §114.2）**：份额折算事件序列——
+    配对须感知折算（否则未平仓虚高、逐笔胜率失真）；缺省 `None`＝旧行为
+    （无折算信息的调用方**逐位不变**）。
     """
     nav = nav_total_values(snapshots)
     fills = list(trades or ())
@@ -216,7 +220,7 @@ def build_nav_series(snapshots: Sequence[Any], trades: Sequence[Any] = ()
     if fills:
         from btf.analytics.trades import pair_fills_to_trades
 
-        paired = tuple(pair_fills_to_trades(fills))
+        paired = tuple(pair_fills_to_trades(fills, consolidations=consolidations))
     return NavSeries(
         nav=tuple(nav),
         daily_returns=tuple(nav_daily_returns(nav)),
@@ -527,6 +531,7 @@ def compute_all(
     config: Mapping[str, Any] | None = None, *,
     analyzer_names: Sequence[str] | None = None,
     resolver: Callable[[str], type[MetricBase]] | None = None,
+    consolidations: Sequence[Any] | None = None,
 ) -> dict[str, float]:
     """一次性算指标集（报告/落盘用；单指标失败只该项为 NaN）。
 
@@ -535,6 +540,10 @@ def compute_all(
     `runtime` 注入，避免 analytics→registry 的分层违规）后，经
     `registry.register()` 注册的自定义 Analyzer **零源码改动即生效**；
     缺省（None）保持"内置全集"语义不变（RK-6 缓解）。
+
+    `consolidations`（R61′/N63，§114.2）：份额折算序列，透传 `build_nav_series`
+    ⇒ FIFO 配对感知折算（只影响逐笔口径指标 `win_rate_trades` 与 `trades`
+    明细；**NAV 口径 15 项逐位不变**）。
     """
     cfg = config or {}
     # 缺省 = **默认 15 项**（`METRIC_NAMES`）——不含 `OPTIONAL_METRIC_CLASSES`
@@ -542,7 +551,7 @@ def compute_all(
     names = (list(analyzer_names) if analyzer_names is not None
              else list(METRIC_NAMES))
     resolve = resolver or (lambda name: METRICS[name])
-    series = build_nav_series(snapshots, trades)
+    series = build_nav_series(snapshots, trades, consolidations=consolidations)
     out: dict[str, float] = {}
     for name in names:
         metric = resolve(name)()

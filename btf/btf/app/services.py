@@ -369,6 +369,7 @@ def run_walk_forward(
     purge: int = 0,
     embargo: int = 0,
     persist: bool = True,
+    warmup: int | None = None,
     out: str | Path | None = None,
     out_dir: str | Path | None = None,
     overrides: Mapping[str, Any] | None = None,
@@ -397,7 +398,8 @@ def run_walk_forward(
         cfg, days, train=int(window), test=int(test_eff),
         step=(int(step) if step is not None else None), mode=str(mode),
         purge=int(purge), embargo=int(embargo), persist=bool(persist),
-        store=(make_store(out_dir) if persist else None))
+        store=(make_store(out_dir) if persist else None),
+        warmup=(None if warmup is None else int(warmup)))    # R58′：warm-up 透传
     if out:
         target = Path(out)
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -887,11 +887,24 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         except ValueError as exc:
             print(f"[error] {exc}", file=sys.stderr)
             return 2
+        warm_raw = str(getattr(args, "warmup", "auto")).strip().lower()
+        if warm_raw in ("", "auto"):
+            warmup: int | None = None                   # R58′：默认 auto 推导
+        else:
+            try:
+                warmup = int(warm_raw)
+            except ValueError:
+                warmup = -1
+            if warmup < 0:
+                print("[error] --warmup 须为 ≥0 的整数或 auto（缺省 auto）",
+                      file=sys.stderr)
+                return 2
         try:
             report = run_walk_forward(
                 args.config, window=args.window, test=args.test,
                 step=args.step, mode=args.mode, purge=args.purge,
                 embargo=args.embargo, persist=not args.no_persist,
+                warmup=warmup,
                 out=args.out, out_dir=args.out_dir, overrides=overrides)
         except Exception as exc:                    # 装配/窗口/IO 失败
             print(f"[error] walk-forward 失败：{type(exc).__name__}: {exc}",
@@ -901,7 +914,10 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         print(f"[ok] walk-forward：{report['n_folds']} 折 | mode={spec['mode']}"
               f" window={spec['window']} test={spec['test']}"
               f" step={spec['step']} purge={spec['purge']}"
-              f" embargo={spec['embargo']} | persist={spec['persist']}")
+              f" embargo={spec['embargo']} | persist={spec['persist']}"
+              f" | warmup={spec['warmup']}（{spec['warmup_source']}）")
+        if report.get("warmup_note"):
+            print(f"[warn] {report['warmup_note']}")
         keys = ("sharpe_ratio", "annualized_return", "max_drawdown",
                 "total_return")
         print(f"{'折':>3}  {'训练窗':<23} {'测试窗':<23}  "
@@ -982,6 +998,11 @@ def _args_validate(p: argparse.ArgumentParser) -> None:
                    help="训练/测试间隔交易日（与 embargo 合并计入 gap；缺省 0）")
     p.add_argument("--embargo", type=int, default=0, metavar="N",
                    help="测试前缓冲带（交易日；缺省 0）")
+    p.add_argument("--warmup", default="auto", metavar="N|auto",
+                   help="OOS 折热身交易日（**R58′/N60**）：缺省 auto＝按策略声明 "
+                        "`lookback_bars` 推导，未声明 ⇒ 252＋WARN；"
+                        "`--warmup 0` ＝旧行为对照档（长 lookback 策略可能"
+                        "样本外假阴性）")
     p.add_argument("--no-persist", action="store_true",
                    help="walk-forward：不落盘（缺省每折落盘且窗口信息入 manifest）")
     p.add_argument("--run", help="mc：run_id（读回产物，不重跑引擎）")

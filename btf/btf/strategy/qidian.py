@@ -380,6 +380,21 @@ class QidianStrategy(StrategyBase):
     #: S1 契约声明（v0.5.1 起 runtime 对策略做版本协商——19 号 P1-2/EX-2）
     contract_version = CONTRACT_VERSION
 
+    @staticmethod
+    def lookback_bars() -> int:
+        """**R59′/N61 声明**：策略所需历史 bar 数 ＝ `weeks_lookback×5＋20`。
+
+        用途：`walk-forward` 的 warm-up **auto** 推导（`declared_lookback()` 只读
+        本声明，不装配、不运行）——声明前默认回落 252（保守值），而本策略名义
+        所需 = 周线 KDJ(N)/CCI(N) 预热（实测 `WEEKS_LOOKBACK=200` ⇒ **1020** 交易日）。
+        与 `_daily()` 的 `n_bars` **同式**（`weeks_lookback×5＋20`）；本声明取
+        **默认真源**（`QIDIAN_REF`）——实例若经 `reference_path` 自定义真源，
+        wf 的 auto 推导仍按默认真源（**已在批次回执披露**）。
+        注：区间起点历史不足时，wf 仍按 `eff_warm = min(声明值, 可用前置交易日)`
+        截断并**逐折披露**（R58′ 既有机制）。
+        """
+        return int(params_of(load_reference()).weeks_lookback) * 5 + 20
+
     def __init__(self, *, reference_path: str | Path | None = None,
                  weight: float = 0.1, decision_weekday: int = FRIDAY,
                  bars_provider: Callable[[Any, str, TradingDate], Sequence[Any]]

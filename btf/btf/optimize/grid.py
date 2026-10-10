@@ -77,6 +77,7 @@ def _run_single(payload: tuple[dict[str, Any], dict[str, Any]]
     （不写进配置——root schema `additionalProperties: false`）。
     """
     from btf.analytics.run_metrics import compute_run_metrics
+    from btf.analytics.trades import normalize_consolidations  # R61′
     from btf.runtime import BTFRuntime
 
     config, params = payload
@@ -88,7 +89,10 @@ def _run_single(payload: tuple[dict[str, Any], dict[str, Any]]
     # （不报错、不新增字段，与既有行为逐位一致）。
     metrics = compute_run_metrics(result.snapshots, result.fills,
                                   rt._analysis_config(),
-                                  extras=rt._benchmark_metrics)
+                                  extras=rt._benchmark_metrics,
+                                  # R61′（N63）：逐笔口径与落盘路径同源
+                                  consolidations=normalize_consolidations(
+                                      getattr(result, "consolidations", ())))
     # RC-06（2026-10-05）：推断层输入——日收益的 `(T, 单期夏普, 偏度, 峰度)`
     # （纯统计，供 PSR/DSR；样本 < 3 或方差为 0 ⇒ None，**不阻断**网格）。
     returns_stats: dict[str, Any] | None = None

@@ -21,3 +21,6 @@ _archive/
 *.parquet
 *.log
 *.bak*
+
+# ── 智能体/工具运行产物（非源码；v1.2.4 发版时登记）──
+.workbuddy/

@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any
 
 from btf.data.feed import DataFeed
+from btf.data.tables_meta import daily_table_of
 from btf.domain.action import CorporateAction
 from btf.domain.cache import BoundedDict
 from btf.domain.events import (
@@ -101,6 +102,13 @@ class RunResult:
     #: **CL-2-H（R32′；ADR-20 第 2 条）**：派息现金到账审计（逐事件：标的 /
     #: 除息日 / 到账日 / `qty_at_ex` / 每份金额 / 到账额）——覆盖段与归因消费。
     dividend_events: list[dict[str, Any]] = field(default_factory=list)
+    #: **R62′（N64）**：消费侧价格视图（`run.price_view`；见 `Engine.__init__`）。
+    #: 只改「喂给策略的 bar」——记账侧（撮合/成本/费用/NAV/快照）恒名义价。
+    price_view: str = "nominal"
+    #: 复权基准日（`adjusted` 时＝区间起点；`nominal` 时 None）。
+    price_view_ref: TradingDate | None = None
+    #: 复权降级披露（因子缺失回退 1.0 等；并入装配说明/报告「假设与披露」）。
+    adjust_notes: tuple[str, ...] = ()
     #: 配股锁定期内卖出警告（获配股份上市日前卖出；**默认不建模锁定期**，
     #: 故只警告、不阻断——§79.3 #3）。
     lockup_sell_warnings: list[str] = field(default_factory=list)
@@ -157,6 +165,45 @@ def _writeoff_settlement(portfolio: Portfolio, result: RunResult) -> float:
     return residual
 
 
+class _AdjustedDataSource(Mapping[str, Bar]):
+    """**消费侧复权视图**（R62′/N64；19 号 §118）：`ctx.bar()` 读到的当日 bar。
+
+    只包装 `ctx` 的数据入口——**记账/撮合/重估/再平衡一律用原始截面**（ADR-6）。
+    惰性逐标的换算 + 当日 memo（同一 bar 只换一次）。
+    """
+
+    __slots__ = ("_adjust", "_cache", "_raw")
+
+    def __init__(self, raw: Mapping[str, Bar], adjust: Any):
+        self._raw = raw
+        self._adjust = adjust
+        self._cache: dict[str, Bar | None] = {}
+
+    def _one(self, symbol: str) -> Bar | None:
+        if symbol in self._cache:
+            return self._cache[symbol]
+        bar = self._raw.get(symbol)
+        out = None if bar is None else self._adjust([bar])[0]
+        self._cache[symbol] = out
+        return out
+
+    def get(self, symbol: str, default: Any = None) -> Any:
+        bar = self._one(symbol)
+        return default if bar is None else bar
+
+    def __getitem__(self, symbol: str) -> Bar:
+        bar = self._one(symbol)
+        if bar is None:
+            raise KeyError(symbol)
+        return bar
+
+    def __iter__(self):
+        return iter(self._raw)
+
+    def __len__(self) -> int:
+        return len(self._raw)
+
+
 class Engine:
     """事件循环引擎（回测/实时同内核，06 §10.2——仅时钟与 Feed 不同）。"""
 
@@ -176,12 +223,30 @@ class Engine:
         event_log_path: Path | str | None = None,
         event_log_max_records: int = 500_000,
         delisted_settlement: str = "carry",
+        price_view: str = "adjusted",
+        adjust_service: Any | None = None,
     ):
         if delisted_settlement not in ("carry", "writeoff"):
             raise ValueError(
                 f"delisted_settlement 须为 carry|writeoff，得"
                 f" {delisted_settlement!r}（CL-3 / 19 号 §72.4）")
+        if price_view not in ("nominal", "adjusted"):
+            raise ValueError(
+                f"price_view 须为 nominal|adjusted，得 {price_view!r}"
+                f"（R62′/N64；19 号 §118）")
         self._delisted_settlement = delisted_settlement
+        #: **R62′（N64，2026-10-10；19 号 §118）——消费侧价格视图**：
+        #: `adjusted`（默认）＝喂给策略的 bar（`ctx.bar()` / `ctx.history()`）走
+        #: **qfq 后复权**，ref＝**区间起点**（PIT 合规：qfq(t) 只依赖 ≤t 的因子；
+        #: hfq 依赖全序列 ⇒ **禁用**，§118.2）；`nominal` ＝ 名义价（旧行为），
+        #: 供对照实验与回归比对。**记账侧恒名义价**（ADR-6 不动）：撮合价/持仓
+        #: 成本/费用/NAV/snapshots 全部仍由名义价计算——本视图只包装
+        #: `ctx` 的两个数据入口，引擎内其他消费点（撮合/重估/再平衡）不看它。
+        self._price_view = price_view
+        #: 注入点（测试用；None ⇒ 惰性构造 `TushareAdjustService`）。
+        self._adjust_service = adjust_service
+        #: 运行期填充（降级披露 + 基准日）。
+        self._price_view_ref: TradingDate | None = None
         self._feed = feed
         self._strategy = strategy
         self._start = start
@@ -196,6 +261,39 @@ class Engine:
         self._risk = risk_manager
         self._event_log_path = Path(event_log_path) if event_log_path else None
         self._event_log_max = event_log_max_records
+
+    # ── 消费侧价格视图（R62′/N64）──
+    def _build_price_adjuster(self) -> Any | None:
+        """构造 qfq 换算闭包（`nominal` ⇒ None＝不调整）。
+
+        - **公式/基准（§118.2/§118.3-2）**：`qfq(t) = price(t)·f(t)/f(ref)`，
+          `ref = self._start`（区间起点；`adj_factor(ref)` 取 **≤ref 的最近因子**
+          ⇒ 与「period.start 的首个交易日」数值等价，除权日必为交易日）。
+          **禁止 hfq**（依赖全序列因子 ⇒ 前视污染）。
+        - **数据源（§118.3-3）**：`TushareAdjustService`（本地主库，
+          `factor_table_of` 路由：股票 `adj_factor` / ETF·LOF `fund_adj`）——
+          实测非网络调用；**指数**无复权语义（`index_daily`）⇒ 原样返回。
+        - **降级（§118.3-4）**：因子缺失 ⇒ 服务内回退 1.0 并计数，
+          经 `degraded_notes()` 进装配说明/报告披露（禁静默）。
+        """
+        if self._price_view != "adjusted":
+            return None
+        if self._adjust_service is None:
+            from btf.data.adjust import TushareAdjustService
+
+            self._adjust_service = TushareAdjustService()
+        svc = self._adjust_service
+        ref = self._start
+        self._price_view_ref = ref
+
+        def _adjust(bars: Sequence[Bar]) -> list[Bar]:
+            if not bars:
+                return list(bars)
+            if daily_table_of(bars[0].symbol) == "index_daily":
+                return list(bars)          # 指数：无复权因子（btf 内不复权指数）
+            return list(svc.qfq(bars, ref))
+
+        return _adjust
 
     def _universe_loader(self, date: TradingDate) -> list[Instrument]:
         """当日可交易宇宙（`ctx.universe()`；04 §8.3.2 静态身份）。
@@ -216,6 +314,7 @@ class Engine:
 
     # ── 主循环 ──
     def run(self) -> RunResult:
+        price_adjust = self._build_price_adjuster()   # R62′：None ⇒ nominal（旧行为）
         clock = SimClock()
         portfolio = Portfolio(cash=self._initial_cash)
         result = RunResult()
@@ -260,6 +359,9 @@ class Engine:
             bars = history_cache.get(symbol)
             if bars is None:
                 bars = self._feed.bars_of(symbol, self._start, self._end)
+                if price_adjust is not None:
+                    # R62′：`ctx.history()` 同走消费侧复权（一次换算全区间 ⇒ 缓存即调整后序列）
+                    bars = price_adjust(bars)
                 history_cache[symbol] = bars
             return bars
 
@@ -363,8 +465,12 @@ class Engine:
             #    B2 优化（第二刀）：states 惰性装载——策略不查状态则不触发
             #    feed 查询（ST 区间扫描 + TradingState 合成全豁免）。
             _date, _symbols = date, sorted(portfolio.positions)
+            # **R62′（N64）**：ctx 的当日截面走消费侧复权视图（`nominal` ⇒ 原样）；
+            # 循环内其余用途（撮合/重估/再平衡）**仍用原始 `data`**（ADR-6）。
+            ctx_data = (data if price_adjust is None
+                        else _AdjustedDataSource(data, price_adjust))
             ctx = self._make_ctx(
-                clock, portfolio, data,
+                clock, portfolio, ctx_data,
                 LazyStates(lambda d=_date, s=_symbols: self._feed.trading_states(
                     d, s, with_touch_flags=False)),
                 _history_loader, _on_submit_target, _on_submit_order)
@@ -511,6 +617,12 @@ class Engine:
                             result.lockup_sell_warnings.append(_msg)
                             logger.warning(_msg)
         result.n_days = clock.n_days
+        # **R62′（N64）**：价格视图元数据 + 复权降级披露（runtime 转装配说明）
+        result.price_view = self._price_view
+        result.price_view_ref = self._price_view_ref
+        if self._price_view == "adjusted" and self._adjust_service is not None:
+            _dn = getattr(self._adjust_service, "degraded_notes", None)
+            result.adjust_notes = tuple(_dn() if callable(_dn) else ())
         if writer is not None:
             writer.close()
             result.events_path = writer.path

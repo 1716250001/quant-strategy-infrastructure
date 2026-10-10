@@ -19,20 +19,56 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from btf import registry
 from btf.analytics.run_metrics import compute_run_metrics
-from btf.analytics.trades import pair_fills_to_trades
+from btf.analytics.trades import normalize_consolidations, pair_fills_to_trades
 from btf.config.paths import RUNS_DIR
 from btf.experiment.store import LocalRunStore
+
+logger = logging.getLogger(__name__)
 
 #: 数据不变量校验产物文件名（批 8 CC-6；run 目录内）。
 #: R4 第二刀：随落盘编排一并落位（`btf.runtime` 再导出，对外名不变）。
 DATA_QUALITY = "data_quality_report.json"
 
-__all__ = ["DATA_QUALITY", "RunOrchestrator"]
+__all__ = ["DATA_QUALITY", "RunOrchestrator", "consolidations_from_events"]
+
+
+def consolidations_from_events(path: str | Path) -> tuple[tuple[str, Any, float], ...]:
+    """**R61′（N63）**：从 run 的 `events.jsonl` 还原**已应用**的折算序列。
+
+    用途＝**复核路径**（`bt verify` 从产物重算指标）：与落盘路径**同源**——
+    引擎把 `portfolio.apply_ex_date` 实际消费的行动写成 `CorporateActionEvent`，
+    其中 `consolidation_ratio != 1` 者即已应用（确证缩股恒装载／代理缩股受开关
+    `BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS` 控制／ETF 折算走双证据装载 ⇒ 事件集
+    ＝应用集；未装载者不落事件 ⇒ 不会被误应用）。
+
+    边界：① 文件缺失（旧产物/无事件日志）⇒ 空；② **采样降级**日志
+    （`reader.sampled`）可能缺事件 ⇒ 返回可得子集并 **WARN**（禁静默）。
+    """
+    p = Path(path)
+    if not p.is_file():
+        return ()
+    from btf.engine.events_log import EventLogReader
+
+    reader = EventLogReader(p)
+    rows: list[tuple[Any, Any, Any]] = []
+    for ev in reader.events():
+        action = getattr(ev, "action", None)
+        if action is None:
+            continue
+        rows.append((getattr(action, "symbol", ""),
+                     getattr(action, "ex_date", None),
+                     getattr(action, "consolidation_ratio", 1.0)))
+    if reader.sampled:
+        logger.warning("事件日志为采样降级（%s）⇒ 复核用折算序列可能不完整"
+                       "（R61′：禁静默）", p)
+    return normalize_consolidations(rows)
 
 
 def _delisted_holding_notes(result: Any) -> list[str]:
@@ -119,23 +155,55 @@ def _etf_action_notes(result: Any, feed: Any) -> list[str]:
     n_alerts = n_unmodeled
     unmodeled = ([f"{n_unmodeled} 项（fail-closed：双证据不符/因子缺失 ⇒ 不建模）"]
                  if n_unmodeled else ["无"])
+    # **R62′（N64；§118.3）**：覆盖段的「指标口径」须随 `run.price_view` 措辞——
+    # `adjusted`（默认）下策略信号走复权视图，**不得**再写「信号未复权」；
+    # `nominal`（对照档）才保留旧措辞（含跳变失真的名义价告警）。
+    pv = str(getattr(result, "price_view", "nominal") or "nominal")
+    metric_clause = (
+        "指标/信号口径＝**qfq 后复权视图**（R62′/N64；ref＝区间起点，PIT 合规；"
+        "ADR-6 记账仍名义价）"
+        if pv == "adjusted" else
+        "指标口径＝名义价（Q-9=(a′)；**信号未复权**——R62′ 对照档）")
     warning = "无"
     if n_div or n_conv:
-        warning = ("1 条：**本 run 策略信号基于名义价，存在跳变失真**"
-                   "（ADR-20 第 8 条；Q-9=(a′) 保持名义价——与真源/B1 一致）")
+        warning = (("1 条：本 run 已消除公司行动处的**信号跳变失真**"
+                    "（R62′/N64 复权视图；记账仍名义价——ADR-6 未改）")
+                   if pv == "adjusted" else
+                   ("1 条：**本 run 策略信号基于名义价，存在跳变失真**"
+                    "（ADR-20 第 8 条；Q-9=(a′) 保持名义价——与真源/B1 一致）"))
         n_alerts += 1
     notes.append(
         f"ETF/LOF 公司行动覆盖段（ADR-20/R36′；19 号 §96.4）：命中分红 "
         f"{n_div} 笔（载入；其中**入账 {len(divs)} 笔**——除息日无持仓者不入账）／ "
         f"命中折算 {n_conv} 次（载入；其中**入账 {len(cons)} 次**）／ "
         f"未建模项 {unmodeled[0]} ／ "
-        f"指标口径＝名义价（Q-9=(a′)；信号未复权）＋ win_rate＝在场日口径"
+        f"{metric_clause}＋ win_rate＝在场日口径"
         f"（R26′/DOC-11；逐笔辅助＝`win_rate_trades`，须显式声明）、Sharpe/波动＝"
         f"全样本含空仓日（显式标注） ／ 记账口径＝现金到账"
         f"（Q-7 默认；再投未启用） ／ 告警列表＝{warning} ／ 作废横幅＝"
         f"由报告层按作废登记表渲染（命中即顶部显示「本 run 已作废：原因＋"
         f"重跑条件」——R36′/§95.3-A4）")
     notes.extend(feed_notes)
+    return notes
+
+
+def _price_view_notes(result: Any) -> list[str]:
+    """**R62′（N64；19 号 §118）**：消费侧价格视图披露（禁静默）。
+
+    恒披露一行「视图＋基准日＋ADR-6 记账不变」；`adjusted` 下降级（因子缺失
+    回退 1.0 等）由 `TushareAdjustService.degraded_notes()` 透传。
+    """
+    pv = str(getattr(result, "price_view", "nominal") or "nominal")
+    ref = getattr(result, "price_view_ref", None)
+    ref_s = ref.to_ymd() if ref is not None else "—"
+    notes = [
+        f"价格视图（R62′/N64；19 号 §118）：run.price_view={pv}"
+        + (f"——喂给策略的 bar 走 **qfq 后复权**（ref={ref_s}＝区间起点，PIT 合规）；"
+           f"**ADR-6 记账口径不变**：撮合价/持仓成本/费用/NAV/快照恒为**名义价**"
+           if pv == "adjusted" else
+           "——喂给策略的 bar 为**名义价**（旧行为/对照档）")
+    ]
+    notes.extend(str(n) for n in (getattr(result, "adjust_notes", ()) or ()))
     return notes
 
 
@@ -262,6 +330,7 @@ class RunOrchestrator:
             self.rt.assembly_notes.extend(_corp_action_notes(result))
             self.rt.assembly_notes.extend(
                 _etf_action_notes(result, self.rt.feed))
+            self.rt.assembly_notes.extend(_price_view_notes(result))   # R62′
             self.rt._warn_if_short_period(result)
             return result
 
@@ -305,7 +374,8 @@ class RunOrchestrator:
             # （`complete()` 读盘补全 → 终态 manifest 含该披露）。只披露不改数。
             _rc11_notes = (_delisted_holding_notes(result)
                            + _corp_action_notes(result)
-                           + _etf_action_notes(result, self.rt.feed))
+                           + _etf_action_notes(result, self.rt.feed)
+                           + _price_view_notes(result))      # R62′（N64）
             if _rc11_notes:
                 self.rt.assembly_notes.extend(_rc11_notes)
                 manifest = replace(
@@ -313,7 +383,12 @@ class RunOrchestrator:
                 store.write_manifest(manifest)
             self.rt.step_timings["运行·引擎"] = _pc_run() - _t_run
             _t_run = _pc_run()
-            trades = pair_fills_to_trades(result.fills)
+            # **R61′（N63，§114.2 第 1 条）**：配对与指标均传入**已应用的折算序列**
+            # （源＝`result.consolidations`——portfolio 实际入账的逐事件审计）
+            consolidations = normalize_consolidations(
+                getattr(result, "consolidations", ()) or ())
+            trades = pair_fills_to_trades(result.fills,
+                                          consolidations=consolidations)
             store.save_snapshots(manifest.run_id, result.snapshots)
             store.save_fills(manifest.run_id, result.fills)
             store.save_trades(manifest.run_id, trades)
@@ -323,7 +398,8 @@ class RunOrchestrator:
                 result.snapshots, result.fills, self.rt._analysis_config(),
                 analyzer_names=self.rt._analyzer_names(),
                 extras=self.rt._benchmark_metrics,      # R2.5 / P1-10 基准相对项
-                resolver=lambda name: registry.resolve(registry.ANALYZER, name))
+                resolver=lambda name: registry.resolve(registry.ANALYZER, name),
+                consolidations=consolidations)          # R61′：逐笔口径配对同源
             manifest = store.save_metrics(manifest.run_id, metrics)
         except Exception as exc:                    # 崩溃审计：留 FAILED 终态
             store.mark_failed(manifest.run_id, f"{type(exc).__name__}: {exc}")
