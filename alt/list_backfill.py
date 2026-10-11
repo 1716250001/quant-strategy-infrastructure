@@ -3,6 +3,8 @@
 alt/list_backfill.py — 通用 list 模式引擎（建库 / 轮转更新 / 整表重建）
 =======================================================================
 （v1.2 外盘接入，2026-10-11；设计 06 §10.9 / ADR-13/14/15；审查放行 §4.3-⑥）
+（v1.3.1，2026-10-11：F-15 修复（rebuild 水位/覆盖率按**成功落盘**批次收编）+
+  机读覆盖率 `--json` / `--strict-coverage`（O-1）+ 分区快照行数+sha256（§10.6））
 
 职责：
   1. **清单适配**：spec.universe_from（"master:hk_basic"）→ 标的列表
@@ -33,6 +35,7 @@ alt/list_backfill.py — 通用 list 模式引擎（建库 / 轮转更新 / 整�
   python -m alt.list_backfill --table hk_daily --dry-run        # 只打印计划
 """
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -298,12 +301,21 @@ def _verify_shadow(sp, new_dir, verbose=True):
     return counts
 
 
-def _official_partition_state(sp):
-    """正式目录分区状态：{文件名: 行数}（F-9/F-11 切换守卫用）。
+def _sha256_file(path, chunk_size=1 << 20):
+    """文件 SHA256（分块读；29 分区 ≈130 MB 总开销约 1~2 s，B2/§10.6 评估可接受）。"""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(chunk_size), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
-    F-11：必须区分**空分区**（0 行——允许被 new 弃置，无数据损失）与
-    **非空分区**（丢 = 数据损失，必须拦）；读取失败（文件损坏）记 -1，
-    按"非空"**保守处理**（宁可拦死不可丢数据）。
+
+def _official_partition_state(sp):
+    """正式目录分区状态：{文件名: {"rows": n, "sha256": hex}}（F-9/F-11 + B2/§10.6）。
+
+    - rows：数据行数——**空分区**（0 行）允许被 new 弃置（F-11）；读取失败记 -1，
+      按"非空"**保守处理**（宁可拦死不可丢数据）；
+    - sha256：文件内容哈希（§10.6 升级：切换前快照可事后与 `__old` 逐位对账）。
     """
     d = alt_table_dir(sp.name)
     if not os.path.isdir(d):
@@ -312,10 +324,12 @@ def _official_partition_state(sp):
     for f in sorted(os.listdir(d)):
         if not f.endswith(".parquet"):
             continue
+        p = os.path.join(d, f)
         try:
-            state[f] = len(pd.read_parquet(os.path.join(d, f), columns=[sp.date_col]))
+            rows = len(pd.read_parquet(p, columns=[sp.date_col]))
+            state[f] = {"rows": rows, "sha256": _sha256_file(p)}
         except Exception:
-            state[f] = -1                 # 读失败 ⇒ 保守按"非空"处理
+            state[f] = {"rows": -1, "sha256": ""}   # 读失败 ⇒ 保守按"非空"处理
     return state
 
 
@@ -344,9 +358,15 @@ def _switch_shadow(sp, new_dir, official_state=None, verbose=True):
     # ── F-9/F-11 守卫：new 不得缺 official **非空**分区（空分区可弃置）──
     if official_state is None:
         official_state = _official_partition_state(sp)
+    if verbose and official_state:
+        n_rows = sum(st["rows"] for st in official_state.values() if st["rows"] > 0)
+        f0, st0 = next(iter(official_state.items()))
+        print(f"[快照] 切换前正式目录 {len(official_state)} 分区 / {n_rows:,} 行"
+              f"｜sha256（示例 {f0}）={st0['sha256'][:12]}…"
+              f"（全量已记，供 `__old` 逐位对账；B2/§10.6）")
     new_set = set(new_files)
-    missing = sorted(f for f, n in official_state.items()
-                     if n != 0 and f not in new_set)
+    missing = sorted(f for f, st in official_state.items()
+                     if st["rows"] != 0 and f not in new_set)
     if missing:
         raise RuntimeError(
             f"[F-9 守卫] 影子目录缺少正式目录已有分区 {missing}——"
@@ -354,8 +374,8 @@ def _switch_shadow(sp, new_dir, official_state=None, verbose=True):
             f"可能原因：rebuild 中断 / 某年拉取全空 / 误用 --symbols 部分标的。"
             f"若确认某分区确应废弃（如源端撤回数据），"
             f"请手动清理 official 对应 .parquet 后重跑")
-    dropped_empty = sorted(f for f, n in official_state.items()
-                           if n == 0 and f not in new_set)
+    dropped_empty = sorted(f for f, st in official_state.items()
+                           if st["rows"] == 0 and f not in new_set)
     if dropped_empty and verbose:
         print(f"[F-11] 弃置 official 空分区 {dropped_empty}（0 行，无数据损失）")
 
@@ -477,14 +497,14 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
 
     stat = {"ok": 0, "empty": 0, "fail": 0, "rows": 0, "added": 0}
     errs = []
-    done_syms = []              # F-14：成功 + 返空标的（rebuild 水位只标这些）
+    done_syms = []              # F-15：**落盘成功批次**收编（成功+返空；rebuild 水位/覆盖率只认这些）
     buf = []                    # [(symbol, df), ...] 待落盘
     batch_syms = []             # 本批已处理（ok + empty），flush 成功后统一记水位
     t0 = time.time()
     batch_size = batch or HK_BATCH_SIZE
 
     def _flush():
-        nonlocal buf, batch_syms
+        nonlocal buf, batch_syms, done_syms
         if not buf and not batch_syms:
             return
         r = flush_buffer(sp, buf, dest_dir=dest_dir)
@@ -497,6 +517,11 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
                 # 先落盘、后记（INV-3）：水位与一次性断点在此统一推进（含 empty）
                 state.mark_done(sp.name, batch_syms)
                 ckpt.mark_done(sp.name, batch_syms)
+            else:
+                # F-15 修复（修法 1 · 按批入列）：rebuild 的水位/覆盖率同样只在
+                # **落盘成功后**收编该批——flush 失败批不进入 done_syms
+                # （此前在取数成功处即时入列 ⇒ 落盘失败的批也被记"完成"）。
+                done_syms.extend(batch_syms)
         else:
             errs.append(f"flush: {r['errors'][:1]}")
             print(f"    [落盘失败] 不记水位（下次重拉）: {str(r['errors'][:1])[:120]}")
@@ -507,8 +532,7 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         s, d, err = fetch_one(sp, sym, limiter, url)
         batch_syms.append(s)
         if err == "empty":
-            stat["empty"] += 1
-            done_syms.append(s)           # 返空也标（防每次重拉）
+            stat["empty"] += 1            # F-15：随批入列（_flush ok 后统一收编）
         elif err:
             stat["fail"] += 1
             errs.append(f"{s}: {err}")
@@ -516,8 +540,7 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         else:
             stat["ok"] += 1
             stat["rows"] += len(d)
-            buf.append((s, d))
-            done_syms.append(s)
+            buf.append((s, d))            # F-15：随批入列（非即时 append）
 
         if _should_flush(buf, batch_syms, batch_size):
             _flush()
@@ -604,6 +627,10 @@ def main(argv=None):
                     help="整表重建（影子目录 __new → 校验 → 文件级原子替换）")
     ap.add_argument("--dry-run", action="store_true", help="只打印计划，不发请求")
     ap.add_argument("--status", action="store_true", help="轮转进度总览（零请求）")
+    ap.add_argument("--json", action="store_true", dest="json_out",
+                    help="rebuild 完成时在 stdout 末尾输出版本化覆盖率 JSON（B1/O-1）")
+    ap.add_argument("--strict-coverage", action="store_true",
+                    help="rebuild 覆盖率缺失（missing>0）时退出码 3；默认关（告警不阻断）")
     ap.add_argument("--yes", action="store_true", help="跳过确认")
     args = ap.parse_args(argv)
 
@@ -616,9 +643,21 @@ def main(argv=None):
         print("需 --table（或不带参数用 --status 看总览）")
         return 2
     sym_arg = ",".join(args.symbols) if args.symbols else None
-    run(args.table, symbols=sym_arg, budget=args.budget,
-        rebuild=args.rebuild, dry_run=args.dry_run, batch=args.batch,
-        yes=args.yes)
+    res = run(args.table, symbols=sym_arg, budget=args.budget,
+              rebuild=args.rebuild, dry_run=args.dry_run, batch=args.batch,
+              yes=args.yes)
+    # ── B1（O-1）：机读覆盖率（版本化 JSON，仅 rebuild 且有覆盖数据时输出）──
+    cov = (res or {}).get("coverage")
+    if args.json_out and cov is not None:
+        payload = {"schema": "alt-list-rebuild-coverage/1",
+                   "table": res.get("table"),
+                   "universe": cov["universe"],
+                   "done": cov["done"],
+                   "missing": cov["missing"]}
+        print(json.dumps(payload, ensure_ascii=False))
+    # 退出码策略：默认"告警不阻断"（0）；--strict-coverage 时 missing>0 ⇒ 3
+    if args.strict_coverage and cov and cov["missing"]:
+        return 3
     return 0
 
 
