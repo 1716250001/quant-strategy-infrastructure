@@ -539,6 +539,86 @@ def check_gaps(target_date=None, verbose=True):
 
 
 # ============================================================
+# 3.6 list 表轮转体检（v1.2 外盘接入，2026-10-11）
+# ============================================================
+def check_rotate(verbose=True):
+    """list 表轮转进度体检（零请求；09 §14.2 判据）。
+
+    判据：
+      · 已建库的表：停滞标的（水位缺失或 age > rotate_days×2）计为异常；
+      · 未建库的表：`未建库（预期）`，不计异常；
+      · us 语义（无 master 清单）：跳过并注明（进度见 us_backfill --status）。
+
+    ⚠ 为什么不能按"全表最新日"判（否则永远绿）：
+      list 表逐只轮转推进、各只水位不同；"最新日"只反映最近拉过的那批
+      （04 §8.6 / 15 §27.4）。
+    """
+    from alt.list_backfill import RotateState, load_universe
+
+    rows = []
+    state = RotateState()
+    today = datetime.now()
+    for sp in sp_mod.ALL_SPECS:
+        if sp.mode != "list":
+            continue
+        if not (sp.universe_from or "").startswith("master:"):
+            rows.append({"table": sp.name, "state": "us 语义（进度见 us_backfill）",
+                         "total": None, "stale": None, "stalled": None,
+                         "oldest": "", "rotate_days": sp.rotate_days or 0})
+            continue
+        if not _dir_files(sp.name):
+            rows.append({"table": sp.name, "state": "未建库（预期）",
+                         "total": None, "stale": None, "stalled": None,
+                         "oldest": "", "rotate_days": sp.rotate_days or 0})
+            continue
+        try:
+            uni = load_universe(sp, verbose=False)
+        except Exception as e:  # noqa: BLE001
+            rows.append({"table": sp.name, "state": f"清单读取失败:{type(e).__name__}",
+                         "total": None, "stale": None, "stalled": None,
+                         "oldest": "", "rotate_days": sp.rotate_days or 0})
+            continue
+        fresh, stale, oldest, newest = state.progress(sp.name, uni, sp.rotate_days)
+        limit = (sp.rotate_days or 7) * 2
+        rec = state.data.get(sp.name, {})
+        uncovered = stalled = 0
+        for s in uni:
+            d = rec.get(str(s), "")
+            if not d:
+                uncovered += 1          # 从未拉：首建进行中 → 提示，**非故障**
+                continue
+            try:
+                if (today - datetime.strptime(d, "%Y-%m-%d")).days > limit:
+                    stalled += 1        # 有水位但超期 → 真停滞
+            except Exception:  # noqa: BLE001
+                stalled += 1
+        if stalled > 0:
+            st = "轮转停滞"
+        elif uncovered > 0:
+            st = f"建库中（未覆盖 {uncovered:,}）"   # 防狼来了：不计异常
+        else:
+            st = "OK"
+        rows.append({"table": sp.name, "state": st,
+                     "total": len(uni), "stale": stale, "stalled": stalled,
+                     "uncovered": uncovered,
+                     "oldest": oldest, "newest": newest,
+                     "rotate_days": sp.rotate_days or 7})
+    if verbose:
+        print("=" * 96)
+        print("list 表轮转体检（v1.2：按逐只水位判，不按全表最新日）")
+        print("=" * 96)
+        for r in rows:
+            if r["total"] is None:
+                print(f"  {r['table']:<26}{r['state']}")
+            else:
+                print(f"  {r['table']:<26}标的 {r['total']:>6,} | "
+                      f"未覆盖 {r.get('uncovered', 0):>6,} | 陈旧 {r['stale']:>6,} | "
+                      f"停滞(>{r['rotate_days'] * 2}天) {r['stalled']:>6,} | "
+                      f"最旧 {r['oldest'] or '—'} | {r['state']}")
+    return rows
+
+
+# ============================================================
 # 3.5 清理历史重复（可选动作，带备份）
 # ============================================================
 def fix_dupes(only=None, dry_run=True, verbose=True):
@@ -1122,7 +1202,8 @@ def gen_report(path=None, verbose=True):
 # 汇总入口
 # ============================================================
 def run(which=None, only=None, as_json=False):
-    which = which or ["checkpoint", "date_sets", "dupes", "gaps", "scale", "isolation"]
+    which = which or ["checkpoint", "date_sets", "dupes", "gaps", "scale",
+                      "isolation", "rotate"]
     out = {"audited_at": datetime.now().isoformat(timespec="seconds")}
     if "checkpoint" in which:
         out["checkpoint"] = check_checkpoint()
@@ -1136,6 +1217,8 @@ def run(which=None, only=None, as_json=False):
         out["scale"] = check_scale()
     if "isolation" in which:
         out["isolation"] = check_isolation()
+    if "rotate" in which:
+        out["rotate"] = check_rotate()
 
     # 汇总异常数
     # ⚠ 口径说明（N1/N6，2026-09-19）：
@@ -1143,9 +1226,9 @@ def run(which=None, only=None, as_json=False):
     #   · "已确认"（登记过的历史缺口）不计入——避免长期红灯（狼来了）；
     #   · "空数据日"（传参型源端返空）不计入——属业务事实。
     n_bad = 0
-    for k in ("checkpoint", "dupes", "gaps", "date_sets"):
+    for k in ("checkpoint", "dupes", "gaps", "date_sets", "rotate"):
         for r in out.get(k, []):
-            if r.get("state") in ("异常", "缺口", "需排查"):
+            if r.get("state") in ("异常", "缺口", "需排查", "轮转停滞"):
                 n_bad += 1
     out["issues"] = n_bad
     n_empty = sum(1 for r in out.get("date_sets", []) if r.get("state") == "空数据日")
@@ -1180,6 +1263,7 @@ def main(argv=None):
         ("--gaps", "gaps", "覆盖缺口"),
         ("--scale", "scale", "规模统计"),
         ("--isolation", "isolation", "主库隔离校验"),
+        ("--rotate", "rotate", "list 表轮转进度（v1.2）"),
     ):
         ap.add_argument(flag, action="store_true", help=help_)
     ap.add_argument("--only", help="只查某张表（用于重复检测/清理）")
@@ -1216,7 +1300,8 @@ def main(argv=None):
     which = [k for f, k, _ in (
         (a.checkpoint, "checkpoint", ""), (a.date_sets, "date_sets", ""),
         (a.dupes, "dupes", ""), (a.gaps, "gaps", ""),
-        (a.scale, "scale", ""), (a.isolation, "isolation", "")) if f]
+        (a.scale, "scale", ""), (a.isolation, "isolation", ""),
+        (a.rotate, "rotate", "")) if f]
     run(which or None, only=a.only, as_json=a.json)
     return 0
 

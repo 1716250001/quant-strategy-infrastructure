@@ -42,6 +42,24 @@ ALT_LOG_DIR = os.path.join(ALT_DATA_DIR, "_logs")
 # 临时/干跑产物（不入库）
 ALT_TMP_DIR = os.path.join(TEMP_DIR, "alt_run")
 
+# ============================================================
+# 一b、list 轮转与批量落盘参数（v1.2 外盘接入，2026-10-11）
+# ============================================================
+# 轮转周期（天）：list 表每只标的按"最久未拉"轮转重拉，把"全量"摊到时间轴上。
+# ⚠ 为什么是 7 天：港股双表合计 5,570 请求 ÷ sina 20 次/分 = 4.64 h/全量轮
+#     ⇒ 摊成 7 天 ≈ 40 分/天（06 §10.9 速率核算）；调小=更鲜更贵，调大反之。
+ROTATE_DAYS = 7
+
+# 轮转水位文件（{table: {symbol: last_done_date}}；与三态断点**分文件分权责**，04 §8.6）
+ROTATE_STATE_FILE = os.path.join(ALT_META_DIR, "rotate_state.json")
+
+# list 引擎**批量落盘**阈值（先到先触发；ADR-15 / 14 §22.7）：
+#   ⚠ 逐只 flush 的读放大 ≈ N/2（港股全量 ≈1,392×）——批量是**必需而非优化**。
+FLUSH_ROWS = 1_000_000              # ① 行数阈值（≈80 MB/批；含 concat 峰值 ≈200~300 MB）
+FLUSH_SYMS = 300                    # ② 只数阈值
+FLUSH_BYTES = 256 * 1024 * 1024     # ③ 字节上限（防宽表内存尖峰，第三保险）
+HK_BATCH_SIZE = FLUSH_SYMS          # hk_daily 批大小（只）；⚠ ≠ us_backfill.BATCH=3000
+
 
 def alt_table_dir(table):
     """alt 库中某表的目录（不保证存在）"""

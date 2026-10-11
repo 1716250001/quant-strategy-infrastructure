@@ -197,6 +197,91 @@ def join_main(left: pd.DataFrame, right: pd.DataFrame,
     return out.drop(columns=["_dt"])
 
 
+# ============================================================
+# 二b、港股复权：事件级因子 → 逐日乘数（**唯一入口**，v1.2 外盘接入 2026-10-11）
+# ============================================================
+def _expand_qfq_frames(px: pd.DataFrame, fac: pd.DataFrame,
+                       asof: bool = True) -> pd.DataFrame:
+    """纯函数：把价格帧与**事件级**因子帧对齐为逐日复权帧。
+
+    ⚠ 骨架必须 = **价格交易日 ∪ 因子事件日**（P-A 正解，18-审查记录 §2.1/§4.1）：
+      实测 00700：事件日 2014-05-15 落在拆股停牌区间内、**不在价格序列上**；
+      若按交易日 `merge(how="left")` 等值对齐 ⇒ 该事件行 join 不上 ⇒
+      其后整段沿用旧因子 ⇒ **静默错价约 80%**（237 行，全程不报错）。
+
+      · asof=True （默认）：union 骨架 → 升序 → `ffill()`
+        （哨兵 1900-01-01 自然置首，覆盖最早交易日之前；语义 = 取 ≤t 最近事件）
+      · asof=False：显式 `merge_asof(direction="backward")`（两条路径应逐位等价，
+        供自检/回归互验——"换一种等价实现重跑，结果应当一致"，18 §2.6 方法论）
+
+    px / fac 须含 `_dt`（datetime64）；fac 还须含已转数值的 `qfq_factor`。
+    """
+    if asof:
+        skel = pd.DataFrame({"_dt": sorted(set(px["_dt"]) | set(fac["_dt"]))})
+        skel = skel.merge(fac, on="_dt", how="left").sort_values("_dt")
+        skel["qfq_factor"] = skel["qfq_factor"].ffill()
+        return px.merge(skel, on="_dt", how="left")
+    return pd.merge_asof(px, fac, on="_dt", direction="backward")
+
+
+def expand_qfq_factor(symbol: str, *, with_price: bool = True,
+                      asof: bool = True) -> pd.DataFrame:
+    """`hk_qfq_factor`（事件级）→ 逐日乘数序列；**港股复权的唯一入口**。
+
+    ⚠ 为什么必须经本函数（18-审查记录 §2.1 实证）：
+      `hk_qfq_factor` 是**事件级**表（00700 实测 28 行，源为日期**降序**、
+      含 `1900-01-01` 哨兵行在尾），其 `date` 是"除权/拆股生效日"、**未必是
+      交易日**。任何"按交易日等值 join"的实现都会**静默错价约 80%**。
+      展开算法由 `_expand_qfq_frames` 统一实现（骨架∪ + ffill ≡ asof backward）。
+
+    ⚠ 纪律：`list_backfill` / `update` / 消费侧**禁止自行实现展开**——
+      一律 `from alt.reader import expand_qfq_factor`（P-A 定案，防"两套实现"）。
+
+    参数:
+        symbol:     5 位港股代码（如 "00700"）
+        with_price: True（默认）= 同时读 `hk_daily`，返回含 `close_qfq` 的完整帧；
+                    False = 只返回逐日因子 [date, qfq_factor]
+        asof:       实现开关（True=骨架+ffill；False=显式 merge_asof，互验用）
+    返回（with_price=True，正序）:
+        [date, open, high, low, close, volume, amount, qfq_factor, close_qfq]
+        （`date` 为 'YYYYMMDD' 字符串；`close_qfq = close × qfq_factor` 乘数型）
+    返回（with_price=False）:
+        [date, qfq_factor]
+    """
+    fac = read_alt_by_code("hk_qfq_factor", symbol, code_col="symbol")
+    if fac is None or len(fac) == 0:
+        raise ValueError(
+            f"hk_qfq_factor 无 '{symbol}' 数据（未建库？先跑 "
+            f"python -m alt.list_backfill --table hk_qfq_factor）")
+    fac = fac.copy()
+    fac["qfq_factor"] = pd.to_numeric(fac["qfq_factor"], errors="coerce")
+    fac["_dt"] = _to_dt(fac["date"])
+    fac = (fac[["_dt", "qfq_factor"]].dropna()
+           .sort_values("_dt").drop_duplicates("_dt", keep="last")
+           .reset_index(drop=True))
+    if len(fac) == 0:
+        raise ValueError(f"hk_qfq_factor '{symbol}' 因子列全为空或日期不可解析")
+
+    if not with_price:
+        out = fac.copy()
+        out["date"] = out["_dt"].dt.strftime("%Y%m%d")
+        return out[["date", "qfq_factor"]].reset_index(drop=True)
+
+    px = read_alt_by_code("hk_daily", symbol, code_col="symbol")
+    if px is None or len(px) == 0:
+        raise ValueError(
+            f"hk_daily 无 '{symbol}' 数据（未建库？先跑 "
+            f"python -m alt.list_backfill --table hk_daily）")
+    px = px.copy()
+    px["_dt"] = _to_dt(px["date"])
+    px = (px.dropna(subset=["_dt"]).sort_values("_dt")
+          .reset_index(drop=True))
+
+    out = _expand_qfq_frames(px, fac, asof=asof)
+    out["close_qfq"] = out["close"] * out["qfq_factor"]
+    return out.drop(columns=["_dt"]).reset_index(drop=True)
+
+
 def value_on(table: str, date: str, column: str, tolerance_days: int = 400):
     """取 alt 库某表在给定日期附近的取值（用于"某日估值水位"这类查询）。
 

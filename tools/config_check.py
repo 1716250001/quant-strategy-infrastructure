@@ -82,6 +82,8 @@ NON_BACKFILL_TABLES = {
     "fina_indicator": "download-full 下载（财务指标）",
     "fund_nav":       "fund_nav_update 每日更新（基金净值）",
     "custom_index":   "build_micro_index 产出（本地自建指数）",
+    "fund":           "QDII 研究产物（2026-10-06；fund_basic_E 全字段 + qdii6/qdii7 分批行情/净值）",
+    "global_index":   "海外指数研究产物（2026-10-06；tushare index_global 按年落盘，FCHI/GDAXI 等 90 文件）",
 }
 
 

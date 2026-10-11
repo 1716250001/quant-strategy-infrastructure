@@ -68,11 +68,22 @@ class AltCheckpoint:
         return key in self.data.get(table, {}).get("done", [])
 
     def mark_done(self, table, key="__all__"):
+        """记完成。key 可为 str 或 **list/tuple/set**（v1.2：list 引擎批量记，
+        避免逐只写 JSON——港股 2,785 只逐只写 ≈550 MB IO，批量只写几次）。
+
+        优化（v1.2）：**无新增时不重写文件**（原实现每次调用都写，
+        对批量场景是纯浪费；`updated` 语义改为"最后有进展的时间"）。
+        """
         if self.dry_run:
             return
+        keys = list(key) if isinstance(key, (list, tuple, set)) else [key]
         rec = self.data.setdefault(table, {"done": []})
-        if key not in rec["done"]:
-            rec["done"].append(key)
+        done = rec.setdefault("done", [])
+        done_set = set(done)
+        added = [k for k in keys if k not in done_set]
+        if not added:
+            return
+        done.extend(added)
         rec["updated"] = datetime.now().isoformat(timespec="seconds")
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         assert_writable(self.path)          # M1：落盘前过写入守卫
@@ -122,11 +133,101 @@ def is_window_error(err) -> bool:
     return any(k in s for k in _WINDOW_ERR_SIGNS)
 
 
+def _range_windows(sp):
+    """区间表（range_params）的建库分段：**按年**枚举（R-19 隐式分页 ⇒ ≤1 年/段）。
+
+    段内 17 个币种共用同一区间 ⇒ `_currency_boc_sina_map` 的 lru_cache
+    只会发 1 次映射请求（摊薄）；每段内部约 2~3 页（实测 1 年 ≈260 行）。
+
+    ⚠ 格式必须 **YYYYMMDD（无分隔符）**——`currency_boc_sina` 内部按
+      `"-".join([s[:4], s[4:6], s[6:]])` 拼 URL，传 ISO 格式（"2026-09-01"）
+      会被切错（→ "2026--0-9-01"）导致**静默返回空**（实测踩坑 2026-10-11）。
+    """
+    start = sp.range_start or "20120101"
+    y0 = int(str(start)[:4])
+    y1 = int(datetime.now().strftime("%Y%m%d")[:4])
+    return [(f"{y}0101", f"{y}1231") for y in range(y0, y1 + 1)]
+
+
+def run_range_spec(sp, fn, url, limiter: AltRateLimiter, ckpt: AltCheckpoint,
+                   dry_run=False, force=False, verbose=True, window=None):
+    """区间参数表（currency 类）的取数：按段拉取并合并落盘（v1.2）。
+
+    · 建库（window=None）：按 `_range_windows` 年段枚举，断点键 `range:{起始日}`；
+    · 日更（window=(start, end)）：单窗口，重叠幂等（靠 subset 去重）。
+    ⚠ 单段失败即停（避免在风控下持续轰击）；断点**落盘成功后才记**。
+    """
+    res = {"table": sp.name, "tier": sp.tier, "mode": sp.mode,
+           "requests": 0, "rows": 0, "added": 0, "ok": True,
+           "skipped": False, "window_out": False, "errors": [], "warnings": []}
+
+    windows = [window] if window else _range_windows(sp)
+    frames, done_keys = [], []
+    for (s0, s1) in windows:
+        key = f"range:{s0}"
+        if ckpt.is_done(sp.name, key) and not force:
+            continue
+        if dry_run:
+            res["requests"] += len(sp.enum_values)
+            continue
+        seg_err = False
+        seg_any = False                     # 本段是否有非空数据
+        for val in sp.enum_values:
+            kw = dict(sp.params)
+            if sp.enum_param:
+                kw[sp.enum_param] = val
+            kw[sp.range_params[0]] = s0
+            kw[sp.range_params[1]] = s1
+            raw, ok, err = limiter.call(lambda: fn(**kw), url)
+            res["requests"] += 1
+            if not ok:
+                res["errors"].append(f"{s0}~{s1}/{val}: {err}")
+                seg_err = True
+                break
+            if raw is None or len(raw) == 0:
+                res["warnings"].append(f"{s0}~{s1}/{val}: 返回空")
+                continue
+            norm, warns = normalize(raw, sp, enum_value=val)
+            res["warnings"].extend(warns)
+            if len(norm):
+                frames.append(norm)
+                seg_any = True
+            if verbose and res["requests"] % 25 == 0:
+                print(f"      ... {res['requests']} 请求 | 批次 {len(frames)}")
+        if seg_err:
+            break
+        if not seg_any:
+            # 整段（全部币种）返空：**不记断点**（更可能是参数/窗口问题而非源端
+            # 事实空——如格式错误致静默空；下次重试，避免永久跳过）
+            res["warnings"].append(
+                f"{s0}~{s1}: 整段（{len(sp.enum_values)} 币种）返空 → 不记断点")
+            continue
+        done_keys.append(key)
+    if dry_run:
+        return res
+    if frames:
+        merged = pd.concat(frames, ignore_index=True)
+        st = save(merged, sp)
+        res.update(rows=st["rows"], added=st["added"],
+                   ok=bool(st["ok"]) and not res["errors"],
+                   warnings=res["warnings"] + st["warnings"],
+                   errors=res["errors"] + st.get("errors", []))
+    elif res["errors"]:
+        res["ok"] = False
+        res["errors"].append(f"区间取数未成功（{len(windows)} 段中 0 段落盘）")
+    if res["ok"]:
+        for k in done_keys:
+            ckpt.mark_done(sp.name, k)
+    return res
+
+
 def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
-             dry_run=False, force=False, verbose=True, target_date=None):
+             dry_run=False, force=False, verbose=True, target_date=None,
+             range_window=None):
     """执行一张表（含 enum 展开）。返回结果 dict。
 
-    target_date: 按日型表的目标日期（YYYYMMDD）。对 inject_date 的表必填。
+    target_date:  按日型表的目标日期（YYYYMMDD）。对 inject_date 的表必填。
+    range_window: 区间表的窗口 (start, end)；None = 建库按年分段（v1.2）。
     """
     import akshare as ak
 
@@ -152,6 +253,11 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
         return res
 
     url = guess_url(sp.func)
+
+    # —— 区间参数表（v1.2：currency 类；R-19 隐式分页 ⇒ 分段 ≤1 年）——
+    if sp.range_params:
+        return run_range_spec(sp, fn, url, limiter, ckpt, dry_run=dry_run,
+                              force=force, verbose=verbose, window=range_window)
 
     # —— enum 型：逐枚举值取数并合并 ——
     if sp.mode == "enum":

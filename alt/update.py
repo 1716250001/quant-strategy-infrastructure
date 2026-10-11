@@ -40,7 +40,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -119,18 +119,25 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
       action = "skip"    → 本次不动
     """
     if ckpt is None or not is_initialized(sp, ckpt):
+        if sp.mode == "list":
+            return {"action": "skip", "dates": [], "lookback_dates": [],
+                    "reason": f"尚未建库（先跑 python -m alt.list_backfill --table {sp.name}）"}
         return {"action": "skip", "reason": "尚未建库（请先跑 alt.backfill）",
                 "dates": [], "lookback_dates": []}
 
-    # ── mode="list"（按标的列表逐只拉）不走日更引擎（2026-09-21）──
-    # 原因: ① 本引擎的增量模型建立在"按日期"上，按标的的模式表达不了；
-    #       ② 该类表（美股前复权）**前复权基准随新拆股漂移**，本就不允许
-    #          增量追加，必须整表重建 ⇒ 不适用日更。
-    # 专用入口: python -m alt.us_backfill
+    # ── mode="list"（按标的列表逐只拉）——v1.2 起分两类处理（2026-10-11）──
+    #   ① rotate_days>0（港股 hk_daily / hk_qfq_factor）：
+    #      action="rotate" —— 委托 alt/list_backfill.py 按"最久未拉"轮转
+    #      （ADR-14；K=ceil(n/rotate_days) 只/轮，"最旧优先"天然摊薄到每天）。
+    #   ② rotate_days=0（美股 us_daily_qfq）：前复权基准随新拆股漂移，
+    #      必须整表重建、不适用增量或轮转 ⇒ 仍走专用入口 us_backfill。
     if sp.mode == "list":
+        if (sp.rotate_days or 0) > 0:
+            return {"action": "rotate", "dates": [], "lookback_dates": [],
+                    "reason": f"轮转更新（{sp.rotate_days} 天/轮，最久未拉优先）"}
         return {"action": "skip", "dates": [], "lookback_dates": [],
-                "reason": 'mode="list" 不走日更（前复权须整表重建）；'
-                          '请用 python -m alt.us_backfill'}
+                "reason": 'mode="list" 且 rotate_days=0 → 不走日更'
+                          '（前复权须整表重建）；请用 python -m alt.us_backfill'}
 
     # ── single 布局：按刷新间隔决定是否全量刷新 ──
     if sp.layout == "single":
@@ -218,8 +225,20 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
 # 三、执行
 # ============================================================
 def update_single(sp, limiter, ckpt, dry_run=False):
-    """single 布局：全量刷新（force=True 绕过断点，靠 subset 去重保幂等）"""
-    return run_spec(sp, limiter, ckpt, dry_run=dry_run, force=True, verbose=True)
+    """single 布局：全量刷新（force=True 绕过断点，靠 subset 去重保幂等）。
+
+    v1.2：**区间表**（range_params，如中行牌价）不做全量刷新——
+      日更窗口 = 最近 30 自然日（重叠幂等靠 subset 去重；
+      全历史重拉会触发 R-19 隐式分页的请求放大）。
+    """
+    kw = {}
+    if sp.range_params:
+        # ⚠ 格式 YYYYMMDD（接口内部按定长切片拼 URL，ISO 格式会静默返空）
+        end = datetime.now().strftime("%Y%m%d")
+        start = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
+        kw["range_window"] = (start, end)
+    return run_spec(sp, limiter, ckpt, dry_run=dry_run, force=True,
+                    verbose=True, **kw)
 
 
 def update_by_year(sp, limiter, ckpt, dates, lookback_dates, dry_run=False):
@@ -255,6 +274,32 @@ def update_by_year(sp, limiter, ckpt, dates, lookback_dates, dry_run=False):
         if r.get("errors"):
             break
     return agg
+
+
+def update_rotate(sp, limiter, ckpt, dry_run=False, budget=None):
+    """list 表轮转更新（v1.2：**委托** `alt.list_backfill`，禁两套实现）。
+
+    ⚠ 为什么委托而非复写（06 §10.9 / 18-审查记录 §4.3-⑦）：
+      轮转的"清单→选批→限流拉取→双阈值缓冲→落盘→水位"只有一份实现
+      （`list_backfill`）；本函数只负责把它**纳入 update 统一编排**
+      （`python -m alt.update` 是全库刷新总入口，禁 `--only` 手写绕过）。
+    ⚠ limiter 说明：`list_backfill.run` 内部自建 AltRateLimiter（独立统计）。
+      因**顺序执行**（update 其余表跑完才轮转到此），两实例不叠加速率。
+    """
+    from alt import list_backfill as lb
+    res = lb.run(sp.name, budget=budget, dry_run=dry_run, yes=True, verbose=True)
+    if dry_run:
+        return {"table": sp.name, "action": "rotate", "requests": 0, "rows": 0,
+                "added": 0, "ok": True, "errors": [], "warnings": [],
+                "done_dates": [], "refreshed_dates": [],
+                "reason": f"[dry-run] 轮转计划 {res.get('planned', 0)} 只"}
+    stat = res.get("stat") or {}
+    n_req = stat.get("ok", 0) + stat.get("empty", 0) + stat.get("fail", 0)
+    return {"table": sp.name, "action": "rotate", "requests": n_req,
+            "rows": stat.get("rows", 0), "added": stat.get("added", 0),
+            "ok": stat.get("fail", 0) == 0,
+            "errors": list(res.get("errors", []))[:3], "warnings": [],
+            "done_dates": [], "refreshed_dates": []}
 
 
 # ============================================================
@@ -363,7 +408,7 @@ def _read_all(sp):
 # 五、主流程
 # ============================================================
 def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
-        force=False, verbose=True):
+        force=False, verbose=True, rotate_budget=None):
     ensure_alt_dirs()
 
     if only:
@@ -424,7 +469,10 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
 
             print(f"{head} — {p['reason'][:70]}")
             try:
-                if p["action"] == "single":
+                if p["action"] == "rotate":
+                    r = update_rotate(sp, limiter, ckpt, dry_run=dry_run,
+                                      budget=rotate_budget)
+                elif p["action"] == "single":
                     r = update_single(sp, limiter, ckpt, dry_run=dry_run)
                 else:
                     r = update_by_year(sp, limiter, ckpt, p["dates"],
@@ -505,6 +553,15 @@ def status_only(tier=None, only=None):
     bad = [r for r in rows if r["state"] != "OK"]
     print("-" * 92)
     print(f"  正常 {len(rows)-len(bad)} | 异常 {len(bad)}")
+
+    # v1.2：list 表轮转进度（零请求；轮转表不按"全表最新日"判新鲜，
+    #       须按"逐只水位"看——04 §8.6 / 09 §14.2）
+    try:
+        from alt.list_backfill import show_status as _rotate_status
+        print()
+        _rotate_status()
+    except Exception as e:  # noqa: BLE001
+        print(f"  [warn] 轮转进度不可用: {type(e).__name__}: {str(e)[:80]}")
     return rows
 
 
@@ -521,6 +578,9 @@ def main(argv=None):
     p.add_argument("--force", action="store_true", help="忽略刷新间隔强制全刷")
     p.add_argument("--status", action="store_true", help="只做新鲜度体检（零请求）")
     p.add_argument("--list", action="store_true", help="列出可更新表与策略")
+    p.add_argument("--rotate-budget", type=int, default=None, dest="rotate_budget",
+                   help="list 表轮转的单表批量上限（默认 ceil(n/rotate_days)，"
+                        "如港股 398 只/表）")
     args = p.parse_args(argv)
 
     if args.status:
@@ -538,11 +598,15 @@ def main(argv=None):
             for s in ss:
                 mark = "✓" if table_dir_exists(s.name) else " "
                 iv = f"每{s.update_every_days}天" if layout == "single" else "每日"
+                if s.mode == "list":
+                    iv = (f"轮转 {s.rotate_days} 天/轮（list_backfill）"
+                          if (s.rotate_days or 0) > 0 else "整表重建（us_backfill）")
                 print(f"  {mark} {s.tier}  {s.name:<26}{s.note[:34]:<36}{iv}")
         return 0
 
     run(tier=args.tier, only=args.only, dry_run=args.dry_run,
-        lookback=args.lookback, force=args.force)
+        lookback=args.lookback, force=args.force,
+        rotate_budget=args.rotate_budget)
     return 0
 
 

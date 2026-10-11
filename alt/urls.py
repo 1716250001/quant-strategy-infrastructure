@@ -37,6 +37,7 @@ URL_PUSH2EX = "https://push2ex.eastmoney.com"                 # 东财涨停池/
 URL_PUSH2HIS = "https://push2his.eastmoney.com"               # 东财行情端点
 URL_LEGULEGU = "https://legulegu.com"                         # 乐咕乐股
 URL_OPTBBS = "https://1.optbbs.com"                           # QVIX 波指 CSV 源
+URL_SINA = "https://finance.sina.com.cn"                      # 新浪财经（v1.2：港股/中行牌价）
 
 # ============================================================
 # 二、显式登记：函数名 → 真实域名（实测得出，优先于规则）
@@ -52,6 +53,8 @@ _JIN10_FUNCS = {
     "macro_bank_english_interest_rate", "macro_bank_japan_interest_rate",
     "macro_bank_australia_interest_rate",
     "macro_bank_switzerland_interest_rate", "macro_euro_cpi_yoy",
+    # v1.2 外盘接入（2026-10-11 源码核对：走 datacenter-api.jin10.com/reports/list_v2）
+    "macro_bank_brazil_interest_rate", "macro_bank_india_interest_rate",
 }
 
 # —— 单一接口但命名不具有识别特征，需点名登记 ——
@@ -59,6 +62,12 @@ _EXPLICIT = {
     # 乐咕"赚钱效应"：函数名以 _legu 结尾（不是 _lg），且不以 stock_a_ 开头，
     # 原按兜底落入东财档（15/分），实际应为乐咕档（10/分）→ 冒险方向，已收紧
     "stock_market_activity_legu": URL_LEGULEGU,
+    # —— v1.2 外盘接入（2026-10-11 源码核对）——
+    # 港股日线/因子：akshare 实走 finance.sina.com.cn（klc2_kl.js / qfq.js），
+    #   原按命名兜底落入东财 datacenter（15/分，归类错误）→ 登记为 sina 档（20/分）。
+    "stock_hk_daily": URL_SINA,
+    # 中行人民币牌价：实走 biz.finance.sina.com.cn（forex.php），同上。
+    "currency_boc_sina": URL_SINA,
 }
 
 

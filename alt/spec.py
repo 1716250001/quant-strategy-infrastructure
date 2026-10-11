@@ -108,6 +108,39 @@ class TableSpec:
 
     note: str = ""
 
+    # ============================================================
+    # v1.2 外盘接入新增字段（2026-10-11；ADR-13/14/15）
+    # ============================================================
+    # 清单来源（mode="list" 专用）："<库>:<表名>"，如 "master:hk_basic"。
+    #   由 list 引擎解析为"读清单表 → 取标的列 → 变换"三步；
+    #   缺省（None）= 退回 alt 库内清单表（us 语义：us_universe）。
+    universe_from: Optional[str] = None
+    # 清单表中的标的列名 / 标的变换（universe_from 解析用）
+    #   ⚠ 与下面 symbol_param 是**两个概念**：
+    #   universe_col = 清单表里的列名（如 hk_basic 用 "ts_code"）；
+    #   symbol_param = 拉取接口的参数名（akshare 惯例为 "symbol"）。
+    universe_col: str = "symbol"
+    universe_xform: str = ""            # "" | "strip_hk_suffix"（去 ".HK" 后缀）
+    symbol_param: str = "symbol"        # 逐只拉取的接口参数名（mode="list"）
+    # 落盘时注入的**标的列名**（固定 "symbol"，与 subset 声明一致）
+    symbol_col: str = "symbol"
+
+    # 区间参数名（currency 类接口）：非空时由引擎按区间注入，
+    #   例：("start_date", "end_date")；配合 mode="enum" 使用（R-19 隐式分页）。
+    range_params: tuple = ()
+    # 区间表的**建库起点**（"YYYYMMDD"；仅 range_params 非空时用）：
+    #   建库按年分段（起点年 → 今年），**段内同区间**（摊薄映射请求）。
+    #   ⚠ 格式必须 YYYYMMDD：接口内部按定长切片拼 URL（ISO 格式会静默返空）。
+    range_start: str = ""
+
+    # 轮转周期（天，仅 mode="list" 表）：每只按"最久未拉"轮转重拉；
+    #   0 = 不轮转（一次性建库后不动，us 语义）。
+    rotate_days: int = 0
+
+    # 落盘前**强制转 float** 的列（源端 dtype 可能是 str，如港股 qfq_factor——
+    #   akshare 返回字符串形态以避免精度丢失；不转则下游 `close × factor` 报错）。
+    coerce_float_cols: list = field(default_factory=list)
+
     @property
     def inject_date(self) -> bool:
         """是否需要在落盘时注入日期列（按日型接口）"""
@@ -479,7 +512,82 @@ P4 = [
                    "⚠ 数据为美股 T-1（美股收盘=北京次日凌晨）"),
 ]
 
-ALL_SPECS = P0 + P1 + P3 + P4
+# ============================================================
+# v1.2 · 外盘接入新增表（2026-10-11；设计见 05 §20.2 待建清单 / ADR-13/14/15）
+# ============================================================
+# 关键决策（勿改，均有实测/审查背书）：
+#   ① **港股双表**（ADR-13）：`hk_daily` 未复权价 + `hk_qfq_factor` **事件级**
+#      乘数因子（源为日期**降序**、含 1900-01-01 哨兵行在尾）。拒绝"整表存
+#      前复权价"——前复权基准随新除权改写全历史（us_daily_qfq 教训）。
+#   ② **复权展开唯一入口** `alt.reader.expand_qfq_factor()`（P-A 定案）：
+#      骨架 = 价格交易日 ∪ 因子事件日 + 升序 ffill（≡ merge_asof backward）。
+#      ⚠ 禁止按交易日等值 join——左连接会**静默错价 80%**（00700 实证：事件日
+#         2014-05-15 落在拆股停牌区间内、不在价格序列上，join 不上即整段沿用旧因子）。
+#   ③ **轮转重建**（ADR-14）：`stock_hk_daily` 无日期增量参数 ⇒ 每只按
+#      rotate_days 摊薄重拉（默认 7 天/轮 ≈40 分/天，06 §10.9 速率核算）。
+#   ④ **单位口径**：volume=股 / amount=元（港元）——与主库 vol=手 / amount=千元
+#      不同口径，跨库联查必须换算（R-21）。
+#   ⑤ **判重键**（P-B 定案）：`["symbol","date"]` 保留；**实测义务**——编码期
+#      拉 ≥20 只港股因子表，验证"单事件日单行"（18-审查记录 §4.2）。
+P1_EX = [
+    # —— 金十系央行利率（源端停更快照；与既有 _MACRO_A 同构）——
+    TableSpec("macro_bank_brazil", "macro_bank_brazil_interest_rate", "P1",
+              "single", "date", src_date_col="日期", subset="*", mode="once",
+              max_age_days=45, update_every_days=7,
+              note="巴西央行决议报告（金十源）【已陈旧】实测 156 行、止 2025-09-18；"
+                   "每 7 天复查一次源端是否恢复",
+              known_stale="金十系源端已停更（实测止于 2025-09-18；接口可调、结构正常）"),
+    TableSpec("macro_bank_india", "macro_bank_india_interest_rate", "P1",
+              "single", "date", src_date_col="日期", subset="*", mode="once",
+              max_age_days=45, update_every_days=7,
+              note="印度央行决议报告（金十源）【已陈旧】实测 232 行、止 2025-08-06",
+              known_stale="金十系源端已停更（实测止于 2025-08-06；接口可调、结构正常）"),
+    # —— 中行人民币牌价（枚举 17 币种 × **区间参数**，alt 库首个区间表）——
+    # ⚠ 隐式分页（R-19）：接口内部按网页页码循环，一次调用可发多个 HTTP 请求，
+    #   limiter 只记 1 次 ⇒ 区间分段 ≤1 年（实测 1 年 ≈2~3 页）。
+    # ⚠ 批内同区间可摊薄 `_currency_boc_sina_map` 的 lru_cache 映射请求。
+    TableSpec("currency_boc_sina", "currency_boc_sina", "P1", "single", "date",
+              src_date_col="日期", subset=["date", "symbol"], mode="enum",
+              enum_param="symbol", enum_col="symbol",
+              enum_values=["美元", "英镑", "欧元", "澳门元", "泰国铢", "菲律宾比索",
+                           "港币", "瑞士法郎", "新加坡元", "瑞典克朗", "丹麦克朗",
+                           "挪威克朗", "日元", "加拿大元", "澳大利亚元", "新西兰元",
+                           "韩国元"],
+              range_params=("start_date", "end_date"),
+              range_start="20120101",            # 实测可用的建库起点（YYYYMMDD）
+              max_age_days=15,
+              note="中行人民币牌价（新浪中行源）17 币种；区间分段 ≤1 年（隐式分页 R-19）；"
+                   "日更 = 最近 30 自然日 ≈18 请求/天"),
+]
+
+P4_HK = [
+    # —— 港股日线（未复权，1 请求/只；轮转重建）——
+    TableSpec("hk_daily", "stock_hk_daily", "P4", "by_year", "date",
+              src_date_col="date", subset=["symbol", "date"], mode="list",
+              params={"adjust": ""},
+              universe_from="master:hk_basic", universe_col="ts_code",
+              universe_xform="strip_hk_suffix",
+              rotate_days=7, max_age_days=15,
+              core_metric_cols=["close"],
+              note="港股日线【未复权】(1 请求/只)；轮转重建(7 天/轮) → alt/list_backfill.py；"
+                   "⚠ volume=股 / amount=元(港元)，与主库 vol=手 / amount=千元不同口径(R-21)；"
+                   "⚠ 拆股期间源侧可能缺行(00700 实测 2014-05-15~05-28 共 10 个交易日)；"
+                   "⚠ 复权展开唯一入口 alt.reader.expand_qfq_factor()"),
+    # —— 港股前复权因子（**事件级**，1 请求/只；轮转重建）——
+    TableSpec("hk_qfq_factor", "stock_hk_daily", "P4", "single", "date",
+              src_date_col="date", subset=["symbol", "date"], mode="list",
+              params={"adjust": "qfq-factor"},
+              universe_from="master:hk_basic", universe_col="ts_code",
+              universe_xform="strip_hk_suffix",
+              rotate_days=7, max_age_days=400,
+              coerce_float_cols=["qfq_factor"],
+              note="港股前复权因子【事件级】(1 请求/只)；⚠ 源为日期降序、含 1900-01-01 "
+                   "哨兵行(在尾) ⇒ 入库归一化: 转 float + 升序；⚠ 展开唯一入口 "
+                   "alt.reader.expand_qfq_factor()(骨架=价格日∪事件日)，禁自行 ffill；"
+                   "⚠ 哨兵行精度 ~3e-5(早期段残差)，见 09 §14.10 V6（P-C 条款）"),
+]
+
+ALL_SPECS = P0 + P1 + P1_EX + P3 + P4 + P4_HK
 BY_NAME = {s.name: s for s in ALL_SPECS}
 BY_TIER: dict = {}
 for _s in ALL_SPECS:

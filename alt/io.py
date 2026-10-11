@@ -49,6 +49,33 @@ def resolve_subset(df: pd.DataFrame, spec: TableSpec):
     return list(cols), None
 
 
+def coerce_float_cols(df: pd.DataFrame, cols) -> pd.DataFrame:
+    """把指定列强制转为 float（v1.2 外盘接入，2026-10-11）。
+
+    为什么需要（实测，18-审查记录 §4.3-④）:
+      港股 `stock_hk_daily(adjust="qfq-factor")` 返回的 `qfq_factor` 列 dtype
+      是 **str**（akshare 保留字符串形态）——
+        ① 不转 float ⇒ 下游 `close × factor` 直接抛类型错误；
+        ② 跨批 schema 不稳定（一批 str、一批 float）⇒ 按年分区写入类型冲突。
+      故在**落盘前**统一转数值（转不动置 NaN，由后续判空/告警兜底）。
+
+    参数:
+        df:   目标 DataFrame（不原地修改，返回新对象）
+        cols: 需转 float 的列名列表（None/空 = 原样返回）
+    返回:
+        转换后的 DataFrame
+    """
+    if df is None or len(df) == 0 or not cols:
+        return df
+    out = df
+    for c in cols:
+        if c in out.columns:
+            if out is df:
+                out = df.copy()
+            out[c] = pd.to_numeric(out[c], errors="coerce")
+    return out
+
+
 def normalize(df: pd.DataFrame, spec: TableSpec,
               req_date: Optional[str] = None,
               enum_value: Optional[str] = None):
@@ -105,6 +132,12 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
         if c in out.columns:
             out[c] = out[c].astype(str)
 
+    # 3c) **强制浮点列**（v1.2 外盘接入，2026-10-11；spec.coerce_float_cols）
+    #     实测：hk_qfq_factor 的 qfq_factor 源 dtype=str（akshare 字符串形态）——
+    #     不转则 ① 下游 `close × factor` 报错 ② 跨批 schema 冲突（分区写入失败）。
+    if spec.coerce_float_cols:
+        out = coerce_float_cols(out, spec.coerce_float_cols)
+
     # 4) 丢弃日期列为空的行（避免落盘后无法关联）
     if spec.date_col in out.columns:
         before = len(out)
@@ -141,9 +174,14 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
 # ============================================================
 # 二、落盘
 # ============================================================
-def table_path(spec: TableSpec, req_date: Optional[str] = None, year: Optional[str] = None):
-    """目标文件路径（single → {table}/{table}.parquet；by_year → {table}/{YYYY}.parquet）"""
-    d = alt_table_dir(spec.name)
+def table_path(spec: TableSpec, req_date: Optional[str] = None,
+               year: Optional[str] = None, dest_dir: Optional[str] = None):
+    """目标文件路径（single → {table}/{table}.parquet；by_year → {table}/{YYYY}.parquet）。
+
+    dest_dir（v1.2 新增）：目标根目录覆盖——供 list 引擎 `--rebuild`
+    写**影子目录** `{table}__new/` 用（ADR-15；None = 表的常规目录）。
+    """
+    d = dest_dir or alt_table_dir(spec.name)
     if spec.layout == "by_year":
         y = year or (str(req_date)[:4] if req_date else None)
         if not y:
@@ -153,10 +191,14 @@ def table_path(spec: TableSpec, req_date: Optional[str] = None, year: Optional[s
 
 
 def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
-         dry_run: bool = False):
+         dry_run: bool = False, dest_dir: Optional[str] = None):
     """按 spec 落盘。dry_run=True 时只做校验与预演，不写任何文件。
 
     返回: dict(ok, rows, added, path, errors, warnings, dry_run)
+
+    dest_dir（v1.2 新增）：目标根目录覆盖（None = 表常规目录）；
+      供 list 引擎 `--rebuild` 的影子目录（`{table}__new/`）使用。
+      路径硬保护 `assert_writable` 对影子目录同样生效（同在 alt 授权区）。
 
     ⚠ 硬性前置条件：spec.date_col 必须在 df 中存在。
        若源日期列名与 spec.src_date_col 不符（akshare 改列名/猜错），
@@ -191,7 +233,7 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
 
     # 无日期表：强制走 single 布局，直接合并写回
     if not spec.has_date:
-        target = table_path(spec)
+        target = table_path(spec, dest_dir=dest_dir)
         result["path"] = target
         if dry_run:
             result["ok"] = True
@@ -205,8 +247,8 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
 
     if spec.layout == "by_year":
         years = df[spec.date_col].astype(str).str[:4].unique()
-        target_dir = alt_table_dir(spec.name)
-        target = table_path(spec, req_date=req_date, year=years[0])
+        target_dir = dest_dir or alt_table_dir(spec.name)
+        target = table_path(spec, req_date=req_date, year=years[0], dest_dir=dest_dir)
         result["path"] = target_dir + os.sep + "{YYYY}.parquet"
         if dry_run:
             result["ok"] = True
@@ -232,7 +274,7 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
         return result
 
     # single 布局
-    target = table_path(spec)
+    target = table_path(spec, dest_dir=dest_dir)
     result["path"] = target
     if dry_run:
         if spec.date_col not in df.columns:

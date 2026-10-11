@@ -281,6 +281,35 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
             "rows_by_value": {k: int(len(v)) for k, v in got.items()},
             "all_same_cols": len({tuple(map(str, v.columns)) for v in got.values()}) == 1,
         }
+    elif sp.mode == "list":
+        # v1.2：list 表探测——从清单取**首只标的**，带标的参数试调。
+        #   ⚠ 必须注入标的参数：stock_hk_daily 不传 symbol 会直接失败
+        #     （或返回异常结构，如 KeyError('date')）。
+        probe_sym = None
+        if (sp.universe_from or "").startswith("master:"):
+            try:
+                from alt.list_backfill import load_universe
+                uni = load_universe(sp, verbose=False)
+                probe_sym = uni[0] if uni else None
+            except Exception as e:  # noqa: BLE001
+                rep["warnings"].append(
+                    f"清单读取失败（无法确定探测标的）: {type(e).__name__}: {str(e)[:80]}")
+        if probe_sym is None:
+            rep["ok"] = False
+            rep["problems"].append(
+                "list 表无法确定探测标的（universe_from 非 'master:...'）——"
+                "该表走 us_backfill 专用入口，本工具暂不探测")
+            return rep
+        kw = dict(sp.params)
+        kw[sp.symbol_param or "symbol"] = probe_sym
+        raw, ok, err = limiter.call(lambda: fn(**kw), url)
+        rep["requests"] += 1
+        rep["observations"]["probe_symbol"] = probe_sym
+        if not ok:
+            rep["ok"] = False
+            rep["problems"].append(f"调用失败（{probe_sym}）: {err}")
+            return rep
+        df = raw
     else:
         # ⚠ 按日型表（inject_date）必须传目标日期：
         #   akshare 这类接口的 date 参数默认值往往是**硬编码的历史日期**
@@ -367,6 +396,10 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         injected = {sp.date_col}
         if sp.mode == "enum" and sp.enum_col:
             injected.add(sp.enum_col)
+        if sp.mode == "list":
+            # v1.2：list 表的**标的列**由引擎注入（接口不返回，fetch_one 补），
+            #   如 hk_daily 的 symbol——不排除会把正确规格误报"列缺失"。
+            injected.add(sp.symbol_col or "symbol")
         missing = [c for c in sp.subset if c not in cols and c not in injected]
         if missing:
             rep["ok"] = False

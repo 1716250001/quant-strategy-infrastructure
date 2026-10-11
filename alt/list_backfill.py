@@ -1,0 +1,626 @@
+# -*- coding: utf-8 -*-
+"""
+alt/list_backfill.py — 通用 list 模式引擎（建库 / 轮转更新 / 整表重建）
+=======================================================================
+（v1.2 外盘接入，2026-10-11；设计 06 §10.9 / ADR-13/14/15；审查放行 §4.3-⑥）
+
+职责：
+  1. **清单适配**：spec.universe_from（"master:hk_basic"）→ 标的列表
+     （主库只读；`strip_hk_suffix` 变换 = 去 ".HK" 后缀）
+  2. **轮转调度**：按 spec.rotate_days 摊薄（"最久未拉"优先），
+     水位独立持久化 `_meta/rotate_state.json`（与三态断点**分文件分权责**）
+  3. **拉取**：socket 超时补丁 + **串行 + AltRateLimiter**（sina 20/分）
+  4. **双阈值缓冲** → flush → **先落盘、后记水位**（INV-3 / I7）
+  5. **--rebuild**：影子目录 `{table}__new/` → 校验 → **文件级原子替换**
+     （旧文件进 `{table}__old/` 保留 1 轮；ADR-15）
+
+⚠ 四条纪律（勿改）：
+  ① **禁止无 limiter 直发**——us_backfill 的 4 线程无限流是历史偏差（R-16），
+     本引擎不复制；串行 + sina 20/分 是港股的合规前提（06 §10.9）。
+  ② **复权展开唯一入口** = `alt.reader.expand_qfq_factor`；本引擎只负责
+     "拉取 + 落盘"，**不做任何复权计算**（防"两套实现各管一摊"）。
+  ③ **水位只在落盘成功后推进**；flush 失败则该批不记（下次自然重拉）。
+  ④ **V8 预热**：`stock_hk_daily` 用 MiniRacer——若未来放宽为多线程，
+     必须**先单线程预热**再并发（us 实测：未预热直接 4 线程会 FATAL 崩溃）。
+     当前串行执行，天然无此问题。
+
+用法:
+  python -m alt.list_backfill --table hk_daily                  # 建库或轮转（按水位）
+  python -m alt.list_backfill --table hk_daily --rebuild        # 整表重建（影子目录）
+  python -m alt.list_backfill --table hk_daily --symbols 00700,00981   # 指定标的（调试）
+  python -m alt.list_backfill --table hk_daily --budget-syms 20        # 限量试跑
+  python -m alt.list_backfill --status                          # 轮转进度（零请求）
+  python -m alt.list_backfill --table hk_daily --dry-run        # 只打印计划
+"""
+import argparse
+import json
+import math
+import os
+import shutil
+import sys
+import time
+from datetime import datetime
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pandas as pd
+
+from config_alt import (
+    FLUSH_BYTES,
+    FLUSH_ROWS,
+    FLUSH_SYMS,
+    HK_BATCH_SIZE,
+    ROTATE_STATE_FILE,
+    TS_DATA_DIR,
+    alt_table_dir,
+    assert_writable,
+    ensure_alt_dirs,
+)
+from common.parquet_store import list_parquet_files
+from alt import spec as spec_mod
+from alt import io as alt_io
+from alt.rate import AltRateLimiter
+from alt.urls import guess_url
+from alt.backfill import AltCheckpoint
+from alt.us_backfill import SOCKET_TIMEOUT, _patch_requests_timeout
+
+
+# ============================================================
+# 一、轮转水位（rotate_state.json）
+# ============================================================
+class RotateState:
+    """轮转水位：{table: {symbol: "YYYY-MM-DD"}}（04 §8.6，与三态断点分权责）。
+
+    ⚠ 语义（ADR-14）：记"该标的最近一次**成功落盘**的轮转日期"；
+      仅在 flush 成功后推进（INV-3 / I7）。中断不推进 => 下次优先重拉。
+    """
+
+    def __init__(self, path=ROTATE_STATE_FILE, dry_run=False):
+        self.path = path
+        self.dry_run = dry_run
+        self.data = {}
+        if os.path.exists(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    self.data = json.load(f)
+            except Exception:  # noqa: BLE001
+                self.data = {}
+
+    def last_done(self, table, symbol):
+        return self.data.get(table, {}).get(str(symbol), "")
+
+    def mark_done(self, table, symbols, day=None):
+        """批量推进水位（symbols: list/str）。无变化不重写文件。"""
+        if self.dry_run or not symbols:
+            return
+        if isinstance(symbols, str):
+            symbols = [symbols]
+        day = day or datetime.now().strftime("%Y-%m-%d")
+        rec = self.data.setdefault(table, {})
+        changed = False
+        for s in symbols:
+            if rec.get(str(s)) != day:
+                rec[str(s)] = day
+                changed = True
+        if not changed:
+            return
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        assert_writable(self.path)
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, self.path)
+
+    def progress(self, table, symbols, rotate_days=None):
+        """(fresh, stale, oldest, newest)：按 rotate_days 判 stale（零请求）。"""
+        rd = rotate_days if rotate_days else 7
+        rec = self.data.get(table, {})
+        today = datetime.now()
+        fresh = stale = 0
+        dates = []
+        for s in symbols:
+            d = rec.get(str(s), "")
+            if not d:
+                stale += 1
+                continue
+            dates.append(d)
+            try:
+                age = (today - datetime.strptime(d, "%Y-%m-%d")).days
+            except Exception:  # noqa: BLE001
+                age = 10 ** 6
+            if age <= rd:
+                fresh += 1
+            else:
+                stale += 1
+        return fresh, stale, (min(dates) if dates else ""), (max(dates) if dates else "")
+
+
+# ============================================================
+# 二、清单适配（universe_from）
+# ============================================================
+def _read_master_table(table):
+    """读主库表（**只读**；single 优先，by_year 兜底 concat）。"""
+    d = os.path.join(TS_DATA_DIR, table)
+    single = os.path.join(d, f"{table}.parquet")
+    if os.path.exists(single):
+        return pd.read_parquet(single)
+    files = list_parquet_files(d, sort=True, with_dir=True)
+    if not files:
+        raise FileNotFoundError(f"主库无此表: {d}（universe_from 指向的清单表）")
+    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+
+
+def load_universe(sp, verbose=True):
+    """清单适配：universe_from="master:<表名>" → 读主库 → 取列 → 变换（保序去重）。"""
+    src = sp.universe_from or ""
+    if not src.startswith("master:"):
+        raise ValueError(
+            f"{sp.name}: universe_from={src!r} 无法解析"
+            f"（当前支持 'master:<table>'；us 语义的 alt 内清单表请用 --symbols 显式指定）")
+    table = src.split(":", 1)[1]
+    df = _read_master_table(table)
+    col = sp.universe_col
+    if col not in df.columns:
+        raise KeyError(f"清单表 {table} 缺少列 '{col}'（实际: {list(df.columns)[:12]}）")
+    s = df[col].astype(str)
+    if sp.universe_xform == "strip_hk_suffix":
+        s = s.str.replace(r"\.HK$", "", regex=True)      # "00700.HK" → "00700"
+    elif sp.universe_xform:
+        raise ValueError(f"未知 universe_xform: {sp.universe_xform!r}")
+    seen, out = set(), []
+    for x in s.tolist():
+        x = str(x).strip()
+        if x and x not in seen:
+            seen.add(x)
+            out.append(x)
+    if verbose:
+        print(f"[清单] {sp.name} ← master:{table}.{col}"
+              f"（变换 {sp.universe_xform or '原样'}）→ {len(out):,} 只")
+    return out
+
+
+def select_batch(symbols, sp, state, budget=None, verbose=True):
+    """按"最久未拉"选本轮批次：K = ceil(标的数 / rotate_days)（或 --budget-syms 指定）。
+
+    ⚠ K 是**只数**；每只 = 价格 + 因子两条请求 => 请求数 = K × 2
+      （默认 7 天 => K≈398 只 => 796 请求/天，06 §10.9 速率核算）。
+    """
+    if sp.rotate_days <= 0:
+        todo = [s for s in symbols if not state.last_done(sp.name, s)]
+        if verbose:
+            print(f"[批次] rotate_days=0（不轮转）→ 未拉过 {len(todo):,} 只")
+        return todo
+    k = budget or math.ceil(len(symbols) / sp.rotate_days)
+    k = min(k, len(symbols))
+    ordered = sorted(symbols, key=lambda s: (state.last_done(sp.name, s) or ""))
+    todo = ordered[:k]
+    if verbose and todo:
+        oldest = state.last_done(sp.name, todo[0]) or "（从未拉）"
+        print(f"[批次] K={k} 只（=ceil({len(symbols):,}/{sp.rotate_days})"
+              f"{'；--budget-syms 覆盖' if budget else ''}）"
+              f" => 请求 ≈ {k * 2} 条（价格+因子两表合计）｜队首水位={oldest}")
+    return todo
+
+
+# ============================================================
+# 三、拉取（串行 + limiter）
+# ============================================================
+def fetch_one(sp, symbol, limiter, url):
+    """拉单只（经 limiter；limiter 内已含 3 次重试与风控静默）。
+    返回 (symbol, DataFrame|None, err)；成功时**注入标的列**（接口不返回）。
+    """
+    import akshare as ak
+    fn = getattr(ak, sp.func, None)
+    if fn is None:
+        return symbol, None, f"akshare 无此函数: {sp.func}"
+    kw = dict(sp.params)
+    kw[sp.symbol_param or "symbol"] = symbol          # 接口参数名（akshare 惯例 symbol）
+    df, ok, err = limiter.call(lambda: fn(**kw), url)
+    if not ok:
+        return symbol, None, err
+    if df is None or len(df) == 0:
+        return symbol, None, "empty"
+    d = df.copy()
+    d[sp.symbol_col or "symbol"] = symbol             # 注入**标的列**（与 subset 一致）
+    return symbol, d, None
+
+
+# ============================================================
+# 四、缓冲与落盘（先落盘、后记水位）
+# ============================================================
+def _should_flush(buf, batch_syms, batch_size):
+    """flush 判据：**三阈值取先到**（F-10 修复，2026-10-11；ADR-15 / 14 §22.7）。
+
+    ① 只数：本批已处理只数 ≥ `batch_size`（默认 `HK_BATCH_SIZE` = `FLUSH_SYMS` = 300）
+    ② 行数：缓冲行数 ≥ `FLUSH_ROWS`（1,000,000）
+    ③ 字节：缓冲内存 ≈ ≥ `FLUSH_BYTES`（256 MB）——防"小行数表下只数阈值
+       一次性读入过多行"的内存尖峰（F-10 指出的潜在危害路径）。
+
+    ⚠ 为什么必须接线（而非"配置在册代码不读"）：本库高频缺陷族 #9
+      "服务已实现 ≠ 已接线"——配置声明了三阈值、实现只用单阈值即**文档≠实现**。
+    """
+    if batch_syms and len(batch_syms) >= batch_size:
+        return True
+    if not buf:
+        return False
+    if len(buf) >= batch_size:
+        return True
+    buf_rows = sum(len(d) for _, d in buf)
+    if buf_rows >= FLUSH_ROWS:
+        return True
+    buf_bytes = sum(int(d.memory_usage(deep=True).sum()) for _, d in buf)
+    return buf_bytes >= FLUSH_BYTES
+
+
+def flush_buffer(sp, buf, dest_dir=None):
+    """把缓冲区归一化并落盘。**只落盘、不记水位**——由调用方在成功后再记，
+    以保证 INV-3：先落盘、后记水位（失败则什么都不记，下次自然重拉）。
+
+    返回 dict(ok, rows, added, warnings, errors)
+    """
+    if not buf:
+        return {"ok": True, "rows": 0, "added": 0, "warnings": [], "errors": []}
+    raw = pd.concat([d for _, d in buf], ignore_index=True)
+    norm, warns = alt_io.normalize(raw, sp)
+    res = alt_io.save(norm, sp, dest_dir=dest_dir)
+    return {"ok": bool(res.get("ok")), "rows": res.get("rows", 0),
+            "added": res.get("added", 0),
+            "warnings": list(warns) + list(res.get("warnings", [])),
+            "errors": list(res.get("errors", []))}
+
+
+# ============================================================
+# 五、影子目录（--rebuild）
+# ============================================================
+def _verify_shadow(sp, new_dir, verbose=True):
+    """影子目录校验：**逐分区非空**（F-9 修复，2026-10-11）。
+
+    原先只判"总行数 > 0"——残缺的影子目录（缺年份分区）照样通过（F-9 实测）。
+    现逐文件校验：
+      ① 目录内至少 1 个 parquet；
+      ② **每个分区文件至少 1 行**（by_year 表 = 每年至少 1 行，空分区不得进正式目录）。
+    返回 {分区文件名: 行数}（供切换守卫与最终汇总）。
+    """
+    files = sorted(f for f in os.listdir(new_dir) if f.endswith(".parquet"))
+    if not files:
+        raise RuntimeError(f"影子目录无 parquet 文件: {new_dir}")
+    counts = {}
+    for f in files:
+        n = len(pd.read_parquet(os.path.join(new_dir, f), columns=[sp.date_col]))
+        if n <= 0:
+            raise RuntimeError(
+                f"[F-9 守卫] 影子目录分区为空: {f}（0 行）——"
+                f"空分区不得进正式目录（正式目录零改动）")
+        counts[f] = n
+    if verbose:
+        print(f"[校验] 影子目录 {len(files)} 分区 / {sum(counts.values()):,} 行"
+              f"（逐分区非空 OK，按 {sp.date_col} 计）")
+    return counts
+
+
+def _official_partition_state(sp):
+    """正式目录分区状态：{文件名: 行数}（F-9/F-11 切换守卫用）。
+
+    F-11：必须区分**空分区**（0 行——允许被 new 弃置，无数据损失）与
+    **非空分区**（丢 = 数据损失，必须拦）；读取失败（文件损坏）记 -1，
+    按"非空"**保守处理**（宁可拦死不可丢数据）。
+    """
+    d = alt_table_dir(sp.name)
+    if not os.path.isdir(d):
+        return {}
+    state = {}
+    for f in sorted(os.listdir(d)):
+        if not f.endswith(".parquet"):
+            continue
+        try:
+            state[f] = len(pd.read_parquet(os.path.join(d, f), columns=[sp.date_col]))
+        except Exception:
+            state[f] = -1                 # 读失败 ⇒ 保守按"非空"处理
+    return state
+
+
+def _switch_shadow(sp, new_dir, official_state=None, verbose=True):
+    """影子目录 → 正式目录：**文件级原子替换**（ADR-15）+ **分区守卫**（F-9/F-11）。
+
+    ⚠ F-9 守卫（P1 修复）：原实现切完后 official 分区集合**完全等于 new**——
+      new 缺失的年份（某年拉取全空 / rebuild 中断 / 误用 --symbols 部分标的）
+      会被**静默删除**（沙盒复现：3 分区 → 1 分区，属目录级数据丢失）。
+    ⚠ F-11 精确化（P3 修正）：守卫**只针对"非空分区"**——official 的**空分区**
+      （0 行，历史遗留 / 上游撤回）允许被 new 弃置（打印说明，无数据损失）；
+      否则一旦 official 误入空分区，rebuild 将被**永久拦死**（分区棘轮，无逃逸口）。
+      确需丢弃 official **非空**分区的异常场景（源端撤回），报错给出人工清理指引。
+
+    ① 正式目录现有文件 → `{table}__old/`（清旧 __old，保留 1 轮）
+    ② 影子目录文件 → 正式目录（os.replace，同盘原子）
+    ③ 清理影子目录
+    失败处置：打印从 `__old` 回退的命令。
+    """
+    official = alt_table_dir(sp.name)
+    old = official + "__old"
+    new_files = sorted(f for f in os.listdir(new_dir) if f.endswith(".parquet"))
+    if not new_files:
+        raise RuntimeError(f"影子目录为空: {new_dir}（正式目录未动）")
+
+    # ── F-9/F-11 守卫：new 不得缺 official **非空**分区（空分区可弃置）──
+    if official_state is None:
+        official_state = _official_partition_state(sp)
+    new_set = set(new_files)
+    missing = sorted(f for f, n in official_state.items()
+                     if n != 0 and f not in new_set)
+    if missing:
+        raise RuntimeError(
+            f"[F-9 守卫] 影子目录缺少正式目录已有分区 {missing}——"
+            f"直接切换会静默删除这些分区，已中止（正式目录零改动）。"
+            f"可能原因：rebuild 中断 / 某年拉取全空 / 误用 --symbols 部分标的。"
+            f"若确认某分区确应废弃（如源端撤回数据），"
+            f"请手动清理 official 对应 .parquet 后重跑")
+    dropped_empty = sorted(f for f, n in official_state.items()
+                           if n == 0 and f not in new_set)
+    if dropped_empty and verbose:
+        print(f"[F-11] 弃置 official 空分区 {dropped_empty}（0 行，无数据损失）")
+
+    os.makedirs(official, exist_ok=True)
+    if os.path.isdir(old):
+        shutil.rmtree(old)                    # 只保留 1 轮
+    os.makedirs(old, exist_ok=True)
+    moved_old = 0
+    for f in sorted(os.listdir(official)):
+        if f.endswith(".parquet"):
+            os.replace(os.path.join(official, f), os.path.join(old, f))
+            moved_old += 1
+    moved_new = 0
+    for f in new_files:
+        os.replace(os.path.join(new_dir, f), os.path.join(official, f))
+        moved_new += 1
+    shutil.rmtree(new_dir, ignore_errors=True)
+    if verbose:
+        print(f"[切换] 旧文件 {moved_old} → {old}（保留 1 轮）；"
+              f"新文件 {moved_new} → {official}")
+        print(f"  回退（如需）: 将 {old} 下的 .parquet 覆盖回 {official} 后重跑本命令")
+    return moved_new
+
+
+def _check_rebuild_coverage(sp, universe, done_syms, verbose=True):
+    """F-14：rebuild 的 **universe 级覆盖率核对**（P2 修复，2026-10-11）。
+
+    背景：F-9/F-11 守卫只保证"**分区级**"完整（年份不丢）；"**标的级**"缺口
+    （网络超时 → 整只缺失，轮次八实测 00798/01581）不被拦截 ⇒ 静默降级
+    （因子缺失 ⇒ `close_qfq` 退化为 `close`）——**静默**才是真问题。
+
+    设计（"告警 + 自愈"，而非拦截）：
+      · 拦截会让 2/2,785 只超时废掉整轮 ≈4.6 h 重建，代价不成比例；
+      · **水位只标 `done_syms`**（失败标的不标）⇒ 下轮轮转（≤`rotate_days` 天）
+        优先重拉（04 §8.6 状态机"失败保持原水位 ⇒ 下轮优先"）；
+      · 补拉路径已打通：切换后 `--symbols` 增量 upsert 进正式目录（轮次八闭环）。
+
+    返回覆盖率 dict（随 `run()` 返回，供自动化判据解析）。
+    """
+    done_set = set(done_syms)
+    missing = [s for s in universe if s not in done_set]
+    cov = {"universe": len(universe), "done": len(done_set), "missing": missing}
+    if verbose:
+        if missing:
+            head = ", ".join(missing[:10])
+            more = "…" if len(missing) > 10 else ""
+            print(f"[F-14] 覆盖率 {cov['done']:,}/{cov['universe']:,} WARN"
+                  f"——缺失 {len(missing)} 只（{head}{more}）")
+            print(f"  ① 已跳过其水位 ⇒ 下轮轮转（≤{sp.rotate_days} 天）优先自愈；"
+                  f"② 立即补拉: python -m alt.list_backfill --table {sp.name} "
+                  f"--symbols {','.join(missing[:20])}")
+        else:
+            print(f"[F-14] 覆盖率 {cov['done']:,}/{cov['universe']:,} OK（无缺失）")
+    return cov
+
+
+# ============================================================
+# 六、主流程
+# ============================================================
+def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
+        batch=None, yes=False, verbose=True):
+    sp = spec_mod.get(table)
+    if sp.mode != "list":
+        raise SystemExit(f"{table}: mode={sp.mode!r} 不是 'list'（本引擎仅处理 list 表）")
+    if rebuild and symbols:
+        raise SystemExit(
+            "--rebuild 与 --symbols 互斥（F-9 守卫）：rebuild 必须全量 universe——"
+            "部分标的的影子目录必然缺分区，切换即静默丢数据")
+    ensure_alt_dirs()
+    url = guess_url(sp.func)
+    if verbose:
+        print(f"[配置] {sp.name} | func={sp.func} params={sp.params} | 档位={url}")
+
+    universe = ([s.strip() for s in symbols.split(",")] if symbols
+                else load_universe(sp, verbose=verbose))
+    universe = [s for s in universe if s]
+    if not universe:
+        raise SystemExit("清单为空，无可拉标的")
+
+    state = RotateState(dry_run=dry_run)
+    if rebuild:
+        todo = universe
+        mode_label = "整表重建（--rebuild，影子目录）"
+    elif symbols:
+        todo = universe
+        mode_label = "指定标的（--symbols，跳过轮转选批）"
+    else:
+        todo = select_batch(universe, sp, state, budget=budget, verbose=verbose)
+        mode_label = "轮转更新（最旧优先）"
+
+    # 轮转进度摘要（零请求）
+    fresh, stale, oldest, newest = state.progress(sp.name, universe, sp.rotate_days)
+    print(f"[轮转] 进度：新鲜 {fresh:,} / 陈旧或未拉 {stale:,}（共 {len(universe):,}）"
+          f"｜最旧水位 {oldest or '—'}｜最新 {newest or '—'}")
+    print(f"[计划] {mode_label}：本轮 {len(todo):,} 只 => 本表请求 ≈ {len(todo):,} 条"
+          f"（单表口径；sina 20/分 => 约 {len(todo) / 20:.0f} 分钟）"
+          f"｜价格+因子两表合计 {len(todo) * 2:,} 条")
+
+    if dry_run:
+        print("\n[DRY-RUN] 未发请求、未写库。样例队首:", todo[:5])
+        return {"table": sp.name, "planned": len(todo), "dry_run": True}
+
+    if not yes and len(todo) > 50 and sys.stdin is not None:
+        try:
+            input(f"  开始？回车继续（{len(todo):,} 只，Ctrl+C 中断，水位保护） > ")
+        except EOFError:
+            print("  （非交互环境，继续）")
+
+    limiter = AltRateLimiter(dry_run=False, verbose=verbose)
+    ckpt = AltCheckpoint()
+    _patch_requests_timeout(SOCKET_TIMEOUT)   # akshare 的 requests 无超时会长挂起（us 实测）
+
+    dest_dir = None
+    if rebuild:
+        dest_dir = alt_table_dir(sp.name) + "__new"
+        if os.path.isdir(dest_dir):
+            shutil.rmtree(dest_dir)
+        os.makedirs(dest_dir, exist_ok=True)
+
+    stat = {"ok": 0, "empty": 0, "fail": 0, "rows": 0, "added": 0}
+    errs = []
+    done_syms = []              # F-14：成功 + 返空标的（rebuild 水位只标这些）
+    buf = []                    # [(symbol, df), ...] 待落盘
+    batch_syms = []             # 本批已处理（ok + empty），flush 成功后统一记水位
+    t0 = time.time()
+    batch_size = batch or HK_BATCH_SIZE
+
+    def _flush():
+        nonlocal buf, batch_syms
+        if not buf and not batch_syms:
+            return
+        r = flush_buffer(sp, buf, dest_dir=dest_dir)
+        if r["ok"]:
+            stat["added"] += r["added"]
+            if buf:
+                print(f"    [落盘] {len(buf)} 只 → 新增 {r['added']:,} 行"
+                      f"（累计 {stat['added']:,}）")
+            if not rebuild:
+                # 先落盘、后记（INV-3）：水位与一次性断点在此统一推进（含 empty）
+                state.mark_done(sp.name, batch_syms)
+                ckpt.mark_done(sp.name, batch_syms)
+        else:
+            errs.append(f"flush: {r['errors'][:1]}")
+            print(f"    [落盘失败] 不记水位（下次重拉）: {str(r['errors'][:1])[:120]}")
+        buf = []
+        batch_syms = []
+
+    for i, sym in enumerate(todo, 1):
+        s, d, err = fetch_one(sp, sym, limiter, url)
+        batch_syms.append(s)
+        if err == "empty":
+            stat["empty"] += 1
+            done_syms.append(s)           # 返空也标（防每次重拉）
+        elif err:
+            stat["fail"] += 1
+            errs.append(f"{s}: {err}")
+            batch_syms.remove(s)          # 失败不记水位
+        else:
+            stat["ok"] += 1
+            stat["rows"] += len(d)
+            buf.append((s, d))
+            done_syms.append(s)
+
+        if _should_flush(buf, batch_syms, batch_size):
+            _flush()
+        if i % 200 == 0 or i == len(todo):
+            el = time.time() - t0
+            rate = i / max(el, 1)
+            print(f"    {i:,}/{len(todo):,} | 成功 {stat['ok']:,} 空 {stat['empty']} "
+                  f"失败 {stat['fail']} | {rate:.2f} 只/s | "
+                  f"剩余≈{(len(todo) - i) / max(rate, 0.01) / 60:.0f} 分钟")
+    _flush()
+
+    el = time.time() - t0
+    print("\n" + "=" * 84)
+    print(f"[完成] {sp.name} | {mode_label}")
+    print(f"  成功 {stat['ok']:,} | 返空 {stat['empty']} | 失败 {stat['fail']} | "
+          f"拉取 {stat['rows']:,} 行 | 落盘新增 {stat['added']:,} 行 | 耗时 {el / 60:.1f} 分钟")
+    print(f"  {limiter.status_str()}")
+    if errs:
+        print(f"  失败样例（前 5）: {errs[:5]}")
+
+    cov = None
+    if rebuild:
+        official_state = _official_partition_state(sp)  # F-9/F-11：切换前快照（含行数）
+        cov = _check_rebuild_coverage(sp, universe, done_syms, verbose=verbose)  # F-14
+        counts = _verify_shadow(sp, dest_dir, verbose=verbose)
+        total = sum(counts.values())
+        moved = _switch_shadow(sp, dest_dir, official_state=official_state,
+                               verbose=verbose)
+        # 切换成功后刷新水位与断点：**只标 done_syms**（F-14：失败标的不标 ⇒
+        # 下轮轮转优先重拉自愈；此前标全量 universe 会把失败也记成"已完成"）
+        state.mark_done(sp.name, done_syms)
+        ckpt.mark_done(sp.name, done_syms)
+        print(f"[rebuild] done: {moved} 分区 / {total:,} 行 → 正式目录；"
+              f"水位已刷新（{len(set(done_syms)):,}/{len(universe):,} 只）")
+    else:
+        fresh, stale, oldest, newest = state.progress(sp.name, universe, sp.rotate_days)
+        print(f"  [轮转] 进度更新：新鲜 {fresh:,} / 陈旧或未拉 {stale:,}"
+              f"｜最旧 {oldest or '—'}｜最新 {newest or '—'}")
+    return {"table": sp.name, "stat": stat, "errors": errs,
+            "coverage": cov, "dry_run": False}
+
+
+# ============================================================
+# 七、状态（零请求）
+# ============================================================
+def show_status(table=None, verbose=True):
+    tables = ([table] if table else
+              [s.name for s in spec_mod.ALL_SPECS if s.mode == "list"])
+    state = RotateState()
+    print(f"{'表名':<18}{'标的':>8}{'新鲜':>8}{'陈旧/未拉':>10}"
+          f"{'最旧水位':>14}{'最新水位':>14}")
+    print("-" * 80)
+    for t in tables:
+        sp = spec_mod.get(t)
+        if not (sp.universe_from or "").startswith("master:"):
+            print(f"{t:<18}  （alt 内清单/us 语义，进度见 us_backfill --status）")
+            continue
+        try:
+            uni = load_universe(sp, verbose=False)
+        except Exception as e:  # noqa: BLE001
+            print(f"{t:<18}  清单读取失败: {str(e)[:50]}")
+            continue
+        fresh, stale, oldest, newest = state.progress(t, uni, sp.rotate_days)
+        print(f"{t:<18}{len(uni):>8,}{fresh:>8,}{stale:>10,}"
+              f"{oldest or '—':>14}{newest or '—':>14}")
+    return 0
+
+
+# ============================================================
+# 八、CLI
+# ============================================================
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        description="alt 库 list 模式引擎（建库 / 轮转更新 / 整表重建）")
+    ap.add_argument("--table", help="表名（spec 中 mode='list' 的表）")
+    ap.add_argument("--symbols", nargs="+",
+                    help='指定标的（调试用，跳过轮转选批）。'
+                         '⚠ PowerShell 下必须加引号保全前导零：--symbols "00700,00981"')
+    ap.add_argument("--budget-syms", type=int, default=None, dest="budget",
+                    help="本轮最多拉 N 只（覆盖 ceil(n/rotate_days)）")
+    ap.add_argument("--batch", type=int, default=None,
+                    help=f"flush 批大小（只），默认 {HK_BATCH_SIZE}")
+    ap.add_argument("--rebuild", action="store_true",
+                    help="整表重建（影子目录 __new → 校验 → 文件级原子替换）")
+    ap.add_argument("--dry-run", action="store_true", help="只打印计划，不发请求")
+    ap.add_argument("--status", action="store_true", help="轮转进度总览（零请求）")
+    ap.add_argument("--yes", action="store_true", help="跳过确认")
+    args = ap.parse_args(argv)
+
+    if args.status:
+        print("=" * 84)
+        print("alt list 表轮转进度")
+        print("=" * 84)
+        return show_status(args.table)
+    if not args.table:
+        print("需 --table（或不带参数用 --status 看总览）")
+        return 2
+    sym_arg = ",".join(args.symbols) if args.symbols else None
+    run(args.table, symbols=sym_arg, budget=args.budget,
+        rebuild=args.rebuild, dry_run=args.dry_run, batch=args.batch,
+        yes=args.yes)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
