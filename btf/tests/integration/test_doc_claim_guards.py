@@ -45,7 +45,7 @@ CURRENT_DOCS = (
     "16-架构评审与验收标准.md",
 )
 USAGE_DOC = "20-回测平台使用指引.md"
-DOC_19 = "19-架构审查与重构方案-20260927.md"
+DOC_19 = "19-架构审查与重构演进记录.md"
 
 
 def _read(name: str) -> list[str]:
