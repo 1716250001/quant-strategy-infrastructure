@@ -26,7 +26,11 @@
   类型按**更宽者**取（`null` < `string` < `large_string` < 数值型）——
   因为 `null`/`string` 往往是"该年整列为空"的**推断产物**，按多数派会把
   有效值列压成 `null` 反而 cast 失败。
-- 列集合不一致（某分区缺列）⇒ 该表**不动**并如实报告（结构差异不是类型差异）。
+- 列集合相同、**仅列序不同** ⇒ 按**多数派列序**统一（schema 元数据级规范化；
+  行值/行数零改动，按列名取数的消费侧不受影响）。（R64′ C 段实证：`bc_otcqt`
+  三个年度文件列集合完全相同、仅顺序不同。）
+- 列集合**真不一致**（某分区缺列/多列）⇒ 该表**不动**并如实报告——补列属结构
+  变更，超出"仅类型 cast"授权，须另行裁决（宁可留红也不静默补列）。
 - cast 失败的分区**不动**且如实报告（禁静默改数据）。
 - 修复是**逐文件原子写**（.tmp → os.replace），任何单文件失败只影响该文件。
 
@@ -93,29 +97,41 @@ def scan(tables=None, root=None):
 
 
 def canonical_schema(schemas):
-    """逐列并集 canonical schema → (schema, 说明)；不可并（列集合不一致）→ (None, 原因)。
+    """逐列并集 canonical schema → (schema, 说明)；不可并 → (None, 原因)。
 
     列型优先级（宽者胜）：数值型 > large_string > string > null。
     理由：`null`/`string` 常是"该年整列为空"的推断产物，按多数派会把有效值列
     压成 `null` → cast 反而失败。
+
+    列序（R64′ C 段实证 bc_otcqt）：**列集合相同、仅顺序不同** ⇒ 按多数派列序
+    统一（schema 元数据级规范化，行值/行数零改动，消费侧按列名取数不受影响）；
+    **列集合不同**（缺列/多列）⇒ 拒修（补列属结构变更，超出"仅类型 cast"授权，
+    须另行裁决——宁可留红也不静默补列）。
     """
-    base = schemas[0]
-    names = list(base.names)
-    for s in schemas[1:]:
-        if list(s.names) != names:
-            return None, "列集合/顺序不一致（结构差异，非类型差异）"
+    from collections import Counter
+
+    orders = Counter(tuple(s.names) for s in schemas)
+    canon_names = list(orders.most_common(1)[0][0])
+    sets = {frozenset(o) for o in orders}
+    if len(sets) > 1:
+        miss = set.union(*sets) - set.intersection(*sets)
+        return None, (f"列集合不一致（结构差异，非类型差异；差异列 {sorted(miss)[:6]}"
+                      f"）——补列超出本工具授权，须另行裁决")
+    # 按列名聚合类型（列序可能不同 ⇒ 不能按下标对齐）
+    types_by_col: dict[str, list] = {}
+    for s in schemas:
+        for name, t in zip(s.names, s.types):
+            types_by_col.setdefault(name, [])
+            if not any(t.equals(x) for x in types_by_col[name]):
+                types_by_col[name].append(t)
     fields = []
-    for i, name in enumerate(names):
-        cand: list[pa.DataType] = []
-        for s in schemas:
-            t = s.types[i]
-            if pa.types.is_null(t):                 # null 可 cast 到任何类型
-                continue
-            if not any(t.equals(x) for x in cand):
-                cand.append(t)
-        if not cand:
+    conflict = []
+    for name in canon_names:
+        cand = types_by_col[name]
+        if not cand or all(pa.types.is_null(t) for t in cand):
             fields.append(pa.field(name, pa.null()))     # 全分区皆空列
             continue
+        cand = [t for t in cand if not pa.types.is_null(t)]
         if len(cand) == 1:
             fields.append(pa.field(name, cand[0]))       # 唯一实型（含 double 等）
             continue
@@ -126,8 +142,13 @@ def canonical_schema(schemas):
         if all(pa.types.is_integer(t) or pa.types.is_floating(t) for t in cand):
             fields.append(pa.field(name, pa.float64()))
             continue
-        return None, f"列 {name} 类型冲突且无安全并集: {sorted(names_s)}"
-    return pa.schema(fields), "逐列并集"
+        conflict.append(f"{name}:{sorted(names_s)}")
+    if conflict:
+        return None, f"列类型冲突且无安全并集: {conflict[:4]}"
+    why = "逐列并集"
+    if len(orders) > 1:
+        why += "＋列序统一（列集合相同，按多数派列序）"
+    return pa.schema(fields), why
 
 
 def fix(table, root=None):
