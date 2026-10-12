@@ -13,6 +13,28 @@
   无历史窗口**。影响面仅 `walk-forward --warmup auto` 的折热身推导（未声明时回落保守
   默认 252＋WARN）；普通 `bt run` 零影响。插件边界基线已按 AA-3 留痕刷新。
 
+## [1.3.3] — 2026-10-12（R66′：P-NEW-1 修复；老大 22:1x 批复「派单修复」，19 号 §125）
+
+### 新增（Added）——**能力修复**（非口径变更；默认行为零变化）
+
+- **`rules.overrides` 生效语义落地（P-NEW-1 销项）**：`MirrorJsonRulesProvider` 此前
+  **只留痕不应用**（`get()` 直读镜像值）⇒ 规则参数网格轴不可用（R65′ 实证）。现定案：
+  - **构造期一次性条目级浅合并**（覆盖同键参数、追加新键；不做深层 merge），`get()`
+    返回合并后结果；
+  - 条目的规则 ID 与参数键**与 `get()` 同走 aliases 归一**（文档键名 `pe_ttm_max` →
+    规范名 `pe_max`）；
+  - **fail-closed**：条目指向未登记规则 ⇒ 构造期 `ValueError`（禁静默 no-op——
+    正是本缺陷的形态）；
+  - `overrides` 属性＝**规范化生效条目**（`{rule_id, param, value}`，均为规范名）
+    ⇒ **留痕集＝生效集**（G4 可断言；manifest 仍记 config 原文条目）。
+- **守卫测试 +7 条**（`tests/unit/test_rules_mirror.py::TestOverridesApplied`）：
+  ①override 生效 ②未 override 参数零副作用 ③留痕集＝生效集 ④别名键生效（留痕落规范名）
+  ⑤未登记规则 fail-closed ⑥条目缺键 fail-closed ⑦空 overrides 与镜像逐键相等。
+- **回归红线（G2）**：空 overrides（默认）⇒ 行为**逐位不变**——159934 默认 run
+  `metrics_digest` 与 `sha256:77622d2b…` 一致（F6′ 同法）。
+- **v77 规则轴网格补跑随之可行**（三轴 ±1 档结论见报告 §十一.5；`roe_min` 轴
+  邻域退化 88% ⇒ 工具口径 sensitive=True 告警照录）。
+
 ## [1.3.2] — 2026-10-12（三轮架构审查修正批次发版；老大批复 D2a，19 号 §124 B 段）
 
 **来源**：《代码仓库三轮架构审查报告与待办-20261011.md》（赤潮，三轮独立审查）——
