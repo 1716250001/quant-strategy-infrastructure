@@ -81,7 +81,23 @@ def _metrics_legal(rt, res) -> dict:
             getattr(res, "consolidations", ())))
 
 
+def _harden_stdout() -> None:
+    """让 stdout 对不可编码字符降级而非抛错（2026-10-11 实证）。
+
+    本工具用 `✓` / `✗` 报结论。stdout 被**管道/CI 捕获**时 Python 用 locale
+    编码（GBK）⇒ `✓`(U+2713) 不在 GBK 中 ⇒ `print` 抛 UnicodeEncodeError，
+    **check 明明通过却以退出码 1 结束**（`test_v77_digest_tool_smoke` 实测复现）。
+    errors="replace" 把不可编码符号降级为 `?`：判定链（数字行）完全保真，
+    只有符号本身降级 —— 与 `tools/doctor.py` 同源纪律。
+    """
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except Exception:
+        pass
+
+
 def main() -> int:
+    _harden_stdout()
     ap = argparse.ArgumentParser(description="v77 三档 digest 基线校验（R37′/R42′）")
     ap.add_argument("--tiers", default=",".join(_TIERS),
                     help="档位（逗号分隔；缺省三档全跑）")

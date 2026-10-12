@@ -64,11 +64,14 @@ v5.1 子命令注册表：每个子命令独立声明参数与实现，
   scan-divergence / divergence-trigger / monitor
        → _archive/背离扫描器-20260924/（背离假设已实证否决）
 
-本清单与 build_parser() 的注册表保持一致：注册 36 个命令名 —— 30 个可见顶级命令
+本清单与 build_parser() 的注册表保持一致：注册 37 个命令名 —— 31 个可见顶级命令
 （其中 db 命令族含 audit / schema / report / clean / migrate / ckpt 6 个子命令）
 + 6 个隐藏兼容别名（db-clean / db-audit / db-schema / db-report / db-migrate / ckpt）。
 alt 库另有等价模块入口：python -m alt.update / alt.audit / alt.backfill
 亦支持等价直调（与子命令等价）：python -m tools.leverage_monitor / tools.etf_flow
+事件面表周期通道（dividend/namechange；E-01）模块入口：
+  python -m fetch.periodic_update --status    # 只看状态（零请求）
+  python -m fetch.periodic_update             # 到期则增量补（未到期零请求）
 """
 import argparse
 import datetime

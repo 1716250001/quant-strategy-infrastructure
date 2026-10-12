@@ -74,6 +74,13 @@ FLOORS = [
 # ── 非 tushare backfill 管理的库表（由其他流水线维护）──
 # 用途: 判据 ⑦（反向归属）的白名单。这些目录有数据但**本就不该**出现在
 #       BACKFILL_TARGETS 里，若不列白名单会产生稳定误报（"狼来了"）。
+#
+# ⚠ 层归属说明（2026-10-11 三轮架构审查 H-04）:
+#   表归属登记在代码库内共 **6 处**（详见 alt/spec.py 顶部同名注释的清单），
+#   本白名单是其中**唯一的"反向坐标系"**——登记的是"**不在** BACKFILL_TARGETS
+#   里的表"，与定义/索引/体检/执行/迁移五处的方向相反，
+#   故**不可**与那五处合并计数，也不可由 config.py 导出（否则等于把
+#   "反向清单"混进"正向清单"，判据 ⑦ 会失去证伪能力）。
 NON_BACKFILL_TABLES = {
     "metadata":       "元数据目录（stock_basic / fund_basic / trade_cal / cb_basic 等）",
     "income":         "download-full 下载（利润表）",
@@ -231,6 +238,33 @@ def check_config(check_disk=True):
         res.failures.append(
             f"DAILY_UPDATE_EXEMPT 以下条目未写原因（豁免必须给理由）: "
             f"{sorted(no_reason)}")
+
+    # ⑤b 日期列双轨一致性（E-03，2026-10-11 三轮架构审查）
+    #   现状（实测：顶层 79 键 / 条目级 15 处 / 分歧 0 处）:
+    #     顶层 `TABLE_DATE_COL`   = 全库权威索引（reader/db_audit/migrate 共用）
+    #     条目级 conf["date_col"] = **取数执行参数**（backfill 落盘/缺口计算用）
+    #     第三轨 `db_schema` 探测  = 只读扫描产物，不参与写入决策
+    #   收敛结论：**条目级为该条目真源，顶层为派生索引**；本判据把"两者必须
+    #   一致"变成机检断言（原状只靠防坑注释串联 ⇒ 改一处漏一处无人拦）。
+    #   ⚠ 35 张表无顶层映射（多为静态/无日期列的表）**不在约束范围**——
+    #     条目级未声明 date_col 时不参与比对（设计内，非缺口）。
+    date_conflict = []
+    for src, tag in ((BACKFILL_TARGETS, "BACKFILL_TARGETS"),
+                     (DAILY_UPDATE_EXTRA, "DAILY_UPDATE_EXTRA")):
+        for name, conf in src.items():
+            dc = (conf or {}).get("date_col")
+            top = TABLE_DATE_COL.get(name)
+            if not dc:
+                continue
+            if top != dc:
+                date_conflict.append(
+                    f"{name}({tag}.date_col={dc!r} vs TABLE_DATE_COL={top!r})")
+    res.checks_done.append("date_col_consistency")
+    if date_conflict:
+        res.failures.append(
+            f"日期列双轨不一致（条目级 vs 顶层映射）: {date_conflict}\n"
+            f"    → 口径：**条目级 date_col 为条目真源，TABLE_DATE_COL 为派生索引**，"
+            f"两处必须同值；改一处须同步改另一处")
 
     # ⑥⑦⑧ 需要读磁盘（只读 parquet 元数据）
     if not check_disk:

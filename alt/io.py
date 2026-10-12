@@ -155,6 +155,12 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
     #    都是负值 → **该表此后永远不再写盘，静默冻结**（不报错、日志显示 ok）。
     #    故必须在**进入落盘前**就保证每批数据自身无重复，
     #    使 added 的计算不受源端重复干扰。
+    #
+    #    ⚠ 2026-10-11 联动评估（三轮审查 E-02）：merge_append 已补**值级变更
+    #    检测** —— 同键值修正（行数不增）现在会落盘。但**本步骤仍然必需**：
+    #    它管的是另一条路径（源端重复导致的 added<0 与首次写入自带重复）。
+    #    merge_append 对"行数减少"仍保守不写盘（不做静默删行），
+    #    故入库前自去重是本表唯一的防线，不得删除。
     sub, _ = resolve_subset(out, spec)
     if len(out):
         before = len(out)

@@ -29,7 +29,11 @@ TestAdditionForbidden）。
 
 配置键（``config``，Analyzer 协议第三参）：
     annualization_factor  年化交易日数（默认 252，A 股）
-    risk_free_rate        无风险利率（年化，默认 0.0；Sharpe 用，线性日化）
+    risk_free_rate        无风险利率（年化，默认 0.0；Sharpe 用，**几何日化**）
+                          ——F-01（2026-10-11 三轮架构审查）：与 `analytics.benchmark`
+                          的 alpha 口径**统一为几何** `(1+rf)^(1/ann)−1`；
+                          原实现为线性 `rf/ann`，同一 rf 在两处日化不同
+                          （rf=0.0 时两者恒等 ⇒ 既有 run 数字零变化）。
 """
 from __future__ import annotations
 
@@ -245,6 +249,21 @@ def _risk_free_rate(config: Mapping[str, Any]) -> float:
     return float(config.get("risk_free_rate", DEFAULT_RISK_FREE))
 
 
+def _rf_daily(config: Mapping[str, Any], factor: float) -> float:
+    """年化无风险利率 → **单期（日）**利率。
+
+    **F-01（2026-10-11 三轮架构审查）**：统一为**几何**日化
+    `(1+rf)^(1/factor) − 1`——与 `analytics.benchmark.relative_metrics` 的
+    `rf_daily` **同式**（此前 metrics 侧用线性 `rf/factor`，两处口径分裂）。
+    ⚠ rf=0.0（默认）时两式恒等 ⇒ **既有回测数字零变化**；
+      仅显式设置 rf≠0 的 run 会计上变（口径变更，已入 CHANGELOG）。
+    """
+    rf = _risk_free_rate(config)
+    if rf <= -1.0:                      # 防 (1+rf) ≤ 0 的非法域（fail-closed）
+        return rf / factor
+    return (1.0 + rf) ** (1.0 / factor) - 1.0
+
+
 def _periods(series: NavSeries) -> int:
     """年化基数 = 收益日数（快照数 − 1；<2 → 不可年化）。"""
     if series.n_days < 2:
@@ -332,9 +351,11 @@ class AnnualizedVolatility(MetricBase):
 
 
 class SharpeRatio(MetricBase):
-    """夏普比率 = (mean(r) − rf/年化因子) / stdev(r) × √年化因子。
+    """夏普比率 = (mean(r) − rf_日) / stdev(r) × √年化因子。
 
-    rf 为**年化**无风险利率，按线性日化（rf / 年化因子）简化处理。
+    rf 为**年化**无风险利率，按**几何**日化（`_rf_daily`：`(1+rf)^(1/ann)−1`）——
+    F-01（2026-10-11）起与 `analytics.benchmark` 的 alpha 口径**同式**；
+    rf=0.0（默认）时与旧线性式恒等，既有数字零变化。
     """
 
     name = "sharpe_ratio"
@@ -347,7 +368,7 @@ class SharpeRatio(MetricBase):
         sd = statistics.stdev(eff)
         if sd == 0:
             raise ZeroDivisionError("日收益波动为 0，夏普无定义")
-        excess = statistics.fmean(eff) - _risk_free_rate(config) / factor
+        excess = statistics.fmean(eff) - _rf_daily(config, factor)
         return excess / sd * math.sqrt(factor)
 
 

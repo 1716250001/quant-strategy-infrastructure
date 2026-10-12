@@ -18,6 +18,10 @@ tools/doctor.py — 环境自检
                 本地无表、走 akshare 替代源且新鲜度由替代源侧自带检查）本就不在
                 Tushare 日更体系内，跳过而非漏检 —— 详见 config.LEAKY_IDLE_EXEMPT。
   9. 定时任务   列出已登记的定时任务（若可访问）
+ 10. 事件面表   周期更新通道（config.PERIODIC_UPDATE_TARGETS：dividend /
+                namechange）的**陈旧监控** —— 堵住"by_code 事件面表既不在日更组、
+                也不在豁免清单 ⇒ 无归宿无告警"的缺口（2026-10-11 三轮审查 E-01；
+                实证 namechange 曾停更 4 周无人发现）。只读、零请求。
 
 用法:
   python main.py doctor                  # 全部检查（离线）
@@ -439,6 +443,71 @@ def check_leaky_permissions(rep):
 
 
 # ============================================================
+# 10. 事件面表（周期更新通道）陈旧监控 — 2026-10-11 新增（E-01）
+# ============================================================
+def check_periodic_tables(rep):
+    """`config.PERIODIC_UPDATE_TARGETS` 的新鲜度监控 —— 回答"停更会不会被发现"。
+
+    背景（2026-10-11 三轮架构审查 E-01，中级别）：
+      `dividend`（公司行动装载源）与 `namechange`（ST 判定源）是 btf 引擎股票侧
+      的数据源，但 mode=by_code ⇒ 既不在日更组、也不在豁免清单（豁免判据只扫
+      by_date / freq=day）⇒ **无归宿、无陈旧监控**。实证：namechange 库内最新
+      公告日停在 20260912（滞后 4 周），期间新分红/送转/ST 事件**静默缺失**，
+      且表内「无行」与「真无事件」不可区分。
+
+    判据（两条）：
+      ① 陈旧：库内最新 `recency_col`（公告日类）落后今天 > `stale_after_days`
+         ⇒ **提示**（不失败：停更窗口内的回测结论须降级，但环境本身没坏）
+      ② 到期未跑：`fetch.periodic_update.is_due` 判为到期（间隔已过 / 数据陈旧）
+         ⇒ 提示"可运行 python -m fetch.periodic_update 补"
+
+    ⚠ 只读（读 parquet 列 + 状态文件），零 API 请求、零写入。
+    """
+    try:
+        from config import PERIODIC_UPDATE_TARGETS
+    except Exception as e:
+        rep.warn("事件面表", "检查未执行", f"{str(e)[:60]}")
+        return
+    try:
+        from fetch.periodic_update import data_recency, is_due, load_state, _days, _today
+    except Exception as e:
+        rep.warn("事件面表", "检查未执行", f"{str(e)[:60]}")
+        return
+
+    state = load_state()
+    stale, due, fresh = [], [], []
+    for name, spec in PERIODIC_UPDATE_TARGETS.items():
+        recency = data_recency(name, spec["recency_col"])
+        age = _days(recency, _today()) if recency else None
+        limit = int(spec.get("stale_after_days", 45))
+        is_due_now, why = is_due(name, spec, state)
+        label = f"{name}={recency or '无数据'}"
+        if recency is None:
+            due.append(f"{name}（库内无数据）")
+        elif age is not None and age > limit:
+            stale.append(f"{label}(落后{age}天>{limit})")
+        elif is_due_now:
+            due.append(f"{name}（{why}）")
+        else:
+            fresh.append(f"{label}(落后{age}天)")
+
+    if stale:
+        rep.warn("事件面表", "陈旧", "⚠ " + ", ".join(stale)
+                 + " —— 近端回测的公司行动/ST 判定可能静默缺失，结论须降级；"
+                   "运行 `python -m fetch.periodic_update` 补齐")
+    if due:
+        rep.items.append({
+            "group": "事件面表", "name": "到期未跑", "status": "－",
+            "detail": f"{len(due)} 张表可按周期补: {', '.join(due)}"
+                      f"（python -m fetch.periodic_update）"})
+    if not stale and not due:
+        rep.ok("事件面表", "周期通道",
+               f"{len(fresh)} 张表均新鲜: {', '.join(fresh)}")
+    elif not stale:
+        rep.ok("事件面表", "陈旧", "无落后超阈值的表")
+
+
+# ============================================================
 # 8. 定时任务
 # ============================================================
 def check_scheduler(r):
@@ -467,7 +536,26 @@ def check_scheduler(r):
 # ============================================================
 # 主流程
 # ============================================================
+def _harden_stdout():
+    """让 stdout 对不可编码字符降级而非抛错。
+
+    为什么必须做（2026-10-11 实测）:
+      本模块用 ⚠/✗ 符号渲染"提示/失败"。在 GBK 控制台下走管道
+      （`python main.py doctor | Out-File x.txt` / CI 捕获）时，stdout 的
+      encoding 是 GBK —— ⚠(U+26A0) 不在 GBK 中 ⇒ 汇总行
+      `print(f"... {WARN} ...")` 直接抛 UnicodeEncodeError，
+      **整个 doctor 以异常退出**（有提示项时 100% 触发，与检查内容无关）。
+      errors="replace" 把不可编码字符降级为 `?`，命令行/机器人仍可读到全部
+      检查结果（保真度损失仅限符号本身）。
+    """
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except Exception:
+        pass
+
+
 def run_doctor(network=False, as_json=False):
+    _harden_stdout()
     r = Report()
     check_env(r)
     check_paths(r)
@@ -478,6 +566,7 @@ def run_doctor(network=False, as_json=False):
     check_config_integrity(r)
     check_dead_config_revival(r)
     check_leaky_permissions(r)
+    check_periodic_tables(r)
     check_scheduler(r)
 
     if as_json:

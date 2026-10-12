@@ -591,6 +591,11 @@ def _run_all():
           （与 fund_company 判重键"键存在但列不存在"同源的断言盲区：
             只验"存在"，不验"真有效"。）
 
+        ⚠ 2026-10-11 扩展（三轮审查 E-01）：新增第三态「周期更新通道」
+          `config.PERIODIC_UPDATE_TARGETS`（dividend / namechange —— by_code 事件面表，
+          日更代价不可接受但必须有人管）纳入本断言：须写理由 / 须有 interval_days 与
+          recency_col / **不得与日更组重叠**（双通道即"两个结构各管一摊"）。
+
         判据（缺一即报错）:
           ① 在 DAILY_UPDATE_GROUPS 的某个组里          → 每天跑，OK
           ② 在 DAILY_UPDATE_EXEMPT 里（须写明原因）    → 刻意不跑，OK
@@ -682,6 +687,39 @@ def _run_all():
             f"    → 二选一：扩 daily_update 支持该 mode（并同步 engine_supports_daily），"
             f"或移出组并登记 DAILY_UPDATE_EXEMPT")
 
+        # ⑤ 周期更新通道（2026-10-11 新增；三轮审查 E-01）
+        #   为什么由本断言管: dividend / namechange 是 by_code 事件面表 —— 既不在
+        #   DAILY_UPDATE_GROUPS、也不在 DAILY_UPDATE_EXEMPT（后者的判据只覆盖
+        #   by_date / freq=day），此前**无归宿、无陈旧监控**（实证停更 4 周无人发现）。
+        #   本判据把"第三态"（周期通道）也纳入"要么纳入、要么写理由"的同一条纪律。
+        from config import PERIODIC_UPDATE_TARGETS
+        # 列名校验复用 config_check 的"只读 parquet 元数据"助手（同一份实现，
+        # 避免第三处各写一份 schema 读取）——故 import 私有名。
+        from tools.config_check import _pk_column_names
+        from config import MARKET_DATA_DIR as _MDD
+
+        p_bad, p_dual, p_nocol = [], [], []
+        for name, spec in PERIODIC_UPDATE_TARGETS.items():
+            if not str(spec.get("reason", "")).strip():
+                p_bad.append(f"{name}(缺 reason)")
+            if not spec.get("interval_days") or not spec.get("recency_col"):
+                p_bad.append(f"{name}(缺 interval_days/recency_col)")
+            if name in in_group:
+                p_dual.append(name)
+            cols, _err = _pk_column_names(name, _MDD)
+            if cols is not None and spec.get("recency_col") not in cols:
+                p_nocol.append(f"{name}.{spec.get('recency_col')}")
+        assert not p_bad, (
+            f"PERIODIC_UPDATE_TARGETS 登记不完整: {p_bad}\n"
+            f"    → 每项必须写明 reason 与 interval_days / recency_col"
+            f"（写不出理由的说明它该进日更组）")
+        assert not p_dual, (
+            f"以下表同时出现在 DAILY_UPDATE_GROUPS 与 PERIODIC_UPDATE_TARGETS: {p_dual}\n"
+            f"    → 双通道 = 「两个结构各管一摊」的复发形态，只能二选一")
+        assert not p_nocol, (
+            f"周期通道的 recency_col 在磁盘上不存在: {p_nocol}\n"
+            f"    → 陈旧监控会读到 None 并永久误报，须改用真实列")
+
         # ── 汇总 ──
         n_cand = len(cand)
         n_daily = sum(1 for i in cand.values() if i["freq"] == "day")
@@ -694,7 +732,8 @@ def _run_all():
         n_by_range = sum(1 for i in cand.values() if i["mode"] == "by_range")
         return (f"({n_cand}表[by_date {n_cand - n_by_range} + by_range {n_by_range}]: "
                 f"日更候选{n_daily} = 纳入{n_grp} + 豁免{n_ex} + 死结{n_dead} | "
-                f"周/月线{n_week} | 反向无孤儿 | 假纳入无 | 豁免均含原因)")
+                f"周/月线{n_week} | 反向无孤儿 | 假纳入无 | 豁免均含原因 | "
+                f"周期通道{len(PERIODIC_UPDATE_TARGETS)}表(理由/列名/无重叠))")
 
 
     check("每日更新清单完整性", r10)

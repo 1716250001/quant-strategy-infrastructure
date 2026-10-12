@@ -332,13 +332,31 @@ class Checkpoint:
             return len(self.data.get(api_name, {}).get("completed", []))
 
     def save(self):
-        """持久化断点到磁盘(原子写: 先写临时文件再替换, 避免并发写坏)"""
+        """持久化断点到磁盘(原子写 + fsync: 断电也不丢断点/不写坏)。
+
+        E-05（2026-10-11 三轮架构审查）: 原实现只有 `os.replace` —— 原子写
+        保证的是**目录项换名**原子，数据可能仍在页缓存；断电后可能出现
+        "断点文件存在但内容为空/截断"。断点被读坏会退化为"从头开始"
+        （见 `__init__` 的损坏分支）—— 对 5,900 标的的表等于白拉一天。
+        故 flush + os.fsync 后再替换；目录项 fsync 为 best-effort（POSIX 需要，
+        Windows 不可用 ⇒ 降级不阻断）。
+        """
         with self._lock:
             os.makedirs(os.path.dirname(self.path), exist_ok=True)
             tmp = self.path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp, self.path)
+            try:
+                dfd = os.open(os.path.dirname(os.path.abspath(self.path)), os.O_RDONLY)
+                try:
+                    os.fsync(dfd)
+                finally:
+                    os.close(dfd)
+            except OSError:
+                pass
 
     def reset(self):
         """清除断点"""

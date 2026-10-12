@@ -273,6 +273,35 @@ class TestBenchmarkLayer:
         with pytest.raises(BenchmarkError, match="长度"):
             relative_metrics([1.0, 1.1], [1.0, 1.0, 1.0])
 
+    def test_alpha_rf_daily_is_geometric(self):
+        """**F-01 跨模块口径守卫**：benchmark 的 rf 日化 == 几何式（与 Sharpe 同式）。
+
+        独立复算（不 import 被测实现的内部函数）：以线性式复算会得到不同值，
+        故本用例对"口径回退到线性"有判别力（19 号三轮审查 F-01 的第一性要求：
+        同一 rf 在两处不得分裂）。
+        """
+        from btf.analytics.benchmark import relative_metrics
+
+        ann, rf = 252, 0.03
+        strategy = [1.0, 1.02, 1.01, 1.05, 1.08, 1.06]
+        bench = [1.0, 1.01, 1.00, 1.02, 1.03, 1.015]
+        got = relative_metrics(strategy, bench, symbol="X",
+                               risk_free_rate=rf, annualization_factor=ann)
+
+        s_r = [strategy[i] / strategy[i - 1] - 1.0 for i in range(1, len(strategy))]
+        b_r = [bench[i] / bench[i - 1] - 1.0 for i in range(1, len(bench))]
+        ms, mb = sum(s_r) / len(s_r), sum(b_r) / len(b_r)
+        var_b = sum((r - mb) ** 2 for r in b_r) / (len(b_r) - 1)
+        cov = sum((s - ms) * (b - mb)
+                  for s, b in zip(s_r, b_r, strict=True)) / (len(s_r) - 1)
+        beta = cov / var_b
+        rf_geo = (1.0 + rf) ** (1.0 / ann) - 1.0
+        rf_lin = rf / ann
+        exp_geo = ((ms - rf_geo) - beta * (mb - rf_geo)) * ann
+        exp_lin = ((ms - rf_lin) - beta * (mb - rf_lin)) * ann
+        assert got["alpha_annualized"] == pytest.approx(exp_geo, rel=1e-12)
+        assert abs(exp_geo - exp_lin) > 1e-9          # 判别性（两口径可区分）
+
     def test_index_series_fail_closed_on_missing_day(self):
         from btf.data.index_series import IndexSeriesError, load_index_closes
 

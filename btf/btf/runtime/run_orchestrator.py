@@ -252,6 +252,14 @@ def _corp_action_notes(result: Any) -> list[str]:
                      f"（默认外部增资补足，§79.3 #2）")
         if ev.get("listing_date"):
             line += f"；获配股份上市日 {ev['listing_date']}（默认不建模锁定期）"
+        if ev.get("p0_source") == "avg_cost_fallback":
+            # **B-02**（三轮架构审查）：`p0` 兜底取 avg_cost ＝ **成本冒充市价**
+            # （当日无 bar）。属降级口径，必须进披露通道（与 RC-04 同机制），
+            # 否则只存在于代码注释里 —— 引用该事件当日 NAV 的结论会无据可查。
+            line += (f"；⚠ **降级披露**：除权日无 `last_close`（当日无 bar）⇒ "
+                     f"理论除权价基准 `p0` **兜底取 avg_cost={ev.get('p0')}**"
+                     f"（成本冒充市价——B-02；当日 NAV 重估基准为降级值，"
+                     f"引用须加口径保留）")
         notes.append(line)
     for msg in getattr(result, "lockup_sell_warnings", ()) or ():
         notes.append(str(msg))
@@ -318,13 +326,21 @@ class RunOrchestrator:
             异常 → manifest 落 FAILED（含原因）后抛出。
 
         persist=False 时不落盘（纯内存回测）；store 可注入（测试隔离）。
-        返回值=engine.RunResult（附加 ``manifest`` / ``run_id`` / ``metrics``）。
+        返回值=engine.RunResult——``manifest`` / ``run_id`` / ``metrics`` 三字段
+        由 `RunResult` dataclass **声明**（D-01）：落盘路径填真值，
+        `persist=False` 路径显式置 **None**（＝未落盘/未计算，禁按空字典兜底）。
         """
         if self.rt.strategy is None:
             raise RuntimeError("先 build 再 run")
 
         if not persist:
             result = self.rt._run_engine(None)
+            # **D-01**（三轮架构审查）：不落盘路径**显式置 None** —— 三字段已在
+            # `RunResult` dataclass 声明（契约单一形态），此处显式赋 None 把
+            # "本次未落盘/未计算"写进代码而非只靠默认值（禁用 `{}` 兜底解读）。
+            result.manifest = None
+            result.run_id = None
+            result.metrics = None
             # RC-11-A / CL-2 第二段：不落盘路径同样登记披露（装配说明可被调用方读取）
             self.rt.assembly_notes.extend(_delisted_holding_notes(result))
             self.rt.assembly_notes.extend(_corp_action_notes(result))

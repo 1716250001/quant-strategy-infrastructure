@@ -95,18 +95,133 @@ def dir_size_bytes(dir_path, pattern=".parquet"):
     return total
 
 
-def _atomic_write_parquet(df, path):
-    """原子写 parquet：先写 {path}.tmp，再 os.replace 覆盖目标。
+def _fsync_file(path):
+    """把文件内容刷到物理介质（best-effort；平台不支持时静默跳过）。
+
+    E-05（2026-10-11 三轮架构审查）: 原子写的 `os.replace` 只保证**目录项**
+    换名原子，不保证**数据**已落盘 —— 断电时可能出现"新文件名 + 空/半内容"。
+    与 btf `events.jsonl` 的 fsync 纪律相比，主库侧此前投入不对等（同为
+    数据可靠性关键路径）。此处补齐：写后 fsync 再 replace。
+
+    ⚠ 目录级 fsync（POSIX 才需要，用于持久化 rename 本身）在 Windows 不可用
+      —— 故整个函数 best-effort：失败只降级（不阻断写入）。
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _fsync_dir(path):
+    """目录项持久化（best-effort；Windows 打开目录句柄会失败 ⇒ 跳过）。"""
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _existing_schema(path):
+    """既有 parquet 的 arrow schema（读不到 ⇒ None）。"""
+    try:
+        import pyarrow.parquet as pq
+        return pq.read_schema(path)
+    except Exception:
+        return None
+
+
+def _write_aligned(df, path, schema):
+    """按既有 schema 落盘（列序 + 类型对齐）→ True；不可对齐 → False。
+
+    为什么必须做（2026-10-11 实证，E-01 写盘副作用）:
+      pandas 往返会**丢 arrow 类型** —— 全空列 `null` ⇄ `double`、
+      `string` ⇄ `large_string`（实证 dividend.stk_bo_rate、
+      namechange.end_date）。同一表不同年份分区的 schema 若漂移，
+      跨分区读会在 `pa.concat_tables` 直接 ArrowInvalid
+      （btf `data/quality.py::_check_cc4_events` 即在此崩）。
+      以**既有文件的 schema 为权威**（本函数）＝写入永不引入漂移。
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    cols = list(schema.names)
+    if set(cols) != set(df.columns):
+        return False                      # 列集合变化 ⇒ 交回默认写（由上层判结构）
+    try:
+        table = pa.Table.from_pandas(df[cols], preserve_index=False)
+        table = table.cast(schema)
+    except Exception as e:
+        print(f"  [WARN] schema 对齐失败（回退默认写，可能引入漂移）: {str(e)[:90]}")
+        return False
+    pq.write_table(table, path)
+    return True
+
+
+def _atomic_write_parquet(df, path, schema=None):
+    """原子写 parquet：先写 {path}.tmp，fsync，再 os.replace 覆盖目标。
 
     为什么（2026-09-30 DB2）:
       to_parquet 直接覆盖原文件，写中途崩溃/断电会同时失去新旧数据 ——
       原文件已被截断且无法回退。原子写保证任一时刻磁盘上要么是旧文件、
       要么是完整新文件。残留 .tmp 无害：list_parquet_files 按 .parquet
       后缀过滤不会认到它；同目录同名 .tmp 重跑即被覆盖，幂等。
+
+    E-05（2026-10-11）: 在 replace **之前**对 .tmp 做 fsync —— 否则
+    "崩溃安全"只覆盖进程崩溃，不覆盖断电（数据仍在页缓存里）。
+
+    schema 参数（2026-10-11）: 传入既有文件的 arrow schema 时按其对
+    列序/类型落盘（防跨分区漂移，见 `_write_aligned`）。
     """
     tmp = "%s.tmp" % path
-    df.to_parquet(tmp, index=False)
+    if schema is None or not _write_aligned(df, tmp, schema):
+        df.to_parquet(tmp, index=False)
+    _fsync_file(tmp)                # E-05: 数据先落盘，再换名
     os.replace(tmp, path)
+    _fsync_dir(os.path.dirname(os.path.abspath(path)))   # E-05: 目录项（POSIX）
+
+
+def _values_changed(existing, combined, keys):
+    """同键行是否存在**值级差异**（行数不变时判断"是否真的无变化"）。
+
+    用途（E-02，2026-10-11 三轮架构审查）：
+      `merge_append` 原实现用 `added = len(combined) - len(existing) <= 0` 作为
+      "无变化、不写盘"的判据 —— 但该判据**只数行数**，于是「同键值修正」
+      （源端更正数据 / 复权因子刷新 / 口径变更重写）永远算不出 added，
+      **该表此后永远冻结在旧值上**（不报错、日志显示 ok）。
+      实证代价：single 布局表（一表一文件）没有第二条写入路径可绕开。
+
+    判定口径（保守：拿不准时判"有变化"→ 写盘）：
+      - 列集合不同（新增/删除列）⇒ 有变化
+      - 行数不等或键集合不一致 ⇒ 有变化（交调用方按原语义处理）
+      - 逐键对齐后**逐列比较**：dtype 差异（int64 vs float64）不算变化；
+        NaN 与 NaN 视为相同（`assert_frame_equal` 默认语义）。
+    """
+    if set(existing.columns) != set(combined.columns):
+        return True
+    if len(existing) != len(combined):
+        return True
+    cols = list(existing.columns)
+    old = existing.set_index(keys).sort_index()
+    new = combined[cols].set_index(keys).sort_index()
+    if not old.index.equals(new.index):
+        return True
+    try:
+        from pandas.testing import assert_frame_equal
+        assert_frame_equal(old, new, check_dtype=False, check_names=False)
+        return False
+    except AssertionError:
+        return True
 
 
 def merge_append(path, new_df, subset, sort_by=None, keep="last"):
@@ -125,6 +240,8 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
         keep: 去重保留策略，默认 last（新数据优先）
     返回:
         (changed: bool, added_rows: int)
+        ⚠ 语义（E-02 起）：`changed=True, added_rows=0` ＝ **同键值修正已落盘**
+          （行数未增）。调用方的"已更新"计数应看 changed，行数增长看 added_rows。
     """
     if new_df is None or len(new_df) == 0:
         return False, 0
@@ -136,6 +253,11 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
 
     if os.path.exists(path):
         existing = pd.read_parquet(path)
+        # schema 对齐基准（2026-10-11）：以**既有文件**的 arrow schema 为权威，
+        # 写盘时按其列序/类型落盘 —— 否则 pandas 往返会引入跨分区漂移
+        # （实证 dividend.stk_bo_rate `double`→`null`、namechange.end_date
+        #  `string`→`large_string`，跨分区读在 `pa.concat_tables` 直接崩）。
+        schema = _existing_schema(path)
         combined = pd.concat([existing, new_df], ignore_index=True)
         combined = combined.drop_duplicates(subset=keys, keep=keep)
         if sort_by and sort_by in combined.columns:
@@ -144,11 +266,33 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
 
         added = len(combined) - len(existing)
         if added <= 0:
-            return False, 0
+            # ── E-02（2026-10-11 三轮架构审查）：值级变更检测 ──
+            # added<=0 有两种含义，原实现一律短路 ⇒ 第二种永不落盘：
+            #   ① 新数据与既有行**逐值相同** ⇒ 确实无需写盘（原优化，保留）
+            #   ② 同键但**值被修正**（源端更正 / 复权因子刷新 / 口径重写）
+            #      ⇒ **必须落盘**，否则表内该键永久冻结在旧值（不报错）。
+            # ⚠ 与 upsert_by_year 的行为分裂由此消除（原：一有一无）。
+            if keys is None:
+                # 全列判重：去重后行数不增 ⇒ 逐列必然相同（无需比较）
+                return False, 0
+            if len(combined) != len(existing):
+                # 行数减少 = 既有文件自带重复行被去重（如源端重复入库）。
+                # 此时**不写盘**（保持原行为：不做静默删行）——由调用方在
+                # 入库前自去重（见 alt/io.py 步骤 5 的同源处置）。
+                return False, 0
+            if not _values_changed(existing, combined, keys):
+                return False, 0
+            # 值修正：按既有列序落盘；added 如实为 0（行数未增，
+            # 但 changed=True 让调用方的"已更新"计数如实反映）
+            if set(combined.columns) == set(existing.columns):
+                combined = combined[list(existing.columns)]
+            _atomic_write_parquet(combined, path, schema=schema)
+            _invalidate_reader_cache(path)
+            return True, 0
         # 列顺序与既有文件对齐，保持文件结构稳定
         if set(combined.columns) == set(existing.columns):
             combined = combined[list(existing.columns)]
-        _atomic_write_parquet(combined, path)
+        _atomic_write_parquet(combined, path, schema=schema)
         _invalidate_reader_cache(path)          # 写后失效读取缓存
         return True, added
 
@@ -285,7 +429,12 @@ def upsert_by_year(df, dir_path, date_col="trade_date", subset=None,
     参数:
         df:       当日/当期全市场数据
         dir_path: 目标目录
-        date_col: 分区依据列(取其前4位作年份)。**若该列不存在则回退为单文件**。
+        date_col: 分区依据列(取其前4位作年份)。**该列不存在时 fail-closed 抛
+                  `KeyError`**（D-03，2026-10-11 三轮架构审查订正：原 docstring
+                  写「回退为单文件」、与实现不符 —— 回退会在 by_year 目录里凭空
+                  生成一个单文件，把事情变成"混合布局"，且 `reader.detect_layout`
+                  会判为 `single`/混合（下游读数静默降级）。本函数**只按年分区**，
+                  无日期列的数据请调用方显式选择其它写入器）。
         subset:   行去重主键(None=沿用默认; "*"=全列判重)
         sort_by:  排序列
         on_error: 可选回调 on_error(year, exception)
@@ -297,7 +446,9 @@ def upsert_by_year(df, dir_path, date_col="trade_date", subset=None,
 
     ensure_dir(dir_path)
 
-    # 无日期列 → 回退单文件(如 new_share 只有 ipo_date)
+    # 无日期列 → **fail-closed 抛错**（不回退单文件；D-03：注释原写"回退单文件"
+    # 与实现不符 —— 回退会在按年目录里生成单文件 ⇒ 布局被判成 mixed/single，
+    # 下游读数静默降级。调用方须自带日期列，或用其它写入器显式落单文件）
     if date_col not in df.columns:
         raise KeyError(f"按年分区需要列 '{date_col}', 实际列: {list(df.columns)[:8]}")
 
@@ -546,7 +697,10 @@ class YearBatchWriter:
         if df is None or len(df) == 0:
             return
         if self.date_col not in df.columns:
-            # 无分区列 → 直接走单次写入, 不参与批量
+            # 无分区列 → **fail-closed**：upsert_by_year 会抛 KeyError，
+            # 经 on_error 上报且**不记断点**（下次续跑重拉）。
+            # ⚠ D-03（2026-10-11）订正：原注释写「直接走单次写入」与实现不符 ——
+            #   本分支实际不会成功写入任何文件（除抛出外无副作用）。
             try:
                 r = upsert_by_year(df, self.dir_path, date_col=self.date_col,
                                    subset=self.subset, sort_by=self.sort_by)

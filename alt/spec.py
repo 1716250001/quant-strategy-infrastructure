@@ -5,8 +5,19 @@ alt/spec.py — akshare 备用库的【表规格唯一真源】
 集中定义每张表的：接口、取数模式、布局、日期列、去重键、列映射。
 
 为什么独立成文件：
-  主库把表规格散在 config.py 的 4 处（BACKFILL_TARGETS / TABLE_DATE_COL /
-  DB_AUDIT_PKEYS / db_migrate.DATE_COL），新增表需多处同步、易漏。
+  主库把表归属登记**按层散在多处**（2026-10-11 三轮架构审查 H-04 实测复核：
+  **共 6 处**，原自评「4 处」为低估）——
+    ① 定义层 config.py  BACKFILL_TARGETS(101) / DAILY_UPDATE_EXTRA(9)
+    ② 索引层 config.py  TABLE_DATE_COL(79)
+    ③ 体检层 config.py  DB_AUDIT_PKEYS(114)
+    ④ 执行层 config.py  DAILY_UPDATE_GROUPS(2 组) / DAILY_UPDATE_EXEMPT(5) /
+                        PERIODIC_UPDATE_TARGETS(2)
+    ⑤ 迁移层 tools/db_migrate.py  DATE_COL（多候选逐列回退）
+    ⑥ 白名单 tools/config_check.py NON_BACKFILL_TABLES（磁盘反向归属白名单）
+  ⚠ ⑥ 与 ①~⑤ **不同层**：它登记的是"**不属于** BACKFILL_TARGETS 的表"
+    （外部流水线产出），坐标系与其他五处相反，**不可并入**（故分开计数）。
+  ⇒ 新增表须在 ① 登记；②③④ 的一致性已由 `tools/config_check.py` 判据
+    ③⑤b⑥⑦ 与回归 R10/R11 机检拦截（不再依赖人工"记得改几处"）。
   alt 库把规格收敛到本文件一处，从结构上消除"多处不同步"问题。
 
 ⚠ 三条关键纪律（都由实测踩坑得出）：

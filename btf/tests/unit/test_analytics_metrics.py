@@ -102,10 +102,16 @@ def _ref_vol(eff=EFF, factor: float = FACTOR) -> float:
 
 
 def _ref_sharpe(eff=EFF, factor: float = FACTOR, rf: float = 0.0) -> float:
-    """夏普参考值（显式公式独立复算）。"""
+    """夏普参考值（显式公式独立复算）。
+
+    **F-01（2026-10-11 三轮架构审查）**：rf 日化＝**几何**
+    `(1+rf)^(1/factor) − 1`（与 `analytics.benchmark` 的 alpha 同式）；
+    rf=0.0 时与旧线性式 `rf/factor` **恒等** ⇒ 默认档数字零变化。
+    """
     mean = sum(eff) / len(eff)
     var = sum((r - mean) ** 2 for r in eff) / (len(eff) - 1)
-    return (mean - rf / factor) / math.sqrt(var) * math.sqrt(factor)
+    rf_daily = (1.0 + rf) ** (1.0 / factor) - 1.0
+    return (mean - rf_daily) / math.sqrt(var) * math.sqrt(factor)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -247,9 +253,31 @@ class TestNavMetrics:
         assert got == pytest.approx(_ref_sharpe())
 
     def test_sharpe_with_risk_free(self):
-        """rf=0.03 年化 → 日化 0.03/3，分子下移。"""
+        """rf=0.03 年化 → **几何**日化 `1.03^(1/3)−1`，分子下移（F-01 口径）。"""
         got = SharpeRatio().compute(_snapshots(), (), _cfg(risk_free_rate=0.03))
         assert got == pytest.approx(_ref_sharpe(rf=0.03))
+        # 判别性：几何 ≠ 线性 ⇒ 本用例能区分两种口径（非空断言）
+        linear = (sum(EFF) / len(EFF) - 0.03 / FACTOR) / _ref_vol() * math.sqrt(FACTOR)
+        assert abs(got - linear) > 1e-9
+
+    def test_sharpe_rf_zero_equals_linear_legacy(self):
+        """**F-01 零回归护栏**：rf=0 ⇒ 几何/线性两式恒等，数字逐位不变。"""
+        got = SharpeRatio().compute(_snapshots(), (), _cfg(risk_free_rate=0.0))
+        mean = sum(EFF) / len(EFF)
+        var = sum((r - mean) ** 2 for r in EFF) / (len(EFF) - 1)
+        legacy_linear = (mean - 0.0 / FACTOR) / math.sqrt(var) * math.sqrt(FACTOR)
+        # ⚠ rel 而非 abs=0：`statistics.stdev` 用精确分数运算，与朴素平方和
+        # 公式存在末位差（1 ulp）—— 这不影响"两式恒等"的结论（差值来自
+        # stdev 实现，不来自 rf 日化）。
+        assert got == pytest.approx(legacy_linear, rel=1e-12)
+
+    def test_sharpe_rf_invalid_domain_falls_back_linear(self):
+        """rf ≤ −100%（非法复利域）⇒ 回退线性且**不崩**（fail-safe 分支）。"""
+        got = SharpeRatio().compute(_snapshots(), (), _cfg(risk_free_rate=-1.5))
+        mean = sum(EFF) / len(EFF)
+        var = sum((r - mean) ** 2 for r in EFF) / (len(EFF) - 1)
+        exp = (mean - (-1.5) / FACTOR) / math.sqrt(var) * math.sqrt(FACTOR)
+        assert got == pytest.approx(exp)
 
     def test_max_drawdown(self):
         assert MaxDrawdown().compute(

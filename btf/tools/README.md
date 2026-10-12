@@ -16,6 +16,15 @@
     export_rules_mirror.py    规则镜像导出（四方 ④）
     align_mdcore.py / align_v77.py          口径对齐抽检
     run_qidian_rerun.py / run_v77_robustness.py  批次复跑脚本（有对应测试锚定）
+    bare_env_check.py         **独立环境裸验证（C-01，2026-10-11 三轮架构审查）**：
+                              临时独立 venv 按两份 requirements 重建 → 真入口
+                              `--version` → pytest 子集；把"依赖预算 ≤8"从文档层
+                              约束升级为**环境层实测**（双工程共享 `代码/_venv` ⇒
+                              隐性依赖在本机测不出）。`--plan` 零副作用预览；
+                              **节奏**＝每季度或改动 requirements 后**必跑**
+                              （不自动进 `bt check`——建 venv＋联网，非秒级门禁）。
+                              实测（2026-10-11）：独立 venv → 底座 28 包 ＋ btf 9 包
+                              → `btf 1.3.1`（真入口）→ `tests/unit` 全绿。
 
 探针（`probes/` 子目录，CLI 审查报告-20260930 P3 归档）：
     一次性性能/等价性探针（probe_layout / probe_sort_equiv / probe_sorted /

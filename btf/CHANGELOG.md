@@ -3,6 +3,88 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 结构；
 版本号遵循语义化版本（M0 由 18 号分步编码计划定义）。
 
+## [未发布] — 2026-10-11（三轮架构审查修正批次）
+
+**来源**：《代码仓库三轮架构审查报告与待办-20261011.md》（赤潮，三轮独立审查）——
+本批次修正报告中**涉及 btf 的全部条目**（D-01 / B-01 / B-02 / D-02 / D-03 / F-01 / C-01
+＋连带：插件边界基线刷新、测试计数口径 1219→1224、文档守卫同步）。
+
+### ⚠ 口径变更（**单列**）
+
+- **F-01 · rf 日化统一为几何**：`analysis.risk_free_rate` 的**日化**在
+  `analytics.metrics`（Sharpe）与 `analytics.benchmark`（alpha）两处**同式**
+  `(1+rf)^(1/ann)−1`（原：metrics 侧线性 `rf/ann`、benchmark 侧几何 ⇒ 同一 rf
+  两处口径分裂）。
+  **影响面**：`rf=0.0`（默认）时两式恒等 ⇒ **既有 run 数字零变化**；
+  **显式设置 rf≠0** 的 run 会计上变（夏普分子下移量不同）⇒ 跨本批次的
+  rf≠0 数字**不可直接比较**；报告引用须带 `run.analysis.risk_free_rate` 值。
+  独立复算守卫：`tests/unit/test_analytics_metrics.py::test_sharpe_with_risk_free`
+  （含判别性断言）＋ `tests/integration/test_review19_fixes.py::test_alpha_rf_daily_is_geometric`
+  （跨模块一致性，线性式可区分）。
+
+### 修复（Fixed）
+
+- **D-01（RunResult 契约双形态）**：`metrics` / `manifest` / `run_id` 三字段原只在
+  `persist=True` 路径被**动态附加**，`persist=False`（内存回测/网格搜索）**没有** ⇒
+  同一类型两种形态（`result.metrics` 一档 AttributeError、一档正常；N45 残根）。
+  今在 `RunResult` dataclass **声明**（`Any`/宽松注解，不引 experiment 层），
+  `persist=False` 路径**显式置 None**（＝未落盘/未计算，禁按 `{}` 兜底解读）。
+- **B-01（送转取整口径订正 ＋ .5 边界黄金用例）**：`portfolio.apply_ex_date` 的送转
+  取整原注释写「四舍五入」、实现是 `round()`（**银行家舍入**，.5 进偶数）——
+  注释订正为与实现一致，并**钉死**边界行为：
+  `tests/unit/test_portfolio.py::test_stk_div_half_boundary_pins_rounding`
+  （qty=101/103、10送5 ⇒ 151.5→**152**、154.5→**154**；改 half-up 或 floor 必失败）。
+  与碎份治理框架（ADR-20 第 ⑪ 条：缩股＝向下取整＋丢弃披露）的关系＝**刻意不同口径**
+  （送转零股属"应得补偿"、缩股碎份属"权益减损"），已在 ADR-20 第 ⑪ 条补注登记。
+  ⚠ 改口径＝口径变更，须走 CHANGELOG 单列 ＋ 同步 `golden_refcalc.py` 与黄金集断言。
+- **B-02（配股 `p0` 兜底进披露通道）**：当日无 bar 时理论除权价基准 `p0` 会取
+  `avg_cost`（**成本冒充市价**）——原仅代码注释自认。今事件带 `p0_source`
+  （`last_close` / `avg_cost_fallback`），`runtime._corp_action_notes` 在兜底时
+  追加**降级披露**行（与 RC-04 同机制），报告「假设与披露」可见。
+- **D-03（upsert_by_year 注释-实现矛盾，二选一）**：docstring/注释原写"无日期列
+  回退单文件"，实现是 **fail-closed 抛 KeyError**。订正为**实现口径**（回退单文件
+  会在按年目录里造出"混合布局"、把 reader 布局探测打回 single/mixed ⇒ 下游读数
+  静默降级），并同步 `YearBatchWriter.add` 的"无分区列"分支注释（该分支实际
+  不会写成功任何文件，经 `on_error` 上报且不记断点）。
+- **进程/断电安全（连带）**：`tools/check_v77_digest.py` 增 `_harden_stdout()`
+  ——管道/CI 捕获时 stdout 为 GBK，`✓`(U+2713) 不在 GBK ⇒ `print` 抛
+  `UnicodeEncodeError`，**check 明明通过却以退出码 1 结束**（`test_v77_digest_tool_smoke`
+  实测复现）；`errors="replace"` 后符号降级、判定链保真。
+
+### 修改（Changed）
+
+- **D-02（`Engine.run()` 复杂度切分，行为零变更）**：三处内聚块下沉私有方法——
+  `_load_actions()`（步骤①公司行动装载）／`_risk_precheck()`（步骤⑧风控预检，
+  事件写出闭包 `emit` 注入以保持"日志只在 run 内直写"）／`_post_process()`
+  （循环后：退市残值披露 / 清算口径 / 公司行动审计转出 / 价格视图元数据）。
+  口径注释随方法迁移，**顺序与语义逐位不变**（全量 1224 测试 + 黄金集回归通过）。
+- **测试计数口径（R60′/纪律九 同批复核）**：本批新增 5 例（B-01 边界黄金用例、
+  B-02 兜底披露、F-01 零回归/非法域/跨模块一致性）⇒ 全量 **1219 → 1224**
+  （非 L5 **1196 → 1201**，L5 23 不变）；`CURRENT_DOCS` 六份现状文档的计数声明
+  已同批同步（文档守卫 T-A 机检通过）。
+- **插件边界基线刷新（AA-3 留痕）**：核心 5 文件哈希更新，依据＝本批次
+  （`tools/.plugin_baseline_history.jsonl` 已追加，`--update --reason` 留痕）。
+
+### 新增（Added）
+
+- **C-01 · `tools/bare_env_check.py`——独立环境「裸验证」**：把"依赖预算 ≤8"
+  从文档层约束升级为**环境层实测**（双工程共享 venv ⇒ 本机永远测不出隐性依赖）。
+  在临时独立 venv 里按 `代码/requirements.txt` ＋ `btf/requirements.txt` 重建，
+  跑**真入口** `python -m btf.cli.main --version` 与 pytest 子集；
+  `--plan` 零副作用预览，`--run` 真执行。**节奏**：每季度一次或改动
+  requirements 后必跑（不自动进 `bt check`——建 venv＋联网不属于秒级门禁）。
+  **本批实跑证据**：独立 venv → 底座 28 包 + btf 9 包 → `btf 1.3.1`（真入口）
+  → `tests/unit` 全绿。
+
+### 边界
+
+- 本批次**不**解决 L-B2（真实业务策略 L4 全链路仍 0 次）——登记不派单；
+- 测试用例数字沿用 §116 双重标注纪律（`TEST-CASE` · 不代表实际执行）；
+- 版本号未 bump（本批次为**审查修正**，发版另行派单）；
+- 文档侧同批（非本 CHANGELOG 事项，此处仅交叉引用）：`12-ADR草案.md` ADR-20 **第 ⑮ 条**（B-01 口径登记）、
+  `20-回测平台使用指引.md` **纪律十**（B-03 双链口径）＋ **§13.1b**（C-01 裸验证节奏）、
+  `19-架构审查与重构演进记录.md` **§122/§123**（审查方补录，W-1 独占文件）。
+
 ## [1.3.1] — 2026-10-11
 
 **发布主题：版本统一推进（与 mdf v1.3.1 对齐）——无功能变更**（老大 2026-10-11 令「把 btf 和数据库统一推进到 v1.3.1」；依据 = mdf 18 号 §13 派单 EE-V13-2）

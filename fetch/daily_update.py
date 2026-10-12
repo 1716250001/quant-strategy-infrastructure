@@ -33,12 +33,22 @@ main.py gap-update 现在直接调用本模块（命令名不变，定时任务�
 原 fetch/gap_update.py、fetch/intraday_update.py 的逐文件落盘路径已废弃，
 仅在需要"重放旧行为"时保留（见各自的 deprecation 说明）。
 
+收尾两步（2026-10 起）
+----------------------
+[Step 3] market_state 派生（依赖 stk_limit + daily）
+[Step 5] **事件面表周期更新通道**（2026-10-11 新增；三轮审查 E-01）：
+         dividend / namechange 是 by_code 事件面表，日更全量重拉代价不可接受
+         （5,900 请求/天/表），改按 config.PERIODIC_UPDATE_TARGETS 的
+         interval_days 到期检查 —— **未到期零请求**，到期只拉缺失窗口。
+         它让"事件面表停更"从静默变成日更日志里可见（实证曾停更 4 周无人发现）。
+
 用法:
   python main.py gap-update                  # 补缺口 + 复核最近3个交易日
   python main.py gap-update --group all      # 追加资金面/事件面接口
   python main.py gap-update --lookback 10    # 扩大复核窗口（修历史残缺）
   python main.py gap-update --dry-run        # 只输出计划, 不发请求
   python -m fetch.daily_update --list        # 列出每日更新接口清单
+  python -m fetch.periodic_update --status   # 只看事件面表周期通道状态（零请求）
 """
 import os
 import time
@@ -210,7 +220,8 @@ def _resolve_gaps_range(name, conf, target_date, date_col=None):
 # ============================================================
 def run_daily_update(target_date=None, dry_run=False, groups=("core",),
                      lookback=None, workers=None, only=None,
-                     verbose=False, with_market_state=True):
+                     verbose=False, with_market_state=True,
+                     with_periodic=True):
     """每日增量更新。
 
     参数:
@@ -219,6 +230,9 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
         lookback:    复核窗口交易日数；None = config 默认
         only:        只跑指定的表名（逗号分隔字符串或序列）
         with_market_state: 收尾是否重算 market_state 派生表
+        with_periodic:     收尾是否检查**周期更新通道**（E-01：dividend /
+                     namechange；未到期即零请求跳过）。`--only` 时自动关闭
+                     （单表补数不该顺带跑别的通道）
     """
     if lookback is None:
         lookback = DAILY_UPDATE_LOOKBACK
@@ -390,6 +404,22 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     #   长得一样（都表现为"数据落后 N 天"），不单独识别就分不出原因。
     _report_permission_denied(dry_run=dry_run)
 
+    # ── Step 5: 周期更新通道（2026-10-11 新增；三轮审查 E-01）──
+    #   为什么挂在日更末尾：dividend / namechange 是 by_code 事件面表，
+    #   日更全量重拉代价不可接受（5,900 请求/天/表），但**必须有归宿**。
+    #   本通道按 config.PERIODIC_UPDATE_TARGETS 的 interval_days 判到期，
+    #   **未到期 = 零请求跳过**（只读状态文件 + 读一列 parquet），
+    #   到期则只拉缺失窗口（1~N 个请求，N≈窗口内交易日数）。
+    #   ⚠ 与日更同等重要的一点：它让"事件面表停更"从**静默**变成
+    #     **日更日志里可见**（此前实证停更 4 周无人发现）。
+    if with_periodic and not only and not dry_run:
+        try:
+            from fetch.periodic_update import run_periodic_update
+            print("\n[Step 5] 事件面表周期更新通道（E-01；未到期则零请求）")
+            run_periodic_update(quiet=False)
+        except Exception as e:
+            print(f"  [WARN] 周期更新通道失败（不影响日更主流程）: {str(e)[:100]}")
+
     return {"ok": ok_n, "fail": fail_n, "rows": 0}
 
 
@@ -487,6 +517,8 @@ def main(argv=None):
     p.add_argument("--verbose", action="store_true", help="打印重试日志")
     p.add_argument("--no-market-state", action="store_true",
                    help="不重算 market_state 派生表")
+    p.add_argument("--no-periodic", action="store_true",
+                   help="不检查事件面表周期更新通道（E-01；默认检查，未到期零请求）")
     p.add_argument("--list", action="store_true", help="列出接口清单后退出")
     a = p.parse_args(argv)
 
@@ -506,7 +538,8 @@ def main(argv=None):
     run_daily_update(target_date=a.date, dry_run=a.dry_run, groups=groups,
                      lookback=a.lookback, workers=a.workers, only=only,
                      verbose=a.verbose,
-                     with_market_state=not a.no_market_state)
+                     with_market_state=not a.no_market_state,
+                     with_periodic=not a.no_periodic)
 
 
 if __name__ == "__main__":

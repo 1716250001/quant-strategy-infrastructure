@@ -1051,6 +1051,11 @@ BACKFILL_TARGETS = OrderedDict([
         "api": "hk_daily", "desc": "港股日线", "mode": "by_code",
         "codes": "hk", "max_rows": 5000, "tier": "X", "enabled": False,
         "note": "⛔ 限频1次/分钟, 2785只需46小时, 批量入库不可行; 用 akshare/Wind 替代",
+        # ⚠ 2026-10-11（E-04，三轮架构审查）：**本条目是历史搁置记录，实体在 alt 库**
+        #   —— 实际落盘在 `D:\全量数据\alt_data\hk_daily`（by_year / 29 分区），
+        #   由 `alt/spec.py::P4_HK`（`alt/list_backfill.py` 轮转重建）维护，
+        #   与主库 `market_data` 无关。**勿按本条目在主库建 hk_daily 表**
+        #   （会造成同表两册、归属互斥被打破）。
     }),
     ("report_rc", {
         "api": "report_rc", "desc": "券商研报", "mode": "by_code",
@@ -1243,6 +1248,15 @@ BACKFILL_PAGED = set(BACKFILL_PAGE_CONF.keys())
 #                             如 namechange.end_date 不全，需逐列回退）
 #   db_schema.DATE_COL_PREF = **探测**报告用（如实反映库里实际有什么，
 #                             刻意不依赖本配置 —— 否则配置错了就查不出来）
+#
+# ⚠ 2026-10-11 三轮架构审查 E-03（日期列"双轨制"收敛结论）:
+#   除上表外，BACKFILL_TARGETS / DAILY_UPDATE_EXTRA 的**条目级** `date_col`
+#   字段也声明日期列（实测 15 处）。两者是**不同层**、不是重复：
+#     条目级 `date_col` = **该条目的取数执行参数**（backfill 落盘 / 缺口计算用）
+#     本表（顶层）      = **全库权威索引**（reader / db_audit / db_migrate 共用）
+#   收敛口径：**条目级为条目真源，顶层为派生索引** —— 两处必须同值；
+#   该约束已由 `tools/config_check.py` 判据 ⑤b（date_col_consistency）机检
+#   （实测分歧 0 处）。35 张表无顶层映射者多为静态/无日期列表，属设计内。
 TABLE_DATE_COL = {
     # 行情（按交易日）
     "daily": "trade_date", "daily_basic": "trade_date",
@@ -1737,6 +1751,11 @@ DAILY_UPDATE_EXTRA = OrderedDict([
         "note": "⚠ 限频1次/小时(实测: 首次报'1次/分钟'、65秒后才是真值); "
                 "历史回补不可行(约377天), 日更可行; 用美股日历; "
                 "历史用 akshare stock_us_daily(新浪源) 补",
+        # ⚠ 2026-10-11（E-04，三轮架构审查）：**主册登记 ≠ 主库有实体**。
+        #   `us_daily` 的实体在 **alt 库**（`D:\全量数据\alt_data\us_daily*`），
+        #   由 `alt/spec.py` 的 `us_daily` / `us_daily_qfq` 条目维护（mode=list）。
+        #   本条目仅为"该接口在主册有属性定义/限频登记"的留痕；主库侧不建表。
+        #   查数据请走 `alt.reader`，勿按本条在 `market_data` 找 us_daily。
     }),
 ])
 
@@ -1980,6 +1999,75 @@ DAILY_UPDATE_EXEMPT = {
     "new_share":    "IPO 新股上市：**事件驱动型**（有新股才新增），"
                     "非连续日频；按需区间回补即可",
 }
+
+# ------------------------------------------------------------
+# 事件面表的「周期性更新」归宿 — 2026-10-11 新增（三轮审查 E-01 专项）
+# ------------------------------------------------------------
+# 用途: 补齐**第三种归宿**。此前每张表只有两种状态：
+#   ① 在 DAILY_UPDATE_GROUPS（每天跑）② 在 DAILY_UPDATE_EXEMPT（刻意不日更，须写理由）。
+#   但 DAILY_UPDATE_EXEMPT 的判据只覆盖 by_date / freq=day 的表 ⇒ **by_code 的事件面表
+#   落在两者之外 = 无归宿、无陈旧监控**。
+#
+# 背景（2026-10-11 三轮架构审查 E-01，中级别）:
+#   `dividend`（公司行动装载源，btf `feed.py` 区间实施态）与 `namechange`（ST 判定源，
+#   btf `state.py`）均为 tier A/B 的 btf 股票侧**数据源**，mode=by_code、既不在日更组、
+#   也不在豁免清单，且**没有任何陈旧监控** ⇒ 实证 namechange 库内最新 start_date
+#   停在 20260912（审查日已滞后 4 周），dividend 靠手动续命（表内含未来 ex_date）。
+#   危害形态：表内「无行」与「真无事件」不可区分 —— 新分红/送转/ST 事件**静默缺失**，
+#   近端股票回测结果出错且无 fail-closed 防线。
+#
+# 为什么不进 DAILY_UPDATE_GROUPS（成本核算，实测）:
+#   两表 mode=by_code 且 codes=stock_all（约 5,900 标的）⇒ 每天全量重拉 = 5,900
+#   请求/天/表（170次/分 ⇒ 约 35 分钟/表），日更代价与收益完全不匹配。
+#   实测接口**支持按日期拉取**（2026-10-11 探针）：
+#     · namechange  `start_date`/`end_date`（公告日期）区间拉取 —— 1 请求/次
+#     · dividend    `ann_date`（公告日期）单日横截面 —— 1 请求/日
+#   ⇒ 正确的形态是「**周期性 + 增量窗口**」：每 interval_days 跑一次，
+#     只拉 (最近 lookback_days) 窗口，落盘按主键去重 ⇒ 幂等、可重放。
+#
+# 纪律（由回归 R10 校验，缺一报错）:
+#   ① 每项必须写明 `reason` 与 `interval_days`（写不出理由的说明它该进日更组）；
+#   ② 不得与 DAILY_UPDATE_GROUPS 重复（双通道 = "两个结构各管一摊"的复发形态）；
+#   ③ `recency_col` 必须真实存在于该表（陈旧监控据此判新鲜度）。
+# ⚠ 陈旧监控落点：`tools/doctor.py` 第 10 项「事件面表」（stale_after_days）；
+#   更新执行落点：`fetch/periodic_update.py`（命令 `python -m fetch.periodic_update`
+#   或 `main.py periodic-update`）。
+PERIODIC_UPDATE_TARGETS = OrderedDict([
+    ("namechange", {
+        "desc": "股票曾用名（ST/借壳识别；btf state.py ST 判定装载源）",
+        # ── 取数形态：一次区间请求（公告日期区间）──
+        "pull": "by_range",
+        "start_param": "start_date", "end_param": "end_date",
+        # ── 落盘形态（须与 TABLE_DATE_COL / DB_AUDIT_PKEYS 一致）──
+        "date_col": "start_date",
+        "subset": ["ts_code", "start_date"],
+        # ── 新鲜度信号列：公告日（分区列是"生效日"，可能含未来值，不可作新鲜度信号）──
+        "recency_col": "ann_date",
+        "interval_days": 7,            # 每周一次（事件稀疏，实测 4 周 19 条）
+        "lookback_days": 60,           # 每次回看窗口（覆盖"更名生效日晚于公告日"的情形）
+        "stale_after_days": 45,        # 库内最新 ann_date 落后超此天数 ⇒ doctor 告警
+        "reason": "ST/借壳判定的事件面装载源：既不该日更（全市场 by_code 重拉 5,900 请求/"
+                  "天），也不能无归宿（实证停更 4 周无人发现）。改走**每 7 天一次**的"
+                  "公告日区间增量：1 请求/次，落盘幂等。",
+    }),
+    ("dividend", {
+        "desc": "分红送股（btf feed.py 公司行动装载源，tier A）",
+        # ── 取数形态：逐公告日横截面（接口无区间参数，按 ann_date 单日拉全市场）──
+        "pull": "by_date",
+        "date_param": "ann_date",
+        # ── 落盘形态 ──
+        "date_col": "end_date",
+        "subset": ["ts_code", "end_date", "ann_date", "div_proc"],
+        # ── 新鲜度信号列：公告日（end_date 是报告期，无法反映"有无新公告"）──
+        "recency_col": "ann_date",
+        "interval_days": 7,
+        "lookback_days": 60,
+        "stale_after_days": 60,        # 分红公告季节性（年报 4~7 月密集）⇒ 阈值放宽
+        "reason": "公司行动装载源：除权除息/送转/派息的原始事件表。分季公告（年报/中报/"
+                  "季报）⇒ 日更无收益、却要 5,900 请求/天。改走**每 7 天一次**的公告日"
+                  "横截面增量（1 请求/日，窗口内约 5 请求/次），落盘幂等。",
+    }),
+])
 
 # daily / daily_basic 单日行数已逼近 6000 上限（实测 5553），
 # 加进分页表以防未来标的数扩容后被静默截断（每天多 1 次请求）。

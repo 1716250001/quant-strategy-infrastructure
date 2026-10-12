@@ -693,6 +693,14 @@ def run_audit(sections=("checkpoint", "dup", "gap", "scale"), only=None,
 
     as_json: stdout 输出结果 JSON（CLI --json；2026-09-30 P3 统一）
     """
+    # GBK 控制台下 ⚠/★ 等符号会让 print 抛 UnicodeEncodeError（2026-10-11 实测：
+    # 走管道/CI 捕获时 `db audit --section gap` **100% 崩**，退出码 1、体检中段
+    # 丢失）——errors="replace" 让符号降级为 `?`，判定链与数字完全保真。
+    # 同源处置见 tools/doctor.py::_harden_stdout。
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except Exception:
+        pass
     if not as_json:
         print("=" * 96)
         print("  全量数据库体检")

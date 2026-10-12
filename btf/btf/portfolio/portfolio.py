@@ -195,8 +195,14 @@ class Portfolio:
                 cost = m * price
                 p0 = self._last_close.get(action.symbol)
                 old_cost = pos.avg_cost
+                #: **B-02（三轮架构审查）**：兜底来源显式登记 —— 当日无 bar 时
+                #: `p0` 取 `avg_cost`（**成本冒充市价**），属降级口径，必须
+                #: 经 `_corp_action_notes` 进报告「假设与披露」（与 RC-04 同机制），
+                #: 不得只在代码注释里自认。
+                p0_source = "last_close"
                 if p0 is None or p0 <= 0:
                     p0 = old_cost
+                    p0_source = "avg_cost_fallback"
                 cash_before = self.cash
                 pos.qty += m
                 pos.available_qty += m
@@ -220,6 +226,9 @@ class Portfolio:
                     "qty_at_ex": qty_at_ex, "rights_qty": m, "cost": cost,
                     "cash_shortfall": max(0.0, cost - cash_before),
                     "p0": p0, "pex": pex,
+                    # B-02：`last_close`（正常）／`avg_cost_fallback`（降级，
+                    # 当日无 bar ⇒ 成本冒充市价）——报告层据此进披露通道
+                    "p0_source": p0_source,
                     "listing_date": (listing.to_ymd() if listing else None),
                 })
 
@@ -280,6 +289,18 @@ class Portfolio:
             pos.avg_cost -= cd
         if d:
             factor = 1.0 + d
+            # ── 送转取整口径（**B-01**，2026-10-11 三轮架构审查）──
+            # `round()`＝**银行家舍入**（.5 进偶数）——**不是**本注释旧写的
+            # 「四舍五入」（原文与实现不符，B-01 已订正）。
+            # 与碎份治理框架（ADR-20 第 ⑪ 条）的关系：缩股碎份＝**向下取整 ＋
+            # 丢弃量披露**（权益减损方向，保守）；送转零股＝**round**（份额增加
+            # 方向，零股属应得补偿，取确定性无偏舍入）。二者**刻意不同口径**，
+            # 已在 ADR-20 第 ⑪ 条补注登记（含 .5 边界行为）。
+            # ⚠ 改动此口径＝**口径变更**：须走 CHANGELOG 单列 ＋ 变化清单
+            #   （照 19 号 §120.2 先例），并同步 `tools/golden_refcalc.py`
+            #   与黄金集断言（`tests/regression/test_golden_l3_reconcile.py`）。
+            #   黄金用例：`tests/unit/test_portfolio_l1.py` 的 .5 边界组
+            #   （qty=101/103 ＋ 10送5 ⇒ 151.5→152、154.5→154）。
             pos.qty = round(pos.qty * factor)
             pos.available_qty = round(pos.available_qty * factor)
             pos.avg_cost /= factor

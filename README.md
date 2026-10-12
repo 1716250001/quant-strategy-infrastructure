@@ -2,7 +2,7 @@
 
 > **位置**：`D:\量化策略\代码\`
 > **身份**：**本目录就是 Git 仓库根**（`quant-strategy`，远端 `git@github.com:1716250001/quant-strategy.git`）
-> **版本**：主工程 `5.0.0`（`config.py` 单一真源）｜回测工具 `btf 1.2.3`（**V1.2.3 定版，2026-10-09**）
+> **版本**：主工程 `5.0.0`（`config.py` 单一真源）｜回测工具 `btf 1.3.1`（**V1.3.1 发版，2026-10-11**——与 mdf v1.3.1 统一版本号，无功能变更；沿革 1.2.4 定版后 L4 六单 → 2026-10-10）
 > **不在本目录**：主库数据（`D:\全量数据\market_data\`）、日报数据（`..\数据\`）、回测产物（`..\回测产物\`）、事实类文档（`..\文档\`）——见 §6
 > **顶层总览**：`..\README.md`（工作区级的目录树、数据红线、变更记录）
 
@@ -14,8 +14,8 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 
 | 工程 | 入口 | 版本 | 说明 |
 |---|---|---|---|
-| **主工程**（本层） | `python main.py <cmd>`（安装后亦可 `pyramid <cmd>`） | 5.0.0 | 数据维护 / 全量库体检 / 因子与指数分析 / 奇点扫描 / 推送。**36 个命令名**（30 可见顶级 + 6 隐藏兼容别名，`db` 命令族另含 6 个子命令） |
-| **回测工具子系统** | `btf\`（`bt <cmd>`） | btf 1.1.0 | 独立工程（自带 `pyproject.toml` / `CHANGELOG.md` / 九项质量门）；**11 条命令族** + `--version` |
+| **主工程**（本层） | `python main.py <cmd>`（安装后亦可 `pyramid <cmd>`） | 5.0.0 | 数据维护 / 全量库体检 / 因子与指数分析 / 奇点扫描 / 推送。**37 个命令名**（31 可见顶级 + 6 隐藏兼容别名，`db` 命令族另含 6 个子命令） |
+| **回测工具子系统** | `btf\`（`bt <cmd>`） | btf 1.3.1 | 独立工程（自带 `pyproject.toml` / `CHANGELOG.md` / **十项质量门**）；**13 条命令族** + `--version` |
 
 两者的 venv 是同一个：`代码\_venv\Scripts\python.exe`。
 
@@ -70,9 +70,9 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 | 包 | 职责 | 关键模块 |
 |---|---|---|
 | `common\` | 公共层：**路径 / IO / 日历 / 代码 的唯一真源** | `paths.py`（路径解析唯入口，禁止 `__file__` 推算）、`parquet_store.py`（增量合并 / 按年分区 / 批写）、`reader.py`、`calendar.py`、`codes.py`、`jsonio.py`、`logging_setup.py` |
-| `fetch\` | 拉取类任务 | `daily_update.py`（★ 每日增量统一入口）、`full_download.py`（建库/重建，断点续跑）、`cb_download.py`、`fund_nav_update.py`、`redtide_supply.py`、`backfill{,_io,_spec}.py`（通用补数三件套）、`base.py`（限频/断点/并发基建） |
+| `fetch\` | 拉取类任务 | `daily_update.py`（★ 每日增量统一入口）、`full_download.py`（建库/重建，断点续跑）、`cb_download.py`、`fund_nav_update.py`、`redtide_supply.py`、`backfill{,_io,_spec}.py`（通用补数三件套）、`periodic_update.py`（★ 事件面表周期通道：dividend/namechange，见 `config.PERIODIC_UPDATE_TARGETS`）、`base.py`（限频/断点/并发基建） |
 | `strategies\` | 策略信号层 | `qidian.py`（标的池/取数/指标/信号）、`qidian_daily_scan.py`（扫描编排） |
-| `tools\` | 运维与分析脚本（被 CLI 调用，也可单独跑） | `db_{audit,schema,clean,migrate}.py`、`ckpt_tool.py`、`doctor.py`、`config_check.py`、`check_coverage.py`、`consumer_coverage.py`、`regress_pipeline.py`、`build_micro_index.py`、`factor_library.py`、`fund_pool_builder.py`、`manager_profile.py`、`leverage_monitor.py`、`etf_flow.py`、`{list,export}_lof.py`、`gen_db_report.py`、`quicklook.py`、`clean_scratch.py`、`utils.py` |
+| `tools\` | 运维与分析脚本（被 CLI 调用，也可单独跑） | `db_{audit,schema,clean,migrate}.py`、`db_schema_align.py`（★ 跨年度分区 schema 漂移 扫描/修复）、`ckpt_tool.py`、`doctor.py`、`config_check.py`、`check_coverage.py`、`consumer_coverage.py`、`regress_pipeline.py`、`build_micro_index.py`、`factor_library.py`、`fund_pool_builder.py`、`manager_profile.py`、`leverage_monitor.py`、`etf_flow.py`、`{list,export}_lof.py`、`gen_db_report.py`、`quicklook.py`、`clean_scratch.py`、`utils.py` |
 | `push\` | 推送 | `pushplus.py` |
 | `alt\` | alt 库（另类/海外数据，**物理隔离**于主库） | `update.py`、`audit.py`、`backfill.py`、`us_backfill.py`、`verify_spec.py`、`reader.py`、`spec.py`、`rate.py`、`urls.py`、`io.py` |
 
@@ -86,7 +86,7 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 
 ## 4. `btf\` — 回测工具子系统
 
-独立工程（自带 pyproject / CHANGELOG / 门禁），**版本 1.2.3（V1.2.3 定版，2026-10-09）**（`btf\_version.py` 单一真源）。
+独立工程（自带 pyproject / CHANGELOG / 门禁），**版本 1.3.1（V1.3.1 发版，2026-10-11；与 mdf 统一版本号，无功能变更）**（`btf\_version.py` 单一真源）。
 
 ```
 btf\
@@ -99,12 +99,12 @@ btf\
 ├─ schemas\            配置 JSON Schema（backtest.v1.json）
 ├─ benchmarks\         B1–B5 基准留档
 ├─ examples\           示例策略（rotation.py）+ 配置
-├─ tools\              常驻工具 16 个（九项门禁脚本 + 对账/复跑/冷备/预算）+ probes\ 探针
-└─ tests\              890 项（unit / integration / regression / system / benchmark / perf / fixtures）
+├─ tools\              常驻工具 20 个（十项门禁脚本 + 对账/复跑/冷备/预算）+ probes\ 探针
+└─ tests\              1219 项（unit / integration / regression / system / benchmark / perf / fixtures）
 ```
 
-- **命令族 11 条**：`config-check` / `run` / `report` / `verify` / `test` / `dataset` / `optimize` + `check` / `cold-backup` / `runs` / `show`（另有 `bt --version`）
-- **质量门 `bt check` 9/9**：ruff · import-linter 十契约 · 插件边界（SHA256 基线）· domain 白名单 · 依赖预算 8/8 · 冒烟 · 报告渲染级断言 · 数据不变量（含负向对照）· IO 单一入口（AST 扫描 + 变异性自检）
+- **命令族 13 条**：`config-check` / `run` / `report` / `verify` / `test` / `dataset` / `optimize` / `validate` / `data` + `check` / `cold-backup` / `runs` / `show`（另有 `bt --version`）
+- **质量门 `bt check` 10/10**：ruff · import-linter 十契约 · 冒烟 · 依赖预算 8/8 · 包可导入 · domain 白名单 · 报告渲染级结构 · 数据不变量（含负向对照）· IO 单一入口（AST 扫描 + 变异性自检）· 插件边界基线（SHA256）
 - 纪律示例：随机数一律经 `ctx` 已播种 Generator；`data.core` 是唯一触磁盘模块；一切改动须过门禁 + 追加 CHANGELOG
 
 ---
@@ -115,8 +115,8 @@ btf\
 
 | 子目录 | 内容 |
 |---|---|
-| `回测工具架构\` | **22 份**：01–17 号架构基线（v0.3 冻结，五轮评审闭环）+ 18 号分步编码计划（执行状态跟踪）+ 19 号架构审查与重构方案 + README（导航/映射表） |
-| `全量数据库架构\` | **18 份**：MD-Foundation（mdf）v0.1 设计稿 + README |
+| `回测工具架构\` | **22 份**：01–17 号架构基线（v0.3 冻结，五轮评审闭环）+ 18 号分步编码计划（执行状态跟踪）+ 19 号架构审查与重构演进记录（**含 §122/§123**）+ 20 号回测平台使用指引 + 21 号 CLI 功能手册 + README（导航/映射表） |
+| `全量数据库架构\` | **19 份**：MD-Foundation（mdf）设计稿（v1.3.1 定版）+ 18 号审查记录（逐轮追加）+ README |
 
 改 btf 前先读 `回测工具架构\README.md` 的阅读路径；任务级变更按 18 号的「使用约定」登记。
 
@@ -126,12 +126,12 @@ btf\
 
 | 位置 | 内容 |
 |---|---|
-| `D:\全量数据\market_data\` | ★ **主库**：全量市场数据（Tushare，Parquet 按年分区，111 张表；113 目录 / 11,366 文件 / 6.94 GB） |
+| `D:\全量数据\market_data\` | ★ **主库**：全量市场数据（Tushare，Parquet 按年分区）—— **113 张表**（另有 `market_state` / `wind_index` 两个纯子目录容器）/ **11,935 parquet / 7.0 GB**（2026-10-11 实测） |
 | `D:\全量数据\alt_data\` | alt 备用库（akshare，含美股；141 文件 / 598 MB） |
 | `..\数据\` | **日报数据** `daily_data\`（JSON/CSV）+ `signals\` + `wind指数库\` + 基金池 / 经理桥表 CSV |
 | `..\回测产物\` | btf 回测 `runs\` + `v77-robustness\` + 收口/验收报告（M1–M3 / 场景 A·B） |
 | `..\文档\` | 事实类文档：`数据与工程\` / `策略体系\` / `市场研究\` / `舰队福利提取\` |
-| `..\备份\` | 冷备与归档（含 btf 跨版本源码冷备 `*-cold\`，最新 `20261009-0715-btf-1.2.3-cold`） |
+| `..\备份\` | 冷备与归档（含 btf 跨版本源码冷备 `*-cold\`，最新 `20261011-1827-mdf-btf-v1.3.1-cold`） |
 
 **路径口径**：主库等绝对路径在 `config.py` 集中定义（`MARKET_DATA_DIR` / `DATA_DIR` / `DOC_DIR` …），其余模块一律经 `common\paths.py` 取用；禁止自行用 `__file__` 推算、禁止散落硬编码。
 
@@ -156,8 +156,9 @@ btf\
 D:\量化策略\代码\_venv\Scripts\python.exe main.py doctor      # 环境自检（依赖/路径/磁盘/断点/凭据）
 
 # 数据维护（盘后）
-python main.py gap-update          # 差额补全（库最新日 → 今天）
+python main.py gap-update          # 差额补全（库最新日 → 今天；收尾含事件面表周期通道）
 python main.py intraday-update     # 尾盘增量（= gap-update --lookback 1）
+python -m fetch.periodic_update --status   # 事件面表（dividend/namechange）周期通道状态，零请求
 python main.py redtide-supply      # 赤潮数据补全（adj_factor / stk_limit / market_state）
 python main.py fund-nav            # 基金净值增量
 python main.py download-full       # 全市场建库/重建（断点续跑）
@@ -186,8 +187,8 @@ python main.py alt-update / alt-audit / alt-backfill / alt-us / alt-verify
 
 # 回测工具（btf；短命令 bt / pyramid 已装在本 venv\Scripts\ 下）
 cd btf
-..\_venv\Scripts\python.exe -m pytest           # 全量测试（890 项）
-..\_venv\Scripts\python.exe tools\check.py      # 等价于 bt check（9/9 门禁）
+..\_venv\Scripts\python.exe -m pytest           # 全量测试（1219 项）
+..\_venv\Scripts\python.exe tools\check.py      # 等价于 bt check（10/10 门禁）
 bt run -c <config> / bt report / bt verify / bt check   # 跑回测 / 报告 / 复核 / 门禁
 ```
 
@@ -198,7 +199,7 @@ bt run -c <config> / bt report / bt verify / bt check   # 跑回测 / 报告 / �
 1. **凭据只在 `.env`**，永不进仓；`_archive\` 含历史明文凭据，勿外传。
 2. **所有路径从 `common\paths.py` 取**——禁自行推算 `__file__`、禁硬编码、禁多层 fallback。
 3. **改动生产流水线前先 `--dry-run`**；数据表清单/结构改动后跑 `config-check`。
-4. **回测工具改动须过 `bt check`（9/9）**，并在 `btf\CHANGELOG.md` 追加条目。
+4. **回测工具改动须过 `bt check`（10/10）**，并在 `btf\CHANGELOG.md` 追加条目。
 5. **任务级变更须登记**：`代码架构\回测工具架构\18-分步编码计划.md` + `..\README.md` §八。
 6. **验证话术纪律**：不以"全绿"作结论，须附实测输出摘要（btf 铁律）。
 

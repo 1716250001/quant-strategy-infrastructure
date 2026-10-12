@@ -112,6 +112,16 @@ class RunResult:
     #: 配股锁定期内卖出警告（获配股份上市日前卖出；**默认不建模锁定期**，
     #: 故只警告、不阻断——§79.3 #3）。
     lockup_sell_warnings: list[str] = field(default_factory=list)
+    #: ── 落盘编排附加三字段（**D-01**，2026-10-11 三轮架构审查）──
+    #: 问题：此前只有 `persist=True` 路径在 `RunOrchestrator` 里**动态附加**
+    #: 这三属性，`persist=False`（内存回测/网格搜索）**没有** ⇒ 同一类型两种形态，
+    #: 调用方 `result.metrics` 在一档下 AttributeError、另一档正常（N45 残根形态）。
+    #: 修法：在 dataclass 上**声明**并取 None 默认值 —— 双路径契约一致；
+    #: None 语义＝"本次未落盘/未计算"，**不是**空结果（禁按 `{}` 兜底解读）。
+    #: ⚠ 类型用 Any / 宽松注解：engine 不得 import experiment（分层铁律 5）。
+    manifest: Any = None
+    run_id: str | None = None
+    metrics: Mapping[str, float] | None = None
 
 
 def _writeoff_settlement(portfolio: Portfolio, result: RunResult) -> float:
@@ -332,26 +342,9 @@ class Engine:
         explicit_orders: list[Order] = []
         warned_risk_chain = False
 
-        # 步骤①数据源：区间实施态行动一次性装载（升序 (ex_date, symbol)
-        # =确定性；dividend 表小 ~0.2s/10 年，B2 预算内）+ 两时点索引。
-        # by_pay 仅收录 ex≠pay 的行动（pay≡ex 在 ex 分支当日到账）。
-        # 行动编号 idx 作 pending 登记键——同标的同日多行动（如 600811
-        # 19960730 送转/派息拆 3 行）不会互相覆盖丢分红。
-        actions_by_ex: dict[str, list[tuple[int, CorporateAction]]] = {}
-        actions_by_pay: dict[str, list[tuple[int, CorporateAction]]] = {}
-        # **CL-2-H（R32′）**：显式宇宙（`_cross_section`）给出时随装载一并传入
-        # ——ETF/LOF 公司行动按宇宙内 `is_fund_code` 标的上限装载（避免全 ETF
-        # 扫描）；**签名探测**兼容未扩参的自定义/Memory Feed（无 `symbols`
-        # 形参 ⇒ 原两参调用，语义不变）。
-        _ca = self._feed.corporate_actions
-        if "symbols" in inspect.signature(_ca).parameters:
-            _ca_iter = _ca(self._start, self._end, symbols=self._cross_section)
-        else:
-            _ca_iter = _ca(self._start, self._end)
-        for idx, act in enumerate(_ca_iter):
-            actions_by_ex.setdefault(act.ex_date.to_ymd(), []).append((idx, act))
-            if act.pay_date is not None and act.pay_date != act.ex_date:
-                actions_by_pay.setdefault(act.pay_date.to_ymd(), []).append((idx, act))
+        # 步骤①数据源：区间实施态行动一次性装载（**D-02**：细节下沉
+        # `_load_actions()`，口径注释随函数走）+ 两时点索引。
+        actions_by_ex, actions_by_pay = self._load_actions()
         # qty_at_ex 跨窗口登记（实现注意②）：idx → (qty_at_ex, cash_div)
         pending_divs: dict[int, tuple[int, float]] = {}
 
@@ -518,34 +511,11 @@ class Engine:
                         with_touch_flags=False),
                     data))
 
-            # ⑧ 风控预检（M2 5.2：规则链逐单裁决——首 REDUCE/REJECT 生效；
-            # 否决转 Rejection(code=risk_rejected) 进当日拒单统计，06 §10.6）
-            # states 覆盖 drafts 标的（涨跌停预拒需 touch flags=True）；
-            # LazyStates 惰性——链无 tradability 规则时不触发查询。
-            # 盯市补充：drafts 标的（可能未持仓——首日建仓）先以当日收盘
-            # 盯市，供 close_of 预估（无价规则会降级放行）。
-            if drafts and self._risk is not None:
-                mark = {o.symbol: data[o.symbol].close
-                        for o in drafts if o.symbol in data}
-                if mark:
-                    portfolio.mark_all(mark)
-                syms = sorted({o.symbol for o in drafts})
-                risk_states = LazyStates(
-                    lambda d=date, s=syms:
-                        self._feed.trading_states(d, s, with_touch_flags=True))
-                drafts = self._risk.pre_check(drafts, portfolio, risk_states)
-                for order, reason in self._risk.batch_rejections:
-                    result.rejections.append(
-                        (order, Rejection(RejectCode.RISK_REJECTED,
-                                          f"{reason}（风控预检）")))
-                    result.orders.append(order)   # 被拒也计入已提交（审计）
-                    _emit(OrderRejectedEvent(
-                        order=order,
-                        reason=Rejection(RejectCode.RISK_REJECTED,
-                                         f"{reason}（风控预检）")))
-            elif drafts and not warned_risk_chain:
-                logger.warning("风控链为空：订单直接入队（04 §8.5 扩展点 6 降级）")
-                warned_risk_chain = True
+            # ⑧ 风控预检（M2 5.2：规则链逐单裁决——首 REDUCE/REJECT 生效）
+            #    **D-02**：细节下沉 `_risk_precheck()`（含 states/盯市/空链降级
+            #    三处口径注释），此处只保留步骤时点位次。
+            drafts, warned_risk_chain = self._risk_precheck(
+                drafts, portfolio, data, date, result, warned_risk_chain, _emit)
 
             # ⑨ 确定性赋号 + 入队
             for draft in drafts:
@@ -559,6 +529,21 @@ class Engine:
             result.snapshots.append(portfolio.snapshot(date))
             _emit(SessionEndEvent(date=date))
 
+        # 循环后处理（退市残值披露 / 清算口径 / 公司行动审计转出 / 价格视图）
+        #   **D-02**：细节下沉 `_post_process()`（行为零变更；口径注释随函数走）
+        self._post_process(result, portfolio, last_seen, clock, writer)
+        return result
+
+    # ── 循环后处理（**D-02** 从 run() 抽出；行为零变更）──
+    def _post_process(self, result, portfolio, last_seen, clock, writer) -> None:
+        """run() 循环结束后的三处后处理 ＋ 元数据转出。
+
+        顺序与语义**逐位不变**（19 号 §72.4/§79.4/§96.4 口径注释随迁）：
+          ① 退市持仓残值披露（RC-11-A：**只披露、不改数**）
+          ② 清算口径登记 ＋ writeoff 核销（CL-3）
+          ③ 公司行动审计转出 ＋ 锁定期卖出警告（CL-2 第二段 / CL-2-H）
+          ④ 价格视图元数据与降级披露（R62′）＋ 事件日志收尾
+        """
         # RC-11-A（2026-10-05）：退市持仓残值披露——**只披露、不改数**。
         # 候选 = 区间末仍持仓（qty>0）且末日无 bar 的标的；对候选做一次
         # 状态查询，`is_delisted=True` 命中 ⇒ 登记（标的 / 末次交易日）。
@@ -627,7 +612,68 @@ class Engine:
             writer.close()
             result.events_path = writer.path
             result.events_sampled = writer.sampled
-        return result
+
+    # ── 步骤①：公司行动装载（**D-02** 从 run() 抽出；行为零变更）──
+    def _load_actions(
+        self,
+    ) -> tuple[dict[str, list[tuple[int, CorporateAction]]],
+               dict[str, list[tuple[int, CorporateAction]]]]:
+        """区间实施态行动一次性装载 → (actions_by_ex, actions_by_pay)。
+
+        升序 (ex_date, symbol) ＝确定性；dividend 表小 ~0.2s/10 年，B2 预算内。
+        by_pay 仅收录 ex≠pay 的行动（pay≡ex 在 ex 分支当日到账）。
+        行动编号 idx 作 pending 登记键——同标的同日多行动（如 600811
+        19960730 送转/派息拆 3 行）不会互相覆盖丢分红。
+
+        **CL-2-H（R32′）**：显式宇宙（`_cross_section`）给出时随装载一并传入
+        ——ETF/LOF 公司行动按宇宙内 `is_fund_code` 标的上限装载（避免全 ETF
+        扫描）；**签名探测**兼容未扩参的自定义/Memory Feed（无 `symbols`
+        形参 ⇒ 原两参调用，语义不变）。
+        """
+        actions_by_ex: dict[str, list[tuple[int, CorporateAction]]] = {}
+        actions_by_pay: dict[str, list[tuple[int, CorporateAction]]] = {}
+        _ca = self._feed.corporate_actions
+        if "symbols" in inspect.signature(_ca).parameters:
+            _ca_iter = _ca(self._start, self._end, symbols=self._cross_section)
+        else:
+            _ca_iter = _ca(self._start, self._end)
+        for idx, act in enumerate(_ca_iter):
+            actions_by_ex.setdefault(act.ex_date.to_ymd(), []).append((idx, act))
+            if act.pay_date is not None and act.pay_date != act.ex_date:
+                actions_by_pay.setdefault(act.pay_date.to_ymd(), []).append((idx, act))
+        return actions_by_ex, actions_by_pay
+
+    # ── 步骤⑧：风控预检（**D-02** 从 run() 抽出；行为零变更）──
+    def _risk_precheck(self, drafts, portfolio, data, date, result, warned, emit):
+        """风控链逐单裁决 → (drafts, warned)。
+
+        规则链首 REDUCE/REJECT 生效；否决转 `Rejection(code=risk_rejected)`
+        进当日拒单统计（06 §10.6）。states 覆盖 drafts 标的（涨跌停预拒需
+        touch flags=True）；LazyStates 惰性——链无 tradability 规则时不触发查询。
+        盯市补充：drafts 标的（可能未持仓——首日建仓）先以当日收盘盯市，
+        供 `close_of` 预估（无价规则会降级放行）。
+        空链降级：`warned=False` 时告警一次并回传 `True`（禁静默，04 §8.5 扩展点 6）。
+        `emit` ＝ run() 内的事件写出闭包（注入以保持"事件日志只在 run 内直写"）。
+        """
+        if drafts and self._risk is not None:
+            mark = {o.symbol: data[o.symbol].close
+                    for o in drafts if o.symbol in data}
+            if mark:
+                portfolio.mark_all(mark)
+            syms = sorted({o.symbol for o in drafts})
+            risk_states = LazyStates(
+                lambda d=date, s=syms:
+                    self._feed.trading_states(d, s, with_touch_flags=True))
+            drafts = self._risk.pre_check(drafts, portfolio, risk_states)
+            for order, reason in self._risk.batch_rejections:
+                rej = Rejection(RejectCode.RISK_REJECTED, f"{reason}（风控预检）")
+                result.rejections.append((order, rej))
+                result.orders.append(order)   # 被拒也计入已提交（审计）
+                emit(OrderRejectedEvent(order=order, reason=rej))
+        elif drafts and not warned:
+            logger.warning("风控链为空：订单直接入队（04 §8.5 扩展点 6 降级）")
+            warned = True
+        return drafts, warned
 
     # ── ctx 工厂 ──
     def _make_ctx(self, clock, portfolio, data, states, loader, on_target, on_order):

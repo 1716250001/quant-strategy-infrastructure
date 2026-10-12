@@ -247,10 +247,63 @@ class TestCorporateActionForms:
                                                   symbol="000001.SZ")) == 0
 
     def test_fractional_stk_div_rounding(self):
-        """千分位送转比例（如 10 送 1.235）：qty 四舍五入取整；
+        """千分位送转比例（如 10 送 1.235）：qty 取整（**银行家舍入**，B-01 订正）；
         avg_cost 按文档理论比例 /=（整比例场景两者精确一致）。"""
         qty_at_ex = self.pf.apply_ex_date(self._action(stk_div=0.1235))
         pos = self.pf.position("600900.SH")
         assert qty_at_ex == 100
         assert pos.qty == round(100 * 1.1235)    # 112
         assert pos.avg_cost == pytest.approx(10.0 / 1.1235)
+
+    def test_stk_div_half_boundary_pins_rounding(self):
+        """**B-01 黄金用例**：送转 `.5` 边界行为**钉死**（ADR-20 第 ⑪ 条补注）。
+
+        口径（2026-10-11 三轮架构审查 B-01 订正注释）：`round()` ＝
+        **银行家舍入**（.5 进偶数），**不是**「四舍五入」。
+        本用例同时覆盖"进位"与"退位"两侧 —— 任何把口径改成 half-up（151.5→152
+        两者同号看不出差别）或 floor 的改动都会在此失败；**改口径属口径变更**，
+        须走 CHANGELOG 单列 ＋ 变化清单（照 19 号 §120.2 先例）。
+
+        qty=101、10送5（stk_div=0.5）：101×1.5 = 151.5 → round → **152**（偶）
+        qty=103、10送5：              103×1.5 = 154.5 → round → **154**（偶）
+        """
+        pf_a = Portfolio(cash=1_000_000.0)
+        pf_a.apply_fill(mk_fill("600900.SH", OrderSide.BUY, 101, 10.0))
+        pf_a.apply_ex_date(self._action(stk_div=0.5))
+        assert pf_a.position("600900.SH").qty == 152
+
+        pf_b = Portfolio(cash=1_000_000.0)
+        pf_b.apply_fill(mk_fill("600900.SH", OrderSide.BUY, 103, 10.0))
+        pf_b.apply_ex_date(self._action(stk_div=0.5))
+        assert pf_b.position("600900.SH").qty == 154
+
+    def test_rights_p0_fallback_source_is_disclosed(self):
+        """**B-02 黄金用例**：配股 `p0` 兜底（成本冒充市价）**必须可披露**。
+
+        当日无 bar（`_last_close` 无该标的）⇒ `p0` 取 `avg_cost`，事件须带
+        `p0_source="avg_cost_fallback"`（报告层 `_corp_action_notes` 据此
+        进「假设与披露」）；有 `last_close` ⇒ `p0_source="last_close"`。
+        """
+        from btf.domain.action import CorporateAction
+
+        def _rights_action():
+            return CorporateAction(
+                symbol="600900.SH", ex_date=D, pay_date=None, record_date=None,
+                cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
+                rights_ratio=0.5, rights_price=5.0)
+
+        # ① 无 last_close（无 bar）⇒ 兜底取 avg_cost（=10.0）
+        pf = Portfolio(cash=1_000_000.0)
+        pf.apply_fill(mk_fill("600900.SH", OrderSide.BUY, 100, 10.0))
+        pf.apply_ex_date(_rights_action())
+        ev = pf.rights_events[-1]
+        assert ev["p0_source"] == "avg_cost_fallback"
+        assert ev["p0"] == pytest.approx(10.0)
+
+        # ② 有 last_close ⇒ 正常路径（不得误标降级）
+        pf2 = Portfolio(cash=1_000_000.0)
+        pf2.apply_fill(mk_fill("600900.SH", OrderSide.BUY, 100, 10.0))
+        pf2.mark_all({"600900.SH": 12.0})
+        pf2.apply_ex_date(_rights_action())
+        assert pf2.rights_events[-1]["p0_source"] == "last_close"
+        assert pf2.rights_events[-1]["p0"] == pytest.approx(12.0)
