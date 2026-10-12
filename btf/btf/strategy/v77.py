@@ -36,6 +36,18 @@ class V77Strategy(StrategyBase):
 
     contract_version = CONTRACT_VERSION
 
+    @staticmethod
+    def lookback_bars() -> int:
+        """**R65′ 声明**（对应 R59′/N61 先例）：策略所需历史 bar 数 ＝ **6**。
+
+        依据：L0-LIQ 状态机的最大记忆 ＝ 入闸确认期 3 ＋ 恢复期 3
+        （`data/liq._finalize`；规则源 Z-6 口径）——裸判定（指数涨跌幅/跌停
+        家数）与 L2 硬筛（PIT 财报快照，as-of 当日）均为**当日截面、无历史
+        窗口** ⇒ 声明 6 个交易日。若不声明，`walk-forward --warmup auto`
+        会回落保守默认 252 并 WARN（N60 纪律：禁静默退化 0）。
+        """
+        return 6
+
     def __init__(
         self,
         rules: object,

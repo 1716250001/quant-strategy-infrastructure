@@ -76,7 +76,7 @@
   "btf/strategy/qidian.py": "55be4bc33b8462459e2e5710b6667241d9d187f4cf33b8b00bf7be6f48c5a6ba",
   "btf/strategy/rebalance.py": "8b594d05f1a8a53bbdff90e1462e870abacc640b9f43c065688ddfb846269811",
   "btf/strategy/rules.py": "500640142b99f08d316263481351f57978174435a946f6b93d3b5da17f79f8cb",
-  "btf/strategy/v77.py": "035715d49f0342da2a61c86dfd69dc22c8a84055368f31e3e4c8e166620a7274",
+  "btf/strategy/v77.py": "afd3916b59f64a968bf8d353bfe9ae2656f358867f9c3f576b0ec4f560bcde7f",
   "btf/viz/__init__.py": "2435af11315bc2d35f0706e6fc588effca2a4def4626e073ca449b0286b39335",
   "btf/viz/charts.py": "0fe68fe5c8aaa006302fa758e57b1c92acab78e5e39f335991218bb73b094336",
   "btf/viz/contracts.py": "8ab86fafadbc701fe3cd9e5724fb2767ccc98100aa2581db6989cf759c085ffa",
