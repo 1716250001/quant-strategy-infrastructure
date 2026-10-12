@@ -80,8 +80,17 @@ class MirrorJsonRulesProvider:
     由 Schema 拒绝；显式 override 须声明 `override: true` 并留痕进 manifest
     （`rules_overrides` 字段）。
 
-    指纹：`rules_version()` 取镜像内的 `rules_version`（v7.7 + 规则内容
-    sha256）——进 RunManifest，使"规则升级导致回测/实盘分叉"可被检测。
+    **R66′/P-NEW-1（2026-10-12）override 生效语义**：此前 overrides **只留痕
+    不应用**（`get()` 直读镜像值）⇒ 规则参数网格轴不可用。现定案：
+    - **构造期一次性浅合并**（immutable 快照）：条目级覆盖同键参数、追加新键，
+      **不做深层 merge**；`get()` 返回合并后结果；
+    - **键名归一**：条目的规则 ID 与参数键均与 `get()` 同走 `aliases`
+      （文档键名 → 规范名，如 `pe_ttm_max → pe_max`）；
+    - **fail-closed**：条目指向未登记规则 ⇒ 构造期 `ValueError`（早失败，
+      禁静默 no-op——正是本次缺陷的形态）；空 `overrides` ⇒ 行为逐位不变；
+    - **留痕集＝生效集**：`overrides` 属性返回**规范化后的生效条目**
+      （`{rule_id, param, value}`，均为规范名）——与 manifest 里的 config
+      原文条目可断言等价（归一后一致，G4）。
     """
 
     contract_version: ClassVar[str] = CONTRACT_VERSION
@@ -96,7 +105,32 @@ class MirrorJsonRulesProvider:
         self._aliases: dict[str, str] = dict(payload.get("aliases") or {})
         self._units: dict[str, str] = dict(payload.get("units") or {})
         self._version: str = payload.get("rules_version", "unknown")
-        self._overrides: tuple[Mapping[str, Any], ...] = tuple(overrides)
+        # ── R66′/P-NEW-1：构造期一次性合并（生效语义）＋ 规范化留痕 ──
+        self._overrides: tuple[Mapping[str, Any], ...] = tuple(
+            self._normalize_override(raw) for raw in overrides)
+        for entry in self._overrides:
+            key, param, value = (entry["rule_id"], entry["param"],
+                                 entry["value"])
+            if key not in self._rules:
+                raise ValueError(
+                    f"override 指向未登记规则 {key!r}"
+                    f"（已登记: {sorted(self._rules)}）——fail-closed，"
+                    "禁静默 no-op（R66′/P-NEW-1 教训）")
+            self._rules[key][param] = value      # 浅合并：覆盖/追加
+
+    def _normalize_override(self, raw: Mapping[str, Any]) -> dict[str, Any]:
+        """条目规范化：`rule_id|rule` 二选一 ＋ `param`/`value` 必填；键名走 aliases。"""
+        if not isinstance(raw, Mapping):
+            raise ValueError(
+                f"override 条目须为映射，得 {type(raw).__name__}: {raw!r}")
+        rule_id = raw.get("rule_id", raw.get("rule"))
+        param = raw.get("param")
+        if not rule_id or not param or "value" not in raw:
+            raise ValueError(
+                f"override 条目缺 rule_id(/rule)、param 或 value: {dict(raw)}")
+        return {"rule_id": self._aliases.get(rule_id, rule_id),
+                "param": self._aliases.get(param, param),
+                "value": raw["value"]}
 
     # ── 协议 ──
     def rules_version(self) -> str:
@@ -104,7 +138,10 @@ class MirrorJsonRulesProvider:
         return self._version
 
     def get(self, rule_id: str) -> Mapping[str, Any]:
-        """取规则参数（支持 aliases 文档键名；未登记 → KeyError 显式报错）。"""
+        """取规则参数（支持 aliases 文档键名；未登记 → KeyError 显式报错）。
+
+        R66′ 起：返回**合并 overrides 后**的快照（构造期已应用）。
+        """
         key = self._aliases.get(rule_id, rule_id)
         if key not in self._rules:
             raise KeyError(
@@ -118,7 +155,7 @@ class MirrorJsonRulesProvider:
 
     @property
     def overrides(self) -> tuple[Mapping[str, Any], ...]:
-        """显式 override 清单（覆盖即留痕）。"""
+        """显式 override 清单——R66′ 起＝**规范化生效条目**（留痕集＝生效集）。"""
         return self._overrides
 
     def units(self) -> Mapping[str, str]:

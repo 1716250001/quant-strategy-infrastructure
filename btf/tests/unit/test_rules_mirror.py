@@ -82,6 +82,72 @@ class TestMirrorJsonRulesProvider:
             MirrorJsonRulesProvider(tmp_path / "nope.json")
 
 
+class TestOverridesApplied:
+    """R66′/P-NEW-1 守卫：overrides **生效语义**（此前只留痕不应用）。
+
+    对应派单 §125.1 第 3 条四断言 ＋ fail-closed 锁定：
+        ① override 生效 ② 未 override 参数零副作用 ③ 留痕集＝生效集
+        ④ 别名键 override 生效 ＋ ⑤ 未登记规则构造期报错 ＋ ⑥ 空表零副作用。
+    """
+
+    def test_override_applied(self, mirror_path):
+        provider = MirrorJsonRulesProvider(
+            mirror_path,
+            overrides=({"rule_id": "L2_filter", "param": "pe_max",
+                        "value": 25},))
+        assert provider.get("L2_filter")["pe_max"] == 25
+
+    def test_non_overridden_params_untouched(self, mirror_path):
+        provider = MirrorJsonRulesProvider(
+            mirror_path,
+            overrides=({"rule_id": "L2_filter", "param": "pe_max",
+                        "value": 25},))
+        got = provider.get("L2_filter")
+        assert got["pb_max"] == V75["pb_max"] and got["roe_min"] == V75["roe_min"] \
+            and got["dv_min"] == V75["dv_min"]
+        assert provider.get("L0_LIQ") == LIQ          # 未触碰的规则整体不变
+
+    def test_overrides_property_equals_effective_set(self, mirror_path):
+        """③ 留痕集＝生效集：规范化条目（规范名）与实际应用逐条一致（G4）。"""
+        entries = ({"rule_id": "L0_LIQ", "param": "ratio_crisis", "value": 12},
+                   {"rule_id": "L2_filter", "param": "pe_max", "value": 25})
+        provider = MirrorJsonRulesProvider(mirror_path, overrides=entries)
+        assert provider.overrides == entries           # 规范名输入 ⇒ 恒等
+        assert provider.get("L0_LIQ")["ratio_crisis"] == 12
+        assert provider.get("L2_filter")["pe_max"] == 25
+
+    def test_alias_keys_override_applied(self, mirror_path):
+        """④ 别名键（文档名）override 生效；留痕落**规范名**（pe_ttm_max→pe_max）。"""
+        provider = MirrorJsonRulesProvider(
+            mirror_path,
+            overrides=({"rule": "L2_filter", "param": "pe_ttm_max",
+                        "value": 20, "override": True},))
+        assert provider.get("L2_filter")["pe_max"] == 20
+        assert provider.overrides == (
+            {"rule_id": "L2_filter", "param": "pe_max", "value": 20},)
+
+    def test_unknown_rule_fails_closed(self, mirror_path):
+        """⑤ 未登记规则 ⇒ 构造期 ValueError（禁静默 no-op——P-NEW-1 教训）。"""
+        with pytest.raises(ValueError, match="未登记规则"):
+            MirrorJsonRulesProvider(
+                mirror_path,
+                overrides=({"rule_id": "L9_unknown", "param": "x",
+                            "value": 1},))
+
+    def test_malformed_entry_fails_closed(self, mirror_path):
+        with pytest.raises(ValueError, match="override 条目"):
+            MirrorJsonRulesProvider(
+                mirror_path, overrides=({"rule_id": "L2_filter"},))
+
+    def test_empty_overrides_zero_side_effect(self, mirror_path):
+        """⑥ 空 overrides（默认）⇒ 与镜像原文逐键相等（G2 红线的单元面）。"""
+        p_none = MirrorJsonRulesProvider(mirror_path)
+        p_empty = MirrorJsonRulesProvider(mirror_path, overrides=())
+        assert p_none.get("L2_filter") == p_empty.get("L2_filter") == V75
+        assert p_empty.get("L0_LIQ") == LIQ
+        assert p_empty.overrides == ()
+
+
 class TestRegistry:
     def test_registered(self):
         assert "mirror_json" in registry.available(RULES_PROVIDER)
