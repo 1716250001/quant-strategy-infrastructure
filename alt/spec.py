@@ -542,17 +542,24 @@ P4 = [
 #      拉 ≥20 只港股因子表，验证"单事件日单行"（18-审查记录 §4.2）。
 P1_EX = [
     # —— 金十系央行利率（源端停更快照；与既有 _MACRO_A 同构）——
+    # ⚠ 处置（老大 2026-10-12 19:1x 批复；mdf 18号 §15 登记变更）：
+    #   **移出 mdf 程序线，归 Wind 来源范畴研究**——采集器
+    #   `代码\_scratch\wind_macro_fetch.py` 已备，Wind 充值后一键续跑。
+    #   此处**不删条目**（保结构），仅注记「Wind 线承接，暂缓建表」；
+    #   既有 7 天复查轮询对该 2 表不再有意义（源端已停更 + 线路移交）。
     TableSpec("macro_bank_brazil", "macro_bank_brazil_interest_rate", "P1",
               "single", "date", src_date_col="日期", subset="*", mode="once",
               max_age_days=45, update_every_days=7,
               note="巴西央行决议报告（金十源）【已陈旧】实测 156 行、止 2025-09-18；"
                    "每 7 天复查一次源端是否恢复",
-              known_stale="金十系源端已停更（实测止于 2025-09-18；接口可调、结构正常）"),
+              known_stale="金十系源端已停更（实测止于 2025-09-18；接口可调、结构正常）；"
+                          "**Wind 线承接，暂缓建表**（18号 §15；采集器 wind_macro_fetch.py 已备）"),
     TableSpec("macro_bank_india", "macro_bank_india_interest_rate", "P1",
               "single", "date", src_date_col="日期", subset="*", mode="once",
               max_age_days=45, update_every_days=7,
               note="印度央行决议报告（金十源）【已陈旧】实测 232 行、止 2025-08-06",
-              known_stale="金十系源端已停更（实测止于 2025-08-06；接口可调、结构正常）"),
+              known_stale="金十系源端已停更（实测止于 2025-08-06；接口可调、结构正常）；"
+                          "**Wind 线承接，暂缓建表**（18号 §15；采集器 wind_macro_fetch.py 已备）"),
     # —— 中行人民币牌价（枚举 17 币种 × **区间参数**，alt 库首个区间表）——
     # ⚠ 隐式分页（R-19）：接口内部按网页页码循环，一次调用可发多个 HTTP 请求，
     #   limiter 只记 1 次 ⇒ 区间分段 ≤1 年（实测 1 年 ≈2~3 页）。

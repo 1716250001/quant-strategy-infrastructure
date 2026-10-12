@@ -376,7 +376,7 @@ def fill_missing_codes(name, spec, pro, limiter, dry_run=False, verbose=False):
 # 主流程
 # ============================================================
 def run_periodic_update(only=None, dry_run=False, force=False, status_only=False,
-                        verbose=False, quiet=False):
+                        verbose=False, quiet=False, record_version=True):
     """执行周期性更新。返回 {表名: 结果字典}。
 
     参数:
@@ -386,6 +386,8 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
         status_only: 只打印状态（零请求）
         verbose:     打印每次 API 重试日志
         quiet:       静音（供 daily_update 内嵌调用；只打印必要告警）
+        record_version: 是否写库版本（08 §13.5；EE-D11-1 动作 A）。**被日更内嵌时
+                     由日更统一记一次** ⇒ 内嵌调用须传 False（防同日双计）。
     """
     if only and isinstance(only, str):
         only = [x.strip() for x in only.split(",") if x.strip()]
@@ -529,6 +531,17 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
     if not dry_run and plan:
         save_state(state)
         print(f"\n  状态已记录: {state_path()}")
+        # ── 库版本（08 §13.5；仅**独立运行**时记——被日更内嵌时由日更统一记，
+        #    见 record_version 参数；只记真正处理过的表，跳过的不算变更）──
+        if record_version:
+            changed = [n for n, r in results.items()
+                       if isinstance(r, dict) and "skipped" not in r]
+            if changed:
+                try:
+                    from tools.db_version import record as _dbv
+                    _dbv(changed, note="事件面表周期通道")
+                except Exception as e:
+                    print(f"  [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")
 
     if not quiet:
         print(f"\n  完成: {len(results)}/{len(plan)} 张表 | "

@@ -508,6 +508,38 @@ def check_periodic_tables(rep):
 
 
 # ============================================================
+# 10b. 库版本展示（EE-D11-1 动作 A 消费侧；2026-10-12 新增）
+# ============================================================
+def check_db_version(rep):
+    """读取并展示库版本 `metadata/db_version.json`（08 §13.5；**展示级，不判失败**）。
+
+    向后兼容：文件缺失 ⇒ 提示「未生成」（接线前的库没有该文件，属正常态；
+    接线后由日更/回补/结构性变更自动写入）。只读、零请求、零写入。
+    """
+    try:
+        from tools.db_version import show, version_path
+    except Exception as e:
+        rep.warn("库版本", "检查未执行", f"{str(e)[:60]}")
+        return
+    rec = show()
+    if not rec:
+        rep.items.append({
+            "group": "库版本", "name": "db_version", "status": "－",
+            "detail": "未生成（08 §13.5；接线后由日更/回补/结构性变更自动写入）"
+                      f" — {version_path()}"})
+        return
+    detail = (f"{rec.get('version')} @ {rec.get('generated_at')}"
+              f" | 变更表 {len(rec.get('tables_changed') or [])} 个"
+              f" | checkpoint_rev={rec.get('checkpoint_rev')}")
+    rep.ok("库版本", str(rec.get("version")), detail)
+    hist = rec.get("history") or []
+    if hist:
+        rep.items.append({
+            "group": "库版本", "name": "历史", "status": "－",
+            "detail": " → ".join(h.get("version", "?") for h in hist[-6:])})
+
+
+# ============================================================
 # 8. 定时任务
 # ============================================================
 def check_scheduler(r):
@@ -567,6 +599,7 @@ def run_doctor(network=False, as_json=False):
     check_dead_config_revival(r)
     check_leaky_permissions(r)
     check_periodic_tables(r)
+    check_db_version(r)
     check_scheduler(r)
 
     if as_json:

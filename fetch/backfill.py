@@ -776,6 +776,16 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
     print(f"  断点文件: {cp.path}")
     print(f"\n  提示: 重跑本命令会自动跳过已完成部分")
 
+    # ── 库版本（08 §13.5："补数与回补同样写"；EE-D11-1 动作 A）──
+    #   只在确有完成项时记（幂等重跑全跳过 ⇒ 无变更 ⇒ 不记）；best-effort。
+    if not dry_run and any((r or {}).get("done") for r in results):
+        try:
+            from tools.db_version import record as _dbv
+            _dbv([r["name"] for r in results if (r or {}).get("done")],
+                 note="补数/回补")
+        except Exception as e:
+            print(f"  [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")
+
 
 def main():
     p = argparse.ArgumentParser(description="通用补数引擎")

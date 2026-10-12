@@ -412,13 +412,29 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     #   到期则只拉缺失窗口（1~N 个请求，N≈窗口内交易日数）。
     #   ⚠ 与日更同等重要的一点：它让"事件面表停更"从**静默**变成
     #     **日更日志里可见**（此前实证停更 4 周无人发现）。
+    per_result = None
     if with_periodic and not only and not dry_run:
         try:
             from fetch.periodic_update import run_periodic_update
             print("\n[Step 5] 事件面表周期更新通道（E-01；未到期则零请求）")
-            run_periodic_update(quiet=False)
+            per_result = run_periodic_update(quiet=False, record_version=False)
         except Exception as e:
             print(f"  [WARN] 周期更新通道失败（不影响日更主流程）: {str(e)[:100]}")
+
+    # ── 库版本记录（08 §13.5：每次成功日更写入一次；EE-D11-1 动作 A）──
+    #   ⚠ 周期通道内嵌时由本处**统一记一次**（record_version=False 防同日双计）；
+    #     全部表失败 ⇒ 不记（"成功日更"是写入前提）。best-effort：失败只告警，
+    #     版本落后由 doctor「库版本」可见。
+    if not dry_run:
+        per_tables = [n for n, r in (per_result or {}).items()
+                      if isinstance(r, dict) and "skipped" not in r]
+        if ok_n > 0 or per_tables:
+            try:
+                from tools.db_version import record as _dbv
+                tables = [n for n, r in results if (r or {}).get("done")] + per_tables
+                _dbv(tables, note=f"日更 ok={ok_n}" + (f"+周期{len(per_tables)}" if per_tables else ""))
+            except Exception as e:
+                print(f"  [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")
 
     return {"ok": ok_n, "fail": fail_n, "rows": 0}
 

@@ -222,12 +222,25 @@ def main(argv=None):
         print("未指定表名（或用 --all）；无动作")
         return 2
     n_fail = 0
+    fixed_summary = []                     # (表, 修的分区数)——结构性变更记库版本用
     for t in targets:
         n, failed, note = fix(t)
         print(f"[{t}] {note}")
+        if n:
+            fixed_summary.append(f"{t}({n}分区)")
         if failed:
             n_fail += len(failed)
             print(f"    ⚠ 失败 {len(failed)}: {failed}")
+    # ── 库版本（08 §13.5："--rebuild 类整表重建视同结构性变更"；schema 对齐同理。
+    #    EE-D11-1 动作 A 布线 + R64′ C 段回执建议：结构性变更应留版本痕）──
+    if fixed_summary and not n_fail:
+        try:
+            from tools.db_version import record as _dbv
+            _dbv([s.split("(")[0] for s in fixed_summary],
+                 note=f"跨分区 schema 对齐 {', '.join(fixed_summary)}",
+                 structural=True)
+        except Exception as e:
+            print(f"    [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")
     return 1 if n_fail else 0
 
 
