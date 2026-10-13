@@ -7,13 +7,19 @@ tools/leverage_monitor.py — 系统性风险维度·杠杆监控（D2 拆分产
 **只保留风险维度**：B 口径杠杆热度 + 黄/红警戒分级。
 β 合成 / 仓位映射 / 共振 / 四象限等旧逻辑已随原文件归档（_archive/日报链路-20260924/）。
 
-口径（与 fetch/leverage.py 2026-09-22 修复版完全一致，勿漂移）：
-  B口径 b_pct = (rzmre + rzche) 三所求和 / (沪000001.SH + 深399001.SZ 成交额) × 100
+口径（2026-10-13 分母修复版；分子分母同为沪深两市全市场口径，与 2015 年可比）：
+  B口径 b_pct = (rzmre + rzche) 沪深两所求和 / (沪000001.SH + 深399106.SZ 成交额) × 100
   · margin 为 T-1 延迟数据；分母必须用**与两融同期**的交易日（跨日配比会失真）
   · index_daily.amount 单位千元（×1000 转元）；margin 三列单位元
-  · 曾有单交易所 bug（b_ratio 低估 2.1 倍导致黄/红警长期漏报）——按交易所求和是铁律
+  · 分子只取沪深两所（剔除 BSE，与分母口径一致）；按交易所求和是铁律
+    （曾因单交易所口径低估 2.1 倍，黄/红警长期漏报）
+  · ⚠ 2026-10-13 修复：分母原用「深证成指 399001.SZ」= 成分股指数、仅覆盖深市约 49%
+    成交额 → B 值系统性虚高约 1.37 倍（2026 全年 184/184 天误报"红警"，修正后 33/184）。
+    深市全市场口径必须用「深证综指 399106.SZ」（与 daily 表个股求和互验一致）。
 
-阈值（锚 2015 牛市峰值 21.5%）：
+阈值（参考锚 = 2015 全市场口径：中位 23.7% / 峰值 37.4%；原「2015牛市峰值21.5%」系
+误标——实测 2015 峰值 37.4%@20150217 缩量期，6-12 大顶日仅 21.51%。该锚仅作历史
+参照，不参与级别判定）：
   ≥20% 红警（杠杆过热熔断）｜≥18% 黄警（偏高）｜<18% 正常
 
 用法：
@@ -36,7 +42,9 @@ from config import MARKET_DATA_DIR
 # 阈值常量（单一真源；与旧 build_dual_warning 一致）
 YELLOW_THRESHOLD = 18.0   # B口径 ≥18% 黄警
 RED_THRESHOLD = 20.0      # B口径 ≥20% 红警
-RED_ANCHOR = "2015牛市峰值21.5%"
+# 参考锚（2026-10-13 修订）：原「2015牛市峰值21.5%」系误标。实测全市场口径 2015 峰值
+# 37.4%（1-2 月缩量期，@20150217）/ 全年中位 23.7% / 6-12 大顶日 21.51%。
+RED_ANCHOR = "2015全市场口径: 中位23.7% / 峰值37.4%"
 
 
 def _read_parquet(table: str, trade_date: str) -> pd.DataFrame:
@@ -84,14 +92,18 @@ def get_leverage_state(trade_date: str = None) -> dict:
     if marg.empty:
         raise RuntimeError(f"margin {mdate} 空数据")
     # 铁律：按交易所求和（曾因单交易所口径低估 2.1 倍漏报红警）
+    # 2026-10-13：分子只取沪深两所（剔除 BSE），与分母（沪深两市）及 2015 年同口径
+    marg = marg[marg["exchange_id"].isin(["SSE", "SZSE"])]
     rzye = float(marg["rzye"].sum())
     rzmre = float(marg["rzmre"].sum())
     rzche = float(marg["rzche"].sum())
 
     idx = _read_parquet("index_daily", mdate)
-    amt = idx[(idx["trade_date"] == mdate) & (idx["ts_code"].isin(["000001.SH", "399001.SZ"]))]
+    # 分母 = 沪综指 + 深证综指（两市全市场口径）。2026-10-13 修复：原用「深证成指
+    # 399001.SZ」系成分股指数、仅覆盖深市约 49% 成交额，导致 B 值系统性虚高约 1.37 倍。
+    amt = idx[(idx["trade_date"] == mdate) & (idx["ts_code"].isin(["000001.SH", "399106.SZ"]))]
     if amt.empty:
-        raise RuntimeError(f"index_daily {mdate} 无沪/深指数成交额（两融分母缺失）")
+        raise RuntimeError(f"index_daily {mdate} 无沪/深全市场指数成交额（两融分母缺失）")
     total_turnover = float(amt["amount"].astype(float).sum()) * 1000  # 千元→元
 
     b_pct = (rzmre + rzche) / total_turnover * 100 if total_turnover > 0 else 0.0
@@ -114,7 +126,7 @@ def get_leverage_state(trade_date: str = None) -> dict:
         "action": action,
         "ref": RED_ANCHOR if level != "normal" else "",
         "thresholds": f"黄警≥{YELLOW_THRESHOLD:.0f}% / 红警≥{RED_THRESHOLD:.0f}%",
-        "note": "两融为T-1延迟；三所求和；分母与两融同期（沪+深成交额）",
+        "note": "两融为T-1延迟；沪深两所求和；分母与两融同期（沪综指+深综指=两市全市场）",
     }
 
 
