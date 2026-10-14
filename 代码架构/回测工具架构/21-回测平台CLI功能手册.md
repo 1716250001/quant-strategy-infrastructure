@@ -138,7 +138,7 @@ btf 1.3.4
 
 $ bt --help
 usage: bt [-h] [--version]
-          {check,cold-backup,config-check,data,dataset,optimize,report,run,runs,show,test,validate,verify} ...
+          {adhoc,check,cold-backup,config-check,data,dataset,optimize,report,run,runs,show,test,validate,verify} ...
 ```
 
 > 不给子命令、或给未知子命令 → argparse 报错并**退出码 2**（脚本中可据此区分「用法错误」与「业务失败」）。
