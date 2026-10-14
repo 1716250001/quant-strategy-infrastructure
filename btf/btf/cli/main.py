@@ -1017,6 +1017,43 @@ def _args_validate(p: argparse.ArgumentParser) -> None:
                    help="walk-forward：配置覆盖（与 bt run 同则）")
 
 
+# ─────────────────────────────────────────────────────────────
+# ⑦ adhoc（HH-3，19 号 §128）
+# ─────────────────────────────────────────────────────────────
+def _cmd_adhoc(args: argparse.Namespace) -> int:
+    """bt adhoc：一次性/外部回测脚本的**产物契约封装**（委托 `tools/adhoc_run.py`）。
+
+    **HH-3（19 号 §128，2026-10-14）**：把 `tools/adhoc_run.py` 收编为 CLI
+    子命令（L2 复算报告 §9 待办第 6 条）——**入口统一、功能不变**；与
+    `bt check` / `bt cold-backup` 同法：只转发到工具脚本（单一真源），
+    不在 `btf/` 内做第二实现。被封装脚本自身的参数经 `--` 分隔透传。
+    """
+    from btf.app import adhoc_run
+
+    return adhoc_run(
+        name=args.name, script=args.script, params=args.params,
+        tables=args.tables, as_of=args.as_of, watch_dir=args.watch_dir,
+        out=args.out, register_only=args.register_only,
+        list_only=args.list, script_args=tuple(args.script_args or ()),
+    )
+
+
+def _args_adhoc(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--name", help="实验名（登记 key）")
+    p.add_argument("--script", help="待执行/待登记的脚本路径")
+    p.add_argument("--params", help="参数 JSON 路径")
+    p.add_argument("--tables", default="", help="声明用到的主库表，逗号分隔")
+    p.add_argument("--as-of", default="", help="数据基准日 YYYYMMDD")
+    p.add_argument("--watch-dir", default="",
+                   help="差分监视目录（默认脚本所在目录）")
+    p.add_argument("--out", help="登记台根目录（缺省 tools 脚本默认）")
+    p.add_argument("--register-only", action="store_true",
+                   help="不执行脚本，仅登记现有产物（存量脚本用）")
+    p.add_argument("--list", action="store_true", help="列出登记台")
+    p.add_argument("script_args", nargs=argparse.REMAINDER,
+                   help="传给被封装脚本的参数（用 -- 分隔）")
+
+
 #: 命令注册表：名字 → (处理器, 帮助, 参数注册器)
 COMMANDS: dict[str, tuple[CommandHandler, str, ArgAdder]] = {
     "config-check": (_cmd_config_check,
@@ -1049,14 +1086,18 @@ COMMANDS: dict[str, tuple[CommandHandler, str, ArgAdder]] = {
              "数据专项扫描：scan-consolidation（ETF/LOF 份额折算双证据；"
              "R34′/ADR-20）",
              _args_data),
+    "adhoc": (_cmd_adhoc,
+              "一次性/外部回测脚本的产物契约封装（= python tools/adhoc_run.py；"
+              "HH-3）",
+              _args_adhoc),
 }
 
 
 def main(argv: list[str] | None = None) -> int:
     _utf8()
     parser = argparse.ArgumentParser(
-        prog="bt", description="btf 回测工具（十三命令族：config-check/run/report/"
-                               "verify/test/dataset/optimize/validate/data + check/"
+        prog="bt", description="btf 回测工具（十四命令族：config-check/run/report/"
+                               "verify/test/dataset/optimize/validate/data/adhoc + check/"
                                "cold-backup/runs/show）")
     parser.add_argument("--version", action="version",
                         version=f"btf {__version__}",

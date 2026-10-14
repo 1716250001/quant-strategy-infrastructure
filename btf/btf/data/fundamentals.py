@@ -114,6 +114,15 @@ def screen_l2(date_ymd: str, params: dict, *, root: Path | None = None,
         roe = roe_entry[0]
         if pe > 0 and pe < pe_max and pb < pb_max and roe > roe_min and dv > dv_min:
             picks.append(code)
+    # ── 排序口径定序留痕（HH-1，2026-10-14）──
+    #   `sorted()` = Python 默认序；对 `ts_code` 字符串即**代码字母序**
+    #   （如 000001.SZ < 000002.SZ < … < 600000.SH < 688xxx；.BJ 已排除）。
+    #   **此即历史 v77 全部结论的复现口径**（含 §23.2 IR 0.0548 / §54.3 Z-6 后
+    #   IR 0.0504，及 L2 复算 A1 臂）；策略侧 `[:top_k]` 截取依赖本序——
+    #   **改本行 = 改口径**：全部历史结论不可比，须出新口径批次并重跑基线。
+    #   ⚠ 背景（L2 复算报告）：v77 docstring 曾述"低估优先（pe_ttm 升序）"，
+    #   但全仓**从未存在** pe 排序实现——原为"排序口径未写死"状态；
+    #   本项**只留痕、不补实现、不改行为**（"低估优先"改造须另立派单）。
     return sorted(picks)
 
 

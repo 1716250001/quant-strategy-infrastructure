@@ -38,6 +38,7 @@ __all__ = [
     "RunDetail",
     "RunOutcome",
     "RunSummary",
+    "adhoc_run",
     "assemble_assumptions",
     "build_dataset",
     "build_report_file",
@@ -669,6 +670,54 @@ def cold_backup(
         if out:
             args += ["--out", str(out)]
     return _run_tool_script("cold_backup.py", args)
+
+
+def adhoc_run(
+    *,
+    name: str | None = None,
+    script: str | Path | None = None,
+    params: str | Path | None = None,
+    tables: str = "",
+    as_of: str = "",
+    watch_dir: str | Path | None = None,
+    out: str | Path | None = None,
+    register_only: bool = False,
+    list_only: bool = False,
+    script_args: Sequence[str] = (),
+) -> int:
+    """`bt adhoc`：一次性/外部回测脚本的**产物契约封装**（委托 `tools/adhoc_run.py`）。
+
+    **HH-3（19 号 §128，2026-10-14）**：L2 复算报告 §9 待办第 6 条落地——与
+    `bt check` / `bt cold-backup` 同法（**只转发、不做第二实现**；入口统一、
+    功能不变，产出的 `manifest.json`/登记台与直接跑工具逐位同源）。
+    被封装脚本自身的参数经 `--` 分隔透传（工具侧 argparse.REMAINDER）。
+    """
+    args: list[str] = []
+    if list_only:
+        args.append("--list")
+    else:
+        if name:
+            args += ["--name", str(name)]
+        if script:
+            args += ["--script", str(script)]
+        if params:
+            args += ["--params", str(params)]
+        if tables:
+            args += ["--tables", str(tables)]
+        if as_of:
+            args += ["--as-of", str(as_of)]
+        if watch_dir:
+            args += ["--watch-dir", str(watch_dir)]
+        if out:
+            args += ["--out", str(out)]
+        if register_only:
+            args.append("--register-only")
+        # bt 侧 argparse REMAINDER **含分隔符 `--` 本身**（实测），先剔除再补
+        # 唯一一个 —— 与工具侧同纪律（工具亦有 `a != "--"` 过滤，双重幂等）。
+        passthrough = [a for a in script_args if a != "--"]
+        if passthrough:
+            args += ["--", *passthrough]
+    return _run_tool_script("adhoc_run.py", args)
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,14 @@
     ① L0-LIQ 状态（data/liq.py）→ 仓位上限（NORMAL 5 成 / WATCH 2 成 /
        CRISIS 0 / RECOVERY 1 成，来自规则源 L76）；
     ② L2 硬筛（data/fundamentals.py，PIT 口径）→ 合格标的；
-    ③ 低估优先（pe_ttm 升序）取前 top_k，**等权**且总仓位 ≤ 上限。
+    ③ 池内取前 top_k：**实际＝代码字母序**（`screen_l2` 返回 `sorted(picks)`，
+       Python 默认序；排序口径留痕见 `data/fundamentals.py` 模块内 HH-1 注释）
+       ——**等权**且总仓位 ≤ 上限。
+       ⚠ 口径订正（HH-1，2026-10-14）：本 docstring 此前写"低估优先（pe_ttm
+       升序）取前 top_k"，**与实现不符且从未实现**（全仓零 pe 排序实现，
+       L2 复算报告实证）——历史 v77 全部结论（含 IR 0.0548 / Z-6 后 0.0504）
+       的实际口径＝「通过硬筛的代码序前 top_k」，**以此为准**；"低估优先"
+       若要做，属行为/口径变更，须另立派单（本项仅订正文档，零逻辑变更）。
 
 可测性：`screen_fn` / `liq_fn` 可注入（单测用合成实现，脱离主库）。
 """

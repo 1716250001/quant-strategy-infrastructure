@@ -1,8 +1,8 @@
-# btf 回测平台 · CLI 功能手册（**v1.3.3**；2026-10-12：1.3.2 修正批＋1.3.3 R66′）
+# btf 回测平台 · CLI 功能手册（**v1.3.4**；2026-10-14：L2 治理批＋1.3.3 R66′）
 
 > **定位**：`bt` 命令行的**完整功能参考**——逐命令给出用途、语法、参数表、行为分步、输出样例、退出码与限制。
 > **只用工具**请看 [20-回测平台使用指引.md](20-回测平台使用指引.md)（5 分钟上手向）；本手册面向「查参数、排故障、写自动化脚本」。
-> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **1.3.3**；1.3.2/1.3.3 发版 2026-10-12）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**；**2026-10-10 复核实测**（`bt --version` → `btf 1.2.4`；13 命令族含 `data`）；**2026-10-11 复核实测**（`bt --version` → `btf 1.3.3`——版本统一推进，无功能变更）。
+> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **1.3.4**；1.3.4 发版 2026-10-14）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**；**2026-10-10 复核实测**（`bt --version` → `btf 1.2.4`；13 命令族含 `data`）；**2026-10-11 复核实测**（`bt --version` → `btf 1.3.4`——版本统一推进，无功能变更）。**2026-10-14 增量：`adhoc` 收编（HH-3，14 命令族；§4.14）**。
 > **维护**：CLI 改动必须同步本手册；相邻文档：装配/引擎语义见 04/06 号，产物契约见 08 号，门禁口径见 09 号。
 > 2026-10-05 补 §0「输出解读纪律」（Q3 裁决 · 纪律类立即生效）。
 
@@ -17,7 +17,7 @@
 
 1. **`bt run` 的输出是"记账结果"，不是"策略有效证明"。**
    CLI 打印的年化 / 夏普 / 超额**只说明账算得对**，不说明策略可行。
-   **成本敏感性复跑已完成**（v77 同区间：零摩擦 **+7.19% / IR 0.0504**｜交付默认 **+6.07% / 0.0305**｜0.3% 压力 **+4.28% / IR −0.0013**）⇒
+   **成本敏感性复跑已完成**（v77 同区间：零摩擦 **+7.19% / IR 0.0504**｜交付默认 **+6.07% / 0.0305**｜0.3% 压力 **+4.28% / IR −0.0013**）⇒〔⚠ 偶然产物｜生成机制 = L2 消融 A1 臂（现行实现 current × 代码序）；无先验、不可迁移；详 L2 复算报告〕
    引用**必须标注成本口径**；未附框架外推断证据者仍加限定语「**零摩擦假设下的记账结果**」（[20 号纪律二](20-回测平台使用指引.md)）。
 
 2. **`bt optimize` 的最优结果必须连同试验数 N 一起解读。**
@@ -67,7 +67,7 @@
 
 ## 2. 全局概览
 
-### 2.1 命令族地图（13 命令，按场景分组）
+### 2.1 命令族地图（14 命令，按场景分组）
 
 ```
 ① 核心回测链路   config-check → run → runs → show → report → verify
@@ -75,6 +75,7 @@
 ③ 数据资产       dataset / data（专项扫描 scan-consolidation；R34′）
 ④ 工程门禁       check / test / cold-backup
 ⑤ 推断校验       validate（walk-forward | mc；RC-15/16）
+⑥ 外部脚本       adhoc（一次性/外部脚本产物契约封装；HH-3）
 ```
 
 ### 2.2 命令总表
@@ -90,6 +91,7 @@
 | `optimize` | 参数网格搜索（`grid_search` 进程池） | `--config` `--grid` `--objective` `--workers` `--top` `--out` `--allow-short` | **是**（多次 run） | 0/1/2/**3** |
 | `dataset` | 黄金集：构建 / 主库对账 / 内嵌重算 / **数据冻结清单** | `build-golden\|verify\|refcalc\|freeze` `--cases` `--list` `--force` `--config` `--mode` `--out` | 视动作（`freeze` 写只读清单） | 0/1/2 |
 | `data` | 数据专项扫描（`scan-consolidation`：ETF/LOF 份额折算**双证据互校** ＋ fail-closed；R34′ 已交付） | `scan-consolidation` `--config` `--out` `--tolerance` | 写结果 JSON（`--out`） | 0/1/2 |
+| `adhoc` | 一次性/外部脚本**产物契约封装**（执行差分登记 / register-only 存量登记 / 登记台） | `--name` `--script` `--params` `--tables` `--as-of` `--watch-dir` `--out` `--register-only` `--list` `-- <脚本参数>` | 写 adhoc 登记台（`回测产物\adhoc\`） | 0/1 |
 | `test` | 运行测试层（pytest 执行器） | `--layer` `--pattern` `--path` | 否 | pytest 码 |
 | `check` | 十项架构门禁（提交前必跑，无参数） | — | 否 | 0/1 |
 | `validate` | 滚动验证 / 蒙特卡洛（`walk-forward` / `mc`） | `walk-forward\\|mc` `--config` `--window` `--test` `--step` `--mode` `--purge` `--embargo` `--no-persist` `--run` `--n` `--seed` `--out` `--out-dir` `--set` | `mc` 否；`walk-forward` **是**（每折落盘） | 0/1/2 |
@@ -119,7 +121,7 @@ flowchart LR
 | 项 | 值 |
 |---|---|
 | 解释器 | `D:\量化策略\代码\_venv\Scripts\python.exe` |
-| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.3.3`） |
+| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.3.4`） |
 | 等价调用 | `python -m btf.cli.main <命令>`（脚本化推荐，不依赖 console script） |
 | 仓库根 | `D:\量化策略\代码\btf`（含 `btf/` 包、`tests/`、`tools/`、`schemas/`、`examples/`） |
 
@@ -128,7 +130,7 @@ flowchart LR
 | 选项 | 说明 |
 |---|---|
 | `-h`, `--help` | 打印帮助（顶层或任意子命令；退出码 0） |
-| `--version` | 打印 `btf 1.3.3`（版本单一真源 `btf/_version.py`） |
+| `--version` | 打印 `btf 1.3.4`（版本单一真源 `btf/_version.py`） |
 
 ```bash
 $ bt --version
@@ -1027,6 +1029,48 @@ bt data scan-consolidation --config <yaml> [--out <json>] [--tolerance 0.005]
 
 ---
 
+### 4.14 `bt adhoc` —— 一次性/外部脚本的产物契约封装（HH-3，2026-10-14）
+
+**用途**：给**非 btf 引擎**的回测脚本（如 round2 外部方法论复现）套同一套产物契约
+（`manifest.json` 与真入口 run 同结构：脚本指纹 / 参数哈希 / 数据锚 / 代码版本 /
+产物清单 + sha256 / 重算命令）——**不要求改造脚本本身**（目录快照差分法）。
+**HH-3（19 号 §128）**：`tools/adhoc_run.py` 收编为 CLI 子命令，入口统一、功能不变。
+
+**语法**
+
+```bash
+bt adhoc --name <实验名> --script <脚本> [--params p.json] [--tables t1,t2]
+         [--as-of YYYYMMDD] [--watch-dir <目录>] [--out <登记台根>]
+         [--register-only | --list] -- <脚本自己的参数>
+```
+
+**行为**
+
+- **执行登记**（默认）：快照监视目录（默认脚本所在目录）→ 子进程跑脚本 → 再做一次快照，
+  差集即本次产物（逐文件 sha256）→ 写 `manifest.json` 并追加登记台 `registry.jsonl`；
+- **`--register-only`**：不执行脚本，把监视目录里**现有**产物全部登记（存量脚本用）；
+- **`--list`**：列出登记台；脚本参数经 `--` 分隔**原样透传**（bt 侧 REMAINDER 兼容）。
+
+**语法演示（round2 一条脚本签名）**——脚本依赖原机路径、本机执行不可用，取登记路径演示：
+
+```bash
+$ bt adhoc --name qa-round2-register --register-only \
+    --script "…\赤潮\_archive\…\round2\debug_lower_search.py" \
+    --watch-dir "…\round2\probe" --tables daily,index_daily --as-of 20260923
+[adhoc] COMPLETED | run_id=20261014_221628_4d4f9e
+   产物 17 个（首 5）…  manifest → …\adhoc\qa-round2-register\<run_id>\manifest.json
+$ bt adhoc --list
+ 20261014_221556_820fee  COMPLETED qa-rrg-demo              产物   1  …
+ 20261014_221628_4d4f9e  COMPLETED qa-round2-register       产物  17  …
+```
+
+**退出码**：0；1（脚本非零退出 / 登记失败）；2（工具脚本缺失 / 参数用法错误）。
+
+**注意**：委托 `tools/adhoc_run.py`（单一真源；CLI 只转发不做第二实现）；
+登记台根默认 `回测产物\adhoc\`。
+
+---
+
 ## 5. 退出码与错误处理约定
 
 ### 5.1 退出码总表
@@ -1034,7 +1078,7 @@ bt data scan-consolidation --config <yaml> [--out <json>] [--tolerance 0.005]
 | 码 | 通用含义 | 典型命令 |
 |---|---|---|
 | `0` | 成功 / 检查通过（含「无数据可列」这类正常空结果） | 全部 |
-| `1` | **业务失败**：校验失败 / 装配失败 / 复核不一致 / 对账漂移 / 哈希失败 / run 不存在 | `config-check` `run` `report` `verify` `dataset` `check` `cold-backup` |
+| `1` | **业务失败**：校验失败 / 装配失败 / 复核不一致 / 对账漂移 / 哈希失败 / run 不存在 | `config-check` `run` `report` `verify` `dataset` `check` `cold-backup` `adhoc` |
 | `2` | **用法与前置错误**：argparse 用法错误、`--set`/`--grid` 语法错、未知 dataset 动作、工具脚本缺失 | 全部 |
 | `3` | **策略性阻断**：`optimize` 短区间（样本 < 250 交易日）默认拒绝给出排序结论（**CL-1**；`--allow-short` 可显式放行） | `optimize` |
 | pytest 码 | 原样透传（0/1/2/5） | `test` |
@@ -1250,7 +1294,7 @@ $ bt cold-backup --verify <冷备目录>                  # ⑤ 异地校验（�
 ### 附录 A：速查卡（一屏带走）
 
 ```
-bt --version                                          # btf 1.3.3
+bt --version                                          # btf 1.3.4
 bt config-check <yaml> [--dump] [--resolve-strategy]  # 静态校验
 bt run --config <yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 bt runs [--latest N] [--out-dir DIR]                  # 只读清单

@@ -2,7 +2,7 @@
 
 > **位置**：`D:\量化策略\代码\`
 > **身份**：**本目录就是 Git 仓库根**（`quant-strategy`，远端 `git@github.com:1716250001/quant-strategy.git`）
-> **版本**：主工程 `5.0.0`（`config.py` 单一真源）｜回测工具 `btf 1.3.3`（**2026-10-12：1.3.2＝三轮架构审查修正批，1.3.3＝R66′ overrides 生效修复**；沿革 1.3.1 版本统一 → 2026-10-11）
+> **版本**：主工程 `5.0.0`（`config.py` 单一真源）｜回测工具 `btf 1.3.4`（**2026-10-14：L2 治理批 HH-1~HH-6**；沿革 1.3.2 修正批 → 1.3.3 overrides 生效 → 2026-10-12）
 > **不在本目录**：主库数据（`D:\全量数据\market_data\`）、日报数据（`..\数据\`）、回测产物（`..\回测产物\`）、事实类文档（`..\文档\`）——见 §6
 > **顶层总览**：`..\README.md`（工作区级的目录树、数据红线、变更记录）
 
@@ -15,7 +15,7 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 | 工程 | 入口 | 版本 | 说明 |
 |---|---|---|---|
 | **主工程**（本层） | `python main.py <cmd>`（安装后亦可 `pyramid <cmd>`） | 5.0.0 | 数据维护 / 全量库体检 / 因子与指数分析 / 奇点扫描 / 推送。**37 个命令名**（31 可见顶级 + 6 隐藏兼容别名，`db` 命令族另含 6 个子命令） |
-| **回测工具子系统** | `btf\`（`bt <cmd>`） | btf 1.3.3 | 独立工程（自带 `pyproject.toml` / `CHANGELOG.md` / **十项质量门**）；**13 条命令族** + `--version` |
+| **回测工具子系统** | `btf\`（`bt <cmd>`） | btf 1.3.4 | 独立工程（自带 `pyproject.toml` / `CHANGELOG.md` / **十项质量门**）；**14 条命令族**（HH-3 新增 `adhoc`） + `--version` |
 
 两者的 venv 是同一个：`代码\_venv\Scripts\python.exe`。
 
@@ -86,7 +86,7 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 
 ## 4. `btf\` — 回测工具子系统
 
-独立工程（自带 pyproject / CHANGELOG / 门禁），**版本 1.3.3（2026-10-12：1.3.2 修正批＋1.3.3 R66′）**（`btf\_version.py` 单一真源）。
+独立工程（自带 pyproject / CHANGELOG / 门禁），**版本 1.3.4（2026-10-14：L2 治理批）**（`btf\_version.py` 单一真源）。
 
 ```
 btf\
@@ -100,7 +100,7 @@ btf\
 ├─ benchmarks\         B1–B5 基准留档
 ├─ examples\           示例策略（rotation.py）+ 配置
 ├─ tools\              常驻工具 21 个（十项门禁脚本 + 对账/复跑/冷备/预算/独立环境裸验证）+ probes\ 探针
-└─ tests\              1231 项（unit / integration / regression / system / benchmark / perf / fixtures；非 L5 1208；V1.2.4 tag 快照口径＝1219）
+└─ tests\              1235 项（unit / integration / regression / system / benchmark / perf / fixtures；非 L5 1212；V1.2.4 tag 快照口径＝1219）
 ```
 
 - **命令族 13 条**：`config-check` / `run` / `report` / `verify` / `test` / `dataset` / `optimize` / `validate` / `data` + `check` / `cold-backup` / `runs` / `show`（另有 `bt --version`）
@@ -131,7 +131,7 @@ btf\
 | `..\数据\` | **日报数据** `daily_data\`（JSON/CSV）+ `signals\` + `wind指数库\` + 基金池 / 经理桥表 CSV |
 | `..\回测产物\` | btf 回测 `runs\` + `v77-robustness\` + 收口/验收报告（M1–M3 / 场景 A·B） |
 | `..\文档\` | 事实类文档：`数据与工程\` / `策略体系\` / `市场研究\` / `舰队福利提取\` |
-| `..\备份\` | 冷备与归档（含 btf 跨版本源码冷备 `*-cold\`，最新 `20261012-2241-btf-1.3.3-cold`） |
+| `..\备份\` | 冷备与归档（含 btf 跨版本源码冷备 `*-cold\`，最新 `20261014-2246-btf-1.3.4-cold`） |
 
 **路径口径**：主库等绝对路径在 `config.py` 集中定义（`MARKET_DATA_DIR` / `DATA_DIR` / `DOC_DIR` …），其余模块一律经 `common\paths.py` 取用；禁止自行用 `__file__` 推算、禁止散落硬编码。
 
@@ -187,7 +187,7 @@ python main.py alt-update / alt-audit / alt-backfill / alt-us / alt-verify
 
 # 回测工具（btf；短命令 bt / pyramid 已装在本 venv\Scripts\ 下）
 cd btf
-..\_venv\Scripts\python.exe -m pytest           # 全量测试（1231 项；非 L5 1208；V1.2.4 tag 快照口径＝1219）
+..\_venv\Scripts\python.exe -m pytest           # 全量测试（1235 项；非 L5 1212；V1.2.4 tag 快照口径＝1219）
 ..\_venv\Scripts\python.exe tools\check.py      # 等价于 bt check（10/10 门禁）
 bt run -c <config> / bt report / bt verify / bt check   # 跑回测 / 报告 / 复核 / 门禁
 ```

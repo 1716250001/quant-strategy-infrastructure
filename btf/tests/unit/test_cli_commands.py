@@ -70,10 +70,12 @@ class TestCommandRegistry:
     def test_twelve_commands_registered(self):
         # **CL-2-H/R34′（2026-10-07）**：12 → 13——新增 `data`（数据专项扫描；
         # `bt data scan-consolidation`，ADR-20/21 号 §4.13）。
+        # **HH-3（2026-10-14）**：13 → 14——新增 `adhoc`（一次性/外部脚本产物
+        # 契约封装；19 号 §128，L2 复算报告 §9 待办第 6 条）。
         assert set(COMMANDS) == {"config-check", "run", "report", "verify",
                                  "test", "dataset", "optimize", "check",
                                  "cold-backup", "runs", "show", "validate",
-                                 "data"}
+                                 "data", "adhoc"}
 
     def test_each_command_has_help_and_args(self):
         for name, (handler, help_text, add_args) in COMMANDS.items():
@@ -269,6 +271,62 @@ class TestGateAndBackupDelegation:
                      "--reason", "应被忽略"]) == 0
         assert calls[0][1:] == [str(ROOT / "tools" / "cold_backup.py"),
                                 "--verify", "X:/old"]
+
+
+class TestAdhocDelegation:
+    """HH-3（19 号 §128）：`bt adhoc` 委托 `tools/adhoc_run.py`（单一真源）。
+
+    单测只验"转发到哪个脚本、参数怎么排、`--` 透传、退出码透传"；
+    真实登记/执行链路由验收端到端实测覆盖（不在此落盘）。
+    """
+
+    @staticmethod
+    def _spy(monkeypatch) -> list[list[str]]:
+        from btf.app import services
+
+        calls: list[list[str]] = []
+
+        def fake_call(cmd):
+            calls.append(list(cmd))
+            return 0
+
+        monkeypatch.setattr(services.subprocess, "call", fake_call)
+        return calls
+
+    def test_adhoc_forwards_execute_args(self, monkeypatch):
+        calls = self._spy(monkeypatch)
+        assert main(["adhoc", "--name", "rrg", "--script", "X:/s.py",
+                     "--tables", "daily,index_daily", "--as-of", "20260923",
+                     "--", "--k", "10"]) == 0
+        assert calls[0][1] == str(ROOT / "tools" / "adhoc_run.py")
+        assert calls[0][1:] == [
+            str(ROOT / "tools" / "adhoc_run.py"),
+            "--name", "rrg", "--script", "X:/s.py",
+            "--tables", "daily,index_daily", "--as-of", "20260923",
+            "--", "--k", "10",
+        ]
+
+    def test_adhoc_register_only_and_watch_dir(self, monkeypatch):
+        calls = self._spy(monkeypatch)
+        assert main(["adhoc", "--name", "legacy", "--register-only",
+                     "--script", "X:/s.py", "--watch-dir", "X:/out"]) == 0
+        assert calls[0][1:] == [
+            str(ROOT / "tools" / "adhoc_run.py"),
+            "--name", "legacy", "--script", "X:/s.py",
+            "--watch-dir", "X:/out", "--register-only",
+        ]
+
+    def test_adhoc_list_only(self, monkeypatch):
+        calls = self._spy(monkeypatch)
+        assert main(["adhoc", "--list"]) == 0
+        assert calls[0][1:] == [str(ROOT / "tools" / "adhoc_run.py"),
+                                "--list"]
+
+    def test_adhoc_passes_exit_code_through(self, monkeypatch):
+        from btf.app import services
+
+        monkeypatch.setattr(services.subprocess, "call", lambda cmd: 1)
+        assert main(["adhoc", "--list"]) == 1
 
 
 class TestRunsAndShowCommands:

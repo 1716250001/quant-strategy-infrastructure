@@ -16,6 +16,11 @@
     export_rules_mirror.py    规则镜像导出（四方 ④）
     align_mdcore.py / align_v77.py          口径对齐抽检
     run_qidian_rerun.py / run_v77_robustness.py  批次复跑脚本（有对应测试锚定）
+    run_l2_ablation.py        L2 选股消融矩阵（7 臂 × 区间）；**HH-2 起 A5/A6 负控制
+                              固化为例行对照入口**（`--a56`；每次运行输出对照块 vs
+                              2026-10-01 冻结基线）；成本口径**显式 preRC**（GG-1 纪律）
+    adhoc_run.py              一次性/外部回测脚本的**产物契约封装器**（HH-3 起收编为
+                              `bt adhoc` 子命令；执行差分登记 / register-only / 登记台）
     bare_env_check.py         **独立环境裸验证（C-01，2026-10-11 三轮架构审查）**：
                               临时独立 venv 按两份 requirements 重建 → 真入口
                               `--version` → pytest 子集；把"依赖预算 ≤8"从文档层
