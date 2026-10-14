@@ -283,7 +283,9 @@ def main(argv: list[str] | None = None) -> int:
         # ── 一致性锚 ──
         # A1（selection=current + ranking=code）在算法上应当**逐位等价于**
         # V77Strategy（screen_l2 的 sorted(picks) + [:top_k]）。
-        # 用 rob.EE1_REF（赤潮 §54.3.1 双路径参照值）逐位比对：
+        # 用 rob.EE1_REFS["preRC"]（赤潮 §54.3.1 双路径参照值；GG-1b 后为**双锚
+        # dict**，本矩阵 preRC 零摩擦口径取 preRC 锚——与下方 HH-2 注记同口径）
+        # 逐位比对：
         # 通过 ⇒ 其余臂与 A1 的差异**纯粹**来自 selection/ranking 变量；
         # 不通过 ⇒ 本策略与现状不等价，整份消融结论作废。
         ee = rob.EE1
