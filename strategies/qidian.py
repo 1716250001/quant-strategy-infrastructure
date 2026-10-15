@@ -35,11 +35,10 @@ QIDIAN_POOL = {
         {"code": "932039.CSI", "name": "央企股东回报"},
     ]},
     "512800.SH": {"name": "银行ETF", "recommended": True, "indices": [
-        {"code": "399431.SZ", "name": "国证银行"},
-        {"code": "000134.SH", "name": "上证银行"},
+        {"code": "399986.SZ", "name": "中证银行"},  # 2026-10-15 统一为基金合同跟踪指数（审计_20260917 §3.2；tushare 后缀须 .SZ）
     ]},
     "515630.SH": {"name": "800证券保险ETF", "recommended": True, "indices": [
-        {"code": "931479.CSI", "name": "证券保险"},
+        {"code": "399966.SZ", "name": "中证800证券保险"},  # 2026-10-15 修配对：931479（证券保险领先）→399966（合同跟踪中证800证券保险，审计_20260917 §3.1）
     ]},
     "160639.SZ": {"name": "高铁产业LOF", "recommended": True, "indices": [
         {"code": "399807.SZ", "name": "高铁产业"},
@@ -48,7 +47,7 @@ QIDIAN_POOL = {
         {"code": "930740.CSI", "name": "300红利低波"},
     ]},
     "159793.SZ": {"name": "线上消费ETF", "recommended": True, "indices": [
-        {"code": "931480.CSI", "name": "线上消费"},
+        {"code": "931481.CSI", "name": "沪港深线上消费"},  # 2026-10-15 修配对：931480→931481（合同跟踪，审计_20260917 §3.1）
     ]},
     "510990.SH": {"name": "180ESG ETF", "recommended": True, "indices": [
         {"code": "931088.CSI", "name": "180ESG"},
@@ -62,21 +61,21 @@ QIDIAN_POOL = {
     "515880.SH": {"name": "通信ETF", "recommended": True, "indices": [
         {"code": "931160.CSI", "name": "通信设备"},
     ]},
-    "515580.SH": {"name": "保险ETF", "recommended": True, "indices": [
-        {"code": "399809.SZ", "name": "保险主题"},
+    "515580.SH": {"name": "科技100ETF", "recommended": True, "indices": [
+        {"code": "931187.CSI", "name": "中证科技100"},  # 2026-10-15 修配对：原「保险ETF/399809」双重错配（实为华泰柏瑞中证科技100ETF，合同跟踪931187，审计_20260917 §3.1）
     ]},
     "512200.SH": {"name": "房地产ETF", "recommended": True, "indices": [
         {"code": "399393.SZ", "name": "房地产"},
     ]},
     "512400.SH": {"name": "有色金属ETF", "recommended": True, "indices": [
-        {"code": "399395.SZ", "name": "有色金属"},
+        {"code": "000819.SH", "name": "中证申万有色"},  # 2026-10-15 统一为基金合同跟踪指数（审计_20260917 §3.2）
     ]},
     "159666.SZ": {"name": "物流ETF", "recommended": True, "indices": [
-        {"code": "H30315.CSI", "name": "交通运输"},
+        {"code": "H30171.CSI", "name": "中证全指运输"},  # 2026-10-15 修配对：H30315→H30171（合同跟踪，审计_20260917 §3.1）
     ]},
     # ── 双回测一致优秀 23个 ──
     "517770.SH": {"name": "游戏传媒ETF", "recommended": False, "indices": [
-        {"code": "399248.SZ", "name": "文化指数"},
+        {"code": "931580.CSI", "name": "沪港深游戏及文化传媒"},  # 2026-10-15 修配对：399248→931580（合同跟踪，审计_20260917 §3.1）
     ]},
     "589070.SH": {"name": "科创芯片设计ETF", "recommended": False, "indices": [
         {"code": "950162.CSI", "name": "科创芯片设计"},
@@ -95,7 +94,7 @@ QIDIAN_POOL = {
         {"code": "931447.CSI", "name": "科技先锋"},
     ]},
     "515000.SH": {"name": "科技龙头ETF", "recommended": False, "indices": [
-        {"code": "931186.CSI", "name": "中证科技"},
+        {"code": "931087.CSI", "name": "中证科技龙头"},  # 2026-10-15 修配对：931186→931087（合同跟踪，审计_20260917 §3.1）
     ]},
     "512880.SH": {"name": "全指证券公司ETF", "recommended": False, "indices": [
         {"code": "399975.SZ", "name": "证券公司"},
@@ -104,7 +103,7 @@ QIDIAN_POOL = {
         {"code": "930707.CSI", "name": "中证畜牧"},
     ]},
     "562530.SH": {"name": "1000价值稳健ETF", "recommended": False, "indices": [
-        {"code": "399631.SZ", "name": "1000价值"},
+        {"code": "931588.CSI", "name": "中证智选1000价值稳健"},  # 2026-10-15 修配对：399631→931588（合同跟踪；原配对曾致20260917指数侧假信号，审计_20260917 §3.1）
     ]},
     "159692.SZ": {"name": "证券公司30ETF", "recommended": False, "indices": [
         {"code": "931412.CSI", "name": "证券公司30"},
@@ -134,7 +133,7 @@ QIDIAN_POOL = {
         {"code": "931848.CSI", "name": "800红利低波"},
     ]},
     "512660.SH": {"name": "军工ETF", "recommended": False, "indices": [
-        {"code": "399368.SZ", "name": "国证军工"},
+        {"code": "399967.SZ", "name": "中证军工"},  # 2026-10-15 统一为基金合同跟踪指数（审计_20260917 §3.2）
     ]},
     "501030.SH": {"name": "环境治理LOF", "recommended": False, "indices": [
         {"code": "399806.SZ", "name": "环境治理"},
@@ -150,10 +149,10 @@ QIDIAN_POOL = {
         {"code": "931719.CSI", "name": "电池主题"},
     ]},
     "159992.SZ": {"name": "创新药ETF", "recommended": False, "indices": [
-        {"code": "399993.SZ", "name": "生物医药"},
+        {"code": "931152.CSI", "name": "中证创新药产业"},  # 2026-10-15 修配对：399993→931152（合同跟踪，审计_20260917 §3.1）
     ]},
     "159611.SZ": {"name": "电力ETF", "recommended": False, "indices": [
-        {"code": "399554.SZ", "name": "中证电力"},
+        {"code": "H30199.CSI", "name": "中证全指电力公用事业"},  # 2026-10-15 修配对：399554→H30199（合同跟踪，审计_20260917 §3.1）
     ]},
     "512980.SH": {"name": "传媒ETF", "recommended": False, "indices": [
         {"code": "399971.SZ", "name": "中证传媒"},
