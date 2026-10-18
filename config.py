@@ -510,6 +510,7 @@ BACKFILL_TARGETS = OrderedDict([
     ("fund_adj", {
         "api": "fund_adj", "desc": "基金复权因子", "mode": "by_date",
         "max_rows": 0, "tier": "A", "start": "19991022",
+        "allow_codes_file": True,  # A 段 2026-10-17 特例：by_date 形态允许 codes-file 补历史
         "note": "宽基ETF/LOF轮动**必须用复权价**（fund_daily 是未复权价，ETF 份额折算会"
                 "造成单日假暴涨，实证 159300.SZ 2024-06-25 +255.8%）。"
                 "★2026-10-01 纳入日更(extend组): mode 由 by_code 改 by_date —— "
@@ -531,6 +532,29 @@ BACKFILL_TARGETS = OrderedDict([
         "api": "fund_share", "desc": "基金份额规模", "mode": "by_code",
         "codes": "fund_etf", "max_rows": 5000, "tier": "A",
         "note": "汇金ETF化趋势判断口径",
+    }),
+    ("fund_daily", {
+        "api": "fund_daily", "desc": "ETF/LOF日线（按代码补历史）", "mode": "by_code",
+        "codes": "fund_etf", "max_rows": 5000, "tier": "A",
+        "audit_skip": True,
+        "note": "★2026-10-17 EE-FUND-1 新增：by_code 补历史入口（DAILY_UPDATE_EXTRA 另存 by_date 日更路径，共享同一 checkpoint 文件）。"
+                "仅收 A 类（库内 0 行）；B 类（库内有数据但起点晚于上市 >30 天）需 --force 或 A 段脚本。"
+                "⚠ audit_skip=True 原因：checkpoint 里 fund_daily 的 completed 键是 by_date 日期串（DAILY_UPDATE_EXTRA 写），"
+                "本条目 mode=by_code 期望的是代码串——比对模式错配导致 db_audit 算全 miss 非真实缺口。"
+                "历史缺口可见性由 check-coverage --history 专管，db_audit 只管增量断点一致性。"
+                "根因：同表双入口（by_date 日更 + by_code 补历史）共享 checkpoint 但键型不同——待 A 段执行后评估是否统一入口。",
+    }),
+    ("fund_nav", {
+        "api": "fund_nav", "desc": "基金净值（按代码补历史）", "mode": "by_code",
+        "codes": "fund_etf", "max_rows": 5000, "tier": "A",
+        "audit_skip": True,
+        "note": "★2026-10-17 EE-FUND-1 新增：fund_nav_update.py 仅 5 日回看增量（FUND_NAV_LOOKBACK_DAYS=5），"
+                "本条目提供 by_code 全历史补数入口（含首次收录自愈）。仅收 A 类（库内 0 行）；"
+                "B 类（起点晚）需 --force 或 A 段脚本。"
+                "⚠ audit_skip=True 原因：fund_nav 在 checkpoint 中无 DAILY_UPDATE_EXTRA 写入的 completed 记录"
+                "（fund_nav_update.py 不走 backfill checkpoint），本条目首次运行会把 2963 只代码全部算 pending——"
+                "但 fund_nav 全表 A=817（含非交集）≠ 派单要求的 173（226 交集中），范围超限，故暂由 audit_skip 跳过。"
+                "历史缺口可见性由 check-coverage --history 专管；fund_nav 全表缺口属另立项（派单 §19.6 第 6 项）。",
     }),
     ("fx_daily", {
         "api": "fx_daily", "desc": "外汇日线", "mode": "by_date",

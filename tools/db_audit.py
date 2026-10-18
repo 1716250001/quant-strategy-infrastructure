@@ -464,6 +464,8 @@ def audit_gaps(verbose=True):
     for name, conf in BACKFILL_TARGETS.items():
         if conf.get("tier") == "X" or conf.get("enabled") is False:
             continue
+        if conf.get("audit_skip"):
+            continue  # 独立补数入口: 缺口由日更/增量机制兜底, db_audit 不重复算
         if conf["api"] in ("cn_cpi", "cn_ppi", "cn_m", "cn_pmi", "cn_gdp",
                            "sf_month", "hk_basic"):
             pass  # once 类照常处理

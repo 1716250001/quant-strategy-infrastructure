@@ -175,14 +175,19 @@ def cmd_backfill(args):
                  workers=getattr(args, "workers", None),
                  parallel_targets=getattr(args, "parallel_targets", None),
                  limit=getattr(args, "limit", None),
-                 force=getattr(args, "force", False))
+                 force=getattr(args, "force", False),
+                 codes_file=getattr(args, "codes_file", None),
+                 force_listed=getattr(args, "force_listed", False))
 
 
 def cmd_check_coverage(args):
-    """数据覆盖体检（可转债 + ETF/LOF）"""
+    """数据覆盖体检（可转债 + ETF/LOF + 基金历史起点对账）"""
     from tools.check_coverage import run
-    _banner("check-coverage 数据覆盖体检")
-    run(args.date)
+    history = getattr(args, "history", False)
+    strict = getattr(args, "strict", False)
+    scope = getattr(args, "scope", "full")
+    _banner("check-coverage 数据覆盖体检" + ("（历史起点对账）" if history else ""))
+    return run(args.date, history=history, strict=strict, scope=scope)
 
 
 def cmd_check_consumer(args):
@@ -883,12 +888,26 @@ def build_parser():
     p.add_argument("--force", action="store_true",
                    help="忽略断点与'库内已有标的'，全部重拉"
                         "（修复'断点说完成但数据不完整'，如 index_dailybasic 早期截断）")
+    p.add_argument("--codes-file", default=None,
+                   help="代码清单文件（UTF-8，一行一个 ts_code，# 注释）。"
+                        "替代 resolve_codes，绕过 fund_etf 白名单；仅允许 by_code 目标")
+    p.add_argument("--force-listed", action="store_true",
+                   help="与 --codes-file 联用：清单内代码即使库内已有也计入待跑"
+                        "（B 类缺口补数专用，不影响断点）")
     _add_dry_run(p, help_text="只估算请求数, 不发请求")
     p.set_defaults(func=cmd_backfill)
 
     p = sub.add_parser("check-coverage", help="数据覆盖体检（可转债 + ETF/LOF）")
     p.add_argument("date", nargs="?", default=None,
                    help="检查日期 YYYYMMDD (默认: 自动获取最近交易日)")
+    p.add_argument("--history", action="store_true",
+                   help="基金历史起点对账（EE-FUND-1 B1，四表×场内2963只逐码核验起点 gap>30d）")
+    p.add_argument("--strict", action="store_true",
+                   help="与 --history 联用：存在 A/B 缺口时非零退出码（回归门禁）")
+    p.add_argument("--scope",
+                   choices=("full", "fund_daily", "fund_nav", "fund_adj", "fund_share"),
+                   default="full",
+                   help="历史对账范围：full（四表全跑，默认）/ 单表名")
     p.set_defaults(func=cmd_check_coverage)
 
     p = sub.add_parser("check-consumer", help="决策侧消费标的覆盖体检（A2池+作战包+持仓）")
@@ -1095,10 +1114,12 @@ def main(argv=None):
         parser.print_help()
         return
 
-    args.func(args)
+    rc = args.func(args)
+    rc = rc if isinstance(rc, int) else 0
     # --json 模式保持 stdout 为**纯 JSON**（机器可读），不追加完成语
     if not getattr(args, "json", False):
         print("\n完成。")
+    sys.exit(rc)
 
 
 if __name__ == "__main__":

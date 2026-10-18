@@ -91,6 +91,7 @@ NON_BACKFILL_TABLES = {
     "custom_index":   "build_micro_index 产出（本地自建指数）",
     "fund":           "QDII 研究产物（2026-10-06；fund_basic_E 全字段 + qdii6/qdii7 分批行情/净值）",
     "global_index":   "海外指数研究产物（2026-10-06；tushare index_global 按年落盘，FCHI/GDAXI 等 90 文件）",
+    "derived":        "派生补表容器（EE-FUND-4/G1 §30；fund_basic_patch 首笔交易所行情日，独立 derived 区不 mutate 上游）",
 }
 
 

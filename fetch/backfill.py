@@ -34,6 +34,7 @@ fetch/backfill.py — 通用补数引擎（执行编排层）
   - 断点按 target 名独立记录；**仅"调用成功"才记**，失败留待续跑
 """
 import os
+import re
 import sys
 import time
 import argparse
@@ -74,6 +75,74 @@ from fetch.backfill_io import (            # noqa: F401
 
 BACKFILL_DIR_ROOT = MARKET_DATA_DIR          # 各 target 在 market_data 下建同名目录
 
+# codes-file 模式专用独立断点（不污染主 .backfill_checkpoint.json）
+CODES_CHECKPOINT_FILE = ".backfill_checkpoint_codes.json"
+
+# ts_code 格式校验：6~7 位数字 + .SH/.SZ
+_TS_CODE_RE = re.compile(r"^\d{6,7}\.(SH|SZ)$")
+
+# known_gaps.json 读取缓存（EE-FUND-4 G3：source_empty 注册表 fail-closed）
+_KNOWN_GAPS_CACHE = None
+
+
+def _load_known_gaps():
+    """读取 tools/known_gaps.json（进程内缓存）。缺失/损坏返回 {}。"""
+    global _KNOWN_GAPS_CACHE
+    if _KNOWN_GAPS_CACHE is None:
+        import json as _json
+        _p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "tools", "known_gaps.json")
+        try:
+            with open(_p, encoding="utf-8") as _f:
+                _KNOWN_GAPS_CACHE = _json.load(_f)
+        except Exception:
+            _KNOWN_GAPS_CACHE = {}
+    return _KNOWN_GAPS_CACHE
+
+
+def _table_source_empty_registry(name):
+    """返回某表的 source_empty 注册表 set；无注册表（键不存在）返回 None。
+
+    注意：键存在但为空列表也算「有注册表」——该表所有空码都必须留待续跑/核验，
+    不得回退到「空即 done」。
+    """
+    kg = _load_known_gaps()
+    entry = kg.get(name)
+    if not isinstance(entry, dict) or "source_empty" not in entry:
+        return None
+    return set(entry.get("source_empty") or [])
+
+
+def _is_registered_source_empty(name, code):
+    """该 code 是否在表的 source_empty 注册表中（逐码核验过的源端确空）。"""
+    reg = _table_source_empty_registry(name)
+    return reg is not None and str(code) in reg
+
+
+def _load_codes_file(path):
+    r"""读取 --codes-file 清单（UTF-8 文本，一行一个 ts_code，# 注释，空行忽略）。
+
+    格式非法（非 ^\d{6,7}\.(SH|SZ)$）fail-closed：报错并给出行号，返回 None（调用方
+    负责 sys.exit）。
+    文件不存在 → 友好错误，返回 None。
+    """
+    if not os.path.isfile(path):
+        print(f"  [FATAL] codes-file 不存在: {path}")
+        return None
+    codes = []
+    with open(path, encoding="utf-8") as f:
+        for i, raw in enumerate(f, 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if not _TS_CODE_RE.match(line):
+                print(f"  [FATAL] codes-file 第 {i} 行格式非法: {line!r} "
+                      f"(需匹配 ^\\d{{6,7}}\\.(SH|SZ)$)")
+                return None
+            codes.append(line)
+    print(f"  [codes-file] {path}: {len(codes)} 只")
+    return codes
+
 
 def _concat_pages(chunks):
     """合并分页结果并**全列去重**（分页拉取的统一收口）。
@@ -95,8 +164,62 @@ def _concat_pages(chunks):
 
 
 
+def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=False):
+    """计算待跑任务清单（pending）与跳过数。
+
+    从 run_target 提取，供 dry-run 分支复用（零网络）。
+
+    过滤规则:
+      - force_listed=True: **完全忽略 checkpoint 与库内 present**，清单内全部计入 pending
+      - ignore_checkpoint 由调用方在传入 tasks 前处理（force 时 tasks 即全量）
+      - by_code + by_year：读库内已有代码集合，库内已有 → 跳过
+      - by_code + 单文件：{code}.parquet 存在 → 跳过
+      - 其余：cp.is_done → 跳过
+
+    Returns:
+        (pending: list, skipped: int)
+    """
+    # force_listed 语义：完全忽略 checkpoint/present，清单内全计入 pending
+    if force_listed:
+        return list(tasks), 0
+
+    mode = conf["mode"]
+    if kind in ("month", "range"):
+        pending = [t for t in tasks if not cp.is_done(name, f"{t[0]}|{t[1]}")]
+    elif kind == "code":
+        pending = []
+        if table_storage_layout(name) == "by_year":
+            from common import reader
+            try:
+                present = set(reader.codes_from_store(name, root=BACKFILL_DIR_ROOT))
+            except Exception:
+                present = set()
+            for t in tasks:
+                if cp.is_done(name, str(t)):
+                    continue
+                if str(t) in present:
+                    if not dry_run:
+                        cp.mark_done(name, str(t))
+                    continue
+                pending.append(t)
+        else:
+            target_dir = os.path.join(BACKFILL_DIR_ROOT, name)
+            for t in tasks:
+                if cp.is_done(name, str(t)):
+                    continue
+                if os.path.exists(os.path.join(target_dir, f"{t}.parquet")):
+                    if not dry_run:
+                        cp.mark_done(name, str(t))
+                    continue
+                pending.append(t)
+    else:
+        pending = [t for t in tasks if not cp.is_done(name, str(t))]
+    return pending, len(tasks) - len(pending)
+
+
 def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit=None,
-               date_override=None, ignore_checkpoint=False):
+               date_override=None, ignore_checkpoint=False,
+               listed_codes=None, force_listed=False):
     """执行单个 target。
 
     date_override:    显式指定 by_date 的待跑日期列表（每日增量用）。给定时
@@ -105,7 +228,13 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                       强制重拉（断点说完成也要重拉 —— 那正是为了修复
                       "断点已记但当日数据只有 130 行"这类残缺），故必须提供。
                       落盘走主键去重, 重拉幂等。
+    listed_codes:     --codes-file 清单，替代 resolve_codes（by_code 专用）。
+    force_listed:     --force-listed，清单内代码即使库内已有也计入 pending。
     """
+    # codes-file 强制覆盖 mode 为 by_code：跳过 by_date/by_month 分支，走 by_code 路径
+    # 这是 allow_codes_file 特例（如 fund_adj by_date 但 API 支持 ts_code 参数）
+    if listed_codes is not None:
+        conf = dict(conf, mode="by_code")
     mode = conf["mode"]
     desc = conf.get("desc", "")
     target_dir = os.path.join(BACKFILL_DIR_ROOT, name)
@@ -116,12 +245,20 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         tasks, kind = list(date_override), "date"
     else:
         tasks, kind = build_tasks(name, conf, dry_run)
+        # codes-file 替代 resolve_codes（绕过 fund_etf 白名单，允许 7 位码/退市码；
+        # allow_codes_file 特例如 fund_adj 也在此覆盖 kind→"code"）
+        if listed_codes is not None:
+            tasks = list(listed_codes)
+            kind = "code"
 
     # 前置基础表 (fx_daily 需要 fx_obasic, hk_daily 需要 hk_basic)
     if kind == "need_meta":
         need = conf.get("codes")
         if _ensure_meta(pro, limiter, need, dry_run):
             tasks, kind = build_tasks(name, conf, dry_run)
+            if listed_codes is not None:
+                tasks = list(listed_codes)
+                kind = "code"
         if kind == "need_meta":
             print(f"  [{name}] 跳过: 前置基础表不可用 (codes={need})")
             return None
@@ -129,41 +266,11 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     # 过滤已完成: 断点已标记 或 (by_code) 目标文件已存在 → 跳过
     if ignore_checkpoint:
         pending = list(tasks)
-    elif kind in ("month", "range"):
-        pending = [t for t in tasks if not cp.is_done(name, f"{t[0]}|{t[1]}")]
-    elif kind == "code":
-        pending = []
-        if table_storage_layout(name) == "by_year":
-            # ⚠ 按年分区下 "{code}.parquet" 恒不存在，不能再用文件存在性判断
-            #   （否则"断点丢失时补记"完全失效，每次续跑重拉全部标的）。
-            #   改为一次性读出库内已有代码集合，再逐标的比对——
-            #   O(文件数) 一次，而非 O(标的数 × 文件数)。
-            from common import reader
-            try:
-                present = set(reader.codes_from_store(
-                    name, root=BACKFILL_DIR_ROOT))
-            except Exception:
-                present = set()
-            for t in tasks:
-                if cp.is_done(name, str(t)):
-                    continue
-                if str(t) in present:
-                    if not dry_run:
-                        cp.mark_done(name, str(t))    # 断点丢失时补记
-                    continue
-                pending.append(t)
-        else:
-            for t in tasks:
-                if cp.is_done(name, str(t)):
-                    continue
-                if os.path.exists(os.path.join(target_dir, f"{t}.parquet")):
-                    if not dry_run:
-                        cp.mark_done(name, str(t))    # 断点丢失时补记
-                    continue
-                pending.append(t)
+        skipped = 0
     else:
-        pending = [t for t in tasks if not cp.is_done(name, str(t))]
-    skipped = len(tasks) - len(pending)
+        pending, skipped = _compute_pending(
+            name, conf, tasks, kind, cp, dry_run=dry_run,
+            force_listed=force_listed)
     if limit:
         pending = pending[:limit]
     est = estimate_requests(pending, conf)
@@ -172,7 +279,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     print(f"  [{name}] {desc} | 模式={mode} | 限频={rate}/min | 并发={workers}")
     print(f"  任务数={len(tasks)} 待跑={len(pending)} 跳过={skipped} "
           f"| 预估请求≈{est} | 预估耗时≈{est/max(rate,1):.1f}min"
-          + (f" | 限量={limit}" if limit else ""))
+          + (f" | 限量={limit}" if limit else "")
+          + (f" | force_listed" if force_listed else ""))
     print(f"{'─' * 66}")
 
     if dry_run or not pending:
@@ -245,8 +353,21 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 else:
                     cp.mark_done(name, str(key))
         elif ok:
-            # 调用成功但无数据 → 属"确实没有", 记断点避免重复请求
-            cp.mark_done(name, str(key))
+            # 调用成功但无数据（EE-FUND-4 G3 三级语义）:
+            # - codes-file 模式（§25 R4）：**不记断点**——逐码重拉场景下空返回
+            #   可能是瞬时/源端暂未覆盖，记 done 会永不重拉。
+            # - 常规 by_code + 该表有 source_empty 注册表（G3 fail-closed）：
+            #   仅「逐码核验登记的源端空」记 done；**未注册空码留待续跑**
+            #   （防瞬时空被静默标完成；由 check-coverage/R 门禁驱动人工核验登记）。
+            # - 无注册表的表：保持原「空即 done」语义（全市场/报告期表确实无数据）。
+            if listed_codes is not None:
+                pass
+            elif _table_source_empty_registry(name) is not None:
+                if _is_registered_source_empty(name, key):
+                    cp.mark_done(name, str(key))
+                # 未注册空码：不记断点
+            else:
+                cp.mark_done(name, str(key))
         done_ct["n"] += 1
         if done_ct["n"] % 200 == 0:
             cp.save()
@@ -657,11 +778,29 @@ def list_targets():
 
 
 def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
-                 verbose=False, parallel_targets=None, limit=None, force=False):
+                 verbose=False, parallel_targets=None, limit=None, force=False,
+                 codes_file=None, force_listed=False):
     if workers is None:
         workers = FETCH_MAX_WORKERS
     if parallel_targets is None:
         parallel_targets = BACKFILL_PARALLEL_TARGETS
+
+    # ── O-8 硬约束：force_listed 必须带 codes-file ──
+    if force_listed and not codes_file:
+        print("  [FATAL] --force-listed 必须与 --codes-file 联用（否则会把全库 2,963 只计入 pending）")
+        sys.exit(2)
+
+    # ── codes-file 模式前置处理 ──
+    listed_codes = None
+    codes_sha = None
+    if codes_file:
+        listed_codes = _load_codes_file(codes_file)
+        if listed_codes is None:
+            sys.exit(2)                       # 格式非法 fail-closed
+        import hashlib
+        with open(codes_file, "rb") as f:
+            codes_sha = hashlib.sha1(f.read()).hexdigest()[:8]
+        print(f"  [codes-file] sha1={codes_sha} | force_listed={force_listed}")
 
     _banner("通用补数 — backfill")
     print(f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -673,6 +812,9 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
     if force:
         print("  ⚠ --force: 忽略断点与「库内已有标的」，全部重拉"
               "（用于修复「断点说完成但数据不完整」的历史遗留）")
+    if force_listed:
+        print("  ⚠ --force-listed: codes-file 清单内代码即使库内已有也计入待跑"
+              "（B 类缺口补数专用，不影响断点）")
 
     # 选中目标
     sel = []
@@ -690,47 +832,63 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
         print("\n  没有匹配的目标")
         return
 
+    # C5: codes-file 只允许 by_code 目标（或 allow_codes_file=True 特例，如 fund_adj）
+    if listed_codes is not None:
+        bad = [n for n, c in sel
+               if c.get("mode") != "by_code" and not c.get("allow_codes_file")]
+        if bad:
+            print(f"  [FATAL] --codes-file 仅支持 by_code 目标，以下不兼容: {bad}")
+            sys.exit(2)
+
     total_est = 0
     print(f"\n[选中目标] {len(sel)} 个")
     for name, conf in sel:
         print(f"  {name:20s} {conf.get('desc',''):24s} tier={conf.get('tier','-')}")
 
+    # 断点：codes-file 用独立断点（不污染主 checkpoint）
+    cp_filename = CODES_CHECKPOINT_FILE if listed_codes is not None else ".backfill_checkpoint.json"
+
     if dry_run:
-        print(f"\n{'-' * 66}\n  请求数估算\n{'-' * 66}")
+        print(f"\n{'-' * 66}\n  请求数估算（打印 pending，非 tasks）\n{'-' * 66}")
         rows = []
+        # dry-run 零网络：不传 pro，仅计算 pending
+        cp = Checkpoint(MARKET_DATA_DIR, filename=cp_filename)
         for name, conf in sel:
             try:
                 tasks, kind = build_tasks(name, conf, dry_run=True)
                 if kind == "need_meta":
                     print(f"  {name:20s} 跳过(需先拉前置基础表)")
                     continue
-                est = estimate_requests(tasks, conf)
+                # codes-file 替代 resolve_codes
+                if listed_codes is not None:
+                    tasks = list(listed_codes)
+                    kind = "code"
+                pending, skipped = _compute_pending(
+                    name, conf, tasks, kind, cp, dry_run=True,
+                    force_listed=force_listed)
+                est = estimate_requests(pending, conf)
             except Exception as e:
                 print(f"  {name:20s} [估算失败] {type(e).__name__}: {str(e)[:60]}")
                 continue
             rate = API_RATE_LIMIT.get(conf["api"], API_RATE_LIMIT_DEFAULT)
             total_est += est
-            # ⚠ rate 可能是小数（低限频接口如 shibor_lpr/shibor_quote=0.02/分钟）:
-            #   ① 用 :3d 会因 float 抛 ValueError（dry-run 直接崩溃）
-            #   ② max(rate, 1) 会把"每 50 分钟一次"误算成"每分钟一次"，
-            #      严重低估工期（实证: shibor_lpr 11 个请求被算成 0.1min，
-            #      实际需 11 小时）
             eta_min = est / rate if rate > 0 else 0.0
-            rows.append((name, len(tasks), est, rate, eta_min))
-            print(f"  {name:20s} 任务={len(tasks):6d} 请求≈{est:6d} "
+            rows.append((name, len(tasks), len(pending), est, rate, eta_min))
+            print(f"  {name:20s} 任务={len(tasks):6d} 待跑={len(pending):6d} "
+                  f"跳过={skipped:6d} 请求≈{est:6d} "
                   f"限频={rate:g}/min 耗时≈{eta_min:6.1f}min")
-        serial_min = sum(r[4] for r in rows)
+        serial_min = sum(r[5] for r in rows)
         par = max(parallel_targets, 1)
         print(f"\n  合计: 请求≈{total_est} 次 | 接口数={len(rows)}")
         print(f"  串行等效耗时 ≈ {serial_min:.0f} 分钟 ({serial_min/60:.1f} 小时)")
         print(f"  按 {par} 接口并行 ≈ {serial_min/par:.0f} 分钟 "
               f"({serial_min/par/60:.1f} 小时) — 上限受最慢接口 "
-              f"{max((r[4] for r in rows), default=0):.0f} 分钟约束")
+              f"{max((r[5] for r in rows), default=0):.0f} 分钟约束")
         return
 
     pro = get_pro()
     print("\n[OK] Tushare Pro API 已连接")
-    cp = Checkpoint(MARKET_DATA_DIR, filename=".backfill_checkpoint.json")
+    cp = Checkpoint(MARKET_DATA_DIR, filename=cp_filename)
 
     results = []
     t_all = time.time()
@@ -742,7 +900,7 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
                   + (f" | 每接口限量 {limit}" if limit else "") + "\n")
             with ThreadPoolExecutor(max_workers=parallel_targets) as ex:
                 futs = {ex.submit(run_target, pro, n, c, cp, workers, False, verbose, limit,
-                                  None, force): n
+                                  None, force, listed_codes, force_listed): n
                         for n, c in sel}
                 for fut in as_completed(futs):
                     n = futs[fut]
@@ -757,7 +915,8 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
                 try:
                     r = run_target(pro, name, conf, cp, workers,
                                    dry_run=False, verbose=verbose, limit=limit,
-                                   ignore_checkpoint=force)
+                                   ignore_checkpoint=force,
+                                   listed_codes=listed_codes, force_listed=force_listed)
                     if r:
                         results.append(r)
                 except KeyboardInterrupt:
@@ -802,6 +961,11 @@ def main():
     p.add_argument("--force", action="store_true",
                    help="忽略断点与'库内已有标的'，全部重拉"
                         "（修复'断点说完成但数据不完整'）")
+    p.add_argument("--codes-file", default=None,
+                   help="代码清单文件（UTF-8，一行一个 ts_code，# 注释）。"
+                        "替代 resolve_codes，绕过 fund_etf 白名单；仅允许 by_code 目标")
+    p.add_argument("--force-listed", action="store_true",
+                   help="与 --codes-file 联用：清单内代码即使库内已有也计入待跑")
     args = p.parse_args()
 
     if args.list:
@@ -817,7 +981,8 @@ def main():
     run_backfill(tiers=tiers, only=only, dry_run=args.dry_run,
                  workers=args.workers, verbose=args.verbose,
                  parallel_targets=args.parallel_targets, limit=args.limit,
-                 force=args.force)
+                 force=args.force,
+                 codes_file=args.codes_file, force_listed=args.force_listed)
 
 
 if __name__ == "__main__":

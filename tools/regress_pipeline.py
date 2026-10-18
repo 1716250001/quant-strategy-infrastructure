@@ -1359,6 +1359,376 @@ def _run_all():
     check("dry-run 零副作用", r16)
 
 
+    # ------------------------------------------------------------
+    # R17 基金历史起点对账（EE-FUND-1 B1）
+    # ------------------------------------------------------------
+    _say(f"\n{SEP}\n  R17 基金历史起点对账（check_fund_history）\n{SEP}")
+
+
+    def r17():
+        """check_fund_history 必须正确跑 fund_daily × 场内基金，并与 known_gaps 完全对账。
+
+        基线外置：tools/known_gaps.json。
+        一次调用覆盖 strict 与 detail，避免四表扫描两次（O-6）。
+        scope=fund_daily：只对账 fund_daily 一表，避免 fund_nav/adj/share 存量缺口干扰。
+
+        §25 纪律（禁止「基线归零=放行」逃生口）:
+          ① detail 返回且含 fund_daily 键（A/B/S）
+          ② fund_daily 未登记缺口 A/B 必须**精确等于** known_gaps.A/B
+          ③ 注册表 source_empty 必须与实测逐码一致：
+             - 注册码当前必须仍为 0 行（库内补到数据而注册表未清 → 红）
+             - 当前每个 0 行码要么在 A（计入基线）要么在 S（注册），不得有第三态
+          ④ strict rc 与当前 A/B 一致（有未登记缺口→1，否则→0；S 不触发）
+          ⑤ 场内基金基数 ≥ known_gaps.market_e_count（只对下降告警；新增只 info）
+        """
+        import json as _json
+        import os as _os
+
+        from tools.check_coverage import check_fund_history
+
+        # 读 known_gaps.json 基线
+        _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
+        with open(_kg_path, encoding="utf-8") as _f:
+            _kg = _json.load(_f)
+        fd_expected = _kg["fund_daily"]["A"]
+        fd_expected_b = _kg["fund_daily"]["B"]
+        registered = set(_kg["fund_daily"].get("source_empty", []))
+        registered_late = set(_kg["fund_daily"].get("source_late_start", []))
+        _baseline_count = _kg.get("market_e_count", 0)
+
+        # ⑤ 基数 ≥ 基线（只对下降告警；新增基金只 info 不红）
+        import pandas as _pd
+        from common.paths import META_DIR as _MD
+        _basic = _pd.read_parquet(_os.path.join(_MD, "fund_basic.parquet"),
+                                  columns=["market", "ts_code"])
+        _marketE_count = (_basic["market"] == "E").sum()
+        if _marketE_count > _baseline_count:
+            print(f"  [info] 场内基金新增 {_marketE_count - _baseline_count} 只，"
+                  f"请更新 known_gaps.market_e_count={_marketE_count}")
+        else:
+            assert _marketE_count >= _baseline_count, (
+                f"场内基数漂移: market=E 现有 {_marketE_count} 只 < 基线 {_baseline_count}")
+
+        # ① detail 返回 + ②③④ 一次调用覆盖（scope=fund_daily）
+        rc, detail = check_fund_history(strict=True, return_detail=True, scope="fund_daily")
+        assert isinstance(detail, dict), f"return_detail 应返回 dict, 实际 {type(detail)}"
+        assert "fund_daily" in detail, f"detail 应含 fund_daily, 实际键={set(detail.keys())}"
+
+        fd = detail["fund_daily"]
+        A_fd = {tc for tc, _ in fd["A"]}
+        B_fd = {tc for tc, _, _ in fd["B"]}
+        S_fd = {tc for tc, _ in fd["S"]}
+        SB_fd = {tc for tc, _, _ in fd["SB"]}
+
+        # ② 未登记可执行缺口精确命中基线
+        assert len(A_fd) == fd_expected, (
+            f"fund_daily A 漂移: 实测 {len(A_fd)} ≠ known_gaps {fd_expected}；"
+            f"未登记缺口不得用归零基线绕过（§25）")
+        assert len(B_fd) == fd_expected_b, (
+            f"fund_daily B 漂移: 实测 {len(B_fd)} ≠ known_gaps {fd_expected_b}")
+
+        # ③ 注册表逐码一致性：注册码必须仍为 0 行（stale_registered 为空）
+        stale = set(fd.get("stale_registered", []))
+        assert not stale, (
+            f"source_empty 注册表失真：{len(stale)} 只库内已有数据仍登记为源端空: "
+            f"{sorted(stale)[:5]}")
+        # S 桶实测集合必须等于注册表
+        assert S_fd == registered, (
+            f"S 桶与注册表不一致: S-S_reg={sorted(S_fd - registered)[:5]} "
+            f"reg-S={sorted(registered - S_fd)[:5]}")
+
+        # ③b 晚起点注册表逐码一致性 + 无 stale
+        stale_l = set(fd.get("stale_late", []))
+        assert not stale_l, (
+            f"source_late_start 注册表失真：{len(stale_l)} 只 gap 已消失仍登记: "
+            f"{sorted(stale_l)[:5]}")
+        assert SB_fd == registered_late, (
+            f"SB 桶与注册表不一致: SB-reg={sorted(SB_fd - registered_late)[:5]} "
+            f"reg-SB={sorted(registered_late - SB_fd)[:5]}")
+
+        # ④ strict rc 与未登记缺口一致
+        has_gap = len(A_fd) > 0 or len(B_fd) > 0
+        assert rc == (1 if has_gap else 0), (
+            f"strict rc 断言失败: rc={rc} has_gap={has_gap}")
+
+        return (f"fund_daily | A={len(A_fd)} B={len(B_fd)} "
+                f"S={len(S_fd)}(源端空) SB={len(SB_fd)}(晚起点)"
+                f"| strict rc={rc} | 基数 {_marketE_count} ≥ 基线 {_baseline_count}")
+
+
+    check("基金历史起点对账", r17)
+
+    # ------------------------------------------------------------
+    # R18 backfill --codes-file / --force-listed 语义（EE-FUND-2 A1，dry-run 级）
+    # ------------------------------------------------------------
+    _say(f"\n{SEP}\n  R18 backfill codes-file 语义（dry-run 级，零网络）\n{SEP}")
+
+
+    def r18():
+        """backfill --codes-file + --force-listed 语义验证（dry-run，零网络零写盘）。
+
+        判据:
+          C1: codes-file 非法行 → 非零退出
+          C3: --force-listed → pending=len(清单)；不加 → pending<len(清单)
+          C5: --codes-file 与 by_date 目标（fund_adj）同用 → 非零退出
+          C4: 主 checkpoint 无新增键（hash 不变）
+        """
+        import subprocess as _sp
+        import tempfile as _tf
+        import hashlib as _hl
+        import os as _os
+        from config import MARKET_DATA_DIR
+
+        _main = _os.path.join(_os.path.dirname(__file__), "..", "main.py")
+        _main = _os.path.abspath(_main)
+        _py = sys.executable
+
+        # 主 checkpoint 基线 hash（C4）
+        _cp = _os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
+        _cp_hash_before = None
+        if _os.path.exists(_cp):
+            with open(_cp, "rb") as _f:
+                _cp_hash_before = _hl.sha256(_f.read()).hexdigest()
+
+        def _run_backfill(args_list, check=False):
+            _r = _sp.run([_py, _main, "backfill"] + args_list,
+                         capture_output=True, text=True, encoding="utf-8",
+                         errors="replace")
+            return _r.returncode, _r.stdout, _r.stderr
+
+        # 合法清单（3 只：A 类 / B 类 / 7 位码）
+        _codes = "508000.SH\n161010.SZ\n1610221.SZ\n"
+        with _tf.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                    encoding="utf-8") as _f:
+            _f.write(_codes)
+            _legal = _f.name
+        try:
+            # C3: 加 --force-listed → pending == 3
+            _rc, _out, _ = _run_backfill(
+                ["--only", "fund_daily", "--codes-file", _legal,
+                 "--force-listed", "--dry-run"])
+            assert _rc == 0, f"force-listed dry-run 应成功, rc={_rc}"
+            _pending_force = None
+            for _line in _out.splitlines():
+                if "fund_daily" in _line and "待跑=" in _line:
+                    import re as _re
+                    _m = _re.search(r"待跑=\s*(\d+)", _line)
+                    if _m:
+                        _pending_force = int(_m.group(1))
+            assert _pending_force == 3, (
+                f"force-listed 应 pending=3, 实际 {_pending_force}")
+
+            # C3: 不加 --force-listed → pending < 3（库内已有被跳过）
+            _rc, _out, _ = _run_backfill(
+                ["--only", "fund_daily", "--codes-file", _legal, "--dry-run"])
+            assert _rc == 0, f"non-force dry-run 应成功, rc={_rc}"
+            _pending_plain = None
+            for _line in _out.splitlines():
+                if "fund_daily" in _line and "待跑=" in _line:
+                    _m = _re.search(r"待跑=\s*(\d+)", _line)
+                    if _m:
+                        _pending_plain = int(_m.group(1))
+            assert _pending_plain is not None, "未找到 pending 行"
+            assert _pending_plain < 3, (
+                f"不加 force-listed 应 pending<3, 实际 {_pending_plain}")
+
+            # C5: by_date 目标（非 allow_codes_file 特例）+ codes-file → 非零退出
+            _rc, _out, _ = _run_backfill(
+                ["--only", "fund_div", "--codes-file", _legal, "--dry-run"])
+            assert _rc != 0, f"fund_div + codes-file 应 fail-closed, rc={_rc}"
+        finally:
+            _os.unlink(_legal)
+
+        # C1: 非法行 → 非零退出
+        _bad = "508000.SH\nBADCODE.SH\n161010.SZ\n"
+        with _tf.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                    encoding="utf-8") as _f:
+            _f.write(_bad)
+            _bad_path = _f.name
+        try:
+            _rc, _out, _ = _run_backfill(
+                ["--only", "fund_daily", "--codes-file", _bad_path, "--dry-run"])
+            assert _rc != 0, f"非法行应 fail-closed, rc={_rc}"
+        finally:
+            _os.unlink(_bad_path)
+
+        # C4: 主 checkpoint hash 不变
+        if _cp_hash_before is not None:
+            with open(_cp, "rb") as _f:
+                _cp_hash_after = _hl.sha256(_f.read()).hexdigest()
+            assert _cp_hash_after == _cp_hash_before, (
+                "主 checkpoint 被 codes-file dry-run 污染")
+
+        return (f"C1非法行fail-closed | C3 force={_pending_force}/plain={_pending_plain} "
+                f"| C5 fund_div阻断 | C4 checkpoint 无污染")
+
+
+    check("backfill codes-file 语义", r18)
+
+    # ------------------------------------------------------------
+    # R19 fund_nav / fund_adj / fund_share 注册表强一致（EE-FUND-4 G2 + EE-FUND-6 扩展，禁归零绕过）
+    # ------------------------------------------------------------
+    _say(f"\n{SEP}\n  R19 nav/adj/share 注册表强一致（EE-FUND-4 + EE-FUND-6）\n{SEP}")
+
+
+    def r19():
+        """fund_nav / fund_adj / fund_share 的未登记缺口与注册表逐码强一致。
+
+        与 R17 同纪律（§25 双向校验），scope 逐表对账：
+          ① A/B 实测精确等于 known_gaps.<table>.A/B（回填完成后应 0/0）
+          ② S 桶 == source_empty 注册表；stale_registered 为空
+          ③ SB 桶 == source_late_start 注册表；stale_late 为空
+          ④ strict rc 与未登记 A/B 一致
+
+        扩展（§35 EE-FUND-6）：fund_share 首次建立注册表后纳入同等断言，
+        确保 universe 完整性（A=0），堵住"新表漏硬化"回归风险。
+        """
+        import json as _json
+        import os as _os
+        from tools.check_coverage import check_fund_history
+
+        _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
+        with open(_kg_path, encoding="utf-8") as _f:
+            _kg = _json.load(_f)
+
+        parts = []
+        for _t in ("fund_nav", "fund_adj", "fund_share"):
+            _exp_a = _kg[_t]["A"]
+            _exp_b = _kg[_t]["B"]
+            _reg = set(_kg[_t].get("source_empty", []))
+            _reg_late = set(_kg[_t].get("source_late_start", []))
+
+            _rc, _det = check_fund_history(
+                strict=True, return_detail=True, scope=_t)
+            _d = _det[_t]
+            _A = {tc for tc, _ in _d["A"]}
+            _B = {tc for tc, _, _ in _d["B"]}
+            _S = {tc for tc, _ in _d["S"]}
+            _SB = {tc for tc, _, _ in _d["SB"]}
+
+            assert len(_A) == _exp_a, (
+                f"{_t} A 漂移: 实测 {len(_A)} ≠ 基线 {_exp_a}（禁归零绕过）")
+            assert len(_B) == _exp_b, (
+                f"{_t} B 漂移: 实测 {len(_B)} ≠ 基线 {_exp_b}")
+            assert not _d.get("stale_registered"), (
+                f"{_t} source_empty 注册表失真: {_d['stale_registered'][:5]}")
+            assert not _d.get("stale_late"), (
+                f"{_t} source_late_start 注册表失真: {_d['stale_late'][:5]}")
+            assert _S == _reg, (
+                f"{_t} S 桶≠注册表: {sorted(_S ^ _reg)[:5]}")
+            assert _SB == _reg_late, (
+                f"{_t} SB 桶≠注册表: {sorted(_SB ^ _reg_late)[:5]}")
+            _has_gap = len(_A) > 0 or len(_B) > 0
+            assert _rc == (1 if _has_gap else 0), (
+                f"{_t} strict rc={_rc} 与缺口态 {_has_gap} 不一致")
+            parts.append(f"{_t} A={len(_A)}/B={len(_B)}/S={len(_S)}/SB={len(_SB)}")
+
+        return " | ".join(parts)
+
+
+    check("nav/adj 注册表强一致", r19)
+
+    # ------------------------------------------------------------
+    # R20 7 位幽灵码护栏 + 注册表声明一致性（EE-FUND-5）
+    # ------------------------------------------------------------
+    _say(f"\n{SEP}\n  R20 幽灵码护栏 + 声明一致性（EE-FUND-5）\n{SEP}")
+
+
+    def r20():
+        """7 位 .SZ/.SH 畸形码必须在 fund_basic / 四表 parquet / 注册表中 0 残留；
+        source_empty_count 声明必须与数组等长；market_e_count 与 fund_basic 实测一致；
+        （§37 G-B3）若某表有 source_empty_evidence，则逐码配对 + probe_rows==0 +
+        status 与 fund_basic 一致。
+
+        背景：tushare fund_basic market=E 返回 18 个分级子份额 7 位码
+        （150001.SZ→1500011.SZ），本体系场内 universe 只认 6 位；
+        full_download.py 白名单护栏防日更复活，本断言防任何路径回潮。
+        evidence 断言（§37）：逐码探针注册表（EE-FUND-6 起），防 evidence 静默破坏。
+        """
+        import os as _os
+        import re as _re
+        import glob as _glob
+        import json as _json
+        import pandas as _pd
+        from common.paths import META_DIR as _MD
+        from common.paths import MARKET_DATA_DIR as _ROOT
+
+        _ghost = _re.compile(r"^\d{7}\.(SZ|SH)$")
+
+        # ① fund_basic 0 残留 + market=E 复算 + status 索引（evidence 断言用）
+        _basic = _pd.read_parquet(_os.path.join(_MD, "fund_basic.parquet"),
+                                  columns=["ts_code", "market", "status"])
+        _basic_ghost = _basic.loc[_basic["ts_code"].astype(str).str.match(_ghost)]
+        assert len(_basic_ghost) == 0, (
+            f"fund_basic 残留 {len(_basic_ghost)} 个 7 位码: "
+            f"{sorted(_basic_ghost['ts_code'].astype(str))[:5]}")
+        _e_actual = int((_basic["market"] == "E").sum())
+
+        # ② 四表 parquet 0 残留
+        for _t in ("fund_daily", "fund_nav", "fund_adj", "fund_share"):
+            _n = 0
+            for _fp in _glob.glob(_os.path.join(_ROOT, _t, "*.parquet")):
+                _d = _pd.read_parquet(_fp, columns=["ts_code"])
+                _n += int(_d["ts_code"].astype(str).str.match(_ghost).sum())
+            assert _n == 0, f"{_t} parquet 残留 {_n} 行 7 位码"
+
+        # ③ 注册表 0 残留 + ④ count 声明一致 + ⑤ evidence 校验（§37 G-B3）+ ⑥ market_e_count 一致
+        _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
+        with open(_kg_path, encoding="utf-8") as _f:
+            _kg = _json.load(_f)
+        # fund_basic status 字典（evidence 断言用；统一 nan/"<NA>"→"nan"）
+        _basic_stat = {}
+        for _, _r in _basic.iterrows():
+            _sc = str(_r["status"]) if _r["status"] is not None else "nan"
+            if _sc in ("<NA>", "None", "nan", ""):
+                _sc = "nan"
+            _basic_stat[str(_r["ts_code"])] = _sc
+        for _t in ("fund_daily", "fund_nav", "fund_adj", "fund_share"):
+            _entry = _kg.get(_t, {})
+            for _k in ("source_empty", "source_late_start"):
+                _arr = _entry.get(_k, [])
+                _bad = [c for c in _arr if _ghost.match(str(c))]
+                assert not _bad, f"{_t}.{_k} 残留幽灵码: {_bad[:5]}"
+            if "source_empty_count" in _entry:
+                assert _entry["source_empty_count"] == len(_entry.get("source_empty", [])), (
+                    f"{_t}.source_empty_count={_entry['source_empty_count']} "
+                    f"≠ 数组 {len(_entry.get('source_empty', []))}")
+            # §37 G-B3：evidence 校验（兼容两种格式：dict 老格式 + list 新格式）
+            # ① 码集配对（无条件）；② probe_rows==0 / ③ status 一致（字段存在时才断言）
+            _ev = _entry.get("source_empty_evidence")
+            if _ev is not None:
+                if isinstance(_ev, dict):
+                    _ev_items = [(str(k), v) for k, v in _ev.items()]
+                else:  # list
+                    _ev_items = [(str(e.get("ts_code", "")), e) for e in _ev if e.get("ts_code")]
+                _ev_codes = {tc for tc, _ in _ev_items if tc}
+                _se_codes = {str(c) for c in _entry.get("source_empty", [])}
+                assert _ev_codes == _se_codes, (
+                    f"{_t}.evidence 码集≠source_empty: "
+                    f"差集={sorted(_ev_codes ^ _se_codes)[:5]}")
+                for _tc, _v in _ev_items:
+                    if "probe_rows" in _v:
+                        assert int(_v["probe_rows"]) == 0, (
+                            f"{_t}.evidence[{_tc}].probe_rows="
+                            f"{_v['probe_rows']} ≠ 0")
+                    if "status" in _v:
+                        _st = str(_v.get("status", "")).strip()
+                        if _st in ("<NA>", "None", ""):
+                            _st = "nan"
+                        _fb_st = _basic_stat.get(_tc, "nan")
+                        assert _st == _fb_st, (
+                            f"{_t}.evidence[{_tc}].status={_st} "
+                            f"≠ fund_basic={_fb_st}")
+        assert _kg.get("market_e_count") == _e_actual, (
+            f"market_e_count={_kg.get('market_e_count')} ≠ fund_basic 实测 {_e_actual}")
+
+        return (f"fund_basic E={_e_actual} 无幽灵码；四表 parquet/注册表 0 残留；"
+                f"count 声明全一致；evidence 全表配对")
+
+
+    check("幽灵码护栏+声明一致", r20)
+
+
 # ------------------------------------------------------------
 # 入口
 # ------------------------------------------------------------

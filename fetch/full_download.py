@@ -202,6 +202,19 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
 
     if fund_list:
         fund_df = pd.concat(fund_list, ignore_index=True).drop_duplicates(subset="ts_code")
+        # EE-FUND-5 护栏：tushare fund_basic market=E 会返回 18 个 7 位 .SZ/.SH 码
+        # （分级子份额代码，如 150001.SZ→1500011.SZ，每码均有 6 位同胞），
+        # 本体系场内 universe 只认 6 位码；不拦截则 17:30 日更次日复活污染
+        # （codes-file→parquet→注册表，实证 fund_share 幽灵 B=3）。
+        # 白名单：6 位数字 + .SZ/.SH/.OF；剔除必须打印（fail-loud，不静默）。
+        import re as _re
+        _VALID_FUND_CODE = _re.compile(r"^\d{6}\.(SZ|SH|OF)$")
+        _code_s = fund_df["ts_code"].astype(str)
+        _bad = fund_df.loc[~_code_s.str.match(_VALID_FUND_CODE)]
+        if len(_bad):
+            print(f"  [护栏] 剔除 {len(_bad)} 个非法基金代码（非 6 位 SZ/SH/OF）: "
+                  f"{sorted(_bad['ts_code'].astype(str).tolist())[:25]}")
+            fund_df = fund_df.loc[_code_s.str.match(_VALID_FUND_CODE)].reset_index(drop=True)
         path = os.path.join(meta_dir, "fund_basic.parquet")
         _guard_overwrite(path, fund_df)
         fund_df.to_parquet(path, index=False)

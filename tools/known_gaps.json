@@ -1,0 +1,4639 @@
+{
+  "_comment": "EE-FUND 缺口基线（2026-10-17 §25 复审后诚实口径，禁归零绕过门禁）。fund_daily.A/B = 【未登记】可执行缺口，R17 精确对账；source_empty = 逐只三轮核验（2 轮批量含 --force + 1 轮单线程 ts_code 全历史空；REIT/LOF 另经 trade_date 全市场反查 0 命中；nav 为全市场净值口径、其存在不代表有交易所成交）确认 tushare fund_daily 无源端行情的 150 只，进 S 桶；source_late_start = 6 只分级/稀疏成交基金，源端历史本身残缺/晚起点，进 SB 桶。注册表与实测逐码强一致（库内补到数据而注册表未清 → R17 红）。",
+  "market_e_count": 2945,
+  "fund_daily": {
+    "A": 0,
+    "B": 0,
+    "source": "§25：daily 226 --force 重拉 76 落盘/150 源端空；B 类 76→6（70 只重拉后起点达标）",
+    "source_empty": [
+      "150087.SZ",
+      "150116.SZ",
+      "150119.SZ",
+      "150159.SZ",
+      "150162.SZ",
+      "150166.SZ",
+      "150239.SZ",
+      "150240.SZ",
+      "150253.SZ",
+      "150254.SZ",
+      "150285.SZ",
+      "150286.SZ",
+      "150313.SZ",
+      "150314.SZ",
+      "150319.SZ",
+      "150320.SZ",
+      "150333.SZ",
+      "150334.SZ",
+      "150349.SZ",
+      "150350.SZ",
+      "150351.SZ",
+      "150352.SZ",
+      "150353.SZ",
+      "150354.SZ",
+      "150357.SZ",
+      "150358.SZ",
+      "158036.SZ",
+      "158051.SZ",
+      "158062.SZ",
+      "158065.SZ",
+      "158066.SZ",
+      "158067.SZ",
+      "158072.SZ",
+      "158078.SZ",
+      "158081.SZ",
+      "159047.SZ",
+      "159089.SZ",
+      "159319.SZ",
+      "159585.SZ",
+      "159756.SZ",
+      "159799.SZ",
+      "160123.SZ",
+      "160137.SZ",
+      "160418.SZ",
+      "160419.SZ",
+      "160420.SZ",
+      "160423.SZ",
+      "160425.SZ",
+      "160516.SZ",
+      "160517.SZ",
+      "160524.SZ",
+      "160525.SZ",
+      "160634.SZ",
+      "160636.SZ",
+      "160646.SZ",
+      "160727.SZ",
+      "160814.SZ",
+      "160923.SZ",
+      "161211.SZ",
+      "161230.SZ",
+      "161628.SZ",
+      "161629.SZ",
+      "161721.SZ",
+      "161723.SZ",
+      "161730.SZ",
+      "161836.SZ",
+      "161838.SZ",
+      "161910.SZ",
+      "162107.SZ",
+      "162511.SZ",
+      "162714.SZ",
+      "162907.SZ",
+      "163209.SZ",
+      "164205.SZ",
+      "164212.SZ",
+      "164401.SZ",
+      "164402.SZ",
+      "164811.SZ",
+      "164818.SZ",
+      "164826.SZ",
+      "164905.SZ",
+      "164908.SZ",
+      "165310.SZ",
+      "165312.SZ",
+      "165523.SZ",
+      "165524.SZ",
+      "165526.SZ",
+      "165530.SZ",
+      "165531.SZ",
+      "165532.SZ",
+      "165806.SZ",
+      "166109.SZ",
+      "166802.SZ",
+      "167004.SZ",
+      "167503.SZ",
+      "167505.SZ",
+      "167701.SZ",
+      "167702.SZ",
+      "167705.SZ",
+      "168109.SZ",
+      "168110.SZ",
+      "168205.SZ",
+      "168501.SZ",
+      "168601.SZ",
+      "169108.SZ",
+      "169109.SZ",
+      "180307.SZ",
+      "180505.SZ",
+      "180702.SZ",
+      "181002.SZ",
+      "501033.SH",
+      "501041.SH",
+      "501042.SH",
+      "501052.SH",
+      "501055.SH",
+      "501100.SH",
+      "501101.SH",
+      "501102.SH",
+      "501103.SH",
+      "501105.SH",
+      "501221.SH",
+      "501223.SH",
+      "501226.SH",
+      "506007.SH",
+      "506009.SH",
+      "508038.SH",
+      "508047.SH",
+      "508095.SH",
+      "508605.SH",
+      "508606.SH",
+      "508607.SH",
+      "508609.SH",
+      "508610.SH",
+      "512830.SH",
+      "515443.SH",
+      "516170.SH",
+      "517980.SH",
+      "526020.SH",
+      "560430.SH",
+      "561270.SH",
+      "562210.SH",
+      "562630.SH",
+      "588490.SH",
+      "589450.SH"
+    ],
+    "source_empty_evidence": {
+      "508095.SH": {
+        "name": "国泰海通中国建筑租赁住房REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "508047.SH": {
+        "name": "山证晋中公投瑞阳供热REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "508609.SH": {
+        "name": "华安锦江REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "508607.SH": {
+        "name": "华安陆家嘴REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "508605.SH": {
+        "name": "华夏保利发展REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164212.SZ": {
+        "name": "天弘全球新能源汽车股票(QDII-LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 91,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501226.SH": {
+        "name": "长城全球新能源汽车股票(QDII-LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 91,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161730.SZ": {
+        "name": "招商智星稳健配置混合(FOF-LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 91,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "506009.SH": {
+        "name": "国泰科创板两年定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 21,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160646.SZ": {
+        "name": "鹏华中证沪港深科技龙头指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "169109.SZ": {
+        "name": "东方红睿和三年定开混合-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "506007.SH": {
+        "name": "广发科创板两年定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164826.SZ": {
+        "name": "工银瑞信创业板两年定开混合-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160727.SZ": {
+        "name": "嘉实创业板两年定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160418.SZ": {
+        "name": "华安中证银行ETF联接-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160419.SZ": {
+        "name": "华安中证全指证券公司ETF联接-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160420.SZ": {
+        "name": "华安创业板50指数-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160634.SZ": {
+        "name": "鹏华中证环保产业指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160636.SZ": {
+        "name": "鹏华中证移动互联网指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161721.SZ": {
+        "name": "招商沪深300地产等权重指数-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161723.SZ": {
+        "name": "招商中证银行指数-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164402.SZ": {
+        "name": "前海开源中航军工指数-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165312.SZ": {
+        "name": "建信央视财经50指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165523.SZ": {
+        "name": "中信保诚中证信息安全指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165524.SZ": {
+        "name": "中信保诚中证智能家居指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "167503.SZ": {
+        "name": "安信中证一带一路主题指数-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164401.SZ": {
+        "name": "前海开源中证健康产业指数",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160137.SZ": {
+        "name": "南方中证互联网指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160814.SZ": {
+        "name": "长盛中证金融地产指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161628.SZ": {
+        "name": "融通中证云计算与大数据主题指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164905.SZ": {
+        "name": "交银国证新能源指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164818.SZ": {
+        "name": "工银瑞信中证传媒指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "162907.SZ": {
+        "name": "泰信中证锐联基本面400指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161629.SZ": {
+        "name": "融通中证精准医疗主题指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "168205.SZ": {
+        "name": "中融中证银行指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160425.SZ": {
+        "name": "华安创业板两年定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 21,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160516.SZ": {
+        "name": "博时中证全指证券公司ETF联接-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161838.SZ": {
+        "name": "银华创业板两年定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 30,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160517.SZ": {
+        "name": "博时中证银行指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "162714.SZ": {
+        "name": "广发深证100指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165310.SZ": {
+        "name": "建信沪深300指数增强(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "169108.SZ": {
+        "name": "东方红均衡优选两年定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 21,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "166109.SZ": {
+        "name": "信澳量化先锋混合(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "167505.SZ": {
+        "name": "安信中短利率债债券(LOF)-C",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 154,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "163209.SZ": {
+        "name": "诺安创业板指数增强(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 3536,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501041.SH": {
+        "name": "汇添富弘安混合(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 205,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501042.SH": {
+        "name": "汇添富弘安混合(LOF)-C",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 205,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165530.SZ": {
+        "name": "中信保诚惠泽18个月定开债券-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "168601.SZ": {
+        "name": "汇安裕阳三年持有期混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 143,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "166802.SZ": {
+        "name": "浙商沪深300指数增强(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 362,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161910.SZ": {
+        "name": "万家新机遇价值驱动灵活配置混合-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164811.SZ": {
+        "name": "工银瑞信中证京津冀协同发展主题指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 354,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501055.SH": {
+        "name": "财通多策略福佑定开灵活配置混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 351,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "167705.SZ": {
+        "name": "德邦量化新锐股票(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 351,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160423.SZ": {
+        "name": "华安慧增优选定开灵活配置混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 21,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165532.SZ": {
+        "name": "信诚鼎泰多策略灵活配置混合(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 113,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165531.SZ": {
+        "name": "中信保诚多策略灵活配置混合(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 2210,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501103.SH": {
+        "name": "建信中证政策性金融债5-8年指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 159,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501101.SH": {
+        "name": "建信中证政策性金融债1-3年指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 524,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501102.SH": {
+        "name": "建信中证政策性金融债3-5年指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 164,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501105.SH": {
+        "name": "建信中证政策性金融债8-10年指数(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 520,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "168501.SZ": {
+        "name": "北信瑞丰产业升级多策略混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "167004.SZ": {
+        "name": "平安大华鼎沣定开灵活配置混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "167701.SZ": {
+        "name": "德邦德信中证中高收益企债指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 193,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "167702.SZ": {
+        "name": "德邦量化优选股票(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 710,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160525.SZ": {
+        "name": "博时睿丰灵活配置定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 105,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501033.SH": {
+        "name": "银华惠安定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 129,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501100.SH": {
+        "name": "博时安康18个月定开债券(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 193,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160923.SZ": {
+        "name": "大成海外中国机会混合(QDII-LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 620,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160524.SZ": {
+        "name": "博时弘泰定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 153,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "162107.SZ": {
+        "name": "金鹰先进制造股票(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 850,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164908.SZ": {
+        "name": "交银中证环境治理指数(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 877,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161230.SZ": {
+        "name": "国投瑞银双债丰利两年定开债券-A",
+        "list_date": "20160225",
+        "delist_date": "20180918",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150285.SZ": {
+        "name": "中融中证白酒指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 158,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150286.SZ": {
+        "name": "中融中证白酒指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 158,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150357.SZ": {
+        "name": "国泰国证新能源汽车指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 183,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150358.SZ": {
+        "name": "国泰国证新能源汽车指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 182,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150349.SZ": {
+        "name": "融通中证大农业指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 225,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150350.SZ": {
+        "name": "融通中证大农业指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 225,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150239.SZ": {
+        "name": "鹏华中证医药卫生指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 219,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150240.SZ": {
+        "name": "鹏华中证医药卫生指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 219,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150319.SZ": {
+        "name": "交银中证环境治理指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 223,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150320.SZ": {
+        "name": "交银中证环境治理指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 223,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150353.SZ": {
+        "name": "银华中证一带一路主题指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 193,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150354.SZ": {
+        "name": "银华中证一带一路主题指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 193,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150313.SZ": {
+        "name": "信诚中证基建工程指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 237,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150314.SZ": {
+        "name": "信诚中证基建工程指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 237,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150333.SZ": {
+        "name": "建信中证申万有色金属指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 279,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150334.SZ": {
+        "name": "建信中证申万有色金属指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 278,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150351.SZ": {
+        "name": "银华中证国防安全指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 194,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150352.SZ": {
+        "name": "银华中证国防安全指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 194,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165526.SZ": {
+        "name": "中信保诚新旺回报灵活配置混合(LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1091,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150253.SZ": {
+        "name": "前海开源中证大农业指数分级-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 259,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150254.SZ": {
+        "name": "前海开源中证大农业指数分级-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 259,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150162.SZ": {
+        "name": "银华永益分级债券-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 656,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150166.SZ": {
+        "name": "国富恒利分级债券-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 170,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150159.SZ": {
+        "name": "中欧纯债添利分级债券-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150119.SZ": {
+        "name": "中欧纯债分级债券-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 298,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150116.SZ": {
+        "name": "银华永兴纯债分级债券-B",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 639,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "162511.SZ": {
+        "name": "国联安双佳信用债券(LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1152,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "150087.SZ": {
+        "name": "中欧信用增利债券(LOF)-B",
+        "list_date": "20130227",
+        "delist_date": "20150416",
+        "nav_rows": 573,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "165806.SZ": {
+        "name": "东吴深证100指数增强(LOF)",
+        "list_date": "20120427",
+        "delist_date": "20180711",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "160123.SZ": {
+        "name": "南方中证50债券指数(LOF)-A",
+        "list_date": "20110725",
+        "delist_date": "20160817",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "164205.SZ": {
+        "name": "天弘深证成份指数(LOF)",
+        "list_date": "20100917",
+        "delist_date": "20150507",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161211.SZ": {
+        "name": "国投瑞银沪深300金融地产ETF联接",
+        "list_date": "20100608",
+        "delist_date": "20131104",
+        "nav_rows": 92,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158036.SZ": {
+        "name": "华夏中证卫星产业ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 2,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158051.SZ": {
+        "name": "国联安中证金融科技主题ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 3,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158062.SZ": {
+        "name": "建信创业板金融科技ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 4,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158065.SZ": {
+        "name": "招商国证粮食产业ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158066.SZ": {
+        "name": "前海开源中证大数据产业ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 4,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158067.SZ": {
+        "name": "万家创业板金融科技ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 3,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158072.SZ": {
+        "name": "南方创业板软件ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 2,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158078.SZ": {
+        "name": "华宝创业板电池ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "158081.SZ": {
+        "name": "永赢创业板电池ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "159047.SZ": {
+        "name": "银华中证港股通信息技术综合ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 2,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "159089.SZ": {
+        "name": "国联国证港股通互联网ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 3,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "159319.SZ": {
+        "name": "汇添富国证粮食产业ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "159585.SZ": {
+        "name": "富国中证全指软件ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "159756.SZ": {
+        "name": "中银证券国证新能源车电池ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "159799.SZ": {
+        "name": "平安中证港股通消费主题ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "161836.SZ": {
+        "name": "银华惠博定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "168109.SZ": {
+        "name": "九泰锐兴定增主题双轮驱动混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "168110.SZ": {
+        "name": "九泰锐信定增灵活配置混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "180307.SZ": {
+        "name": "中金菜鸟仓储物流REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "180505.SZ": {
+        "name": "中金杭州安居保障性租赁住房REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "180702.SZ": {
+        "name": "银华粤海水务水利REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 1,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "181002.SZ": {
+        "name": "华泰紫金华住安住REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501052.SH": {
+        "name": "银华惠景定开混合",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501221.SH": {
+        "name": "民生加银优享进取一年封闭运作股票(FOF-LOF)",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "501223.SH": {
+        "name": "汇添富积极投资指数优选一年定开股票(FOF-LOF)-A",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "508038.SH": {
+        "name": "国金嘉泽新能源REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "508606.SH": {
+        "name": "华夏凯德REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "508610.SH": {
+        "name": "广发新城吾悦REIT",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "512830.SH": {
+        "name": "汇添富中国战略新兴产业成份ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "515443.SH": {
+        "name": "南方中证A股ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "516170.SH": {
+        "name": "平安中证细分食品饮料产业主题ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "517980.SH": {
+        "name": "华富中证银行AH价格优选ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "526020.SH": {
+        "name": "华泰柏瑞恒生港股通汽车主题ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "560430.SH": {
+        "name": "中银证券中证A500ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "561270.SH": {
+        "name": "鹏华中证家电龙头ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "562210.SH": {
+        "name": "华宝中证光伏产业ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "562630.SH": {
+        "name": "易方达中证全指通信设备ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "588490.SH": {
+        "name": "泰康中证科创创业人工智能ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      },
+      "589450.SH": {
+        "name": "兴业上证科创板人工智能ETF",
+        "list_date": "",
+        "delist_date": "",
+        "nav_rows": 0,
+        "daily_attempts": 3,
+        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空"
+      }
+    },
+    "source_empty_summary": {
+      "total": 150,
+      "nav_has_data": 105,
+      "nav_also_empty": 45,
+      "composition": "REIT 12/LOF 52/封基/定开/持有 21/其他 65（按名称关键词；REIT/净值型LOF/封基定开多无交易所成交）",
+      "verified_date": "2026-10-17"
+    },
+    "source_late_start": [
+      "150142.SZ"
+    ],
+    "source_late_start_evidence": {
+      "150142.SZ": {
+        "name": "汇添富互利分级债券-B",
+        "gap_days": 43,
+        "source_rows": 515,
+        "source_first": "20140612",
+        "note": "源端首笔成交晚上市 43 天（稀疏成交），非补数可修"
+      }
+    }
+  },
+  "fund_nav": {
+    "A": 0,
+    "B": 0,
+    "note": "全表缺口另立项；派单 173 只 A2 已补（成功 127/空 46），不参与 R17 断言",
+    "source_empty": [
+      "150159.SZ",
+      "158065.SZ",
+      "158078.SZ",
+      "158081.SZ",
+      "159319.SZ",
+      "159585.SZ",
+      "159756.SZ",
+      "159799.SZ",
+      "160123.SZ",
+      "160517.SZ",
+      "160814.SZ",
+      "161230.SZ",
+      "161629.SZ",
+      "161836.SZ",
+      "162714.SZ",
+      "162907.SZ",
+      "164205.SZ",
+      "165806.SZ",
+      "167004.SZ",
+      "168109.SZ",
+      "168110.SZ",
+      "168205.SZ",
+      "168501.SZ",
+      "169109.SZ",
+      "181002.SZ",
+      "501052.SH",
+      "501221.SH",
+      "501223.SH",
+      "508038.SH",
+      "508606.SH",
+      "508610.SH",
+      "512830.SH",
+      "515443.SH",
+      "516170.SH",
+      "517980.SH",
+      "526020.SH",
+      "560430.SH",
+      "561270.SH",
+      "562210.SH",
+      "562630.SH",
+      "588490.SH",
+      "589450.SH"
+    ],
+    "source_late_start": [
+      "150020.SZ",
+      "150021.SZ",
+      "161211.SZ",
+      "184688.SZ",
+      "500001.SH",
+      "500003.SH",
+      "500006.SH",
+      "500008.SH"
+    ],
+    "source_late_start_evidence": {
+      "150020.SZ": {
+        "name": "富国汇利回报分级债券-A",
+        "source_rows": 1039,
+        "source_first": "20130909",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1067
+      },
+      "150021.SZ": {
+        "name": "富国汇利回报分级债券-B",
+        "source_rows": 1039,
+        "source_first": "20130909",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1067
+      },
+      "161211.SZ": {
+        "name": "国投瑞银沪深300金融地产ETF联接",
+        "source_rows": 92,
+        "source_first": "20260602",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 5838
+      },
+      "500006.SH": {
+        "name": "博时裕阳封闭",
+        "source_rows": 769,
+        "source_first": "19990101",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 155
+      },
+      "500003.SH": {
+        "name": "华安安信封闭",
+        "source_rows": 760,
+        "source_first": "19990101",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 189
+      },
+      "500008.SH": {
+        "name": "华夏兴华封闭",
+        "source_rows": 754,
+        "source_first": "19990101",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 238
+      },
+      "184688.SZ": {
+        "name": "南方开元封闭",
+        "source_rows": 747,
+        "source_first": "19981231",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 268
+      },
+      "500001.SH": {
+        "name": "国泰金泰封闭",
+        "source_rows": 738,
+        "source_first": "19990101",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 269
+      }
+    },
+    "ee_fund4_note": "EE-FUND-4（2026-10-17）全表回填：fund_nav 三轮核验后 source_empty=47 / source_late_start=12，未登记 A/B 归零"
+  },
+  "fund_adj": {
+    "A": 0,
+    "B": 0,
+    "note": "全表缺口另立项；派单 189 只 --force 重拉后源端 34 只全部落盘、155 只三轮核验源端空（清单见 source_empty）",
+    "source_empty": [
+      "150116.SZ",
+      "150119.SZ",
+      "150159.SZ",
+      "150162.SZ",
+      "150166.SZ",
+      "150239.SZ",
+      "150240.SZ",
+      "150253.SZ",
+      "150254.SZ",
+      "150285.SZ",
+      "150286.SZ",
+      "150313.SZ",
+      "150314.SZ",
+      "150319.SZ",
+      "150320.SZ",
+      "150333.SZ",
+      "150334.SZ",
+      "150349.SZ",
+      "150350.SZ",
+      "150351.SZ",
+      "150352.SZ",
+      "150353.SZ",
+      "150354.SZ",
+      "150357.SZ",
+      "150358.SZ",
+      "158036.SZ",
+      "158051.SZ",
+      "158062.SZ",
+      "158065.SZ",
+      "158066.SZ",
+      "158067.SZ",
+      "158072.SZ",
+      "158078.SZ",
+      "158081.SZ",
+      "159047.SZ",
+      "159089.SZ",
+      "159319.SZ",
+      "159585.SZ",
+      "159756.SZ",
+      "159799.SZ",
+      "160123.SZ",
+      "160137.SZ",
+      "160418.SZ",
+      "160419.SZ",
+      "160420.SZ",
+      "160422.SZ",
+      "160423.SZ",
+      "160425.SZ",
+      "160516.SZ",
+      "160517.SZ",
+      "160524.SZ",
+      "160525.SZ",
+      "160634.SZ",
+      "160636.SZ",
+      "160646.SZ",
+      "160727.SZ",
+      "160814.SZ",
+      "160923.SZ",
+      "161022.SZ",
+      "161211.SZ",
+      "161230.SZ",
+      "161628.SZ",
+      "161629.SZ",
+      "161721.SZ",
+      "161723.SZ",
+      "161730.SZ",
+      "161836.SZ",
+      "161838.SZ",
+      "161910.SZ",
+      "162107.SZ",
+      "162511.SZ",
+      "162714.SZ",
+      "162717.SZ",
+      "162907.SZ",
+      "163209.SZ",
+      "163827.SZ",
+      "164205.SZ",
+      "164212.SZ",
+      "164401.SZ",
+      "164402.SZ",
+      "164811.SZ",
+      "164818.SZ",
+      "164826.SZ",
+      "164905.SZ",
+      "164908.SZ",
+      "165310.SZ",
+      "165312.SZ",
+      "165523.SZ",
+      "165524.SZ",
+      "165526.SZ",
+      "165530.SZ",
+      "165531.SZ",
+      "165532.SZ",
+      "165806.SZ",
+      "166007.SZ",
+      "166109.SZ",
+      "166802.SZ",
+      "167004.SZ",
+      "167503.SZ",
+      "167505.SZ",
+      "167701.SZ",
+      "167702.SZ",
+      "167705.SZ",
+      "168109.SZ",
+      "168110.SZ",
+      "168205.SZ",
+      "168501.SZ",
+      "168601.SZ",
+      "169108.SZ",
+      "169109.SZ",
+      "180307.SZ",
+      "180505.SZ",
+      "180702.SZ",
+      "181002.SZ",
+      "501002.SH",
+      "501033.SH",
+      "501041.SH",
+      "501042.SH",
+      "501049.SH",
+      "501052.SH",
+      "501055.SH",
+      "501063.SH",
+      "501100.SH",
+      "501101.SH",
+      "501102.SH",
+      "501103.SH",
+      "501105.SH",
+      "501221.SH",
+      "501223.SH",
+      "501226.SH",
+      "506007.SH",
+      "506009.SH",
+      "508038.SH",
+      "508047.SH",
+      "508095.SH",
+      "508605.SH",
+      "508606.SH",
+      "508607.SH",
+      "508609.SH",
+      "508610.SH",
+      "512830.SH",
+      "515443.SH",
+      "516170.SH",
+      "517980.SH",
+      "526020.SH",
+      "560430.SH",
+      "561270.SH",
+      "562210.SH",
+      "562630.SH",
+      "588490.SH",
+      "589450.SH"
+    ],
+    "source_empty_count": 151,
+    "source_empty_evidence_new": {
+      "161022.SZ": {
+        "name": "富国创业板指数-A",
+        "source_rows": 0,
+        "source_first": null,
+        "attempts": "3轮（2批量含force + 1单线程全历史）"
+      },
+      "501063.SH": {
+        "name": "汇添富悦享定开混合",
+        "source_rows": 0,
+        "source_first": null,
+        "attempts": "3轮（2批量含force + 1单线程全历史）"
+      },
+      "166007.SZ": {
+        "name": "中欧互通精选混合-A",
+        "source_rows": 0,
+        "source_first": null,
+        "attempts": "3轮（2批量含force + 1单线程全历史）"
+      },
+      "162717.SZ": {
+        "name": "广发再融资主题灵活配置混合(LOF)-A",
+        "source_rows": 0,
+        "source_first": null,
+        "attempts": "3轮（2批量含force + 1单线程全历史）"
+      },
+      "501049.SH": {
+        "name": "东方红睿玺三年定开灵活配置混合-A",
+        "source_rows": 0,
+        "source_first": null,
+        "attempts": "3轮（2批量含force + 1单线程全历史）"
+      },
+      "160422.SZ": {
+        "name": "华安中证定向增发事件指数(LOF)",
+        "source_rows": 0,
+        "source_first": null,
+        "attempts": "3轮（2批量含force + 1单线程全历史）"
+      },
+      "501002.SH": {
+        "name": "长信中证能源互联网主题指数(LOF)",
+        "source_rows": 0,
+        "source_first": null,
+        "attempts": "3轮（2批量含force + 1单线程全历史）"
+      }
+    },
+    "source_late_start": [
+      "150008.SZ",
+      "150009.SZ",
+      "159001.SZ",
+      "159003.SZ",
+      "159005.SZ",
+      "159901.SZ",
+      "159902.SZ",
+      "159903.SZ",
+      "159905.SZ",
+      "159906.SZ",
+      "159907.SZ",
+      "159909.SZ",
+      "159910.SZ",
+      "159912.SZ",
+      "159913.SZ",
+      "159915.SZ",
+      "159916.SZ",
+      "159918.SZ",
+      "159919.SZ",
+      "159920.SZ",
+      "159922.SZ",
+      "159923.SZ",
+      "159925.SZ",
+      "159928.SZ",
+      "159929.SZ",
+      "159930.SZ",
+      "159931.SZ",
+      "159933.SZ",
+      "159934.SZ",
+      "159935.SZ",
+      "159936.SZ",
+      "159937.SZ",
+      "159938.SZ",
+      "159939.SZ",
+      "159940.SZ",
+      "159941.SZ",
+      "159943.SZ",
+      "159944.SZ",
+      "159945.SZ",
+      "160105.SZ",
+      "160106.SZ",
+      "160119.SZ",
+      "160125.SZ",
+      "160128.SZ",
+      "160133.SZ",
+      "160211.SZ",
+      "160212.SZ",
+      "160215.SZ",
+      "160216.SZ",
+      "160220.SZ",
+      "160311.SZ",
+      "160314.SZ",
+      "160416.SZ",
+      "160505.SZ",
+      "160512.SZ",
+      "160513.SZ",
+      "160515.SZ",
+      "160607.SZ",
+      "160610.SZ",
+      "160611.SZ",
+      "160613.SZ",
+      "160615.SZ",
+      "160616.SZ",
+      "160617.SZ",
+      "160618.SZ",
+      "160621.SZ",
+      "160706.SZ",
+      "160716.SZ",
+      "160717.SZ",
+      "160719.SZ",
+      "160805.SZ",
+      "160806.SZ",
+      "160807.SZ",
+      "160812.SZ",
+      "160813.SZ",
+      "160910.SZ",
+      "160916.SZ",
+      "160918.SZ",
+      "160919.SZ",
+      "161005.SZ",
+      "161010.SZ",
+      "161015.SZ",
+      "161017.SZ",
+      "161115.SZ",
+      "161116.SZ",
+      "161117.SZ",
+      "161119.SZ",
+      "161213.SZ",
+      "161216.SZ",
+      "161217.SZ",
+      "161219.SZ",
+      "161222.SZ",
+      "161224.SZ",
+      "161225.SZ",
+      "161226.SZ",
+      "161227.SZ",
+      "161505.SZ",
+      "161607.SZ",
+      "161610.SZ",
+      "161614.SZ",
+      "161706.SZ",
+      "161713.SZ",
+      "161716.SZ",
+      "161722.SZ",
+      "161810.SZ",
+      "161815.SZ",
+      "161820.SZ",
+      "161903.SZ",
+      "161907.SZ",
+      "161908.SZ",
+      "161911.SZ",
+      "162006.SZ",
+      "162105.SZ",
+      "162108.SZ",
+      "162207.SZ",
+      "162307.SZ",
+      "162411.SZ",
+      "162414.SZ",
+      "162605.SZ",
+      "162607.SZ",
+      "162703.SZ",
+      "162711.SZ",
+      "162712.SZ",
+      "162715.SZ",
+      "163001.SZ",
+      "163110.SZ",
+      "163208.SZ",
+      "163302.SZ",
+      "163402.SZ",
+      "163407.SZ",
+      "163409.SZ",
+      "163412.SZ",
+      "163415.SZ",
+      "163503.SZ",
+      "163801.SZ",
+      "163819.SZ",
+      "163821.SZ",
+      "164105.SZ",
+      "164208.SZ",
+      "164606.SZ",
+      "164701.SZ",
+      "164702.SZ",
+      "164808.SZ",
+      "164810.SZ",
+      "164902.SZ",
+      "164906.SZ",
+      "165309.SZ",
+      "165311.SZ",
+      "165313.SZ",
+      "165508.SZ",
+      "165509.SZ",
+      "165510.SZ",
+      "165512.SZ",
+      "165513.SZ",
+      "165516.SZ",
+      "165517.SZ",
+      "166001.SZ",
+      "166006.SZ",
+      "166008.SZ",
+      "166009.SZ",
+      "166011.SZ",
+      "166105.SZ",
+      "166401.SZ",
+      "167501.SZ",
+      "184688.SZ",
+      "184689.SZ",
+      "184690.SZ",
+      "184691.SZ",
+      "184692.SZ",
+      "184693.SZ",
+      "184698.SZ",
+      "184699.SZ",
+      "184701.SZ",
+      "184705.SZ",
+      "184721.SZ",
+      "184722.SZ",
+      "184728.SZ",
+      "500001.SH",
+      "500002.SH",
+      "500003.SH",
+      "500005.SH",
+      "500006.SH",
+      "500008.SH",
+      "500009.SH",
+      "500011.SH",
+      "500015.SH",
+      "500018.SH",
+      "500038.SH",
+      "500056.SH",
+      "500058.SH",
+      "501201.SH",
+      "510010.SH",
+      "510020.SH",
+      "510030.SH",
+      "510050.SH",
+      "510060.SH",
+      "510090.SH",
+      "510110.SH",
+      "510120.SH",
+      "510130.SH",
+      "510150.SH",
+      "510160.SH",
+      "510170.SH",
+      "510180.SH",
+      "510190.SH",
+      "510210.SH",
+      "510220.SH",
+      "510230.SH",
+      "510270.SH",
+      "510290.SH",
+      "510300.SH",
+      "510310.SH",
+      "510330.SH",
+      "510360.SH",
+      "510410.SH",
+      "510500.SH",
+      "510510.SH",
+      "510560.SH",
+      "510580.SH",
+      "510630.SH",
+      "510650.SH",
+      "510660.SH",
+      "510710.SH",
+      "510880.SH",
+      "510900.SH",
+      "511010.SH",
+      "511800.SH",
+      "511810.SH",
+      "511830.SH",
+      "511860.SH",
+      "511880.SH",
+      "511980.SH",
+      "511990.SH",
+      "512010.SH",
+      "512070.SH",
+      "512120.SH",
+      "512220.SH",
+      "512330.SH",
+      "512500.SH",
+      "512510.SH",
+      "512600.SH",
+      "512640.SH",
+      "513030.SH",
+      "513100.SH",
+      "513500.SH",
+      "513600.SH",
+      "513660.SH",
+      "518800.SH",
+      "518880.SH"
+    ],
+    "source_late_start_evidence": {
+      "501201.SH": {
+        "name": "红土创新科技创新股票(LOF)-A",
+        "source_rows": 782,
+        "source_first": "20230724",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 871
+      },
+      "160621.SZ": {
+        "name": "鹏华丰和债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 84
+      },
+      "511980.SH": {
+        "name": "汇添富添富通货币ETF-E",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 87
+      },
+      "510580.SH": {
+        "name": "易方达中证500ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 136
+      },
+      "510360.SH": {
+        "name": "广发沪深300ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 141
+      },
+      "161227.SZ": {
+        "name": "国投瑞银瑞福深证100指数(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 153
+      },
+      "161226.SZ": {
+        "name": "国投瑞银白银期货(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 164
+      },
+      "167501.SZ": {
+        "name": "安信宝利债券(LOF)-D",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 174
+      },
+      "163001.SZ": {
+        "name": "长信医疗保健行业灵活配置混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 190
+      },
+      "511830.SH": {
+        "name": "华泰柏瑞货币ETF-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 178
+      },
+      "512330.SH": {
+        "name": "南方中证500信息技术指数ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 192
+      },
+      "159944.SZ": {
+        "name": "广发中证全指原材料ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 206
+      },
+      "159945.SZ": {
+        "name": "广发中证全指能源ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 206
+      },
+      "162414.SZ": {
+        "name": "华宝新机遇灵活配置混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 211
+      },
+      "159941.SZ": {
+        "name": "广发纳斯达克100ETF(QDII)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 199
+      },
+      "159943.SZ": {
+        "name": "大成深证成份ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 204
+      },
+      "510560.SH": {
+        "name": "国寿安保中证500ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 209
+      },
+      "164906.SZ": {
+        "name": "交银中证海外中国互联网指数(QDII-LOF)-",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 202
+      },
+      "510710.SH": {
+        "name": "博时上证50ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 227
+      },
+      "161225.SZ": {
+        "name": "国投瑞银瑞盈灵活配置混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160125",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 164
+      },
+      "160125.SZ": {
+        "name": "南方香港优选股票(QDII-LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 260
+      },
+      "512510.SH": {
+        "name": "华泰柏瑞中证500ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 230
+      },
+      "512500.SH": {
+        "name": "华夏中证500ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 244
+      },
+      "161722.SZ": {
+        "name": "招商丰泰灵活配置混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 190
+      },
+      "161224.SZ": {
+        "name": "国投瑞银新丝路灵活配置混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 267
+      },
+      "159940.SZ": {
+        "name": "广发中证全指金融地产ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 286
+      },
+      "161222.SZ": {
+        "name": "国投瑞银瑞利灵活配置混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 269
+      },
+      "166006.SZ": {
+        "name": "中欧行业成长混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 360
+      },
+      "159939.SZ": {
+        "name": "广发中证全指信息技术ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 357
+      },
+      "160919.SZ": {
+        "name": "大成产业升级股票(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 384
+      },
+      "159005.SZ": {
+        "name": "汇添富收益快钱货币ETF-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 380
+      },
+      "513600.SH": {
+        "name": "南方恒生ETF(QDII)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 367
+      },
+      "513660.SH": {
+        "name": "华夏沪港通恒生ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 367
+      },
+      "511810.SH": {
+        "name": "南方理财金货币ETF-H",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 388
+      },
+      "159938.SZ": {
+        "name": "广发中证全指医药卫生ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 385
+      },
+      "511860.SH": {
+        "name": "博时保证金实时货币ETF-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 415
+      },
+      "511800.SH": {
+        "name": "易方达货币ETF-E",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 416
+      },
+      "160813.SZ": {
+        "name": "长盛同盛成长优选灵活配置混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 398
+      },
+      "159937.SZ": {
+        "name": "博时黄金ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 514
+      },
+      "513030.SH": {
+        "name": "华安国际龙头(DAX)ETF(QDII)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 510
+      },
+      "512220.SH": {
+        "name": "景顺长城中证科技传媒通信150ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 527
+      },
+      "160133.SZ": {
+        "name": "南方天元新产业股票(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 521
+      },
+      "512070.SH": {
+        "name": "易方达沪深300非银行金融ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 559
+      },
+      "512640.SH": {
+        "name": "嘉实中证金融地产ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 552
+      },
+      "512600.SH": {
+        "name": "嘉实中证主要消费ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 552
+      },
+      "159936.SZ": {
+        "name": "广发中证全指可选消费ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 582
+      },
+      "160918.SZ": {
+        "name": "大成中小盘混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 638
+      },
+      "160812.SZ": {
+        "name": "长盛同益成长回报灵活配置混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 603
+      },
+      "160220.SZ": {
+        "name": "国泰民益灵活配置混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 742
+      },
+      "159935.SZ": {
+        "name": "景顺长城中证500ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 737
+      },
+      "513500.SH": {
+        "name": "博时标普500ETF(QDII)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 743
+      },
+      "512120.SH": {
+        "name": "华安中证细分医药ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 752
+      },
+      "159934.SZ": {
+        "name": "易方达黄金ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 773
+      },
+      "512010.SH": {
+        "name": "易方达沪深300医药卫生ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 822
+      },
+      "159933.SZ": {
+        "name": "国投瑞银沪深300金融地产ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 834
+      },
+      "161903.SZ": {
+        "name": "万家行业优选混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 882
+      },
+      "159928.SZ": {
+        "name": "汇添富中证主要消费ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 864
+      },
+      "159929.SZ": {
+        "name": "汇添富中证医药卫生ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 864
+      },
+      "159930.SZ": {
+        "name": "汇添富中证能源ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 864
+      },
+      "159931.SZ": {
+        "name": "汇添富中证金融地产ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 864
+      },
+      "160515.SZ": {
+        "name": "博时安丰18个月定开债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 833
+      },
+      "518800.SH": {
+        "name": "国泰黄金ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 913
+      },
+      "518880.SH": {
+        "name": "华安易富黄金ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 913
+      },
+      "159003.SZ": {
+        "name": "招商保证金快线货币ETF-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 465
+      },
+      "162715.SZ": {
+        "name": "广发聚源债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 932
+      },
+      "161911.SZ": {
+        "name": "万家强化收益定开债券",
+        "source_rows": 2600,
+        "source_first": "20140924",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 419
+      },
+      "162108.SZ": {
+        "name": "金鹰元盛债券(LOF)-C",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 253
+      },
+      "513100.SH": {
+        "name": "国泰纳斯达克100ETF(QDII)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 988
+      },
+      "510510.SH": {
+        "name": "广发中证500ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 979
+      },
+      "511880.SH": {
+        "name": "银华货币ETF-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1015
+      },
+      "159001.SZ": {
+        "name": "易方达保证金收益货币ETF-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 465
+      },
+      "510630.SH": {
+        "name": "华夏上证主要消费ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 995
+      },
+      "510650.SH": {
+        "name": "华夏上证金融地产ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 995
+      },
+      "510660.SH": {
+        "name": "华夏上证医药卫生ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 995
+      },
+      "165313.SZ": {
+        "name": "建信优势动力混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1030
+      },
+      "510310.SH": {
+        "name": "易方达沪深300ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1039
+      },
+      "511010.SH": {
+        "name": "国泰上证5年期国债ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1039
+      },
+      "161716.SZ": {
+        "name": "招商双债增强债券(LOF)-C",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 318
+      },
+      "159925.SZ": {
+        "name": "南方沪深300ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1022
+      },
+      "159923.SZ": {
+        "name": "大成中证A100ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1059
+      },
+      "159922.SZ": {
+        "name": "嘉实中证500ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1049
+      },
+      "510500.SH": {
+        "name": "南方中证500ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1049
+      },
+      "511990.SH": {
+        "name": "华宝现金添益货币ETF-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1095
+      },
+      "510330.SH": {
+        "name": "华夏沪深300ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1107
+      },
+      "163415.SZ": {
+        "name": "兴全商业模式优选混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1091
+      },
+      "161119.SZ": {
+        "name": "易方达中债新综合债券指数(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1114
+      },
+      "159920.SZ": {
+        "name": "华夏恒生ETF(QDII)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1193
+      },
+      "161820.SZ": {
+        "name": "银华纯债信用主题债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1240
+      },
+      "510900.SH": {
+        "name": "易方达恒生中国企业ETF(QDII)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1193
+      },
+      "160916.SZ": {
+        "name": "大成优选混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1126
+      },
+      "164702.SZ": {
+        "name": "汇添富季季红定开债券",
+        "source_rows": 2600,
+        "source_first": "20140226",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 489
+      },
+      "164810.SZ": {
+        "name": "工银瑞信纯债定开债券",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1225
+      },
+      "161117.SZ": {
+        "name": "易方达永旭添利定开债券",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1289
+      },
+      "160128.SZ": {
+        "name": "南方金利定开债券-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1291
+      },
+      "163821.SZ": {
+        "name": "中银沪深300等权重指数(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1294
+      },
+      "160806.SZ": {
+        "name": "长盛同庆中证800指数(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 175
+      },
+      "159919.SZ": {
+        "name": "嘉实沪深300ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1340
+      },
+      "165516.SZ": {
+        "name": "中信保诚周期轮动混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1179
+      },
+      "166105.SZ": {
+        "name": "信澳鑫安债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 238
+      },
+      "510300.SH": {
+        "name": "华泰柏瑞沪深300ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1340
+      },
+      "160216.SZ": {
+        "name": "国泰大宗商品配置(QDII-LOF-FOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 296
+      },
+      "161505.SZ": {
+        "name": "银河通利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 615
+      },
+      "165517.SZ": {
+        "name": "中信保诚双盈债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 280
+      },
+      "510410.SH": {
+        "name": "博时上证自然资源ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1357
+      },
+      "163412.SZ": {
+        "name": "兴全轻资产投资混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1337
+      },
+      "160416.SZ": {
+        "name": "华安标普全球石油指数(QDII-LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1366
+      },
+      "166011.SZ": {
+        "name": "中欧盛世成长混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 282
+      },
+      "159918.SZ": {
+        "name": "嘉实中创400ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1357
+      },
+      "163819.SZ": {
+        "name": "中银信用增利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1289
+      },
+      "162105.SZ": {
+        "name": "金鹰持久增利债券(LOF)-C",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 314
+      },
+      "161614.SZ": {
+        "name": "融通四季添利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1392
+      },
+      "165513.SZ": {
+        "name": "中信保诚全球商品主题(QDII-LOF-FOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1476
+      },
+      "161219.SZ": {
+        "name": "国投瑞银新兴产业混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1473
+      },
+      "166401.SZ": {
+        "name": "浦银稳健增利债券(LOF)-C",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 385
+      },
+      "160618.SZ": {
+        "name": "鹏华丰泽债券(LOF)-C",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 399
+      },
+      "164208.SZ": {
+        "name": "天弘丰利债券(LOF)-E",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 421
+      },
+      "161017.SZ": {
+        "name": "富国中证500指数增强(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1560
+      },
+      "162411.SZ": {
+        "name": "华宝标普石油天然气上游股票指数(QDII-LOF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1329
+      },
+      "163208.SZ": {
+        "name": "诺安油气能源股票(QDII-LOF-FOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 345
+      },
+      "159913.SZ": {
+        "name": "交银深证300价值ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1556
+      },
+      "164606.SZ": {
+        "name": "华泰柏瑞信用增利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1508
+      },
+      "159915.SZ": {
+        "name": "易方达创业板ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1511
+      },
+      "159912.SZ": {
+        "name": "汇添富深证300ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1526
+      },
+      "510290.SH": {
+        "name": "南方上证380ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1542
+      },
+      "159916.SZ": {
+        "name": "建信深证基本面60ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1557
+      },
+      "164701.SZ": {
+        "name": "汇添富黄金及贵金属(QDII-LOF-FOF)-",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1428
+      },
+      "162712.SZ": {
+        "name": "广发聚利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1554
+      },
+      "160719.SZ": {
+        "name": "嘉实黄金(QDII-LOF-FOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1448
+      },
+      "159910.SZ": {
+        "name": "嘉实深证基本面120ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1584
+      },
+      "165512.SZ": {
+        "name": "中信保诚新机遇混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1595
+      },
+      "161217.SZ": {
+        "name": "国投瑞银中证上游资源产业指数(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1613
+      },
+      "159909.SZ": {
+        "name": "招商深证电子信息传媒产业(TMT)50ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1610
+      },
+      "163110.SZ": {
+        "name": "申万菱信量化小盘股票(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1641
+      },
+      "165311.SZ": {
+        "name": "建信信用增强债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1602
+      },
+      "510270.SH": {
+        "name": "中银上证国有企业100ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1624
+      },
+      "160513.SZ": {
+        "name": "博时稳健回报债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 576
+      },
+      "159907.SZ": {
+        "name": "广发国证2000ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1632
+      },
+      "161908.SZ": {
+        "name": "万家添利债券(LOF)-C",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 591
+      },
+      "161015.SZ": {
+        "name": "富国天盈债券(LOF)-C",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 603
+      },
+      "161116.SZ": {
+        "name": "易方达黄金主题(QDII-LOF-FOF)-A-",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1542
+      },
+      "163409.SZ": {
+        "name": "兴全绿色投资混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1666
+      },
+      "160512.SZ": {
+        "name": "博时卓越品牌混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1673
+      },
+      "510120.SH": {
+        "name": "海富通上证非周期行业100ETF",
+        "source_rows": 2600,
+        "source_first": "20121129",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 540
+      },
+      "510230.SH": {
+        "name": "国泰上证180金融ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1711
+      },
+      "161216.SZ": {
+        "name": "国投瑞银双债增利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1714
+      },
+      "161907.SZ": {
+        "name": "万家中证红利指数(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20131104",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 873
+      },
+      "164808.SZ": {
+        "name": "工银瑞信四季收益债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1767
+      },
+      "166009.SZ": {
+        "name": "中欧新动力混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1735
+      },
+      "510210.SH": {
+        "name": "富国上证综指ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1770
+      },
+      "164902.SZ": {
+        "name": "交银信用添利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1744
+      },
+      "510220.SH": {
+        "name": "华泰柏瑞上证中小盘ETF",
+        "source_rows": 2600,
+        "source_first": "20120420",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 389
+      },
+      "159906.SZ": {
+        "name": "大成深证成长40ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1800
+      },
+      "165510.SZ": {
+        "name": "信诚金砖四国积极配置(QDII-LOF-FOF)",
+        "source_rows": 2600,
+        "source_first": "20120921",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 610
+      },
+      "161213.SZ": {
+        "name": "国投瑞银中证下游消费与服务产业指数(LOF)",
+        "source_rows": 2600,
+        "source_first": "20110516",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 116
+      },
+      "510150.SH": {
+        "name": "招商上证消费80ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1798
+      },
+      "161815.SZ": {
+        "name": "银华抗通胀主题(QDII-LOF-FOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1865
+      },
+      "160617.SZ": {
+        "name": "鹏华丰润债券(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1869
+      },
+      "166008.SZ": {
+        "name": "中欧增强回报债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1805
+      },
+      "510170.SH": {
+        "name": "国联安上证大宗商品股票ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1829
+      },
+      "510190.SH": {
+        "name": "华安上证50ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1844
+      },
+      "161115.SZ": {
+        "name": "易方达岁丰添利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1882
+      },
+      "159905.SZ": {
+        "name": "工银瑞信深证红利ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1843
+      },
+      "163407.SZ": {
+        "name": "兴全沪深300指数增强(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1835
+      },
+      "160717.SZ": {
+        "name": "嘉实恒生中国企业指数(QDII-LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1918
+      },
+      "165509.SZ": {
+        "name": "中信保诚增强收益债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1907
+      },
+      "510110.SH": {
+        "name": "海富通上证周期行业50ETF",
+        "source_rows": 2600,
+        "source_first": "20121129",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 745
+      },
+      "164105.SZ": {
+        "name": "华富强化回报债券(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1935
+      },
+      "510160.SH": {
+        "name": "南方中证南方小康产业ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1914
+      },
+      "160215.SZ": {
+        "name": "国泰价值经典灵活配置混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1963
+      },
+      "160807.SZ": {
+        "name": "长盛沪深300指数(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1970
+      },
+      "165508.SZ": {
+        "name": "中信保诚深度价值混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1956
+      },
+      "161713.SZ": {
+        "name": "招商信用添利债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2008
+      },
+      "510090.SH": {
+        "name": "建信上证社会责任ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1998
+      },
+      "510030.SH": {
+        "name": "华宝上证180价值ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2071
+      },
+      "510130.SH": {
+        "name": "易方达上证中盘ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2045
+      },
+      "160212.SZ": {
+        "name": "国泰估值优势混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1065
+      },
+      "160616.SZ": {
+        "name": "鹏华中证500指数(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2101
+      },
+      "160716.SZ": {
+        "name": "嘉实中证锐联基本面50指数(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2178
+      },
+      "510020.SH": {
+        "name": "博时上证超级大盘ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2141
+      },
+      "159903.SZ": {
+        "name": "南方深证成份ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2186
+      },
+      "162711.SZ": {
+        "name": "广发中证500ETF联接(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2211
+      },
+      "165309.SZ": {
+        "name": "建信沪深300指数(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2250
+      },
+      "162307.SZ": {
+        "name": "海富通中证A100指数(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2211
+      },
+      "160211.SZ": {
+        "name": "国泰中小盘成长混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2212
+      },
+      "150008.SZ": {
+        "name": "国投瑞银瑞和沪深300指数分级-小康",
+        "source_rows": 2600,
+        "source_first": "20091224",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 35
+      },
+      "150009.SZ": {
+        "name": "国投瑞银瑞和沪深300指数分级-远见",
+        "source_rows": 2600,
+        "source_first": "20091224",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 35
+      },
+      "160119.SZ": {
+        "name": "南方中证500ETF联接(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2269
+      },
+      "510010.SH": {
+        "name": "交银上证180公司治理ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2235
+      },
+      "510060.SH": {
+        "name": "工银瑞信上证中央企业50ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2284
+      },
+      "161810.SZ": {
+        "name": "银华内需精选混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2295
+      },
+      "160615.SZ": {
+        "name": "鹏华沪深300ETF联接(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2456
+      },
+      "161010.SZ": {
+        "name": "富国天丰强化收益债券(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2607
+      },
+      "160613.SZ": {
+        "name": "鹏华盛世创新混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2635
+      },
+      "160314.SZ": {
+        "name": "华夏行业精选混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 2936
+      },
+      "160910.SZ": {
+        "name": "大成创新成长混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3017
+      },
+      "161610.SZ": {
+        "name": "融通领先成长混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3116
+      },
+      "160611.SZ": {
+        "name": "鹏华优质治理混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3116
+      },
+      "160311.SZ": {
+        "name": "华夏蓝筹核心混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3167
+      },
+      "162006.SZ": {
+        "name": "长城久富核心成长混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3177
+      },
+      "166001.SZ": {
+        "name": "中欧新趋势混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3202
+      },
+      "160610.SZ": {
+        "name": "鹏华动力增长混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3247
+      },
+      "160805.SZ": {
+        "name": "长盛同智优势成长混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3268
+      },
+      "510880.SH": {
+        "name": "华泰柏瑞上证红利ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3297
+      },
+      "160607.SZ": {
+        "name": "鹏华价值优势混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3419
+      },
+      "159902.SZ": {
+        "name": "华夏中小企业100ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3432
+      },
+      "162207.SZ": {
+        "name": "宏利效率优选混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3478
+      },
+      "510180.SH": {
+        "name": "华安上证180ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3542
+      },
+      "159901.SZ": {
+        "name": "易方达深证100ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3566
+      },
+      "162607.SZ": {
+        "name": "景顺长城资源垄断混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3583
+      },
+      "163503.SZ": {
+        "name": "天治核心成长混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3104
+      },
+      "161706.SZ": {
+        "name": "招商优质成长混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3702
+      },
+      "161005.SZ": {
+        "name": "富国天惠精选成长混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3633
+      },
+      "163402.SZ": {
+        "name": "兴全趋势投资混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3661
+      },
+      "163302.SZ": {
+        "name": "大摩资源优选混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3129
+      },
+      "160706.SZ": {
+        "name": "嘉实沪深300ETF联接(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3755
+      },
+      "160106.SZ": {
+        "name": "南方高增长混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3781
+      },
+      "161607.SZ": {
+        "name": "融通巨潮100指数(LOF)-A/B",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3878
+      },
+      "162605.SZ": {
+        "name": "景顺长城鼎益混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3900
+      },
+      "162703.SZ": {
+        "name": "广发小盘成长混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3926
+      },
+      "160505.SZ": {
+        "name": "博时主题行业混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3992
+      },
+      "163801.SZ": {
+        "name": "中银中国精选混合(LOF)-A",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3991
+      },
+      "510050.SH": {
+        "name": "华夏上证50ETF",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 3991
+      },
+      "160105.SZ": {
+        "name": "南方积极配置混合(LOF)",
+        "source_rows": 2600,
+        "source_first": "20160128",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 4056
+      },
+      "500058.SH": {
+        "name": "银河银丰封闭",
+        "source_rows": 2600,
+        "source_first": "20061117",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1529
+      },
+      "184722.SZ": {
+        "name": "长城久嘉",
+        "source_rows": 2600,
+        "source_first": "20061026",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1521
+      },
+      "184721.SZ": {
+        "name": "嘉实丰和价值",
+        "source_rows": 2600,
+        "source_first": "20060711",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1559
+      },
+      "500056.SH": {
+        "name": "易方达科瑞封闭",
+        "source_rows": 2600,
+        "source_first": "20060426",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1498
+      },
+      "184728.SZ": {
+        "name": "宝盈鸿阳封闭",
+        "source_rows": 2600,
+        "source_first": "20060427",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1591
+      },
+      "500038.SH": {
+        "name": "融通通乾封闭",
+        "source_rows": 2600,
+        "source_first": "20051202",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1533
+      },
+      "184705.SZ": {
+        "name": "博时裕泽封闭",
+        "source_rows": 2600,
+        "source_first": "20000721",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 65
+      },
+      "184701.SZ": {
+        "name": "大成景福封闭",
+        "source_rows": 2600,
+        "source_first": "20040415",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1557
+      },
+      "500015.SH": {
+        "name": "富国汉兴封闭",
+        "source_rows": 2600,
+        "source_first": "20040401",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1543
+      },
+      "184699.SZ": {
+        "name": "长盛同盛",
+        "source_rows": 2600,
+        "source_first": "20040224",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1551
+      },
+      "500011.SH": {
+        "name": "国泰金鑫封闭",
+        "source_rows": 2600,
+        "source_first": "20031229",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1494
+      },
+      "184698.SZ": {
+        "name": "南方天元封闭",
+        "source_rows": 2600,
+        "source_first": "20031017",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1488
+      },
+      "184693.SZ": {
+        "name": "鹏华普丰封闭",
+        "source_rows": 2600,
+        "source_first": "20030917",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1510
+      },
+      "500018.SH": {
+        "name": "华夏兴和封闭",
+        "source_rows": 2600,
+        "source_first": "20030909",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1502
+      },
+      "184692.SZ": {
+        "name": "博时裕隆封闭",
+        "source_rows": 2600,
+        "source_first": "20030910",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1539
+      },
+      "500009.SH": {
+        "name": "华安安顺封闭",
+        "source_rows": 2600,
+        "source_first": "20030820",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1520
+      },
+      "500005.SH": {
+        "name": "富国汉盛封闭",
+        "source_rows": 2600,
+        "source_first": "20030812",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1547
+      },
+      "184691.SZ": {
+        "name": "大成景宏封闭",
+        "source_rows": 2600,
+        "source_first": "20030723",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1527
+      },
+      "184690.SZ": {
+        "name": "长盛同益",
+        "source_rows": 2600,
+        "source_first": "20030718",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1549
+      },
+      "500002.SH": {
+        "name": "嘉实泰和",
+        "source_rows": 2600,
+        "source_first": "20030718",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1550
+      },
+      "184689.SZ": {
+        "name": "鹏华普惠封闭",
+        "source_rows": 2600,
+        "source_first": "20030404",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1528
+      },
+      "500006.SH": {
+        "name": "博时裕阳封闭",
+        "source_rows": 2600,
+        "source_first": "20021024",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1547
+      },
+      "500003.SH": {
+        "name": "华安安信封闭",
+        "source_rows": 2600,
+        "source_first": "20020829",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1525
+      },
+      "500008.SH": {
+        "name": "华夏兴华封闭",
+        "source_rows": 2600,
+        "source_first": "20020724",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1538
+      },
+      "184688.SZ": {
+        "name": "南方开元封闭",
+        "source_rows": 2600,
+        "source_first": "20020603",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1518
+      },
+      "500001.SH": {
+        "name": "国泰金泰封闭",
+        "source_rows": 2600,
+        "source_first": "20020411",
+        "attempts": "3轮（2批量含force + 1单线程全历史）",
+        "gap_days": 1465
+      }
+    },
+    "ee_fund4_note": "EE-FUND-4（2026-10-17）全表回填：fund_adj 三轮核验后 source_empty=169 / source_late_start=249，未登记 A/B 归零"
+  },
+  "fund_share": {
+    "A": 0,
+    "B": 0,
+    "source_empty_count": 89,
+    "source_empty": [
+      "150116.SZ",
+      "150119.SZ",
+      "150159.SZ",
+      "150162.SZ",
+      "150166.SZ",
+      "150239.SZ",
+      "150240.SZ",
+      "150253.SZ",
+      "150254.SZ",
+      "150285.SZ",
+      "150286.SZ",
+      "150313.SZ",
+      "150314.SZ",
+      "150319.SZ",
+      "150320.SZ",
+      "150333.SZ",
+      "150334.SZ",
+      "150349.SZ",
+      "150350.SZ",
+      "150351.SZ",
+      "150352.SZ",
+      "150353.SZ",
+      "150354.SZ",
+      "150357.SZ",
+      "150358.SZ",
+      "158065.SZ",
+      "158078.SZ",
+      "158081.SZ",
+      "159319.SZ",
+      "159585.SZ",
+      "159756.SZ",
+      "159799.SZ",
+      "160123.SZ",
+      "160422.SZ",
+      "160423.SZ",
+      "160524.SZ",
+      "160525.SZ",
+      "160814.SZ",
+      "160923.SZ",
+      "161211.SZ",
+      "161230.SZ",
+      "161629.SZ",
+      "161836.SZ",
+      "161910.SZ",
+      "162714.SZ",
+      "162907.SZ",
+      "163827.SZ",
+      "164205.SZ",
+      "164811.SZ",
+      "165530.SZ",
+      "165532.SZ",
+      "165806.SZ",
+      "166007.SZ",
+      "167004.SZ",
+      "167701.SZ",
+      "167705.SZ",
+      "168109.SZ",
+      "168110.SZ",
+      "168205.SZ",
+      "168501.SZ",
+      "168601.SZ",
+      "169109.SZ",
+      "181002.SZ",
+      "501002.SH",
+      "501033.SH",
+      "501041.SH",
+      "501042.SH",
+      "501052.SH",
+      "501055.SH",
+      "501101.SH",
+      "501102.SH",
+      "501103.SH",
+      "501105.SH",
+      "501221.SH",
+      "501223.SH",
+      "508038.SH",
+      "508606.SH",
+      "508610.SH",
+      "512830.SH",
+      "515443.SH",
+      "516170.SH",
+      "517980.SH",
+      "526020.SH",
+      "560430.SH",
+      "561270.SH",
+      "562210.SH",
+      "562630.SH",
+      "588490.SH",
+      "589450.SH"
+    ],
+    "source_late_start": [],
+    "note": "EE-FUND-6（2026-10-18）：逐码探针 118 只 A 类 → 29 只源端有数据回填 （fund_share by_code codes-file），89 只源端 tushare fund_share 全历史 0 行 登记 source_empty。其中 56 只 status=D 退市（分级/老 LOF/QDII）、33 只 status=L/nan 新 ETF/定开混合源端未收录。逐码证据见 source_empty_evidence（与 source_empty 平行，含 status/list_date/delist_date/probe_date）。",
+    "source_empty_evidence": [
+      {
+        "ts_code": "150116.SZ",
+        "name": "银华永兴纯债分级债券-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150119.SZ",
+        "name": "中欧纯债分级债券-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150159.SZ",
+        "name": "中欧纯债添利分级债券-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150162.SZ",
+        "name": "银华永益分级债券-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150166.SZ",
+        "name": "国富恒利分级债券-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150239.SZ",
+        "name": "鹏华中证医药卫生指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150240.SZ",
+        "name": "鹏华中证医药卫生指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150253.SZ",
+        "name": "前海开源中证大农业指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150254.SZ",
+        "name": "前海开源中证大农业指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150285.SZ",
+        "name": "中融中证白酒指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150286.SZ",
+        "name": "中融中证白酒指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150313.SZ",
+        "name": "信诚中证基建工程指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150314.SZ",
+        "name": "信诚中证基建工程指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150319.SZ",
+        "name": "交银中证环境治理指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150320.SZ",
+        "name": "交银中证环境治理指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150333.SZ",
+        "name": "建信中证申万有色金属指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150334.SZ",
+        "name": "建信中证申万有色金属指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150349.SZ",
+        "name": "融通中证大农业指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150350.SZ",
+        "name": "融通中证大农业指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150351.SZ",
+        "name": "银华中证国防安全指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150352.SZ",
+        "name": "银华中证国防安全指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150353.SZ",
+        "name": "银华中证一带一路主题指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150354.SZ",
+        "name": "银华中证一带一路主题指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150357.SZ",
+        "name": "国泰国证新能源汽车指数分级-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "150358.SZ",
+        "name": "国泰国证新能源汽车指数分级-B",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "158065.SZ",
+        "name": "招商国证粮食产业ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "158078.SZ",
+        "name": "华宝创业板电池ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "158081.SZ",
+        "name": "永赢创业板电池ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "159319.SZ",
+        "name": "汇添富国证粮食产业ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "159585.SZ",
+        "name": "富国中证全指软件ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "159756.SZ",
+        "name": "中银证券国证新能源车电池ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "159799.SZ",
+        "name": "平安中证港股通消费主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "160123.SZ",
+        "name": "南方中证50债券指数(LOF)-A",
+        "status": "D",
+        "list_date": "20110725",
+        "delist_date": "20160817",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "160422.SZ",
+        "name": "华安中证定向增发事件指数(LOF)",
+        "status": "D",
+        "list_date": "20170526",
+        "delist_date": "20181108",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "160423.SZ",
+        "name": "华安慧增优选定开灵活配置混合",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "160524.SZ",
+        "name": "博时弘泰定开混合",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "160525.SZ",
+        "name": "博时睿丰灵活配置定开混合",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "160814.SZ",
+        "name": "长盛中证金融地产指数(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "160923.SZ",
+        "name": "大成海外中国机会混合(QDII-LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "161211.SZ",
+        "name": "国投瑞银沪深300金融地产ETF联接",
+        "status": "L",
+        "list_date": "20100608",
+        "delist_date": "20131104",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "161230.SZ",
+        "name": "国投瑞银双债丰利两年定开债券-A",
+        "status": "D",
+        "list_date": "20160225",
+        "delist_date": "20180918",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "161629.SZ",
+        "name": "融通中证精准医疗主题指数(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "161836.SZ",
+        "name": "银华惠博定开混合",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "161910.SZ",
+        "name": "万家新机遇价值驱动灵活配置混合-A",
+        "status": "L",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "162714.SZ",
+        "name": "广发深证100指数(LOF)-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "162907.SZ",
+        "name": "泰信中证锐联基本面400指数(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "163827.SZ",
+        "name": "中银产业债一年定开债券(LOF)",
+        "status": "D",
+        "list_date": "20141218",
+        "delist_date": "20200303",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "164205.SZ",
+        "name": "天弘深证成份指数(LOF)",
+        "status": "D",
+        "list_date": "20100917",
+        "delist_date": "20150507",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "164811.SZ",
+        "name": "工银瑞信中证京津冀协同发展主题指数(LOF)-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "165530.SZ",
+        "name": "中信保诚惠泽18个月定开债券-A",
+        "status": "L",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "165532.SZ",
+        "name": "信诚鼎泰多策略灵活配置混合(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "165806.SZ",
+        "name": "东吴深证100指数增强(LOF)",
+        "status": "D",
+        "list_date": "20120427",
+        "delist_date": "20180711",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "166007.SZ",
+        "name": "中欧互通精选混合-A",
+        "status": "L",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "167004.SZ",
+        "name": "平安大华鼎沣定开灵活配置混合",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "167701.SZ",
+        "name": "德邦德信中证中高收益企债指数(LOF)-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "167705.SZ",
+        "name": "德邦量化新锐股票(LOF)-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "168109.SZ",
+        "name": "九泰锐兴定增主题双轮驱动混合",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "168110.SZ",
+        "name": "九泰锐信定增灵活配置混合",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "168205.SZ",
+        "name": "中融中证银行指数(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "168501.SZ",
+        "name": "北信瑞丰产业升级多策略混合",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "168601.SZ",
+        "name": "汇安裕阳三年持有期混合",
+        "status": "L",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "169109.SZ",
+        "name": "东方红睿和三年定开混合-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "181002.SZ",
+        "name": "华泰紫金华住安住REIT",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501002.SH",
+        "name": "长信中证能源互联网主题指数(LOF)",
+        "status": "D",
+        "list_date": "20160201",
+        "delist_date": "20190301",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501033.SH",
+        "name": "银华惠安定开混合",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501041.SH",
+        "name": "汇添富弘安混合(LOF)-A",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501042.SH",
+        "name": "汇添富弘安混合(LOF)-C",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501052.SH",
+        "name": "银华惠景定开混合",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501055.SH",
+        "name": "财通多策略福佑定开灵活配置混合",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501101.SH",
+        "name": "建信中证政策性金融债1-3年指数(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501102.SH",
+        "name": "建信中证政策性金融债3-5年指数(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501103.SH",
+        "name": "建信中证政策性金融债5-8年指数(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501105.SH",
+        "name": "建信中证政策性金融债8-10年指数(LOF)",
+        "status": "D",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501221.SH",
+        "name": "民生加银优享进取一年封闭运作股票(FOF-LOF)",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "501223.SH",
+        "name": "汇添富积极投资指数优选一年定开股票(FOF-LOF)-A",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "508038.SH",
+        "name": "国金嘉泽新能源REIT",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "508606.SH",
+        "name": "华夏凯德REIT",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "508610.SH",
+        "name": "广发新城吾悦REIT",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "512830.SH",
+        "name": "汇添富中国战略新兴产业成份ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "515443.SH",
+        "name": "南方中证A股ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "516170.SH",
+        "name": "平安中证细分食品饮料产业主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "517980.SH",
+        "name": "华富中证银行AH价格优选ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "526020.SH",
+        "name": "华泰柏瑞恒生港股通汽车主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "560430.SH",
+        "name": "中银证券中证A500ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "561270.SH",
+        "name": "鹏华中证家电龙头ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "562210.SH",
+        "name": "华宝中证光伏产业ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "562630.SH",
+        "name": "易方达中证全指通信设备ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "588490.SH",
+        "name": "泰康中证科创创业人工智能ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      },
+      {
+        "ts_code": "589450.SH",
+        "name": "兴业上证科创板人工智能ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-18",
+        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+      }
+    ]
+  },
+  "_comment_ee_fund4": "EE-FUND-4 完成（2026-10-17）：fund_nav 回填 2700（落 2653，+317.5 万行）→47 源端空/12 源端晚起点；fund_adj 回填 263（落 249）→新增 14 源端空（合 169）/249 源端晚起点；均经 2 批量+1 单线程三轮核验。fund_share 133/3 属 N-4 另案，未动。",
+  "_comment_ee_fund5": "EE-FUND-5（2026-10-17）：剔除 18 个 7 位 .SZ/.SH 幽灵码。溯源结论与派单预期不同——tushare fund_basic market=E 源端真实返回这 18 码（分级子份额，6 位母码前插 1，如 150001.SZ→1500011.SZ，18/18 各有 6 位同胞且 parquet 行为真实行情），非本地截断遗留；故 full_download.py 加 ^\\d{6}\\.(SZ|SH|OF)$ 白名单护栏防日更复活。清理：注册表（daily 144/1、nav 42/8、adj 151/249）+ parquet（daily 5691/nav 9884/share 17 行，备份 备份\\归档文件\\20261017-幽灵码清理备份）+ fund_basic（32953→32935，market=E 2963→2945）。",
+  "_comment_ee_fund6": "EE-FUND-6（2026-10-18）：fund_share A=118 逐码探针（tushare fund_share 118 请求）→ 29 只源端有数据回填（main.py backfill --only fund_share --codes-file --force-listed，29/29 成功）；89 只源端 0 行登记 source_empty（56 只 status=D 退市分级/老 LOF/QDII，33 只 status=L/nan 新 ETF/定开混合 tushare 未收录）。fund_share 注册表首次建立。"
+}

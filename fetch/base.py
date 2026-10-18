@@ -419,7 +419,7 @@ def _pick_date_col(df):
     by_code 表返回的日期列不统一：多数是 trade_date，财务类用 end_date，
     公告类用 ann_date。都找不到就放弃续拉（宁可少拉，也不瞎猜）。
     """
-    for c in ("trade_date", "end_date", "ann_date"):
+    for c in ("trade_date", "nav_date", "end_date", "ann_date"):
         if c in df.columns:
             return c
     return None
