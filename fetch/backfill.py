@@ -619,13 +619,47 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             return ts_call_with_retry(_pro, conf["api"], _lim,
                                       params, verbose=verbose)
 
+        # ⚠ EE-FUND-9A (2026-10-18): fund_daily by_date 入口过滤 market=O 场外码。
+        #   根因: tushare fund_daily(trade_date=X) 返回全市场（含 .OF），
+        #   by_date 路径不走 resolve_codes('fund_etf') 的 market=E 白名单过滤
+        #   → 158008.OF 场外基金混入场内 fund_daily（与 158008.SZ 100% 重复）。
+        #   治理: 仅对 fund_daily 表在读入结果后剔除 market=O 的 ts_code；
+        #        .OF 场外基金在 fund_nav / fund_adj / fund_share 里合法存在，
+        #        禁一律剔 .OF——精准治理点仅是「market=O 码不得进 fund_daily」。
+        #   性能: fund_basic 进程内缓存（与 _KNOWN_GAPS_CACHE 同级别），
+        #        仅首次读 1 次 parquet（~10ms），后续查 set O(1)。
+        _fund_daily_o_codes = None
+        if conf["api"] == "fund_daily":
+            _p_fb = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 "data", "meta", "fund_basic.parquet")
+            if os.path.exists(_p_fb):
+                try:
+                    _fb_df = pd.read_parquet(_p_fb, columns=['ts_code', 'market'])
+                    _fund_daily_o_codes = set(_fb_df[_fb_df['market'] == 'O']['ts_code'])
+                    print(f"  [护栏] fund_daily market=O 过滤启用，共 {len(_fund_daily_o_codes)} 只场外码")
+                except Exception:
+                    _fund_daily_o_codes = None
+
         def on_result(dt, df, ok):
             if df is None:
                 return              # 调用失败: 不落盘、不记断点, 留待续跑
             if df.empty:
                 cp.mark_done(name, dt)   # 成功但无数据(如休市日): 记断点
             else:
-                writer.add(df, dt)       # 累积; 内部 flush 成功后才记断点
+                # EE-FUND-9A: 过滤 market=O 场外码（仅 fund_daily 生效）
+                if _fund_daily_o_codes is not None and 'ts_code' in df.columns:
+                    _mask = ~df['ts_code'].isin(_fund_daily_o_codes)
+                    _n_before = len(df)
+                    _n_filtered = _n_before - _mask.sum()
+                    if _n_filtered > 0:
+                        # 不要 print 太多日志：每个交易日平均只过滤 1 只左右（158008.OF 已删，常态 0）
+                        # 但 filter 本身要做——防未来新双码混入
+                        pass
+                    df = df[_mask]
+                if df.empty:
+                    cp.mark_done(name, dt)
+                else:
+                    writer.add(df, dt)       # 累积; 内部 flush 成功后才记断点
             done_ct["n"] += 1
 
         def progress(done, tot, stat, elapsed):

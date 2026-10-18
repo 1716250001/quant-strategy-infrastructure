@@ -1728,6 +1728,55 @@ def _run_all():
 
     check("幽灵码护栏+声明一致", r20)
 
+    # R21 fund_daily 码集 ⊆ fund_basic market=E（EE-FUND-9A）
+    # ------------------------------------------------------------
+    _say(f"\n{SEP}\n  R21 fund_daily 场内码纯度（EE-FUND-9A）\n{SEP}")
+
+    def r21():
+        """fund_daily parquet 所有 ts_code 必须是 fund_basic market='E' 场内码。
+
+        背景：158008.OF 场外基金混入场内 fund_daily（与 158008.SZ 100% 重复）。
+        根因：DAILY_UPDATE_EXTRA.fund_daily by_date 路径取全市场，不走 resolve_codes
+        的 market=E 过滤。护栏已在 fetch/backfill.py by_date on_result 里，
+        本断言是第二道防线——任何路径写入后必须校验。
+
+        ⚠ 仅限 fund_daily。fund_nav / fund_adj / fund_share 含 .OF 合法
+        （场外基金有净值/分红/份额，但无日线行情）。
+        """
+        import os as _os
+        import glob as _glob
+        import pandas as _pd
+        from common.paths import META_DIR as _MD
+        from common.paths import MARKET_DATA_DIR as _ROOT
+
+        # fund_basic market=E 集
+        _basic = _pd.read_parquet(_os.path.join(_MD, "fund_basic.parquet"),
+                                  columns=["ts_code", "market"])
+        _e_set = set(_basic[_basic["market"] == "E"]["ts_code"])
+
+        # fund_daily 全码
+        _daily_codes = set()
+        for _fp in _glob.glob(_os.path.join(_ROOT, "fund_daily", "*.parquet")):
+            _d = _pd.read_parquet(_fp, columns=["ts_code"])
+            _daily_codes.update(_d["ts_code"].unique())
+
+        # 违规码：在 fund_daily 但不在 market=E
+        _bad = sorted(_daily_codes - _e_set)
+        assert not _bad, (
+            f"fund_daily 有 {len(_bad)} 个非 market=E 码: {_bad[:10]}")
+
+        # 且违规码还应在 fund_basic 的 market=O 里（理论上），
+        # 如果不在 fund_basic 里就是更严重的幽灵码
+        _all_basic = set(_basic["ts_code"])
+        _ghost_like = [c for c in _bad if c not in _all_basic]
+        assert not _ghost_like, (
+            f"fund_daily 有 {len(_ghost_like)} 个不在 fund_basic 的幽灵码: "
+            f"{_ghost_like[:5]}")
+
+        return f"fund_daily distinct={len(_daily_codes)} ⊆ market=E={len(_e_set)}；零场外/幽灵码"
+
+    check("fund_daily 场内码纯度", r21)
+
 
 # ------------------------------------------------------------
 # 入口
