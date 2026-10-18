@@ -163,7 +163,7 @@ python main.py redtide-supply      # 赤潮数据补全（adj_factor / stk_limit
 python main.py fund-nav            # 基金净值增量
 python main.py download-full       # 全市场建库/重建（断点续跑）
 python main.py check-coverage      # 覆盖体检（可转债 + ETF/LOF）
-python main.py check-coverage --history  # 基金历史起点对账（四表×场内2963只；2026-10-17 EE-FUND-1）
+python main.py check-coverage --history  # 基金历史起点对账（四表×场内2945只；2026-10-17 EE-FUND-1，2026-10-18 EE-FUND-9 清 18 幽灵码修正）
 python main.py check-consumer      # 决策侧消费标的覆盖体检
 
 # 库维护与体检
