@@ -628,10 +628,13 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         #        禁一律剔 .OF——精准治理点仅是「market=O 码不得进 fund_daily」。
         #   性能: fund_basic 进程内缓存（与 _KNOWN_GAPS_CACHE 同级别），
         #        仅首次读 1 次 parquet（~10ms），后续查 set O(1)。
+        # ⚠ EE-FUND-9A 护栏（§42 G-9A2 P1 修死路径）:
+        #   原实现写死 "代码/data/meta/fund_basic.parquet"（不存在）→ exists() 恒 False
+        #   护栏永不启用。改用 config.META_DIR（= D:\全量数据\market_data\metadata）。
         _fund_daily_o_codes = None
         if conf["api"] == "fund_daily":
-            _p_fb = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                 "data", "meta", "fund_basic.parquet")
+            from config import META_DIR as _META_DIR
+            _p_fb = os.path.join(_META_DIR, "fund_basic.parquet")
             if os.path.exists(_p_fb):
                 try:
                     _fb_df = pd.read_parquet(_p_fb, columns=['ts_code', 'market'])

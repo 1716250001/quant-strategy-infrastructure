@@ -91,6 +91,15 @@ NON_BACKFILL_TABLES = {
     "custom_index":   "build_micro_index 产出（本地自建指数）",
     "fund":           "QDII 研究产物（2026-10-06；fund_basic_E 全字段 + qdii6/qdii7 分批行情/净值）",
     "global_index":   "海外指数研究产物（2026-10-06；tushare index_global 按年落盘，FCHI/GDAXI 等 90 文件）",
+    # ⚠ EE-FUND-9B §42 first_trade_date 通道约定（文档级，零代码变更）:
+    #   消费方需真实上市起点时，读 derived/fund_basic_patch.parquet.first_trade_date；
+    #   fund_basic.list_date 对 92 只封转开基金失真（沿用原 code，list_date 是封转开日
+    #   而非首笔交易所行情日；§30 G1 全量校正产物）。
+    #   补表为独立 derived 区产物，不 mutate 上游 fund_basic（17:30 刷新会覆盖）。
+    #   字段: ts_code / name / fund_type / list_date / first_trade_date /
+    #         early_days / category / status
+    #   行数: 2945（= fund_basic market=E 纯场内，2026-10-18 清 18 幽灵码后）
+    #   status: 28 只源端实证为空（tushare fund_basic 返回 None，真·无法补）
     "derived":        "派生补表容器（EE-FUND-4/G1 §30；fund_basic_patch 首笔交易所行情日，独立 derived 区不 mutate 上游）",
 }
 

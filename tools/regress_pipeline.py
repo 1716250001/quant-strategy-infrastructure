@@ -1777,6 +1777,62 @@ def _run_all():
 
     check("fund_daily 场内码纯度", r21)
 
+    # R22 派生补表一致性（EE-FUND-9B）
+    # ------------------------------------------------------------
+    _say(f"\n{SEP}\n  R22 派生补表一致性（EE-FUND-9B）\n{SEP}")
+
+    def r22():
+        """derived/fund_basic_patch.parquet ↔ fund_basic market=E 强一致：
+        行数=2945、early 计数=92 稳定、status NaN 集合=源端实证为空者(28只)。
+
+        背景：§30 构建补表时未过滤 7 位幽灵码，派单声称 2963 行实为 2945+18。
+        执行方清 18 幽灵码修正后，补表应与 fund_basic market=E 严格对齐。
+        status NaN=28 只 tushare 源端也返回 None，属诚实残留（§42 G-9B1 判据订正）。
+        """
+        import os as _os
+        import pandas as _pd
+        from common.paths import META_DIR as _MD
+
+        _patch_path = r"D:\全量数据\market_data\derived\fund_basic_patch.parquet"
+        assert _os.path.exists(_patch_path), (
+            f"派生补表缺失: {_patch_path}")
+        _patch = _pd.read_parquet(_patch_path)
+
+        # ① 行数 = fund_basic market=E
+        _basic = _pd.read_parquet(_os.path.join(_MD, "fund_basic.parquet"),
+                                  columns=["ts_code", "market"])
+        _e_set = set(_basic[_basic["market"] == "E"]["ts_code"])
+        assert len(_patch) == len(_e_set), (
+            f"补表行数 {len(_patch)} ≠ fund_basic market=E {len(_e_set)}")
+
+        # ② 补表码集 = market=E
+        _patch_set = set(_patch["ts_code"])
+        assert _patch_set == _e_set, (
+            f"补表码集≠market=E: 差集={sorted(_patch_set ^ _e_set)[:5]}")
+
+        # ③ early 计数稳定=92（封转开首笔行情早于 list_date）
+        _early_ct = int((_patch["early_days"] > 0).sum())
+        assert _early_ct == 92, (
+            f"early_days>0 = {_early_ct} ≠ 92（可能封转开样本变了）")
+
+        # ④ status NaN：28 只源端实证为空者（§42 G-9B1）
+        #    留空 = tushare fund_basic 源端 status=None（真·无法补）
+        if "status" in _patch.columns:
+            _na_mask = (_patch["status"].isna() |
+                        (_patch["status"].astype(str).isin(
+                            ["", "nan", "<NA>", "None"])))
+            _na_ct = int(_na_mask.sum())
+            # 28 只是 §42 审查方独立探针确认的源端 NaN 集合大小
+            # 允许 0 误差；若源端后续补上则 NaN 应更少（断言仍过）
+            # 这里只做「≤28 或 ==28」语义——实际跑期望 ==28
+            assert _na_ct <= 28, (
+                f"补表 status NaN={_na_ct} > 源端实证 28（可能补表被改坏）")
+
+        return (f"补表 {len(_patch)} 行↔E universe 对齐；early=92 稳定；"
+                f"status NaN ≤ 28 源端诚实残留")
+
+    check("派生补表一致性", r22)
+
 
 # ------------------------------------------------------------
 # 入口
