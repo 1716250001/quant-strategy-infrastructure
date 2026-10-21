@@ -501,14 +501,16 @@ P3 = [
     #   造成"同一期被记成两期"。
     TableSpec("esg_hz_rating", "stock_esg_hz_sina", "P3", "single", "rating_date",
               src_date_col="日期", subset=["rating_date", "symbol"], mode="once",
-              max_age_days=120, update_every_days=90, max_backfill_days=0,
+              max_age_days=210, update_every_days=90, max_backfill_days=0,
               rename={"股票代码": "symbol", "股票名称": "name", "交易市场": "market",
                       "ESG评分": "esg_score", "ESG等级": "esg_grade",
                       "环境": "e_score", "环境等级": "e_grade",
                       "社会": "s_score", "社会等级": "s_grade",
                       "公司治理": "g_score", "公司治理等级": "g_grade"},
               inject_const={"fetch_date": "__TODAY__"},
-              note="华证ESG评级（季度快照；评级日滞后约2.5月；源无历史接口，历史须自建）"),
+              note="华证ESG评级（季度快照；评级日滞后约2.5月；源无历史接口，历史须自建；"
+                   "max_age_days=210：按季度更新+源滞后82天推演，峰值 age≈172，留38天缓冲；"
+                   "若实测为半年更，上调300）"),
 ]
 
 # ============================================================
