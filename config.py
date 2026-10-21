@@ -1128,6 +1128,19 @@ BACKFILL_TARGETS = OrderedDict([
         "max_rows": 0, "tier": "B",
         "note": "359行; 含 L1(28)/L2(104)/L3(227) 三级行业分类 + parent_code",
     }),
+    # 申万行业历史成分（2026-10-22 EE-FUND-13 新增）
+    #   497 请求 × 31(L1)+131(L2)+335(L3) = 23,460 行（实测）
+    #   主键 (index_code, con_code, in_date) —— 同一股票同一行业可多段进出
+    #   out_date 可空（当前在册），非空（已离开该行业）
+    #   由 pro.index_member(index_code=...) 拉全量（start/end 参数无效，只能整行业拉）
+    ("index_member_hist", {
+        "api": "index_member", "desc": "申万行业历史成分", "mode": "once",
+        "max_rows": 0, "tier": "B",
+        "code_param": "index_code", "codes": "sw_all_497",
+        "note": "23460行; L1=7740/L2=8170/L3=7550; 含历史进出段(out_date非空34.6%); "
+                "父子关系: L2上级=L1名称→L1代码, L3上级=L2名称→L2代码; "
+                "派生重建index_member_all(5504行,原5913行); 409只退市股因申万2021版不再覆盖被正确排除",
+    }),
     ("stk_weekly_monthly", {
         "api": "stk_weekly_monthly", "desc": "股票周月线", "mode": "by_date",
         "freq": "week", "week_anchor": "friday", "max_rows": 0, "tier": "B",
@@ -1552,6 +1565,7 @@ DB_AUDIT_PKEYS = {
     "index_monthly":    ["ts_code", "trade_date"],
     "index_global":     ["ts_code", "trade_date"],
     "index_member_all": ["ts_code"],
+    "index_member_hist": ["index_code", "con_code", "in_date"],  # 2026-10-22 EE-FUND-13 新增
     "hs_const":         ["ts_code", "hs_type"],
     # --- 尚未入库/已废弃的表（2026-09-19 补：R11 要求每张表都有归宿）---
     #     配 None = 跳过重复检查（结构未实测，宁可不查也不误报）
