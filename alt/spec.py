@@ -152,6 +152,13 @@ class TableSpec:
     #   akshare 返回字符串形态以避免精度丢失；不转则下游 `close × factor` 报错）。
     coerce_float_cols: list = field(default_factory=list)
 
+    # 常量列注入（EE-FUND-12 新增，2026-10-21）。
+    #   在归一化阶段**日期处理之后、枚举注入之前**执行（io.py normalize）。
+    #   特殊值 "__TODAY__" → 运行日 "YYYYMMDD" 字符串；其他值原样写入。
+    #   默认空 dict = 完全跳过，71 张现有表行为零变化（G-12G 验）。
+    #   用例：esg_hz_rating 源端无 fetch_date，需注入以区分"抓取日 vs 评级基准日"。
+    inject_const: dict = field(default_factory=dict)
+
     @property
     def inject_date(self) -> bool:
         """是否需要在落盘时注入日期列（按日型接口）"""
@@ -483,6 +490,25 @@ P3 = [
               max_backfill_days=30, core_metric_cols=["涨跌幅"],
               subset=["trade_date", "代码"], mode="once",
               note="跌停股池【源码硬校验30天；弱市日可能为空属正常】"),
+
+    # 华证 ESG 评级（EE-FUND-12 新增，2026-10-21）
+    # ⚠ 接口实测：akshare.stock_esg_hz_sina() 无参 → 一次返回 6,392 行全量
+    #   （审查方 §49 对签名的描述「p/num 两参」有误，实际无参）。
+    #   列: ['日期','股票代码','交易市场','股票名称','ESG评分','ESG等级',
+    #        '环境','环境等级','社会','社会等级','公司治理','公司治理等级']
+    #   源无历史接口、无日期参数 → rating_date 由 '日期' 归一化（单一值），
+    #   fetch_date 由 inject_const 注入（__TODAY__），两列分离避免新浪滞后
+    #   造成"同一期被记成两期"。
+    TableSpec("esg_hz_rating", "stock_esg_hz_sina", "P3", "single", "rating_date",
+              src_date_col="日期", subset=["rating_date", "symbol"], mode="once",
+              max_age_days=120, update_every_days=90, max_backfill_days=0,
+              rename={"股票代码": "symbol", "股票名称": "name", "交易市场": "market",
+                      "ESG评分": "esg_score", "ESG等级": "esg_grade",
+                      "环境": "e_score", "环境等级": "e_grade",
+                      "社会": "s_score", "社会等级": "s_grade",
+                      "公司治理": "g_score", "公司治理等级": "g_grade"},
+              inject_const={"fetch_date": "__TODAY__"},
+              note="华证ESG评级（季度快照；评级日滞后约2.5月；源无历史接口，历史须自建）"),
 ]
 
 # ============================================================

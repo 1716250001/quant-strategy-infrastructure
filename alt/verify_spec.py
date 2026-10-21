@@ -391,7 +391,9 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
     # ⚠ 注意：subset 中的某些列是**由本工程注入的**，原始返回里本就不存在：
     #     - spec.date_col：由 normalize() 从 src_date_col 归一化而来
     #     - spec.enum_col：由 normalize() 按枚举值注入
-    #   这两类必须排除，否则会把正确的规格误报为"列缺失"。
+    #     - spec.rename.values()：由 normalize() 从源列名重命名而来
+    #     - spec.inject_const.keys()：由 normalize() 注入常量列（EE-FUND-12 新增）
+    #   这些必须排除，否则会把正确的规格误报为"列缺失"。
     if isinstance(sp.subset, list):
         injected = {sp.date_col}
         if sp.mode == "enum" and sp.enum_col:
@@ -400,6 +402,12 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
             # v1.2：list 表的**标的列**由引擎注入（接口不返回，fetch_one 补），
             #   如 hk_daily 的 symbol——不排除会把正确规格误报"列缺失"。
             injected.add(sp.symbol_col or "symbol")
+        # 2026-10-21 补：rename 后的目标列名（原始返回是源列名，normalize 后变）
+        if sp.rename:
+            injected.update(sp.rename.values())
+        # 2026-10-21 补：inject_const 注入的常量列
+        if hasattr(sp, 'inject_const') and sp.inject_const:
+            injected.update(sp.inject_const.keys())
         missing = [c for c in sp.subset if c not in cols and c not in injected]
         if missing:
             rep["ok"] = False

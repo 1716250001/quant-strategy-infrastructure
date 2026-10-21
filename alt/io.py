@@ -14,6 +14,7 @@ alt/io.py — alt 库落盘层（日期归一化 + 复用主库存储设施）
   common.parquet_store.upsert_by_year —— 按年分区批量落盘
 """
 import os
+from datetime import datetime
 from typing import Optional
 
 import pandas as pd
@@ -118,6 +119,16 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
             out[spec.date_col] = norm
             if src != spec.date_col:
                 out = out.drop(columns=[src])
+
+    # 2b) 常量列注入（EE-FUND-12 新增，2026-10-21）
+    #     日期处理之后、枚举注入之前（§56.4 约束）。
+    #     空 dict = 完全跳过（71 张现有表行为零变化）。
+    #     特殊值 "__TODAY__" → 运行日 "YYYYMMDD"；其他值原样写入。
+    if spec.inject_const:
+        today = datetime.now().strftime("%Y%m%d")
+        for col, val in spec.inject_const.items():
+            actual_val = today if val == "__TODAY__" else val
+            out[col] = actual_val
 
     # 3) 枚举列注入（enum 模式必须，否则不同枚举值的同日数据会互相判重）
     if spec.mode == "enum" and spec.enum_col:
