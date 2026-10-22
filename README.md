@@ -131,9 +131,10 @@ btf\
 
 | 位置 | 内容 |
 |---|---|
-| `D:\全量数据\market_data\` | ★ **主库**：全量市场数据（Tushare，Parquet 按年分区）—— **113 张表**（另有 `market_state` / `wind_index` 两个纯子目录容器，共 115 目录）/ **11,935 parquet / 7.01 GB**（2026-10-12 实测；10-12 已全库跨分区 schema 对齐） |
-| `D:\全量数据\alt_data\` | alt 备用库（akshare，含美股；141 文件 / 598 MB） |
-| `..\数据\` | **日报数据** `daily_data\`（JSON/CSV）+ `signals\` + `wind指数库\` + 基金池 / 经理桥表 CSV |
+| `D:\全量数据\market_data\` | ★ **主库**：全量市场数据（Tushare，Parquet 按年分区）—— **116 一级子目录**（wind_index 已迁入 wind_data）/ **7,786 parquet / 6.50 GB**（2026-10-22 实测，WIND-LIB 迁移后） |
+| `D:\全量数据\alt_data\` | alt 备用库（akshare，含美股；**74 一级子目录 / 189 parquet / 0.71 GB**） |
+| `D:\全量数据\wind_data\` | ★ **第三库**（WIND-LIB，2026-10-22 新增）：Wind 指数日线 4,142 parquet + SPX/TASI/IBOV 周线枚举快照 + 原始响应 JSON（**1.20 GB raw，不可重建**）—— **5 一级子目录 / 4,153 parquet / 整库 1.82 GB**；独立三库配置 `config_wind.py` 写权硬保护，零进入 DAILY_UPDATE_GROUPS |
+| `..\数据\` | **日报数据** `daily_data\`（JSON/CSV）+ `signals\` + 基金池 / 经理桥表 CSV（原 `wind指数库\` 已退役，raw/清单/logs 全迁入 wind_data） |
 | `..\回测产物\` | btf 回测 `runs\` + `v77-robustness\` + 收口/验收报告（M1–M3 / 场景 A·B） |
 | `..\文档\` | 事实类文档：`数据与工程\` / `策略体系\` / `市场研究\` / `舰队福利提取\` |
 | `..\备份\` | 冷备与归档（含 btf 跨版本源码冷备 `*-cold\`，最新 `20261014-2246-btf-1.3.4-cold`） |
