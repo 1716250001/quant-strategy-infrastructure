@@ -3,8 +3,12 @@
 qidian_daily_scan.py — 奇点战法每日双重信号扫描（⚠ 旧池版，已停用于定时任务）
 =================================================
 
+⛔ **2026-10-21：奇点战法自动化已整体停止，A1/A2 池已归档，适用域收缩至
+   红利指数-红利ETF / 红利低波指数-红利低波ETF 两类（老大指令）。**
+   见 `文档\策略体系\奇点投资框架\00-奇点战法停止与归档-20261021.md`。
+
 ⚠⚠ 2026-10-01 起：本脚本的标的池（QIDIAN_POOL，副官时代 30 个 ETF）已**停用于定时任务**，
-   每日定时推送改用 **`strategies/qidian_pool_scan.py`（A 类观察池：25 指数 / 54 ETF，
+   每日定时推送改用 **`strategies/qidian_pool_scan.py`（A 类观察池：30 指数 / 67 只，
    带四维标签 + ETF 复权 + 交易日闸门）**。
    本文件保留原因：QIDIAN_POOL 是 btf 回测（`btf/btf/strategy/qidian.py` 动态加载）
    与回归测试 `btf/tests/regression/test_qidian_l3.py` 的真源，删除会破坏回测。
@@ -69,7 +73,7 @@ from strategies.qidian import (
 #   Wind 研究暂停背景下不批 W3 日更、不停用温度计；as_of 标注为唯一防线，
 #   W 系列重启时再议数据新鲜度。
 # ============================================================
-WIND_INDEX_DAILY_DIR = r"D:\全量数据\market_data\wind_index\daily"
+WIND_INDEX_DAILY_DIR = r"D:\全量数据\wind_data\norm\series\wind_index_daily"
 
 WIND_CB_THERMOMETER = {
     "889033": {"name": "万得转债等权(温度计)", "role": "情绪温度计·等权口径"},
@@ -464,7 +468,7 @@ def push_signals(results: List[Dict], dry_run: bool = False,
             f"{r['wind_code']}({r['wind_name']}) [{r['wind_role']}]: "
             f"周线 J={r['wind_j']}, CCI={r['wind_cci']} → {'/'.join(r['wind_triggers'])}\n"
             f"观察级: 转债资产类温度计（等权口径比转债ETF灵敏），非交易信号\n"
-            f"⚠ 数据 as_of={r['data_asof']}（wind指数库，非实时；引用须标日期）"
+            f"⚠ 数据 as_of={r['data_asof']}（wind_data 第三库，非实时；引用须标日期）"
         )
         push_items.append({
             "symbol": f"{r['wind_name']}({r['wind_code']})",

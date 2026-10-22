@@ -30,7 +30,7 @@ from config_wind import (
 
 # ── 源目录（W-2a 迁移后已就位） ──────────────────────────────
 SERIES_DIR = r"D:\全量数据\wind_data\norm\series\wind_index_daily"   # 已迁移（W-2a）
-RAW_DIR = r"D:\量化策略\数据\wind指数库\raw"                        # 待搬迁（W-2b）
+RAW_DIR = r"D:\全量数据\wind_data\raw"                             # 已搬迁（W-2b）
 
 # ── 核心列集（§70.2.1 全部 5 种变体都有的 7 列）───────────────
 CORE_COLS = {"TIME", "OPEN", "MATCH", "HIGH", "LOW", "CHANGEHANDRATE", "AVPRICE"}
@@ -235,6 +235,7 @@ def _build(raw_results, series_results):
         row = {
             "windcode": wc,
             "status": status,
+            "as_of": datetime.now().strftime("%Y%m%d"),   # R1-1 补必填 as_of
             # raw 侧
             "raw_present": r.get("raw_present", False),
             "valid": r.get("valid", False),
