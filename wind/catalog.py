@@ -3,8 +3,8 @@
 wind/catalog.py — Wind 第三库目录索引（WIND-LIB W-1）
 ====================================================
 职责：
-  1. 扫描 market_data\wind_index\daily\ 的 4,142 parquet（只读 date 列取起止，禁全量读）
-  2. 扫描 数据\wind指数库\raw\ 的 3,440 JSON 原始响应
+  1. 扫描 wind_data\norm\series\wind_index_daily\ 的 4,142 parquet（只读 date 列取起止，禁全量读）
+  2. 扫描 wind_data\raw\ 的 3,440 JSON 原始响应
   3. 生成 wind_catalog.parquet（主键 windcode，行数 = 4,157 = 4,142 + 15 raw_only）
   4. 记录 schema 变体（§70.2.1 的 5 种）+ valid 字段 + raw_present 状态
 
