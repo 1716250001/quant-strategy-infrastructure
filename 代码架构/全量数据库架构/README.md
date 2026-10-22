@@ -7,7 +7,7 @@
 
 > 项目代号：**MD-Foundation（mdf）**——A 股/基金/债券/期货/期权/海外多口径的**全量市场数据库**体系，覆盖采集 → 落盘 → 治理 → 服务四段。
 >   
-> 文档体系版本：**v1.3.1（已定版，2026-10-11）** ｜ 创建：2026-09-30 ｜ 修订：2026-10-11 ｜ 蓝本：`代码/代码架构/回测工具架构/`（33 章同构映射）
+> 文档体系版本：**v1.5（已定版，2026-10-22）** ｜ 创建：2026-09-30 ｜ 修订：2026-10-22 ｜ 主工程 `config.__version__` = **5.1.0** ｜ 蓝本：`代码/代码架构/回测工具架构/`（33 章同构映射）
 >   
 > 体系定位：本目录回答"**数据怎么存、怎么取、怎么保证可信、怎么不崩**"；`文档/数据与工程/` 回答"某张表某天怎么取、某接口什么权限"。两者**引用不复制**，避免口径漂移。
 >   
@@ -22,6 +22,18 @@
 > **增量说明（2026-10-12，未升版）**：**R64′ C 段**全库跨分区 schema 对齐（30 表 / 462 分区，行数守恒 delta=0，全库 scan 零漂移）＋ **EE-D11-1**（`db_version.json` 接线＋doctor「库版本」展示＋宏观 2 表移出＋本 README §七 行序理顺）＋ **E-01** 事件面周期通道（dividend/namechange 追平＋未回补标的 29/29 补齐）。详见 §七 变更表 2026-10-12 行。
 > 
 > **定版含义（v1.4，2026-10-18 发版）**：**基金数据线全闭环（EE-FUND-1→9 九单 12 轮）**——① 四表门禁 A/B=0、known_gaps 注册表 S144/SB1/S42/SB8/S151/SB249/S89/SB0 全量诚实登记；② 门禁硬化（R17 fund_daily 双向强一致 + R19 nav/adj/share 三表 + R20 幽灵码护栏三断言）；③ 补数引擎（codes-file + --force-listed 独立断点）；④ 数据卫生（158008.OF 场外污染清理 + fund_daily market=O 护栏已活 + 派生补表 R22 看护）；⑤ N-5 fund_div 探针定性（2496 场内无 div 是 by_date 语义合理现象）。门禁 **regress 22 组 / 34 检查项 34/34 全绿** · **check-coverage RC=0** · **db-audit RC=0** · **doctor RC=0**。提交链：`8cc3450` v1.4 发版 · `bf8f7a5` 放行条件收口 · `2413f6a` EE-FUND-9 主执行 · `d12452a` §42 放行条件修复。派单闭环见 18 §43。
+
+> **定版含义（v1.5，2026-10-22 发版）**：**EE-FUND 系列六单全闭环 + 对账工具固化**——
+> 
+> **主库**：① `index_member_hist` 新建（23,460 行 / 429 码，主键 `(index_code, con_code, in_date)`，497 请求 / 68 源端空码，支持任意时点成分切片）；② `index_member_all` 覆盖重建（5,913 → 5,211 行，快照语义：`out_date` 全空 / `is_new` 全 Y / `in_date` 取 L1，L2 20→nan / L3 273→nan 均因 68 源端空码而非分类重排，703 丢失=354 `.BJ` 北交所不覆盖+349 退市/不覆盖，新覆盖 300114.SZ）；③ `index_classify` 增补 SW2021（359 → 856 行，497 SW2021 + 359 SW2014 双版本并存）；④ `index_weight` 扩码（13 → 71 码，708,659 → 1,255,770 行，+76.1%）。
+> 
+> **alt 库**：⑤ `esg_hz_rating` 新建（6,392 行 / 13 列，cn 5,534 + hk 858，双日期 `rating_date` 20260731 / `fetch_date` 20261021）；⑥ `TableSpec.inject_const` 机制（71 张现有表零影响）；⑦ `max_age_days` 120 → 210（季度更新 + 82 天源滞后推演）。
+> 
+> **工具**：⑧ `tools/receipt_reconcile.py`（回执对账断言，退出码 0=正常/2=错误，三场景自测全过，自本单起回执前必须跑）。
+> 
+> **文档**：⑨ 05 号（表数 72 / `index_member_hist` 新表行 / `index_member_all` 5,211）；⑩ 17 号（快照 vs 历史术语、alt 69 目录=67 表注记）；⑪ 本 README 变更表；⑫ EE-FUND-10/11 两批纯文档变更一并纳入（10-17/10-18 未升版）。
+> 
+> 派单闭环：EE-FUND-12（华证 ESG，§49/§56/§57）· EE-FUND-13-C（`index_weight` 扩码，§51/§53/§54/§55）· EE-FUND-14（文档+阈值，§58/§59）· EE-FUND-13（申万行业线，§50/§60/§61/§62/§63）· EE-FUND-15（副本同步+对账工具，§64/§65/§66）——**六单全过**。`研究/zzz-round2/data/` 副本已同步至主库（5,913 → 5,211），8 个下游脚本读自己副本零影响。门禁 `config_check` RC=0 / `regress` 32/34（fund 存量未碰）。提交链 10 笔（见 §七 变更表）。push 归老大。
 
 **v1.1 变更摘要（2026-10-01 实测驱动，详见 §七 变更表）**
 
@@ -190,6 +202,7 @@
 | —（未升版） | 2026-10-17 | **EE-FUND-1 B 段引擎硬化（18 §19/§20）**：fund 三表历史缺口修复——B 段（引擎）已闭环，A 段（数据回填 226 只）未执行。① **check_fund_history 四表起点对账**（`tools/check_coverage.py`）：daily/nav/adj/share × 场内 2,963 只，A=库内 0 行 / B=起点晚上市 >30d，**实测 fund_daily A=150 B=76 与派单基线一致**；② **R17 回归断言组**（`tools/regress_pipeline.py`）：基线外置 `tools/known_gaps.json`，2963 基数可复核（meta 被篡改即红），单次调用避免四表双扫；③ **BACKFILL_TARGETS +2**（fund_daily/fund_nav by_code 补历史入口）：101→103，A25→A27，by_code 26→28；`audit_skip=True` 解决 checkpoint 模式错配；④ **strict 接线**：CLI `--history --strict` 缺口态 RC=1；⑤ **_pick_date_col 补 nav_date**（`fetch/base.py`）；⑥ **文档全量同步**：04 L75 / 09 L35·R表 / 16 L34·L64·L87 / 17 L63·L78 / 架构 README L42·L43·L44 全命中新计数。**遗留（审查方 §20 未放行，FG-06/07 已闭环；FG-08 受令暂缓（A 段待放行），FG-09~FG-12 本批修 FG-09/11）**：A 段 226/173/189 数据回填（老大批准后启动）· B3 范围（fund_nav 全表 A=817 另立项）· 看门狗接线（待办登记可先行） |
 | —（未升版） | 2026-10-17 | **EE-FUND-2/4 ＋ A 段全量回填（18 §23/§25/§31）**：① **A 段回填**——fund_daily 226（落 76/+15.9 万行，150 三轮核验源端空→S）、fund_nav 全表 2700（落 2653/+317.5 万行，47 S/12 SB）、fund_adj 263（落 249，S 合 169/SB 249）；② **门禁重建（§25 撤销「归零放行」逃生口）**——S（source_empty 逐码核验注册表）/ SB（source_late_start）双向强一致：漏登即红、stale 即红，R17 守 fund_daily、**R19 守 nav/adj**；③ **G3 引擎修复**——`backfill.py` 空返回三级语义：codes-file 不记 done / 有注册表表仅注册码记 done（fail-closed）/ 无注册表表保持「空即 done」（辅助函数 `_load_known_gaps/_table_source_empty_registry/_is_registered_source_empty`）；④ **--scope 扩展** fund_nav/fund_adj/fund_share 单表 strict；⑤ R18 codes-file 护栏（C5 改 fund_div，fund_adj 走 `allow_codes_file` 特例）；⑥ **G1 元数据**（赤潮 §30）：`derived/fund_basic_patch.parquet` 派生补表（92 只封转开早段），config-check `NON_BACKFILL_TABLES` 补 derived。regress **19 组/31 项 31/31 绿**。**遗留（非阻断）**：fund_share 133/3（N-4 另案）；G1 reader 合并 first_trade_date（未批） |
 | —（未升版） | 2026-10-17 | **EE-FUND-5 幽灵码根因治理（18 §32）**：清理 18 个 7 位 `.SZ/.SH` 码（tushare fund_basic market=E **源端真实返回**的分级子份额，6 位母码前插 1，如 150001.SZ→1500011.SZ，非本地截断遗留——与派单预期相反，已在回执举证）。① `full_download.py` 加 `^\d{6}\.(SZ|SH|OF)$` 白名单护栏（剔除打印 fail-loud），防 17:30 日更复活；② fund_basic 32,953→32,935、market=E **2963→2945**（先备份 `.bak-20261017-ghost`）；③ parquet 删 daily 5,691/nav 9,884/share 17 行（30 分区先备份至 `备份\归档文件\20261017-幽灵码清理备份`，adj 0 命中）；④ 注册表清理后 daily S144/SB1、nav S42/SB8、adj S151/SB249，四表逐码对账无 stale；⑤ **fund_share B=3→0**（幽灵码产物），A=133→**118**（原 133 含 15 个幽灵码，随 universe 收窄消失；余 118 维持 N-4 不追）；⑥ 5-A `fund_adj.source_empty_count` 订正=151；⑦ 新增 **R20** 幽灵码护栏断言（fund_basic/parquet/注册表 0 残留 + count 声明一致 + market_e_count 复算一致）。regress **20 组/32 项 32/32 绿**；逐表 strict daily/nav/adj RC=0（full RC=1 仅 fund_share A=118 N-4 诚实挂账） |
+| **v1.5**（定版） | 2026-10-22 | **EE-FUND 系列六单全闭环 + 对账工具固化（18 §49~§66）**：① **EE-FUND-12** 华证 ESG 入 alt 库（`esg_hz_rating` 6,392 行 + `inject_const` 机制 + `max_age_days` 120→210）；② **EE-FUND-13-C** `index_weight` 扩码（13→71 码，708,659→1,255,770 行，+76.1%）；③ **EE-FUND-14** 文档表数校正 + ESG 阈值；④ **EE-FUND-13** 申万行业线三段式——`index_member_hist` 新建（23,460 行 / 429 码 / 68 源端空码 / 时点切片），`index_member_all` 覆盖重建（5,913→5,211 行，快照语义恢复：out_date 全空 / is_new 全 Y / in_date 取 L1），`index_classify` 增补 SW2021（359→856 行）；⑤ **EE-FUND-15** `研究/zzz-round2/data/index_member_all.parquet` 副本同步至主库（L1 100% 一致 / RRG 免重跑 / 30 行业扩散指标漂移量化）+ `tools/receipt_reconcile.py` 对账工具（三场景全过，§62.4 系统性问题工具化解）；⑥ **EE-FUND-16** v1.5 发版（config 5.0.0→5.1.0 + README 三处）。**纪律红线三起**：跨层拼装（in_date/out_date 拼接错位 1,205 行）→ 快照语义严格分离 / 归因数字三单不准 → receipt_reconcile.py 固化 / 下游脚本 8 个未读主库 → 副本同步而非改主库。门禁 `config_check` RC=0 / `regress` 32/34（fund 存量未碰）。派单索引 = 18 §49~§66 |
 
 **变更纪律**：
 
