@@ -1,0 +1,53 @@
+feat(wind): W-2a+W-2b+W-3+W-4 — 迁移完成 + gate + 文档
+
+=== W-2a 迁移 wind_index（四道闸口）===
+  闸口 1 评估: 5 子目录 / 4,168 文件 / 638.2 MB
+  闸口 2 快照: migration_snapshot_W-2a_20261022.json（758 KB / 逐文件 sha256）
+  闸口 3 迁移:
+    daily  → norm/series/wind_index_daily
+    spx    → norm/series/spx_weekly
+    tasi   → norm/series/tasi_weekly
+    ibov   → norm/series/ibov_weekly
+    enum   → norm/snap/enum_probe
+  闸口 4 复核: 4168→4168 / 638.2→638.2 MB / sha256 抽样 50/50 ✅
+  11 个引用文件改了 15 处路径（consumer_coverage / 3 wind_study / 3 _scratch / 赤潮侧不动）
+  grep 旧路径零残留（除 _archive 历史产物）
+
+=== W-2b raw 搬迁 + config.py L49 ===
+  raw 搬迁: 1,225.7 MB 1:1 / 0 差异
+  CSV 清单 5 + logs 26 复制到 _catalog/_logs
+  config.py L49 回写:
+    旧: wind_index_enum.py (fetch\下不存在，失效登记)
+    新: _scratch\wind-研究暂存\... (实体位置)
+  config_check RC=0
+
+=== W-3 wind_gate.py + wind_snap ===
+  三测全过:
+    缓存命中（第二次 cache_hit 不发请求）
+    快照覆盖被拒（红线 3）
+    violation_count 正常流程保持 0
+  budget_ledger.jsonl 自动记账（每次调用）
+
+=== W-4 文档收尾 ===
+  consumer_coverage.py 3 处口径更新:
+    "wind_index 停更→INFO" → "已迁入 wind_data 第三库(WIND-LIB W-2a，预算管控)"
+  赤潮侧文档（规格书/待完成需求）不动（不在本轮工程范围）
+
+=== WIND-LIB 六单总评 ===
+  W-0 config_wind.py       ✅ 自验全过
+  W-1 catalog.py           ✅ 8/8 门槛
+  W-2a 迁移 wind_index     ✅ 四道闸口全过
+  W-2b raw 搬迁 + config   ✅ 四道闸口全过
+  W-3 wind_gate.py         ✅ 三测全过
+  W-4 文档收尾             ✅ 工程侧全改
+
+=== 写盘边界 ===
+  D:\全量数据\wind_data\（第三库，config_wind.assert_writable 保护）
+  config.py L49 一处回写（裁决 ④）
+  _scratch\*.py 探测/迁移脚本（自归档）
+  consumer_coverage.py 注释更新
+  无 market_data\ 写入（除删除 wind_index 子目录）
+  无 alt_data\ 写入
+  无 Wind API 积分消耗（mock）
+
+push 归老大

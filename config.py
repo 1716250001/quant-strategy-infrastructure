@@ -46,7 +46,7 @@ config.py — A股三层轮动金字塔策略 · 统一配置中心
     fund_nav_update.py   基金净值增量更新
     redtide_supply.py    赤潮数据补全（market_state 派生；adj_factor/stk_limit
                            已改道至 daily_update）
-    wind_index_enum.py   Wind 自编指数枚举（隔离：产出目录与 tushare 库分离）
+    _scratch\wind-研究暂存\Wind 系列采集与研究脚本（原始响应已迁至 wind_data\raw，目录暂存）
     backfill_spec.py     ┐ 通用补数·任务规格层（该拉哪些数据，纯计算）
     backfill_io.py       │ 通用补数·IO 层（分页拉取 / 三种落盘布局 / 前置表）
     backfill.py          ┘ 通用补数·执行编排 + CLI

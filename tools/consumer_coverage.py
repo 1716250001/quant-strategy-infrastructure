@@ -10,7 +10,7 @@ tools/consumer_coverage.py — 决策侧消费标的覆盖体检（2026-09-25 �
 
 消费清单（与运行拓扑对齐）：
   1. A2 奇点扫描：QIDIAN_POOL 全部 ETF(fund_daily) + 池内指数(index_daily)
-     + XAU_WATCHLIST(fx_daily) + 转债温度计(wind_index，已知停更→INFO)
+     + XAU_WATCHLIST(fx_daily) + 转债温度计(wind_index，已迁入 wind_data 第三库，预算管控)
   2. 作战包固定消费：L0 两指数 / 中证银行(触发位) / HS300(估值定锚)
   3. 作战包动态消费：rules/current-holdings.md 持仓标的（股票→daily，ETF→fund_daily）
 
@@ -18,7 +18,7 @@ tools/consumer_coverage.py — 决策侧消费标的覆盖体检（2026-09-25 �
   - 行数 ≥ min_rows（默认 250 ≈ 1 年）→ PASS
   - 起始日 ≥ 550 天前（次新品，起始=上市日即完备）→ PASS(次新)
   - 其余 → WARN（人工核对：真缺口 or 上市晚）
-  - 温度计 wind_index 停更为已知决议（2026-09-25 Q-G 观察级）→ INFO
+  - 温度计 wind_index 已迁入 wind_data 第三库（WIND-LIB W-2a，预算管控）→ INFO
 
 用法:
   python main.py check-consumer              # 体检（退出码 0=全过 / 2=有 WARN）
@@ -69,7 +69,7 @@ def _classify(table, code, name, min_rows, kind="normal"):
     if kind == "wind":
         return {"table": table, "code": code, "name": name, "rows": n,
                 "range": f"{dmin}~{dmax}", "status": "INFO",
-                "note": "wind_index 停更为已知决议(Q-G 观察级)"}
+                "note": "wind_index 已迁入 wind_data 第三库(WIND-LIB W-2a，预算管控)"}
     if n >= min_rows:
         status, note = "PASS", ""
     elif dmin and (pd.Timestamp(_today()) - pd.Timestamp(dmin)).days <= RECENT_DAYS:

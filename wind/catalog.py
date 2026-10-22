@@ -28,9 +28,9 @@ from config_wind import (
     violation_count,
 )
 
-# ── 源目录 ─────────────────────────────────────────────────
-SERIES_DIR = r"D:\全量数据\market_data\wind_index\daily"   # 4,142 parquet（待迁移，§70.5）
-RAW_DIR = r"D:\量化策略\数据\wind指数库\raw"                # 3,440 JSON（§70.6 待搬迁；派单省略了工程根）
+# ── 源目录（W-2a 迁移后已就位） ──────────────────────────────
+SERIES_DIR = r"D:\全量数据\wind_data\norm\series\wind_index_daily"   # 已迁移（W-2a）
+RAW_DIR = r"D:\量化策略\数据\wind指数库\raw"                        # 待搬迁（W-2b）
 
 # ── 核心列集（§70.2.1 全部 5 种变体都有的 7 列）───────────────
 CORE_COLS = {"TIME", "OPEN", "MATCH", "HIGH", "LOW", "CHANGEHANDRATE", "AVPRICE"}
