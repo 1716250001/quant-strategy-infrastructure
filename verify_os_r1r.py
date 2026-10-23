@@ -292,7 +292,7 @@ except Exception as e:
     print(f"  ❌ FAIL E-1a: {type(e).__name__}: {e}")
 
 # =========================================================================
-# §88 R1R2-4: as_of + src 四表 inject_const
+# §88 R1R2-4: as_of + src 四表 inject_const（spec 级 + 落盘 parquet 级）
 # =========================================================================
 print("\n" + "="*60)
 print("§88 R1R2-4: as_of + src 四表 inject_const")
@@ -300,6 +300,12 @@ print("="*60)
 
 four_tables = ["hk_fina_snap", "hk_val_pct", "us_daily_raw", "us_qfq_factor"]
 today = datetime.now().strftime("%Y%m%d")
+
+scratch_root = PROJECT_ROOT.parent / "_scratch"
+scratch_files = {
+    "hk_val_pct": scratch_root / "hk_val_pct" / "hk_val_pct_3sample.parquet",
+    "us_qfq_factor": scratch_root / "us_qfq_factor" / "us_qfq_factor_3sample.parquet",
+}
 
 for name in four_tables:
     sp = spec_get(name)
@@ -310,6 +316,23 @@ for name in four_tables:
     as_of_val = today if ic.get("as_of") == "__TODAY__" else ic.get("as_of", "(未设)")
     _check(has_src and has_as_of,
            f"{name}: src={src_val}, as_of={as_of_val}")
+
+# --- E-4: 落盘 parquet 级验证（禁止只看 spec 字典） ---
+print("\n  --- E-4 落盘 parquet 验证 ---")
+for name, fpath in scratch_files.items():
+    if fpath.exists():
+        dp = pd.read_parquet(str(fpath))
+        has_a = "as_of" in dp.columns
+        has_s = "src" in dp.columns
+        a_vals = dp["as_of"].unique().tolist() if has_a else []
+        s_vals = dp["src"].unique().tolist() if has_s else []
+        a_ok = has_a and all(v != "__TODAY__" for v in a_vals) and dp["as_of"].notna().all()
+        s_ok = has_s and dp["src"].notna().all() and (dp["src"].astype(str) != "").all()
+        _check(a_ok, f"{name} 落盘 as_of 非空非字面量 (vals={a_vals})")
+        _check(s_ok, f"{name} 落盘 src 非空 (vals={s_vals})")
+        print(f"    样本 {fpath.name}: {len(dp)} rows, cols={list(dp.columns)}")
+    else:
+        print(f"    ⚠ {fpath} 不存在（落盘样本需先手动拉取到 _scratch/）")
 
 # =========================================================================
 # 汇总
