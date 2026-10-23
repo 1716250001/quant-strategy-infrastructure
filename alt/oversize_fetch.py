@@ -8,9 +8,9 @@ alt/oversize_fetch.py —— 外盘扩容专用取数引擎（OS-R1~R5）
   - 独立的进度 checkpoint（断点续拉）
   - S1 基准集验证 + S2 速率门禁 + S3 schema 门禁 + CK-13 PE 剔非正值
 
-当前实现：hk_val_pct（OS-R1 P0-2）
-后续待补：us_daily_raw / us_qfq_factor / us_fina_ind / us_report / us_val_pct /
-          hk_fina_ind / hk_report / hk_div / hk_profile / global_fut
+当前实现: hk_val_pct（专用多请求引擎）
+其余表（us_qfq_factor / us_daily_raw / us_fina_ind / us_report /
+        hk_fina_snap / hk_fina_ind / hk_report）→ 路由到 list_backfill（list 模式，1 标的=1 请求）
 
 用法:
   python -m alt.oversize_fetch --table hk_val_pct            # 全量建库
@@ -456,8 +456,10 @@ def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
 def main():
     parser = argparse.ArgumentParser(description="外盘扩容取数引擎（OS-R1~R5）")
     parser.add_argument("--table", required=True,
-                        choices=["hk_val_pct"],
-                        help="目标表（当前仅实现 hk_val_pct）")
+                        choices=["hk_val_pct", "us_qfq_factor", "us_daily_raw",
+                                 "hk_fina_snap", "us_fina_ind", "us_report",
+                                 "hk_fina_ind", "hk_report"],
+                        help="目标表")
     parser.add_argument("--symbols", default=None,
                         help="指定标的列表（逗号分隔，如 '00700,00981'）")
     parser.add_argument("--no-checkpoint", action="store_true",
@@ -481,7 +483,14 @@ def main():
             max_syms=args.max_syms,
         )
     else:
-        raise SystemExit(f"未知表: {args.table}")
+        # 其余表走 list_backfill 引擎（list 模式表，1 标的 = 1 请求）
+        from alt.list_backfill import run as list_run
+        sym_str = args.symbols  # 已是 "AAPL,MSFT" 格式
+        list_run(
+            args.table,
+            symbols=sym_str,
+            dry_run=args.dry_run,
+        )
 
 
 if __name__ == "__main__":
