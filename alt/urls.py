@@ -38,6 +38,7 @@ URL_PUSH2HIS = "https://push2his.eastmoney.com"               # 东财行情端�
 URL_LEGULEGU = "https://legulegu.com"                         # 乐咕乐股
 URL_OPTBBS = "https://1.optbbs.com"                           # QVIX 波指 CSV 源
 URL_SINA = "https://finance.sina.com.cn"                      # 新浪财经（v1.2：港股/中行牌价）
+URL_BAIDU = "https://finance.baidu.com"                       # 百度股市通（外盘扩容：港股估值分位）
 
 # ============================================================
 # 二、显式登记：函数名 → 真实域名（实测得出，优先于规则）
@@ -68,6 +69,15 @@ _EXPLICIT = {
     "stock_hk_daily": URL_SINA,
     # 中行人民币牌价：实走 biz.finance.sina.com.cn（forex.php），同上。
     "currency_boc_sina": URL_SINA,
+    # —— v1.4 外盘扩容（2026-10-23 源码核对）——
+    # 港股基本面快照：stock_hk_financial_indicator_em → datacenter.eastmoney.com
+    #   （已被 host_tier 兜底识别为 datacenter 档位，此处显式登记让意图清晰）
+    "stock_hk_financial_indicator_em": URL_DATACENTER_WEB,
+    # 港股估值分位：stock_hk_valuation_baidu → finance.baidu.com（other 档 15/分）
+    "stock_hk_valuation_baidu": URL_BAIDU,
+    # 美股日线：stock_us_daily（adjust=''/'qfq'/'qfq-factor'）→ finance.sina.com.cn（sina 档 20/分）
+    #   原按命名兜底落入 datacenter-web，实际走新浪（同 stock_hk_daily）
+    "stock_us_daily": URL_SINA,
 }
 
 

@@ -545,10 +545,35 @@ P4 = [
     # —— 美股日线（前复权）——
     TableSpec("us_daily_qfq", "stock_us_daily", "P4", "by_year", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              max_age_days=5,
-              note="美股日线【前复权 adjust=qfq】; 逐只拉(按标的) → 由 alt/us_backfill.py 处理; "
+              max_age_days=5, rotate_days=30,
+              params={"adjust": "qfq"},
+              universe_from="us_universe",
+              note="美股日线【前复权 adjust=qfq】; 逐只拉; "
                    "⚠ 前复权基准随新拆股漂移 ⇒ 只可整表重建、不可增量追加; "
                    "⚠ 数据为美股 T-1（美股收盘=北京次日凌晨）"),
+    # —— v1.4 外盘扩容 OS-R3（2026-10-23）：美股双表（移植港股双表策略）——
+    # 关键设计（复用港股 ADR-13 结论）：
+    #   ① 不复权价 us_daily_raw + 事件级因子 us_qfq_factor（拒绝存前复权价）
+    #   ② 复权展开唯一入口 alt.reader.expand_qfq_factor()
+    #   ③ stock_us_daily 无日期增量参数 ⇒ 轮转重建（rotate_days=30/轮）
+    #   ④ 新浪域名（finance.sina.com.cn），已有 sina 档位 20/分
+    TableSpec("us_daily_raw", "stock_us_daily", "P4", "by_year", "date",
+              src_date_col="date", subset=["symbol", "date"], mode="list",
+              universe_from="us_universe", max_age_days=5, rotate_days=30,
+              params={"adjust": ""},
+              coerce_float_cols=["open", "high", "low", "close", "volume"],
+              note="美股不复权日线 adjust=''; 逐只拉; "
+                   "⚠ 与 us_daily_qfq 并存：存不复权价 + 事件级因子（同港股双表策略）; "
+                   "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
+    TableSpec("us_qfq_factor", "stock_us_daily", "P4", "by_year", "date",
+              src_date_col="date", subset=["symbol", "date"], mode="list",
+              universe_from="us_universe", max_age_days=90, rotate_days=60,
+              params={"adjust": "qfq-factor"},
+              coerce_float_cols=["qfq_factor", "adjust"],
+              # ⚠ 源为日期降序（哨兵行 1970-01-01 在尾）⇒ 入库需归一化升序
+              note="美股事件级复权因子 adjust='qfq-factor'; 逐只拉; "
+                   "⚠ 日期降序 + 1970-01-01 哨兵行在尾 ⇒ 入库归一化升序; "
+                   "⚠ 复权展开唯一入口 alt.reader.expand_qfq_factor()"),
 ]
 
 # ============================================================
@@ -633,7 +658,54 @@ P4_HK = [
                    "⚠ 哨兵行精度 ~3e-5(早期段残差)，见 09 §14.10 V6（P-C 条款）"),
 ]
 
-ALL_SPECS = P0 + P1 + P1_EX + P3 + P4 + P4_HK
+# ============================================================
+# P0_EXT · 外盘基本面与估值（v1.4 外盘扩容，2026-10-23；OS-R1/R2 派单）
+#   全部走 datacenter / other 档位，限 15 次/分；
+#   每标的多请求（hk_fina_snap 1次 / hk_val_pct 3次），
+#   由独立 fetcher（alt/oversize_fetch.py）处理，不走 list_backfill。
+# ============================================================
+P0_EXT = [
+    # —— OS-R1 P0-1 港股基本面快照 ——
+    # 源: stock_hk_financial_indicator_em → datacenter 档 15/分
+    # 每标的 1 请求 × 2785 只 ≈ 2.95 h
+    TableSpec("hk_fina_snap", "stock_hk_financial_indicator_em", "P0_EXT", "single",
+              "date", src_date_col=None,
+              subset=["symbol", "date"], mode="list",
+              universe_from="master:hk_basic", universe_col="ts_code",
+              universe_xform="strip_hk_suffix", symbol_param="symbol",
+              symbol_col="symbol", rotate_days=30,
+              max_age_days=45,
+              inject_const={"date": "__TODAY__"},
+              # ⚠ 源函数内部用 f'(SECUCODE="{symbol}.HK")' 过滤，
+              #   故 symbol_param 实际无效（请求体用硬编码 .HK 后缀），
+              #   但保留以符合 list 引擎契约；
+              #   ⚠ akshare 内部 RENAME 映射会把中文列名转英文，
+              #     实际落盘列见 alt/oversize_fetch.py 的 schema_fp 校验。
+              note="港股基本面+估值快照（21列：总市值/港股市值/PE/PB/股息率/ROE/EPS/BPS等；"
+                   "东财 datacenter 档 15/分；每标的 1 请求，全量 2785 只 ≈ 2.95h；"
+                   "⚠ 源接口自动按 .HK 后缀过滤，symbols 需去后缀传入）"),
+
+    # —— OS-R1 P0-2 港股十年估值分位 ——
+    # 源: stock_hk_valuation_baidu × 3 个 indicator → other 档 15/分
+    # 每标的 3 请求 × 2785 只 ≈ 8.85 h（但与 R1 的 datacenter 可并行）
+    TableSpec("hk_val_pct", "stock_hk_valuation_baidu", "P0_EXT", "by_year",
+              "date", src_date_col="date",
+              subset=["symbol", "indicator", "date"], mode="list",
+              universe_from="master:hk_basic", universe_col="ts_code",
+              universe_xform="strip_hk_suffix", symbol_param="symbol",
+              symbol_col="symbol", rotate_days=30,
+              max_age_days=45,
+              params={"period": "全部"},
+              inject_const={"src": "baidu"},
+              coerce_float_cols=["value"],
+              note="港股估值时序（市盈率TTM/市盈率静/市净率，各 period=全部 ≈ 629 行）；"
+                   "百度 other 档 15/分；每标的 3 请求，全量 ≈ 8.85h；"
+                   "⚠ 需 OS-R1 独立 fetcher（3 indicator + 分位算法），不走 list_backfill；"
+                   "⚠ period 实际返回 2004-至今（>10 年），百度无严格'十年'选项；"
+                   "⚠ 分位算法 CK-13 必须剔非正值，CK-14 三道门禁"),
+]
+
+ALL_SPECS = P0 + P1 + P1_EX + P3 + P4 + P4_HK + P0_EXT
 BY_NAME = {s.name: s for s in ALL_SPECS}
 BY_TIER: dict = {}
 for _s in ALL_SPECS:
