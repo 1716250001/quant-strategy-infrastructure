@@ -577,6 +577,7 @@ P4 = [
               universe_from="us_universe", max_age_days=5, rotate_days=30,
               params={"adjust": ""},
               coerce_float_cols=["open", "high", "low", "close", "volume"],
+              inject_const={"src": "sina", "as_of": "__TODAY__"},
               note="美股不复权日线 adjust=''; 逐只拉; "
                    "⚠ 与 us_daily_qfq 并存：存不复权价 + 事件级因子（同港股双表策略）; "
                    "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
@@ -586,6 +587,7 @@ P4 = [
               params={"adjust": "qfq-factor"},
               coerce_float_cols=["qfq_factor", "adjust"],
               strip_sentinel=True,
+              inject_const={"src": "sina", "as_of": "__TODAY__"},
               note="美股事件级复权因子 adjust='qfq-factor'; 逐只拉; "
                    "⚠ layout=single（同港股 hk_qfq_factor；事件级因子按年分区会拆散同标的因子）; "
                    "⚠ 源为日期降序 + 1970-01-01 哨兵行在尾 → strip_sentinel=True 剔除哨兵 + 升序; "
@@ -691,7 +693,7 @@ P0_EXT = [
               universe_xform="strip_hk_suffix", symbol_param="symbol",
               symbol_col="symbol", rotate_days=30,
               max_age_days=45,
-              inject_const={"date": "__TODAY__"},
+              inject_const={"date": "__TODAY__", "src": "datacenter-web", "as_of": "__TODAY__"},
               # ⚠ 源函数内部用 f'(SECUCODE="{symbol}.HK")' 过滤，
               #   故 symbol_param 实际无效（请求体用硬编码 .HK 后缀），
               #   但保留以符合 list 引擎契约；
@@ -712,7 +714,7 @@ P0_EXT = [
               symbol_col="symbol", rotate_days=30,
               max_age_days=45,
               params={"period": "近十年"},
-              inject_const={"src": "baidu"},
+              inject_const={"src": "baidu", "as_of": "__TODAY__"},
               coerce_float_cols=["value"],
               note="港股估值时序（市盈率TTM/市盈率静/市净率，各 period=近十年 ≈ 731 行/2016-10-25起）；"
                    "百度 other 档 15/分；每标的 3 请求，全量 ≈ 8.85h；"
