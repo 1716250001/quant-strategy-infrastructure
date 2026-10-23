@@ -242,10 +242,10 @@ _check(norm_us["date"].is_monotonic_increasing,
        f"us_qfq_factor 日期升序")
 
 # =========================================================================
-# §88 R1R2-2: 既有 hk_qfq_factor 哨兵行完好 + 上市首年 close_qfq 非空
+# §88 R1R2-2: 既有 hk_qfq_factor 哨兵行完好 + expand_qfq_factor 真断言
 # =========================================================================
 print("\n" + "="*60)
-print("§88 R1R2-2: 既有 hk_qfq_factor 哨兵行完好")
+print("§88 R1R2-2: 哨兵行完好 + expand_qfq_factor(00700) 真断言")
 print("="*60)
 
 try:
@@ -269,6 +269,27 @@ try:
         print(f"  ⚠ {hk_qfq_path} 不存在，跳过既有表验证（可能未建库）")
 except ImportError:
     print("  ⚠ config_alt 导入失败，跳过既有表验证")
+
+# --- E-1a 真断言：expand_qfq_factor("00700") 2004 年 close_qfq 全非空 ---
+print("\n  --- E-1a 真断言: expand_qfq_factor('00700') ---")
+try:
+    from alt.reader import expand_qfq_factor
+    d = expand_qfq_factor("00700", with_price=True)
+    _check("close_qfq" in d.columns,
+           f"expand_qfq_factor 返回含 close_qfq 列（cols={list(d.columns)}）")
+    y04 = d[d["date"].astype(str).str.startswith("2004")]
+    _check(len(y04) == 137,
+           f"00700 2004 年 137 行（实测 {len(y04)}）")
+    _check(y04["close_qfq"].notna().all(),
+           f"00700 2004 年 close_qfq 100% 非空（非空 {y04['close_qfq'].notna().sum()}/{len(y04)}）")
+    print(f"    qfq_factor={y04['qfq_factor'].iloc[0]:.6f}（哨兵基准值）")
+    print(f"    首行 date={y04['date'].iloc[0]} close_qfq={y04['close_qfq'].iloc[0]:.6f}")
+    print(f"    末行 date={y04['date'].iloc[-1]} close_qfq={y04['close_qfq'].iloc[-1]:.6f}")
+except ImportError as e:
+    print(f"  ⚠ alt.reader 导入失败（{e}），跳过 E-1a")
+except Exception as e:
+    _errors.append(f"E-1a expand_qfq_factor 异常: {type(e).__name__}: {e}")
+    print(f"  ❌ FAIL E-1a: {type(e).__name__}: {e}")
 
 # =========================================================================
 # §88 R1R2-4: as_of + src 四表 inject_const
