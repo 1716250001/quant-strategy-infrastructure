@@ -159,6 +159,21 @@ class TableSpec:
     #   用例：esg_hz_rating 源端无 fetch_date，需注入以区分"抓取日 vs 评级基准日"。
     inject_const: dict = field(default_factory=dict)
 
+    # 哨兵行剔除开关（OS-R1R2 新增，2026-10-23；R1R2-1）。
+    #   True = io.normalize step 6 在落盘前剔除 date < "19900101" 的哨兵行 + 升序排序。
+    #   False = 保持源端原样（含哨兵行），由下游 expand_qfq_factor 的 asof backward 处理。
+    #
+    #   ⚠ 为什么必须是 spec 级开关、不能按表名模糊匹配（R1R2-1 教训）：
+    #      原 io.normalize 用 "表名含 qfq_factor" 匹配 → 同时破坏已上线的
+    #      hk_qfq_factor（2,785 只全部有 1900-01-01 哨兵行，被 expand_qfq_factor
+    #      依赖做 2004 上市首年的基准因子）。改为 spec 级后：
+    #
+    #        · hk_qfq_factor  → False（默认，哨兵行照常入库，行为零变化）
+    #        · us_qfq_factor  → True（源 1970-01-01 哨兵在尾，需剔除）
+    #
+    #   严禁按表名模糊匹配（"qfq_factor" in spec.name 等）——这正是本次回归的根因。
+    strip_sentinel: bool = False
+
     @property
     def inject_date(self) -> bool:
         """是否需要在落盘时注入日期列（按日型接口）"""
@@ -570,9 +585,10 @@ P4 = [
               universe_from="us_universe", max_age_days=90, rotate_days=60,
               params={"adjust": "qfq-factor"},
               coerce_float_cols=["qfq_factor", "adjust"],
+              strip_sentinel=True,
               note="美股事件级复权因子 adjust='qfq-factor'; 逐只拉; "
                    "⚠ layout=single（同港股 hk_qfq_factor；事件级因子按年分区会拆散同标的因子）; "
-                   "⚠ 源为日期降序 + 1970-01-01 哨兵行在尾 → io.normalize 自动剔除哨兵 + 升序归一; "
+                   "⚠ 源为日期降序 + 1970-01-01 哨兵行在尾 → strip_sentinel=True 剔除哨兵 + 升序; "
                    "⚠ 复权展开唯一入口 alt.reader.expand_qfq_factor()"),
 ]
 
