@@ -185,23 +185,31 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
             warns.append(f"本批数据去重：{before} → {len(out)} 行"
                          f"（源端重复行，已按 {sub} 去重）")
 
-    # 6) 哨兵行剔除 + 升序归一化（OS-R1R2 R1R2-1 修复：spec 级开关，严禁按表名模糊匹配）
+    # 6) 哨兵行剔除 + 升序归一化（spec 级开关，严禁按表名模糊匹配）
     #    源为日期降序 + 哨兵行（港股 1900-01-01 / 美股 1970-01-01）在尾。
     #    当且仅当 spec.strip_sentinel=True 时才执行：
     #      (a) 剔除 date < "19900101" 的哨兵行；(b) 升序排序。
-    #    ⚠ R1R2-1 教训（§88 P0 回归）：原用 "表名含 qfq_factor" 匹配，
-    #      同时破坏了已上线的 hk_qfq_factor（2,785 只全部有 1900-01-01 哨兵行，
-    #      被 expand_qfq_factor 的 asof backward 依赖做上市首年的基准因子）。
-    #      改 spec 级开关后：
-    #        · hk_qfq_factor（strip_sentinel=False 默认）→ 行为零变化，哨兵照常入库
-    #        · us_qfq_factor（strip_sentinel=True）→ 剔除 1970-01-01 哨兵 + 升序
+    #
+    #    ⚠ 两次设计教训：
+    #    ① §88 P0 回归：原用 "表名含 qfq_factor" 匹配，同时破坏了已上线的 hk_qfq_factor
+    #      （2,785 只全部有 1900-01-01 哨兵行，被 expand_qfq_factor 的 asof backward 依赖做
+    #      上市首年的基准因子）。改 spec 级开关后两侧独立控制。
+    #    ② §98 E-R3（更严重）：us_qfq_factor strip_sentinel=True 把 1 哨兵 + 12 条真实公司
+    #      行动（1987-05-11 首个除权 / 1987-06-16 2:1 拆股 / 1987-1989 季度分红）全删。
+    #      expand_us_qfq_factor 又用 qfq_factor=1.0 假哨兵顶替 → close_qfq ≡ close（偏差 224×）。
+    #      根因：**哨兵不是垃圾行**——它是"首个公司行动之前所有日期的基准因子"。
+    #      修复：us_qfq_factor.strip_sentinel=False（与 hk_qfq_factor 一致）。
+    #
+    #    当前两侧均为 False，哨兵行（含真实因子值，如 AAPL 19700101=0.004464285714）
+    #    原样入库。expand 层 sort_values("_dt") 自己升序 + ffill。
+    #
     #    ⚠ 本步在 step 2b 日期归一化之后执行，date 列 dtype 已是 str（YYYYMMDD），
     #      阈值也用字符串 "19900101" 比较（定长 YYYYMMDD 的 str 比较等价于数值比较）。
     if spec.strip_sentinel and spec.date_col in out.columns:
         before_qfq = len(out)
         out = out[out[spec.date_col] >= "19900101"].copy()  # 剔除哨兵（str 比较）
         if len(out) < before_qfq:
-            warns.append(f"[strip_sentinel] {spec.name} 哨兵行剔除：{before_qfq} → {len(out)} 行")
+            warns.append(f"[strip_sentinel] {spec.name} 哨兵行剔除：{before_qfq} → {len(out)} 行（⚠ 确认非真实公司行动）")
         out = out.sort_values(["symbol", spec.date_col]).reset_index(drop=True)
 
     return out.reset_index(drop=True), warns
