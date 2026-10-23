@@ -185,6 +185,19 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
             warns.append(f"本批数据去重：{before} → {len(out)} 行"
                          f"（源端重复行，已按 {sub} 去重）")
 
+    # 6) qfq_factor 特殊处理（哨兵行剔除 + 升序归一化）
+    #    源为日期降序 + 哨兵行（港股 1900-01-01 / 美股 1970-01-01）在尾；
+    #    必须在落盘前：(a) 剔除哨兵行（date < 19900101）；(b) 升序排序。
+    #    适用表：hk_qfq_factor / us_qfq_factor（事件级复权因子）。
+    #    ⚠ 注意：本步在 step 2b 日期归一化之后执行，date 列 dtype 已是
+    #    str（"YYYYMMDD"），故阈值也要用字符串 "19900101" 比较。
+    if "qfq_factor" in (spec.name or "") and spec.date_col in out.columns:
+        before_qfq = len(out)
+        out = out[out[spec.date_col] >= "19900101"].copy()  # 剔除哨兵（str 比较）
+        if len(out) < before_qfq:
+            warns.append(f"qfq_factor 哨兵行剔除：{before_qfq} → {len(out)} 行")
+        out = out.sort_values(["symbol", spec.date_col]).reset_index(drop=True)
+
     return out.reset_index(drop=True), warns
 
 

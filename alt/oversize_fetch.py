@@ -74,7 +74,7 @@ def _load_hk_universe() -> List[str]:
 # ============================================================
 
 HK_VAL_INDICATORS = ["市盈率(TTM)", "市盈率(静)", "市净率"]
-HK_VAL_PERIOD = "全部"          # 百度接口"全部"=2004-至今 ≈ 629 行（无严格十年选项）
+HK_VAL_PERIOD = "近十年"           # 百度接口 period：近十年=731点/2016-10-25起；全部=629点/2004起
 HK_VAL_SRC = "baidu"
 HK_VAL_SRC_HOST = guess_url("stock_hk_valuation_baidu")
 
@@ -116,31 +116,23 @@ def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
     return pd.concat(frames, ignore_index=True), None
 
 
-def _compute_percentile(series: pd.Series) -> Optional[float]:
-    """计算当日 value 在其历史中的百分位。
-
-    CK-13 规则（PE 类剔非正值）：
-      - PE(TTM) / PE(静)：剔除 value ≤ 0 的行（负 PE 无意义）
-      - 市净率(PB)：不剔除（PB 可以为负但有意义）
-    百分位 = rank / len(valid) × 100（用方法='max' 处理相等值）
-
-    当 valid 长度 < 30 时返回 None（样本过少，分位不可靠）。
-    """
-    valid = series.dropna()
-    if len(valid) < 30:
-        return None
-    # 百分位 = 当前值在历史中的排名百分比（小值=低分位，大值=高分位）
-    # rank(pct=True) 返回的是 0~1 的值，乘 100 即百分位
-    ranks = valid.rank(method="max", pct=True)
-    return float(ranks.iloc[-1])
-
-
 def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
     """对单只 × 3 indicator 的原始时序数据计算分位数。
 
     CK-13 规则：
       - PE 类：剔 value ≤ 0 的行后再算分位
       - PB：不剔
+
+    CK-14 三道门禁（PE 类，派单硬性要求）：
+      1. cur > 0（当前值须正）
+      2. n_pos >= 100（正样本数 ≥ 100）
+      3. n_total >= 520（近十年窗口 ≈ 731 点，允许有部分负值）
+    三道全过才给 PE 分位；不满足时 PE 分位置空 → 转 PB 分位。
+
+    R1R-3（消除 look-ahead）：percentile 只存**当前值**一行（当日分位），
+    不在历史行上存分位（历史分位若存就会 look-ahead）。
+    表级结构：date = 拉取当日（inject_const 注入），percentile = 该日当前值分位。
+    历史 value 序列仅作分位计算的输入窗口，不逐行存分位。
     """
     out_parts = []
     for ind in HK_VAL_INDICATORS:
@@ -149,27 +141,52 @@ def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
         if len(sub) == 0:
             continue
 
-        # CK-13: PE 剔非正值
-        if ind in ("市盈率(TTM)", "市盈率(静)"):
-            sub = sub[sub["value"] > 0].copy()
-
         # 按日期升序排
         sub = sub.sort_values("date").reset_index(drop=True)
 
-        if len(sub) < 30:
-            # 样本过少，标记 percentile = None
-            sub["percentile"] = np.nan
+        # CK-13: PE 剔非正值（留原始序列用于 CK-14 判 n_total）
+        n_total = len(sub)                                       # 窗口总点数
+        if ind in ("市盈率(TTM)", "市盈率(静)"):
+            valid = sub[sub["value"] > 0].copy()                  # 剔非正值
         else:
-            # 计算每行 value 在全历史中的百分位
-            vals = sub["value"].values
-            # 用 percentileofscore 方式：对每个 value 算 rank
-            sub["percentile"] = [
-                float(np.sum(vals <= v)) / len(vals) * 100.0
-                for v in vals
-            ]
+            valid = sub.copy()                                    # PB 不剔
 
-        sub["src"] = HK_VAL_SRC
-        out_parts.append(sub)
+        n_pos = len(valid)
+
+        # CK-14 三道门禁：cur_val 必须从【原始未过滤】sub 取，
+        # 因为 CK-13 已经把 value ≤ 0 从 valid 里剔掉了，
+        # 从 valid 取 cur_val 会导致 gate1(cur>0) 永真——
+        # 审查方实测全港 51.1% 标的 PE 当前值为负，这些必须被 gate1 拦住。
+        cur_val = float(sub["value"].iloc[-1])                    # 当前值（原始序列末尾）
+        cur_date = int(sub["date"].iloc[-1])                      # 当前日期（原始序列末尾）
+
+        # CK-14 PE 类三道门禁
+        pct_value = np.nan
+        if ind in ("市盈率(TTM)", "市盈率(静)"):
+            gate1 = cur_val > 0                                   # 门 1：cur > 0（原始值，非过滤后）
+            gate2 = n_pos >= 100                                  # 门 2：正样本数 ≥ 100
+            gate3 = n_total >= 520                                # 门 3：窗口总点数 ≥ 520
+            if gate1 and gate2 and gate3 and n_pos > 0:
+                # 用 CK-13 过滤后的 valid 序列算分位（符合派单 CK-13 口径）
+                pct_value = float(np.sum(valid["value"].values <= cur_val)) / n_pos * 100.0
+            # 任一门禁未过 → PE 分位置空（下游转 PB 分位）
+        else:
+            # PB：CK-14 不适用于 PB（派单 CK-14 仅约束 PE 类）
+            # 但 n_pos 太少仍不可靠
+            if n_pos >= 30:
+                pct_value = float(np.sum(valid["value"].values <= cur_val)) / n_pos * 100.0
+
+        # R1R-3: 只存当前值一行（消除 look-ahead）
+        # date = "近十年" 窗口最新一天
+        row = pd.DataFrame([{
+            "symbol": symbol,
+            "indicator": ind,
+            "date": cur_date,                                      # 窗口最新日
+            "value": cur_val,                                      # 当前值（可能负/零）
+            "percentile": pct_value,                                # 当前值分位（可能 NaN）
+            "src": HK_VAL_SRC,
+        }])
+        out_parts.append(row)
 
     if not out_parts:
         return pd.DataFrame(columns=["symbol", "indicator", "date", "value",
@@ -330,7 +347,8 @@ def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
     if s1_first and not dry_run:
         s1_ok, s1_issue = _run_s1_baseline(limiter)
         if s1_issue > 0:
-            print("\n⚠ S1 基准集未全部通过，继续全量但标记风险")
+            print("\n❌ S1 基准集未全部通过 → 退出（纪律要求）")
+            sys.exit(1)
 
     if dry_run:
         print(f"\n[DRY-RUN] 将处理 {len(universe)} 只（不拉数据、不写库）")
@@ -364,31 +382,34 @@ def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
             cp["empty"].append(sym)
             print(f"  [{i:>5}/{len(universe)}] EMPTY {sym}")
         else:
-            done_count += 1
             enriched = _enrich_with_percentile(raw, sym)
-            buf.append(enriched)
-            cp["done"].append(sym)
-            total_rows += len(enriched)
+            buf.append((sym, enriched))                    # 暂存，不记 done
 
         # 周期 flush
-        buf_syms = done_count
-        buf_rows = sum(len(d) for d in buf)
-
-        if (buf_syms >= buf_flush_threshold or
-                buf_rows >= buf_rows_threshold or
-                i == len(universe)):
-            if buf:
-                flush_df = pd.concat(buf, ignore_index=True)
-                res = _save_hk_val(flush_df, dest_dir)
-                if res.get("ok"):
-                    elapsed = time.time() - last_flush_t
-                    rate = len(buf) / elapsed if elapsed > 0 else 0
-                    print(f"  [flush] {len(buf)} 只 / {len(flush_df):,} 行 落盘 "
-                          f"→ 速率 {rate:.0f} 只/s")
-                else:
-                    print(f"  [flush FAIL] {res.get('errors', '')[:120]}")
+        if (len(buf) >= buf_flush_threshold or
+                sum(len(d) for _, d in buf) >= buf_rows_threshold or
+                (i == len(universe) and buf)):
+            flush_df = pd.concat([d for _, d in buf], ignore_index=True)
+            res = _save_hk_val(flush_df, dest_dir)
+            if res.get("ok"):
+                # B1 修复：落盘成功才记 done
+                for sym_ok, _ in buf:
+                    cp["done"].append(sym_ok)
+                    done_count += 1
+                elapsed = time.time() - last_flush_t
+                rate = len(buf) / elapsed if elapsed > 0 else 0
+                total_rows += len(flush_df)
+                print(f"  [flush OK] {len(buf)} 只 / {len(flush_df):,} 行 "
+                      f"→ 速率 {rate:.0f} 只/s")
                 buf = []
                 last_flush_t = time.time()
+            else:
+                # B1 修复：flush 失败 → 保留 buf 不清空，记 fail
+                for sym_bad, _ in buf:
+                    cp["fail"].append(sym_bad)
+                    fail_count += 1
+                print(f"  [flush FAIL] {res.get('errors', '')[:120]} → "
+                      f"保留 {len(buf)} 只待下次重试")
 
         # 周期 checkpoint 保存（每 20 只或失败时）
         if checkpoint and (i % 20 == 0 or err):

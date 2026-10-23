@@ -565,14 +565,14 @@ P4 = [
               note="美股不复权日线 adjust=''; 逐只拉; "
                    "⚠ 与 us_daily_qfq 并存：存不复权价 + 事件级因子（同港股双表策略）; "
                    "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
-    TableSpec("us_qfq_factor", "stock_us_daily", "P4", "by_year", "date",
+    TableSpec("us_qfq_factor", "stock_us_daily", "P4", "single", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
               universe_from="us_universe", max_age_days=90, rotate_days=60,
               params={"adjust": "qfq-factor"},
               coerce_float_cols=["qfq_factor", "adjust"],
-              # ⚠ 源为日期降序（哨兵行 1970-01-01 在尾）⇒ 入库需归一化升序
               note="美股事件级复权因子 adjust='qfq-factor'; 逐只拉; "
-                   "⚠ 日期降序 + 1970-01-01 哨兵行在尾 ⇒ 入库归一化升序; "
+                   "⚠ layout=single（同港股 hk_qfq_factor；事件级因子按年分区会拆散同标的因子）; "
+                   "⚠ 源为日期降序 + 1970-01-01 哨兵行在尾 → io.normalize 自动剔除哨兵 + 升序归一; "
                    "⚠ 复权展开唯一入口 alt.reader.expand_qfq_factor()"),
 ]
 
@@ -695,14 +695,14 @@ P0_EXT = [
               universe_xform="strip_hk_suffix", symbol_param="symbol",
               symbol_col="symbol", rotate_days=30,
               max_age_days=45,
-              params={"period": "全部"},
+              params={"period": "近十年"},
               inject_const={"src": "baidu"},
               coerce_float_cols=["value"],
-              note="港股估值时序（市盈率TTM/市盈率静/市净率，各 period=全部 ≈ 629 行）；"
+              note="港股估值时序（市盈率TTM/市盈率静/市净率，各 period=近十年 ≈ 731 行/2016-10-25起）；"
                    "百度 other 档 15/分；每标的 3 请求，全量 ≈ 8.85h；"
-                   "⚠ 需 OS-R1 独立 fetcher（3 indicator + 分位算法），不走 list_backfill；"
-                   "⚠ period 实际返回 2004-至今（>10 年），百度无严格'十年'选项；"
-                   "⚠ 分位算法 CK-13 必须剔非正值，CK-14 三道门禁"),
+                   "⚠ 需 OS-R1 独立 fetcher（alt.oversize_fetch.py，3 indicator + 分位算法），不走 list_backfill；"
+                   "⚠ period=近十年（审查方 §86 P0-2 实测：近十年 731 点 vs 全部 629 点，分位偏移最大 31.4pp）；"
+                   "⚠ 分位算法 CK-13 必须剔非正值，CK-14 三道门禁 cur>0 & n_pos>=100 & n_total>=520"),
 ]
 
 ALL_SPECS = P0 + P1 + P1_EX + P3 + P4 + P4_HK + P0_EXT
