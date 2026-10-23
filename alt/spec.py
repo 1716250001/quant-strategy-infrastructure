@@ -586,12 +586,14 @@ P4 = [
               universe_from="us_universe", max_age_days=90, rotate_days=60,
               params={"adjust": "qfq-factor"},
               coerce_float_cols=["qfq_factor", "adjust"],
-              strip_sentinel=True,
+              strip_sentinel=False,  # ⚠ §98 E-R3 改回 False（与 hk_qfq_factor 一致）
+              # 哨兵不是垃圾行——它是"首个公司行动之前所有日期的基准因子"（如 AAPL 19700101 qfq_factor=0.004464285714）
+              # 上轮错判：date < "19900101" 一刀切把 1 哨兵 + 12 真实公司行动全删 → close_qfq ≡ close
               inject_const={"src": "sina", "as_of": "__TODAY__"},
               note="美股事件级复权因子 adjust='qfq-factor'; 逐只拉; "
                    "⚠ layout=single（同港股 hk_qfq_factor；事件级因子按年分区会拆散同标的因子）; "
-                   "⚠ 源为日期降序 + 1970-01-01 哨兵行在尾 → strip_sentinel=True 剔除哨兵 + 升序; "
-                   "⚠ 复权展开唯一入口 alt.reader.expand_qfq_factor()"),
+                   "⚠ strip_sentinel=False：保留 1970-01-01 哨兵行（真实基准因子）+ 所有公司行动； "
+                   "⚠ 复权展开唯一入口 alt.reader.expand_us_qfq_factor()"),
 ]
 
 # ============================================================

@@ -313,12 +313,11 @@ def expand_us_qfq_factor(symbol: str, *, with_price: bool = True,
     fac = (fac[["_dt", "qfq_factor"]].dropna()
            .sort_values("_dt").drop_duplicates("_dt", keep="last")
            .reset_index(drop=True))
-    # 补基准哨兵行：1970-01-01, qfq_factor=1.0
-    # ⚠ 源端 1970-01-01 假哨兵已被 spec.strip_sentinel=True 剔除，
-    #   但 expand 仍需一个最早基准因子（同港股 19000101 + strip_sentinel=False 的效果）。
-    #   无拆股历史时因子=1.0 是合理基准。
-    sentinel = pd.DataFrame({"_dt": [pd.Timestamp("1970-01-01")], "qfq_factor": [1.0]})
-    fac = pd.concat([sentinel, fac], ignore_index=True)
+    # ⚠ §98 E-R3：**不再**合成 1.0 假哨兵。
+    # 源端 us_qfq_factor 自带 1970-01-01 哨兵行（如 AAPL qfq_factor=0.004464285714）——
+    # 这是真实最早基准（< 首个公司行动 1987-05-11 factor=0.004464285714）。
+    # strip_sentinel=False 保留哨兵行入库（spec.py 已改），reader 层 sort_values 会自动把
+    # 它排到最前。expand 用表内第一个事件因子当基准，**不再需要人工补行**。
     if len(fac) == 0:
         raise ValueError(f"us_qfq_factor '{symbol}' 因子列全为空或日期不可解析")
 
