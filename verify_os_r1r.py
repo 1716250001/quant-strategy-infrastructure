@@ -291,6 +291,34 @@ except Exception as e:
     _errors.append(f"E-1a expand_qfq_factor 异常: {type(e).__name__}: {e}")
     print(f"  ❌ FAIL E-1a: {type(e).__name__}: {e}")
 
+# --- E-1b 真断言：expand_us_qfq_factor("AAPL") 1984 年 close_qfq 全非空 ---
+print("\n  --- E-1b 真断言: expand_us_qfq_factor('AAPL') ---")
+try:
+    from alt.reader import expand_us_qfq_factor
+    from config_alt import ALT_TMP_DIR
+    # 样本目录需先手动构建（E-1b 验证前置，禁碰正式 alt_data）
+    _daily_dir = pathlib.Path(ALT_TMP_DIR) / "us_daily_raw"
+    _fac_dir = pathlib.Path(ALT_TMP_DIR) / "us_qfq_factor"
+    if _daily_dir.exists() and _fac_dir.exists():
+        d_us = expand_us_qfq_factor("AAPL", with_price=True, root=ALT_TMP_DIR)
+        _check("close_qfq" in d_us.columns,
+               f"expand_us_qfq_factor 返回含 close_qfq 列（cols={list(d_us.columns)}）")
+        y84 = d_us[d_us["date"].astype(str).str.startswith("1984")]
+        _check(len(y84) == 80,
+               f"AAPL 1984 年 80 行（实测 {len(y84)}）")
+        _check(y84["close_qfq"].notna().all(),
+               f"AAPL 1984 年 close_qfq 100% 非空（非空 {y84['close_qfq'].notna().sum()}/{len(y84)}）")
+        print(f"    qfq_factor={y84['qfq_factor'].iloc[0]}（哨兵基准 1.0，1984~1990 无拆股）")
+        print(f"    首行 date={y84['date'].iloc[0]} close_qfq={y84['close_qfq'].iloc[0]:.2f}")
+        print(f"    末行 date={y84['date'].iloc[-1]} close_qfq={y84['close_qfq'].iloc[-1]:.2f}")
+    else:
+        print(f"  ⚠ us_daily_raw / us_qfq_factor 样本不存在于 {ALT_TMP_DIR}，跳过 E-1b")
+except ImportError as e:
+    print(f"  ⚠ 导入失败（{e}），跳过 E-1b")
+except Exception as e:
+    _errors.append(f"E-1b expand_us_qfq_factor 异常: {type(e).__name__}: {e}")
+    print(f"  ❌ FAIL E-1b: {type(e).__name__}: {e}")
+
 # =========================================================================
 # §88 R1R2-4: as_of + src 四表 inject_const（spec 级 + 落盘 parquet 级）
 # =========================================================================

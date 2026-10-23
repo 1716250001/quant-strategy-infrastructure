@@ -65,12 +65,14 @@ def read_alt(table: str, columns=None, start_date=None, end_date=None,
 
 def read_alt_by_code(table: str, code: str, columns=None,
                      start_date=None, end_date=None, date_col=None,
-                     code_col="ts_code"):
+                     code_col="ts_code", root=None):
     """读 alt 库中某标的的数据（by_year / by_code 布局均支持）"""
     dc = date_col or _date_col_of(table)
+    if root is None:
+        root = ALT_DATA_DIR
     return read_code(table, code, columns=columns, start_date=start_date,
                      end_date=end_date, date_col=dc, code_col=code_col,
-                     root=ALT_DATA_DIR)
+                     root=root)
 
 
 # ============================================================
@@ -272,6 +274,64 @@ def expand_qfq_factor(symbol: str, *, with_price: bool = True,
         raise ValueError(
             f"hk_daily 无 '{symbol}' 数据（未建库？先跑 "
             f"python -m alt.list_backfill --table hk_daily）")
+    px = px.copy()
+    px["_dt"] = _to_dt(px["date"])
+    px = (px.dropna(subset=["_dt"]).sort_values("_dt")
+          .reset_index(drop=True))
+
+    out = _expand_qfq_frames(px, fac, asof=asof)
+    out["close_qfq"] = out["close"] * out["qfq_factor"]
+    return out.drop(columns=["_dt"]).reset_index(drop=True)
+
+
+def expand_us_qfq_factor(symbol: str, *, with_price: bool = True,
+                          asof: bool = True, root: str = None) -> pd.DataFrame:
+    """`us_qfq_factor`（事件级）→ 逐日乘数序列；**美股复权的唯一入口**。
+
+    与港股 `expand_qfq_factor` 同构：骨架∪ + ffill ≡ asof backward。
+    表名固定 us_qfq_factor + us_daily_raw（不复权价表，与港股双表策略一致）。
+
+    参数:
+        symbol:     美股代码（如 "AAPL", "MSFT"）
+        with_price: True（默认）= 同时读 us_daily_raw，返回含 close_qfq 的完整帧
+        asof:       实现开关（True=骨架+ffill）
+        root:       alt 库根目录（默认 ALT_DATA_DIR；测试可传 .temp/alt_run）
+    返回（with_price=True，正序）:
+        [date, open, high, low, close, volume, qfq_factor, close_qfq]
+    """
+    if root is None:
+        root = ALT_DATA_DIR
+
+    fac = read_alt_by_code("us_qfq_factor", symbol, code_col="symbol", root=root)
+    if fac is None or len(fac) == 0:
+        raise ValueError(
+            f"us_qfq_factor 无 '{symbol}' 数据（未建库？先跑 "
+            f"python -m alt.list_backfill --table us_qfq_factor --symbols {symbol}）")
+    fac = fac.copy()
+    fac["qfq_factor"] = pd.to_numeric(fac["qfq_factor"], errors="coerce")
+    fac["_dt"] = _to_dt(fac["date"])
+    fac = (fac[["_dt", "qfq_factor"]].dropna()
+           .sort_values("_dt").drop_duplicates("_dt", keep="last")
+           .reset_index(drop=True))
+    # 补基准哨兵行：1970-01-01, qfq_factor=1.0
+    # ⚠ 源端 1970-01-01 假哨兵已被 spec.strip_sentinel=True 剔除，
+    #   但 expand 仍需一个最早基准因子（同港股 19000101 + strip_sentinel=False 的效果）。
+    #   无拆股历史时因子=1.0 是合理基准。
+    sentinel = pd.DataFrame({"_dt": [pd.Timestamp("1970-01-01")], "qfq_factor": [1.0]})
+    fac = pd.concat([sentinel, fac], ignore_index=True)
+    if len(fac) == 0:
+        raise ValueError(f"us_qfq_factor '{symbol}' 因子列全为空或日期不可解析")
+
+    if not with_price:
+        out = fac.copy()
+        out["date"] = out["_dt"].dt.strftime("%Y%m%d")
+        return out[["date", "qfq_factor"]].reset_index(drop=True)
+
+    px = read_alt_by_code("us_daily_raw", symbol, code_col="symbol", root=root)
+    if px is None or len(px) == 0:
+        raise ValueError(
+            f"us_daily_raw 无 '{symbol}' 数据（未建库？先跑 "
+            f"python -m alt.list_backfill --table us_daily_raw --symbols {symbol}）")
     px = px.copy()
     px["_dt"] = _to_dt(px["date"])
     px = (px.dropna(subset=["_dt"]).sort_values("_dt")
