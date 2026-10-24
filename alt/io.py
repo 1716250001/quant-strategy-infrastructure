@@ -209,8 +209,29 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
             warns.append(f"[strip_sentinel] {spec.name} 哨兵行剔除：{before_qfq} → {len(out)} 行（⚠ 确认非真实公司行动）")
 
     # (b) 升序排序（与 strip_sentinel 解耦，凡 date_col 存在即执行）
+    #
+    #    ⚠ §104 E-R5 P0 回归（2026-10-24）：上一版**硬编码** ["symbol", date_col] 排序键，
+    #      而 alt 库 76 张表中 62 张的主键是 subset="*"（大盘指数/宏观单序列表），
+    #      这些表**没有 symbol 列** → normalize 直接抛 KeyError: 'symbol'
+    #      （其中 61 张走 17:30 日更 ⇒ 全库 82% 的表跑不动）。
+    #      教训：改共享模块时，排序键必须**按列自适应**，不得假定 symbol 普遍存在。
+    #
+    #    排序键自适应（E-3-R4）：
+    #      ① symbol 在列中 → 以 symbol 为分组键（多标的表：先标的、后日期）
+    #      ② 否则若 spec.subset 为列表 → 取其中**非日期**主键列作分组键
+    #         （如 enum 表的 indicator / period；均为小基数枚举，排序稳定）
+    #      ③ 兜底 → 仅按 date_col 排序（大盘指数/宏观单序列，行为等价于"按日期升序"）
+    #    三种情形最终都含 date_col，保证"日期升序"这一不变量恒成立。
     if spec.date_col in out.columns:
-        out = out.sort_values(["symbol", spec.date_col]).reset_index(drop=True)
+        keys = []
+        if "symbol" in out.columns:
+            keys.append("symbol")
+        if isinstance(spec.subset, list):
+            for c in spec.subset:
+                if c != spec.date_col and c in out.columns and c not in keys:
+                    keys.append(c)
+        keys.append(spec.date_col)
+        out = out.sort_values(keys).reset_index(drop=True)
 
     return out.reset_index(drop=True), warns
 

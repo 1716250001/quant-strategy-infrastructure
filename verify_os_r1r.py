@@ -396,6 +396,121 @@ for name, fpath in scratch_files.items():
         print(f"    ⚠ {fpath} 不存在（落盘样本需先手动拉取到 _scratch/）")
 
 # =========================================================================
+# §104 E-3-R5: 全库冒烟 —— 76 张表逐张跑 normalize(假数据)，零异常
+#   背景（§104 P0）：E-3-R3 把排序键硬编码为 ["symbol", date_col]，
+#   而 62/76 张表无 symbol 列（subset="*" 的大盘指数/宏观单序列表）
+#   → normalize 抛 KeyError，其中 61 张走 17:30 日更 ⇒ 全库 82% 停摆。
+#   本用例为该回归的**常驻兜底**：任何"排序键假定某列必然存在"的改动都会在此转红。
+# =========================================================================
+print("\n" + "="*60)
+print("§104 E-3-R5: 全库冒烟 76 张表 normalize 零异常")
+print("="*60)
+
+import os
+from alt.spec import ALL_SPECS
+from config_alt import alt_table_dir
+
+
+def _real_columns(table: str):
+    """读该表已落盘 parquet 的真实列（无此表则返回 None）。"""
+    d = alt_table_dir(table)
+    if not os.path.isdir(d):
+        return None
+    files = sorted(f for f in os.listdir(d) if f.endswith(".parquet"))
+    if not files:
+        return None
+    try:
+        return list(pd.read_parquet(os.path.join(d, files[0])).columns)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _fake_df(sp, real_cols):
+    """按 spec 构造最小假数据，列尽量贴近真实落盘形态。"""
+    cols = {}
+    # 日期列（inject_date 的表不需要源日期列）
+    if sp.has_date and not sp.inject_date:
+        src = sp.src_date_col or sp.date_col
+        cols[src] = ["20260102", "20260101", "20260103"]   # 故意乱序，验证排序
+    # 标的列：优先按真实 parquet 判断，其次按声明推断
+    if real_cols is not None:
+        has_symbol = sp.symbol_col in real_cols or "symbol" in real_cols
+    else:
+        has_symbol = (isinstance(sp.subset, list) and "symbol" in sp.subset) or sp.mode == "list"
+    if has_symbol:
+        cols["symbol"] = ["B002", "A001", "A001"]
+    # subset 非日期键
+    if isinstance(sp.subset, list):
+        for c in sp.subset:
+            if c == sp.date_col or c in cols:
+                continue
+            if c == "symbol":
+                continue
+            cols[c] = ["k2", "k1", "k1"]
+    # enum 列
+    if sp.mode == "enum" and sp.enum_col and sp.enum_col not in cols:
+        cols[sp.enum_col] = ["v1", "v1", "v1"]
+    # 数值/字符串列
+    for c in (sp.force_str_cols or []):
+        cols[c] = ["1", "2", "3"]
+    for c in (sp.coerce_float_cols or []):
+        cols[c] = ["1.5", "2.5", "3.5"]
+    # 至少给一列数值，避免空表
+    cols.setdefault("value", [1.0, 2.0, 3.0])
+    n = max(len(v) for v in cols.values())
+    for k, v in list(cols.items()):
+        if len(v) < n:
+            cols[k] = v + [v[-1]] * (n - len(v))
+    return pd.DataFrame(cols)
+
+
+smoke_fail = []
+no_symbol = []
+smoke_rows = []
+for sp in ALL_SPECS:
+    real = _real_columns(sp.name)
+    df = _fake_df(sp, real)
+    if "symbol" not in df.columns:
+        no_symbol.append(sp.name)
+    try:
+        out, warns = normalize(df, sp, req_date="20260102", enum_value="v1")
+    except Exception as e:  # noqa: BLE001
+        smoke_fail.append((sp.name, type(e).__name__, str(e)))
+        print(f"  ❌ {sp.name}: {type(e).__name__}: {e}")
+        continue
+    # 日期升序不变量（按与实现同样的分组键逐组校验）
+    if sp.has_date and sp.date_col in out.columns and len(out) > 1:
+        gkeys = []
+        if "symbol" in out.columns:
+            gkeys.append("symbol")
+        if isinstance(sp.subset, list):
+            for c in sp.subset:
+                if c != sp.date_col and c in out.columns and c not in gkeys:
+                    gkeys.append(c)
+        ok_asc = True
+        if gkeys:
+            for _, g in out.groupby(gkeys, dropna=False):
+                s = g[sp.date_col].astype(str).tolist()
+                if s != sorted(s):
+                    ok_asc = False
+                    break
+        else:
+            s = out[sp.date_col].astype(str).tolist()
+            ok_asc = s == sorted(s)
+        if not ok_asc:
+            smoke_fail.append((sp.name, "SortOrder", "日期非升序"))
+            print(f"  ❌ {sp.name}: 日期非升序")
+            continue
+    smoke_rows.append((sp.name, len(df), len(out), len(warns)))
+
+_check(len(smoke_fail) == 0,
+       f"全库冒烟 {len(ALL_SPECS) - len(smoke_fail)}/{len(ALL_SPECS)} 张表 normalize 零异常"
+       + (f"（失败: {[f[0] for f in smoke_fail]}）" if smoke_fail else ""))
+_check(len(no_symbol) > 0,
+       f"冒烟覆盖到无 symbol 列的表 {len(no_symbol)} 张（硬编码 ['symbol',date] 必崩的那批）")
+print(f"    总表数={len(ALL_SPECS)} 无symbol={len(no_symbol)} 通过={len(smoke_rows)} 失败={len(smoke_fail)}")
+
+# =========================================================================
 # 汇总
 # =========================================================================
 print("\n" + "="*60)
