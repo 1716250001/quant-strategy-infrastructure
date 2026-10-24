@@ -26,7 +26,16 @@ from config_alt import (
     host_tier,
 )
 
+# 瞬态错误的短退避秒数（RE1-1b）：第 n 次重试等待 n × 本值（2s / 4s）
+TRANSIENT_BACKOFF_SEC = 2.0
+
 # 判定为"被风控拦截"的异常特征
+#
+# ⚠ §113 RE1-1（D1）修复：原表含**裸数字** "429" / "503" / "504"，而判别是
+#   全串子串匹配 ⇒ `JSONDecodeError: Expecting ',' delimiter: line 1 column 429
+#   (char 428)` 里的**报错位置数字**撞上 "429"，被误判为"被风控"，
+#   触发 30s 静默 ×3 后整只标的作废（§111 R-1 首跑 S1 19/20 的真因）。
+#   现起一律**带上下文**匹配，禁止再把裸数字放回本表。
 _BLOCK_SIGNS = (
     "ConnectionError",
     "RemoteDisconnected",
@@ -34,15 +43,25 @@ _BLOCK_SIGNS = (
     "ConnectionResetError",
     "Max retries exceeded",
     "SSLError",
-    # HTTP 层限流（实测乐咕在约 20 次/分时返回 429）
-    "429",
+    # HTTP 层限流（实测乐咕在约 20 次/分时返回 429）——必须带上下文
+    "HTTP 429", "429 Too Many Requests", "status code 429", "status_code=429",
+    "HTTP 503", "Service Unavailable", "status code 503", "status_code=503",
+    "HTTP 504", "Gateway Time-out", "status code 504", "status_code=504",
     "Too Many Requests",
-    "503",
-    "504",
-    "Gateway Time-out",
-    # 被拦后站点返回 HTML 错误页 → JSON 解析失败（空响应特征）
+    # 被拦后站点返回 HTML 错误页 → JSON 解析失败（**空响应**特征）
     "Expecting value: line 1 column 1",
 )
+
+# 判定为"瞬态（可重试）"的特征 —— §113 RE1-1b
+#   与"被风控"分开：这类是 JSON **截断/残缺**，源站偶发抖动所致，
+#   短退避（2s/4s）重试即可，**不得进 30s 长静默**（长静默会放大损失）。
+_TRANSIENT_SIGNS = (
+    "Expecting ',' delimiter",
+    "Expecting property name",
+    "Unterminated string",
+    "Invalid control character",
+)
+
 # 判定为"接口/解析问题"（非风控）的特征
 _PARSE_SIGNS = (
     "AttributeError",
@@ -53,13 +72,24 @@ _PARSE_SIGNS = (
 )
 
 
+def is_transient_error(exc) -> bool:
+    """是否属于"瞬态可重试"（JSON 截断类）——§113 RE1-1b/1c"""
+    s = f"{type(exc).__name__}: {exc}"
+    return any(k.lower() in s.lower() for k in _TRANSIENT_SIGNS)
+
+
 def is_block_error(exc) -> bool:
     """是否属于"被上游拦截"（而非接口本身出错）
 
     覆盖两类：
       1. 连接层：ConnectionError / RemoteDisconnected / SSLError
       2. 应用层：HTTP 429/503/504，以及被拦后返回 HTML 导致的空 JSON
+
+    ⚠ RE1-1c 判别顺序：**先排除瞬态**（JSON 截断类返回 False），再判 block。
+       否则报错文本里的位置数字（如 column 429）会假阳性。
     """
+    if is_transient_error(exc):
+        return False
     s = f"{type(exc).__name__}: {exc}"
     return any(k.lower() in s.lower() for k in _BLOCK_SIGNS)
 
@@ -153,6 +183,7 @@ class AltRateLimiter:
             except Exception as e:  # noqa: BLE001
                 cost = time.time() - t0
                 blocked = is_block_error(e)
+                transient = is_transient_error(e)
 
                 if blocked:
                     # 被上游拦截：长静默，不做密集重试
@@ -164,7 +195,13 @@ class AltRateLimiter:
                     self.stats["retries"] += 1
                     continue
 
-                # 非风控错误（解析/参数问题）→ 短退避
+                # §113 RE1-1b：瞬态（JSON 截断类）→ 短退避重试，**不进长静默**
+                if transient and attempt < ALT_MAX_RETRY:
+                    self.stats["retries"] += 1
+                    time.sleep(TRANSIENT_BACKOFF_SEC * attempt)   # 2s / 4s
+                    continue
+
+                # 非风控、非瞬态（解析/参数问题）→ 立即失败
                 self.stats["fail"] += 1
                 return None, False, f"{type(e).__name__}: {str(e)[:160]}"
 

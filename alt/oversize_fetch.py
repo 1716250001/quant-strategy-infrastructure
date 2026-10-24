@@ -40,6 +40,35 @@ _PROJ_ROOT = _THIS.parent
 if str(_PROJ_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJ_ROOT))
 
+# ============================================================
+# SSL_CERT_FILE 自举（§113 RE1-3 / D3）
+# ------------------------------------------------------------
+# 为什么必须在这里做：`verify_os_r1r.py` 早已自举，但**生产入口没有**——
+# 造成"验证脚本能跑通、生产入口不设环境变量就全崩（curl 77 SSLError）"。
+# §111 审查方代跑 R-1 时正是踩了这个坑（M1：漏设 → S1 全量 SSLError 白跑）。
+# 规则：**不覆盖用户已设值**；探测顺序与 verify_os_r1r.py 保持一致。
+# ============================================================
+if not os.environ.get("SSL_CERT_FILE"):
+    _ssl_candidates = [r"D:\yf_ca\cacert.pem"]
+    try:
+        import certifi as _certifi
+        _ssl_candidates.append(_certifi.where())
+    except ImportError:
+        pass
+    _ssl_candidates.extend([
+        str(Path(sys.prefix) / "Library" / "ssl" / "cacert.pem"),
+        str(Path(sys.prefix) / "cacert.pem"),
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+    ])
+    for _c in _ssl_candidates:
+        if os.path.exists(_c):
+            os.environ["SSL_CERT_FILE"] = _c
+            print(f"[bootstrap] SSL_CERT_FILE = {_c}")
+            break
+    else:
+        print("[bootstrap] ⚠ 未找到 SSL 证书；akshare 网络调用可能失败")
+
 from alt import spec as spec_mod           # noqa: E402
 from alt.io import normalize as _normalize  # noqa: E402
 from alt.io import save as _save            # noqa: E402
@@ -78,6 +107,10 @@ HK_VAL_PERIOD = "近十年"           # 百度接口 period：近十年=731点/2
 HK_VAL_SRC = "baidu"
 HK_VAL_SRC_HOST = guess_url("stock_hk_valuation_baidu")
 
+# 指标级重试（§113 RE1-2a）：单指标失败后再试 2 次，退避 n × 2s（2s / 4s）
+INDICATOR_RETRY = 2
+INDICATOR_BACKOFF_SEC = 2.0
+
 
 def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
                       ) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
@@ -85,18 +118,42 @@ def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
 
     返回: (DataFrame[symbol, indicator, date, value], None) 成功
           (None, str) 失败原因
+
+    §113 RE1-2（D2）修复：**指标级容错**
+      原实现 `if not ok: return None` —— 3 个 indicator 里只要有 1 个瞬态失败，
+      整只标的就作废（已成功的 2 个指标数据一起丢掉，S4「部分成功」未落地）。
+      现改为：
+        a) 单指标失败 → **重试 2 次**（退避 2s / 4s）；
+        b) 重试仍失败 → 记入 `indicator_fails`，**continue 到下一指标**，不中止整只；
+        c) 只要**至少 1 个指标**取到数据 → 返回该数据，失败清单写入 `df.attrs["indicator_fails"]`；
+        d) **3 个指标全败**（或全部空返回）才返回 `(None, ...)`。
     """
     import akshare as ak
 
     frames = []
+    indicator_fails = []
+
     for ind in HK_VAL_INDICATORS:
         def _call(_ind=ind):
             return ak.stock_hk_valuation_baidu(
                 symbol=symbol, indicator=_ind, period=HK_VAL_PERIOD)
 
         df, ok, err = limiter.call(_call, HK_VAL_SRC_HOST)
+
+        # (a) 指标级重试：退避 2s / 4s
+        retries = 0
+        while not ok and retries < INDICATOR_RETRY:
+            retries += 1
+            time.sleep(INDICATOR_BACKOFF_SEC * retries)
+            df, ok, err = limiter.call(_call, HK_VAL_SRC_HOST)
+
         if not ok:
-            return None, f"{ind}: {err}"
+            # (b) 记失败指标后继续，不中止整只
+            indicator_fails.append(ind)
+            print(f"    [WARN] {symbol} {ind} 失败（重试 {retries} 次后仍失败）: "
+                  f"{str(err)[:60]}")
+            continue
+
         if df is None or len(df) == 0:
             # 单 indicator 空返回不是硬失败——可能该标的不支持此指标
             print(f"    [WARN] {symbol} {ind} 空返回（可能该标的无此估值）")
@@ -111,9 +168,15 @@ def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
         frames.append(d[["symbol", "indicator", "date", "value"]])
 
     if not frames:
+        # (d) 全败才整体失败
+        if indicator_fails:
+            return None, f"全部 indicator 失败: {indicator_fails}"
         return None, "全部 indicator 空返回"
 
-    return pd.concat(frames, ignore_index=True), None
+    out = pd.concat(frames, ignore_index=True)
+    # (c) 失败指标清单随 DataFrame 返回（不改变返回签名，避免动调用方）
+    out.attrs["indicator_fails"] = indicator_fails
+    return out, None
 
 
 def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:

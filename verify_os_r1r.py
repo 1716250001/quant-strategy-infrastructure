@@ -511,6 +511,125 @@ _check(len(no_symbol) > 0,
 print(f"    总表数={len(ALL_SPECS)} 无symbol={len(no_symbol)} 通过={len(smoke_rows)} 失败={len(smoke_fail)}")
 
 # =========================================================================
+# §113 RE1-1 / RE1-2: rate 判定粒度 + 指标级容错（含 6 条门槛用例）
+# =========================================================================
+print("\n" + "="*60)
+print("§113 RE1-1: is_block_error 粒度（裸数字误判修复）")
+print("="*60)
+
+import json as _json
+import sys as _sys
+import urllib.error as _urlerr
+import alt.rate as rate_mod
+import alt.oversize_fetch as ovf_mod
+from alt.rate import is_block_error, is_transient_error, AltRateLimiter
+
+_doc = "x" * 600
+_err429 = _json.JSONDecodeError("Expecting ',' delimiter", _doc, 428)   # column 429
+_err503 = _json.JSONDecodeError("Expecting ',' delimiter", _doc, 502)   # column 503
+_err_empty = _json.JSONDecodeError("Expecting value", "", 0)            # column 1
+_err_http429 = _urlerr.HTTPError("http://x", 429, "Too Many Requests", None, None)
+
+print(f"  ① {str(_err429)[:60]}")
+_check(is_block_error(_err429) is False, "截断类 column 429 → is_block_error=False")
+print(f"  ② {str(_err503)[:60]}")
+_check(is_block_error(_err503) is False, "截断类 column 503 → is_block_error=False")
+print(f"  ③ {str(_err_empty)[:60]}")
+_check(is_block_error(_err_empty) is True, "空响应 column 1 → is_block_error=True")
+print(f"  ④ {type(_err_http429).__name__}: {_err_http429}")
+_check(is_block_error(_err_http429) is True, "HTTP Error 429 → is_block_error=True")
+_check(is_transient_error(_err429) is True and is_transient_error(_err_empty) is False,
+       "is_transient_error：截断=True / 空响应=False")
+
+# --- 行为验证：瞬态不进 30s 静默，走短退避重试 ---
+_lim = AltRateLimiter(verbose=False)
+_lim.wait = lambda url: 0.0                      # 免限流等待（仅测试）
+_orig_tb = rate_mod.TRANSIENT_BACKOFF_SEC
+rate_mod.TRANSIENT_BACKOFF_SEC = 0.001
+_seq = {"n": 0}
+
+
+def _fn_transient():
+    _seq["n"] += 1
+    if _seq["n"] == 1:
+        raise _err429
+    return "OK"
+
+
+try:
+    _res, _ok, _e = _lim.call(_fn_transient, "")
+finally:
+    rate_mod.TRANSIENT_BACKOFF_SEC = _orig_tb
+_check(_ok and _lim.stats["blocked"] == 0 and _lim.stats["retries"] == 1,
+       f"瞬态：重试后成功 且 零静默（blocked={_lim.stats['blocked']}, retries={_lim.stats['retries']}）")
+
+_lim2 = AltRateLimiter(verbose=False)
+_lim2.wait = lambda url: 0.0
+
+
+def _fn_block():
+    raise _err_empty
+
+
+_r2, _ok2, _e2 = _lim2.call(_fn_block, "")
+_check((not _ok2) and _lim2.stats["blocked"] >= 1,
+       f"空响应：判 block 并进静默（blocked={_lim2.stats['blocked']}）")
+
+# =========================================================================
+# §113 RE1-2: 指标级容错（单指标失败不中止整只）
+# =========================================================================
+print("\n" + "="*60)
+print("§113 RE1-2: _fetch_hk_val_raw 指标级容错")
+print("="*60)
+
+
+class _StubLimiter:
+    """直接执行 fn，不走限流（测试用）"""
+
+    def call(self, fn, url, *a, **kw):
+        try:
+            return fn(), True, ""
+        except Exception as e:  # noqa: BLE001
+            return None, False, f"{type(e).__name__}: {e}"
+
+
+class _FakeAk:
+    def __init__(self, fail_inds):
+        self.fail = set(fail_inds)
+
+    def stock_hk_valuation_baidu(self, symbol, indicator, period):
+        if indicator in self.fail:
+            raise RuntimeError("boom-simulated")
+        return pd.DataFrame({"date": ["20260102", "20260103"], "value": [1.0, 2.0]})
+
+
+_orig_ak = _sys.modules.get("akshare")
+_orig_ind_backoff = ovf_mod.INDICATOR_BACKOFF_SEC
+ovf_mod.INDICATOR_BACKOFF_SEC = 0.0          # 免重试等待（仅测试）
+try:
+    # 用例 1：仅「市盈率(静)」恒失败 → 仍产出其余 2 个指标
+    _sys.modules["akshare"] = _FakeAk({"市盈率(静)"})
+    _df1, _e1 = ovf_mod._fetch_hk_val_raw("TEST1", _StubLimiter())
+    _inds1 = sorted(_df1["indicator"].unique().tolist()) if _df1 is not None else []
+    _fails1 = (_df1.attrs.get("indicator_fails") if _df1 is not None else None)
+    _check(_df1 is not None and len(_inds1) == 2,
+           f"单指标恒失败 → 仍产出 2 个指标（实际 {_inds1}）")
+    _check(_fails1 == ["市盈率(静)"],
+           f"失败指标已记录（attrs.indicator_fails={_fails1}）")
+
+    # 用例 2：3 个指标全失败 → 返回 (None, ...)
+    _sys.modules["akshare"] = _FakeAk(set(ovf_mod.HK_VAL_INDICATORS))
+    _df2, _e2 = ovf_mod._fetch_hk_val_raw("TEST2", _StubLimiter())
+    _check(_df2 is None and _e2 and "全部 indicator 失败" in _e2,
+           f"三指标全败 → (None, err)（err={str(_e2)[:50]}）")
+finally:
+    ovf_mod.INDICATOR_BACKOFF_SEC = _orig_ind_backoff
+    if _orig_ak is not None:
+        _sys.modules["akshare"] = _orig_ak
+    else:
+        _sys.modules.pop("akshare", None)
+
+# =========================================================================
 # 汇总
 # =========================================================================
 print("\n" + "="*60)
