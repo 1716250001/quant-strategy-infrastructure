@@ -533,9 +533,17 @@ def main():
                         help="跳过 S1 基准集验证")
     parser.add_argument("--max-syms", type=int, default=None,
                         help="最多处理多少只（用于限制执行时间）")
+    # §128 T1-2 / T2：list 表的轮次预算与分段停机点（原样转发给 list_backfill.run）
+    parser.add_argument("--budget-syms", type=int, default=None, dest="budget",
+                        help="list 表：本轮最多拉 N 只（首建传清单总数，如 18052）")
+    parser.add_argument("--until", default=None,
+                        help="分段停机点 HH:MM（到点不再发起新批次，在途批次完成并落盘后退出 0）")
     args = parser.parse_args()
 
     if args.table == "hk_val_pct":
+        if args.budget or args.until:
+            print("[提示] hk_val_pct 走独立引擎（oversize_fetch.run_hk_val_pct），"
+                  f"不支持 --budget-syms/--until（已忽略: budget={args.budget}, until={args.until}）")
         syms = ([s.strip() for s in args.symbols.split(",") if s.strip()]
                 if args.symbols else None)
         run_hk_val_pct(
@@ -553,6 +561,8 @@ def main():
             args.table,
             symbols=sym_str,
             dry_run=args.dry_run,
+            budget=args.budget,
+            until=args.until,
         )
 
 

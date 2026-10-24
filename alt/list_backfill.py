@@ -42,13 +42,14 @@ import os
 import shutil
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 
 from config_alt import (
+    ALT_META_DIR,
     FLUSH_BYTES,
     FLUSH_ROWS,
     FLUSH_SYMS,
@@ -136,6 +137,99 @@ class RotateState:
             else:
                 stale += 1
         return fresh, stale, (min(dates) if dates else ""), (max(dates) if dates else "")
+
+
+# ============================================================
+# 一·五、进度心跳 + 分段停机（§128 R-E3）
+# ------------------------------------------------------------
+# 动机：R-2 是 15 小时作业。旧观测手段下进程静默死亡可能数小时无人知
+#       （2026-10-24 14:07 实证），分段起停靠人记（当日已失守一次 16:30）。
+#   ① 心跳文件 {ALT_META_DIR}/<table>_progress.json —— 外部看门狗只读
+#      `updated_at`：超 15 min 未变即告警。**字段名已冻结，不得擅改。**
+#   ② `--until HH:MM` —— 到点只停"发起新批次"，在途批次完成并落盘后退出，
+#      绝不在请求中途硬中断（会造成该只数据半截）。
+# ============================================================
+
+# `--until` 允许跨午夜的滚动窗口（小时）：若 HH:MM 今日已过，
+# 且距**明日同一时刻**不超过本值，视为"跨夜停机点"（如 23:00 起跑 --until 06:30）；
+# 超过本值则判为"已过期"（明显是记错时刻），立即退出码 2。
+UNTIL_MAX_ROLL_HOURS = 12
+
+
+class ProgressHeartbeat:
+    """进度心跳文件（§128 T1-1）—— 原子写，14 个字段名冻结（看门狗按此解析）。"""
+
+    FIELDS = ("table", "pid", "phase", "started_at", "updated_at", "done", "total",
+              "pct", "rate_sym_per_s", "eta_min", "last_batch", "batch_ok",
+              "batch_fail", "until")
+
+    def __init__(self, table, phase, total, until=None):
+        self.path = os.path.join(ALT_META_DIR, f"{table}_progress.json")
+        self.table = table
+        self.phase = phase
+        self.total = max(int(total), 1)
+        self.until = until or None
+        self.started = datetime.now().astimezone()
+        self.t0 = time.time()
+
+    def write(self, done=0, last_batch=0, batch_ok=0, batch_fail=0, extra=None):
+        """覆写心跳（tmp + os.replace 原子写，外部永不会读到半截 JSON）。"""
+        now = datetime.now().astimezone()
+        el = max(time.time() - self.t0, 1e-6)
+        rate = (done / el) if done else 0.0
+        payload = {
+            "table": self.table,
+            "pid": os.getpid(),
+            "phase": self.phase,
+            "started_at": self.started.isoformat(timespec="milliseconds"),
+            "updated_at": now.isoformat(timespec="milliseconds"),
+            "done": int(done),
+            "total": int(self.total),
+            "pct": round(done / self.total * 100, 2),
+            "rate_sym_per_s": round(rate, 3),
+            "eta_min": round((self.total - done) / rate / 60, 1) if rate > 0 else None,
+            "last_batch": int(last_batch),
+            "batch_ok": int(batch_ok),
+            "batch_fail": int(batch_fail),
+            "until": self.until,
+        }
+        if extra:
+            payload.update(extra)
+        ensure_alt_dirs()
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, self.path)
+        return payload
+
+
+def parse_until(spec_str, now=None):
+    """解析 `--until HH:MM` → 目标 datetime。
+
+    返回 (target_dt, err)。err 非空 ⇒ 调用方应立即退出码 2。
+    · 今日 HH:MM 未到 → 今日
+    · 今日已过且距明日同一时刻 ≤ UNTIL_MAX_ROLL_HOURS → **明日**（跨夜停机点）
+    · 否则 → err="已过期"
+    """
+    s = str(spec_str or "").strip()
+    if not s:
+        return None, ""
+    try:
+        hh, mm = s.split(":")
+        hh, mm = int(hh), int(mm)
+        if not (0 <= hh <= 23 and 0 <= mm <= 59):
+            raise ValueError
+    except Exception:  # noqa: BLE001
+        return None, f"--until 格式非法: {spec_str!r}（应为 HH:MM）"
+    now = now or datetime.now()
+    target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if target > now:
+        return target, ""
+    roll = target + timedelta(days=1)
+    if (roll - now).total_seconds() <= UNTIL_MAX_ROLL_HOURS * 3600:
+        return roll, ""
+    return None, (f"--until {s} 已过期（当前 {now.strftime('%H:%M')}），"
+                  f"请检查时刻")
 
 
 # ============================================================
@@ -467,7 +561,7 @@ def _check_rebuild_coverage(sp, universe, done_syms, verbose=True):
 # 六、主流程
 # ============================================================
 def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
-        batch=None, yes=False, verbose=True):
+        batch=None, yes=False, verbose=True, until=None):
     sp = spec_mod.get(table)
     if sp.mode != "list":
         raise SystemExit(f"{table}: mode={sp.mode!r} 不是 'list'（本引擎仅处理 list 表）")
@@ -475,6 +569,11 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         raise SystemExit(
             "--rebuild 与 --symbols 互斥（F-9 守卫）：rebuild 必须全量 universe——"
             "部分标的的影子目录必然缺分区，切换即静默丢数据")
+    # §128 T2：分段停机点先解析（格式错/已过期一律立即退出码 2，不落任何东西）
+    until_dt, until_err = parse_until(until)
+    if until_err:
+        print(f"[until] {until_err}")
+        raise SystemExit(2)
     ensure_alt_dirs()
     url = guess_url(sp.func)
     if verbose:
@@ -534,10 +633,19 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
     t0 = time.time()
     batch_size = batch or HK_BATCH_SIZE
 
+    # §128 T1-1：进度心跳（dry-run 已在上面 return，故 dry-run 绝不写 meta —— 门槛 f）
+    phase = "build" if (rebuild or (budget is not None and budget >= len(universe))) else "rotate"
+    hb = ProgressHeartbeat(sp.name, phase, len(universe), until=until)
+    hb.write(done=0)
+    persisted = 0                 # 本次运行**落盘成功**的只数（心跳 done 的来源）
+    last_batch_n = 0
+    stopped_by_until = False
+
     def _flush():
-        nonlocal buf, batch_syms, done_syms
+        nonlocal buf, batch_syms, done_syms, persisted, last_batch_n
         if not buf and not batch_syms:
             return
+        n_batch = len(batch_syms)
         r = flush_buffer(sp, buf, dest_dir=dest_dir)
         if r["ok"]:
             stat["added"] += r["added"]
@@ -553,6 +661,11 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
                 # **落盘成功后**收编该批——flush 失败批不进入 done_syms
                 # （此前在取数成功处即时入列 ⇒ 落盘失败的批也被记"完成"）。
                 done_syms.extend(batch_syms)
+            # 心跳**只在 flush 成功后**更新（失败保持旧 updated_at，看门狗才识别得出卡死）
+            persisted += n_batch
+            last_batch_n = n_batch
+            hb.write(done=persisted, last_batch=n_batch,
+                     batch_ok=stat["ok"], batch_fail=stat["fail"])
         else:
             errs.append(f"flush: {r['errors'][:1]}")
             print(f"    [落盘失败] 不记水位（下次重拉）: {str(r['errors'][:1])[:120]}")
@@ -560,6 +673,12 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         batch_syms = []
 
     for i, sym in enumerate(todo, 1):
+        # §128 T2：到点**不再发起新批次**（在标的边界停，绝不截断在途请求）
+        if until_dt is not None and datetime.now() >= until_dt:
+            stopped_by_until = True
+            print(f"\n[until] 到达 {until}，停止发起新批次"
+                  f"（已处理 {len(batch_syms)} 只待落盘）")
+            break
         s, d, err = fetch_one(sp, sym, limiter, url)
         batch_syms.append(s)
         if err == "empty":
@@ -584,6 +703,17 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
     _flush()
 
     el = time.time() - t0
+    # §128 T2 4.2：退出前必须写最后一次心跳（updated_at 即退出时刻）
+    _fin = datetime.now().astimezone().isoformat(timespec="milliseconds")
+    if stopped_by_until:
+        hb.write(done=persisted, last_batch=last_batch_n,
+                 batch_ok=stat["ok"], batch_fail=stat["fail"],
+                 extra={"until_stop": True, "finished_at": _fin})
+        print(f"[until] 到达 {until}，已 flush {persisted} 只后退出")
+    else:
+        hb.write(done=persisted, last_batch=last_batch_n,
+                 batch_ok=stat["ok"], batch_fail=stat["fail"],
+                 extra={"finished_at": _fin})
     print("\n" + "=" * 84)
     print(f"[完成] {sp.name} | {mode_label}")
     print(f"  成功 {stat['ok']:,} | 返空 {stat['empty']} | 失败 {stat['fail']} | "
@@ -617,10 +747,39 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
 # ============================================================
 # 七、状态（零请求）
 # ============================================================
-def show_status(table=None, verbose=True):
+def show_status(table=None, verbose=True, json_out=False):
+    """轮转进度总览（零请求）。
+
+    §128 T1-3：`--status --json` 必须真的输出**机读 JSON**（此前 `--json` 在
+    `--status` 分支之前就 return 了，参数被静默忽略）。不带 `--json` 时
+    表格输出**逐字不变**。
+    """
     tables = ([table] if table else
               [s.name for s in spec_mod.ALL_SPECS if s.mode == "list"])
     state = RotateState()
+
+    if json_out:
+        out = {}
+        for t in tables:
+            sp = spec_mod.get(t)
+            if not (sp.universe_from or ""):
+                out[t] = {"total": None, "fresh": None, "stale": None,
+                          "oldest": None, "newest": None,
+                          "error": "no universe_from"}
+                continue
+            try:
+                uni = load_universe(sp, verbose=False)
+            except Exception as e:  # noqa: BLE001
+                out[t] = {"total": None, "fresh": None, "stale": None,
+                          "oldest": None, "newest": None,
+                          "error": str(e)[:120]}
+                continue
+            fresh, stale, oldest, newest = state.progress(t, uni, sp.rotate_days)
+            out[t] = {"total": len(uni), "fresh": fresh, "stale": stale,
+                      "oldest": oldest or None, "newest": newest or None}
+        print(json.dumps(out, ensure_ascii=False))
+        return 0
+
     print(f"{'表名':<18}{'标的':>8}{'新鲜':>8}{'陈旧/未拉':>10}"
           f"{'最旧水位':>14}{'最新水位':>14}")
     print("-" * 80)
@@ -663,9 +822,14 @@ def main(argv=None):
     ap.add_argument("--strict-coverage", action="store_true",
                     help="rebuild 覆盖率缺失（missing>0）时退出码 3；默认关（告警不阻断）")
     ap.add_argument("--yes", action="store_true", help="跳过确认")
+    ap.add_argument("--until", default=None,
+                    help="分段停机点 HH:MM（到点不再发起新批次，在途批次完成并落盘后退出 0）")
     args = ap.parse_args(argv)
 
     if args.status:
+        if args.json_out:
+            # §128 T1-3：机读 JSON（**不**打表头，保证 stdout 可被 json.loads 解析）
+            return show_status(args.table, json_out=True)
         print("=" * 84)
         print("alt list 表轮转进度")
         print("=" * 84)
@@ -676,7 +840,7 @@ def main(argv=None):
     sym_arg = ",".join(args.symbols) if args.symbols else None
     res = run(args.table, symbols=sym_arg, budget=args.budget,
               rebuild=args.rebuild, dry_run=args.dry_run, batch=args.batch,
-              yes=args.yes)
+              yes=args.yes, until=args.until)
     # ── B1（O-1）：机读覆盖率（版本化 JSON，仅 rebuild 且有覆盖数据时输出）──
     cov = (res or {}).get("coverage")
     if args.json_out and cov is not None:
