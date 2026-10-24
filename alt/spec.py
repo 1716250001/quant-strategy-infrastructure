@@ -557,6 +557,22 @@ P4 = [
               has_date=False, subset="*", mode="list", max_age_days=15,
               note="美股标的全市场清单(18,163只): symbol/英文名/中文名/行业/交易所/市值/PE; "
                    "⚠ 快照型(每次重建)"),
+    # —— §125 RE2-2：美股日线**衍生清单（B 口径 · 18,052 只 · 冻结语义）**——
+    #   口径裁定（老大 2026-10-24）：B = us_daily_qfq 全历史各年分区出现过的唯一 symbol
+    #     · 含 5,523 只已退市/停牌（**必须含**，否则生存者偏差）
+    #     · 排除 111 只从未有行情的空壳；幽灵码 0（已验证 B ⊂ C）
+    #   ⚠ **冻结语义**：本清单不随日更/轮转自动变化；需更新须单独派单重生成并重新冻结，
+    #     否则"清单漂移"会让已落盘分区不可复现。
+    #   ⚠ func 故意写成派生标记 `derived:us_daily_qfq`（不是 akshare 函数名）——
+    #     任何误对该表跑 list_backfill/oversize_fetch 都会在 `getattr(ak, func)` 处
+    #     立即失败并**零写入**，避免把行情写进清单表污染 universe。
+    TableSpec("us_daily_universe", "derived:us_daily_qfq", "P4", "single", "first_date",
+              has_date=True, src_date_col="first_date", subset=["symbol"],
+              mode="list", universe_from="", max_age_days=365,
+              inject_const={"as_of": "__TODAY__"},
+              note="美股日线衍生清单（§125 裁定 B 口径）：symbol/first_date/last_date/as_of; "
+                   "18,052 只 = us_daily_qfq 全历史唯一 symbol（含 5,523 已退市）; "
+                   "⚠ 冻结清单，禁自动刷新; ⚠ 派生表，禁对其取数"),
     # —— 美股日线（前复权）——
     TableSpec("us_daily_qfq", "stock_us_daily", "P4", "by_year", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
@@ -574,7 +590,7 @@ P4 = [
     #   ④ 新浪域名（finance.sina.com.cn），已有 sina 档位 20/分
     TableSpec("us_daily_raw", "stock_us_daily", "P4", "by_year", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_universe", max_age_days=5, rotate_days=30,
+              universe_from="us_daily_universe", max_age_days=5, rotate_days=30,
               params={"adjust": ""},
               coerce_float_cols=["open", "high", "low", "close", "volume"],
               inject_const={"src": "sina", "as_of": "__TODAY__"},
@@ -583,7 +599,7 @@ P4 = [
                    "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
     TableSpec("us_qfq_factor", "stock_us_daily", "P4", "single", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_universe", max_age_days=90, rotate_days=60,
+              universe_from="us_daily_universe", max_age_days=90, rotate_days=60,
               params={"adjust": "qfq-factor"},
               coerce_float_cols=["qfq_factor", "adjust"],
               strip_sentinel=False,  # ⚠ §98 E-R3 改回 False（与 hk_qfq_factor 一致）

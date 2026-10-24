@@ -153,15 +153,46 @@ def _read_master_table(table):
     return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
 
 
+def _read_alt_table(name):
+    """读 **alt 库内**清单表（§125 RE2-1 新增；只读，single 优先，by_year 兜底 concat）。
+
+    为什么需要：us 语义的清单（`us_universe` / `us_daily_universe`）落在 alt 库，
+    原先 `load_universe` 只认 `master:` 前缀 ⇒ `us_daily_raw --dry-run` 直接
+    `ValueError` 崩掉（§123.2.1 实测 EXIT=1），全量建库无法启动。
+    """
+    d = alt_table_dir(name)
+    single = os.path.join(d, f"{name}.parquet")
+    if os.path.exists(single):
+        return pd.read_parquet(single)
+    files = list_parquet_files(d, sort=True, with_dir=True)
+    if not files:
+        raise FileNotFoundError(
+            f"alt 库无此表: {d}（universe_from 指向的清单表；"
+            f"若为派生清单，请先按派单生成）")
+    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+
+
 def load_universe(sp, verbose=True):
-    """清单适配：universe_from="master:<表名>" → 读主库 → 取列 → 变换（保序去重）。"""
+    """清单适配 → 标的列表（保序去重）。
+
+    两种来源（§125 RE2-1）：
+      · `universe_from="master:<表名>"` → 读主库 `TS_DATA_DIR/<表名>`（原有路径，行为逐字不变）
+      · `universe_from="<表名>"`（无前缀）→ 读 **alt 库** `ALT_DATA_DIR/<表名>`
+      · 空 → 报错（该表必须靠 --symbols 显式指定）
+    """
     src = sp.universe_from or ""
-    if not src.startswith("master:"):
+    if src.startswith("master:"):
+        table = src.split(":", 1)[1]
+        df = _read_master_table(table)
+        label = f"master:{table}"
+    elif src:
+        table = src
+        df = _read_alt_table(table)
+        label = f"alt:{table}"
+    else:
         raise ValueError(
-            f"{sp.name}: universe_from={src!r} 无法解析"
-            f"（当前支持 'master:<table>'；us 语义的 alt 内清单表请用 --symbols 显式指定）")
-    table = src.split(":", 1)[1]
-    df = _read_master_table(table)
+            f"{sp.name}: universe_from 为空——请用 --symbols 显式指定标的，"
+            f"或在 spec 中声明 'master:<表名>' / alt 内清单表名")
     col = sp.universe_col
     if col not in df.columns:
         raise KeyError(f"清单表 {table} 缺少列 '{col}'（实际: {list(df.columns)[:12]}）")
@@ -177,7 +208,7 @@ def load_universe(sp, verbose=True):
             seen.add(x)
             out.append(x)
     if verbose:
-        print(f"[清单] {sp.name} ← master:{table}.{col}"
+        print(f"[清单] {sp.name} ← {label}.{col}"
               f"（变换 {sp.universe_xform or '原样'}）→ {len(out):,} 只")
     return out
 
@@ -595,8 +626,8 @@ def show_status(table=None, verbose=True):
     print("-" * 80)
     for t in tables:
         sp = spec_mod.get(t)
-        if not (sp.universe_from or "").startswith("master:"):
-            print(f"{t:<18}  （alt 内清单/us 语义，进度见 us_backfill --status）")
+        if not (sp.universe_from or ""):
+            print(f"{t:<18}  （无 universe_from，须 --symbols 显式指定）")
             continue
         try:
             uni = load_universe(sp, verbose=False)
