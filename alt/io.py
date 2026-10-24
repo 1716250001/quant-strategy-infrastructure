@@ -187,29 +187,29 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
 
     # 6) 哨兵行剔除 + 升序归一化（spec 级开关，严禁按表名模糊匹配）
     #    源为日期降序 + 哨兵行（港股 1900-01-01 / 美股 1970-01-01）在尾。
-    #    当且仅当 spec.strip_sentinel=True 时才执行：
-    #      (a) 剔除 date < "19900101" 的哨兵行；(b) 升序排序。
+    #    剔除与排序解耦：
+    #      (a) 当且仅当 spec.strip_sentinel=True 时执行 date < "19900101" 剔除；
+    #      (b) 排序一律执行（凡 date_col 存在），与 spec 开关无关。
     #
-    #    ⚠ 两次设计教训：
-    #    ① §88 P0 回归：原用 "表名含 qfq_factor" 匹配，同时破坏了已上线的 hk_qfq_factor
-    #      （2,785 只全部有 1900-01-01 哨兵行，被 expand_qfq_factor 的 asof backward 依赖做
-    #      上市首年的基准因子）。改 spec 级开关后两侧独立控制。
-    #    ② §98 E-R3（更严重）：us_qfq_factor strip_sentinel=True 把 1 哨兵 + 12 条真实公司
-    #      行动（1987-05-11 首个除权 / 1987-06-16 2:1 拆股 / 1987-1989 季度分红）全删。
-    #      expand_us_qfq_factor 又用 qfq_factor=1.0 假哨兵顶替 → close_qfq ≡ close（偏差 224×）。
-    #      根因：**哨兵不是垃圾行**——它是"首个公司行动之前所有日期的基准因子"。
-    #      修复：us_qfq_factor.strip_sentinel=False（与 hk_qfq_factor 一致）。
+    #    ⚠ 三次设计教训：
+    #    ① §88 P0 回归：原用 "表名含 qfq_factor" 匹配 → 破坏已上线的 hk_qfq_factor
+    #      （2,785 只全部有 1900-01-01 哨兵行，expand_qfq_factor 的 asof backward 依赖）
+    #    ② §98 E-R3：us_qfq_factor strip_sentinel=True 把 1 哨兵 + 12 条真实公司行动全删
+    #      → 改 False（哨兵是"首个公司行动之前所有日期的基准因子"）
+    #    ③ §102 E-R5：排序被耦合进 if strip_sentinel 块 → strip_sentinel=False 后排序一起失效
+    #      → 两侧升序状态相反（us 降序 vs hk 升序）。修：排序解耦，凡 date_col 存在即升序
     #
-    #    当前两侧均为 False，哨兵行（含真实因子值，如 AAPL 19700101=0.004464285714）
-    #    原样入库。expand 层 sort_values("_dt") 自己升序 + ffill。
-    #
-    #    ⚠ 本步在 step 2b 日期归一化之后执行，date 列 dtype 已是 str（YYYYMMDD），
-    #      阈值也用字符串 "19900101" 比较（定长 YYYYMMDD 的 str 比较等价于数值比较）。
+    #    当前两侧 strip_sentinel 均为 False，哨兵行原样入库；排序一律执行，哨兵行自然排到最前。
+
+    # (a) 哨兵剔除（仅 strip_sentinel=True 时）
     if spec.strip_sentinel and spec.date_col in out.columns:
         before_qfq = len(out)
         out = out[out[spec.date_col] >= "19900101"].copy()  # 剔除哨兵（str 比较）
         if len(out) < before_qfq:
             warns.append(f"[strip_sentinel] {spec.name} 哨兵行剔除：{before_qfq} → {len(out)} 行（⚠ 确认非真实公司行动）")
+
+    # (b) 升序排序（与 strip_sentinel 解耦，凡 date_col 存在即执行）
+    if spec.date_col in out.columns:
         out = out.sort_values(["symbol", spec.date_col]).reset_index(drop=True)
 
     return out.reset_index(drop=True), warns
