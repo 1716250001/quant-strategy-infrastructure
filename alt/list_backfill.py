@@ -608,11 +608,19 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         print("\n[DRY-RUN] 未发请求、未写库。样例队首:", todo[:5])
         return {"table": sp.name, "planned": len(todo), "dry_run": True}
 
-    if not yes and len(todo) > 50 and sys.stdin is not None:
-        try:
-            input(f"  开始？回车继续（{len(todo):,} 只，Ctrl+C 中断，水位保护） > ")
-        except EOFError:
-            print("  （非交互环境，继续）")
+    # §130 RE3-5（阻断项修复）：交互确认不得挂死无人值守作业
+    #   原实现只有 `except EOFError` 兜底 ⇒ 当 stdin 是**管道/后台**（未关闭、非 TTY）时
+    #   `input()` 永久阻塞，进程卡在提示符上（R-2 是 15h 无人值守作业，会整段空转）。
+    #   现在：**非 TTY 一律自动确认**（先判 isatty），TTY 下才真的问人。
+    if not yes and len(todo) > 50:
+        stdin_tty = bool(sys.stdin is not None and getattr(sys.stdin, "isatty", lambda: False)())
+        if not stdin_tty:
+            print(f"  （非 TTY，自动确认继续：{len(todo):,} 只）")
+        else:
+            try:
+                input(f"  开始？回车继续（{len(todo):,} 只，Ctrl+C 中断，水位保护） > ")
+            except EOFError:
+                print("  （非交互环境，继续）")
 
     limiter = AltRateLimiter(dry_run=False, verbose=verbose)
     ckpt = AltCheckpoint()

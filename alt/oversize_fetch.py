@@ -538,6 +538,8 @@ def main():
                         help="list 表：本轮最多拉 N 只（首建传清单总数，如 18052）")
     parser.add_argument("--until", default=None,
                         help="分段停机点 HH:MM（到点不再发起新批次，在途批次完成并落盘后退出 0）")
+    # §130 RE3-5：主入口必须能显式跳过交互确认（原 list_backfill 有、本入口未透传）
+    parser.add_argument("--yes", action="store_true", help="跳过交互确认（无人值守必带）")
     args = parser.parse_args()
 
     if args.table == "hk_val_pct":
@@ -563,6 +565,7 @@ def main():
             dry_run=args.dry_run,
             budget=args.budget,
             until=args.until,
+            yes=args.yes,
         )
 
 
