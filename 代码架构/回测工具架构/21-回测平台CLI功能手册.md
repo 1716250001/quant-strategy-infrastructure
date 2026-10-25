@@ -1,13 +1,13 @@
-> 事实锚点：2026-10-18
+> 事实锚点：2026-10-25
 > - 覆盖范围：btf CLI 手册
 > - 事实真源：btf CLI 注册
-> - 关键计数：—
+> - 关键计数：1211（非 L5 1189 ＋ L5 22）＝工作区 2026-10-25
 
-# btf 回测平台 · CLI 功能手册（**v1.3.4**；2026-10-14：L2 治理批＋1.3.3 R66′）
+# btf 回测平台 · CLI 功能手册（**v0.4（btf 2.0.0 基线，2026-10-25）**；策略出仓＋性能/披露治理收口——KK/LL/MM 全批）
 
 > **定位**：`bt` 命令行的**完整功能参考**——逐命令给出用途、语法、参数表、行为分步、输出样例、退出码与限制。
 > **只用工具**请看 [20-回测平台使用指引.md](20-回测平台使用指引.md)（5 分钟上手向）；本手册面向「查参数、排故障、写自动化脚本」。
-> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **1.3.4**；1.3.4 发版 2026-10-14）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**；**2026-10-10 复核实测**（`bt --version` → `btf 1.2.4`；13 命令族含 `data`）；**2026-10-11 复核实测**（`bt --version` → `btf 1.3.1`——版本统一推进，无功能变更；**现版本见本手册头部，不在此行随批漂移**）。**2026-10-14 增量：`adhoc` 收编（HH-3，14 命令族；§4.14）**。
+> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **2.0.0**；2.0.0 发版 2026-10-25）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**；**2026-10-10 复核实测**（`bt --version` → `btf 1.2.4`；13 命令族含 `data`）；**2026-10-11 复核实测**（`bt --version` → `btf 1.3.1`——版本统一推进，无功能变更；**现版本见本手册头部，不在此行随批漂移**）。**2026-10-14 增量：`adhoc` 收编（HH-3，14 命令族；§4.14）**。**2026-10-25 增量（2.0.0）：策略出仓（`run.strategy_paths`，§4.2）／多基准（§7.2）／`bt dataset freeze` 清单契约与 MM-7 自锁修复（§4.8）／性能门槛 MM-8（§5.3）**。
 > **维护**：CLI 改动必须同步本手册；相邻文档：装配/引擎语义见 04/06 号，产物契约见 08 号，门禁口径见 09 号。
 > 2026-10-05 补 §0「输出解读纪律」（Q3 裁决 · 纪律类立即生效）。
 
@@ -42,7 +42,7 @@
 |---|---|---|---|
 | `execution.slippage` | **`none`** | 零滑点，系统性高估收益 | RC-01 |
 | `execution.handler_params.volume_participation` | **未设（= 100% 成交）** | 无视流动性约束 | RC-02 |
-| `report.benchmark` | **可不配** | 无基准裸奔，超额无锚 | RC-09 |
+| `report.benchmark` | **可不配** | 无基准裸奔，超额无锚（**MM-6**：亦可 1–3 个代码的数组，首个＝主基准——只有它进 `metrics.json`） | RC-09 |
 | `cost_model` | `flat_rate`（印花税恒 0.05%） | 2023-08 前 7.5 年卖出印花税按半价计 | RC-05 / 19 号 §60 |
 
 > ⚠ **默认值不等于推荐值。** 上表为**当前实测**的默认行为，不是最佳实践；
@@ -126,7 +126,7 @@ flowchart LR
 | 项 | 值 |
 |---|---|
 | 解释器 | `D:\量化策略\代码\_venv\Scripts\python.exe` |
-| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 1.3.4`） |
+| 命令入口 | `bt`（console script，已安装；`bt --version` → `btf 2.0.0`） |
 | 等价调用 | `python -m btf.cli.main <命令>`（脚本化推荐，不依赖 console script） |
 | 仓库根 | `D:\量化策略\代码\btf`（含 `btf/` 包、`tests/`、`tools/`、`schemas/`、`examples/`） |
 
@@ -135,11 +135,11 @@ flowchart LR
 | 选项 | 说明 |
 |---|---|
 | `-h`, `--help` | 打印帮助（顶层或任意子命令；退出码 0） |
-| `--version` | 打印 `btf 1.3.4`（版本单一真源 `btf/_version.py`） |
+| `--version` | 打印 `btf 2.0.0`（版本单一真源 `btf/_version.py`） |
 
 ```bash
 $ bt --version
-btf 1.3.4
+btf 2.0.0
 
 $ bt --help
 usage: bt [-h] [--version]
@@ -361,6 +361,23 @@ $ bt run --config config.yaml --out E:\bt_runs --verbose         # 换产物根 
 > bar 走 **qfq 后复权**（`ref＝period.start`，PIT 合规；**禁 hfq**）；`nominal` ＝名义价（旧行为，
 > 供对照）。**ADR-6 记账口径不变**——撮合/成本/费用/NAV/快照恒名义价。跨视图的 run 数字不可直接比较。
 
+> **`run.strategy_paths`（LL-2，2.0.0 新增配置字段）**：策略实现已出仓（`cc_strategies`），
+> `bt run` 须按下述写法装载——`run.strategy` 仍只接受 `module:Class` 点路径（Schema 正则禁止路径符），
+> 搜索路径由本字段声明：
+>
+> ```yaml
+> run:
+>   strategy: "cc_strategies.qidian_replica:QidianStrategy"
+>   strategy_paths: ["D:/量化策略/赤潮/研究"]      # 包的【父目录】，不是包目录
+> ```
+>
+> - 每项须为**绝对路径**（相对路径 ⇒ `ConfigError: run.strategy_paths: 须为绝对路径`）；
+> - 指向**策略包的父目录**（`…/赤潮/研究`，其下才是 `cc_strategies/`）；写包目录会 `ModuleNotFoundError`；
+> - 路径不存在或不是目录 ⇒ `ConfigError`（fail-closed）；
+> - 装载前**幂等注入 `sys.path`（去重、只加不删）**；
+> - 顶层包已被别处缓存装载 ⇒ **包名冲突 `ConfigError`**（见 §5.3）；
+> - 旧写法 `btf.strategy.<具体策略>` 已删 ⇒ 一律 `ImportError`。
+
 **注意**
 
 - **类型推断不做布尔化**：`--set data.quality.strict=true` 会以**字符串** `"true"` 进入合并 →
@@ -449,7 +466,7 @@ bt show --run <run_id> [--out-dir DIR]
 run_id      : 20260927_163148_7ecdb4（COMPLETED）
 产物目录    : D:\量化策略\回测产物\runs\20260927_163148_7ecdb4
 期间        : 2019-06-26 → 2026-09-23（初始资金 1000000.0）
-策略        : btf.strategy.qidian:QidianStrategy
+策略        : cc_strategies.qidian_replica:QidianStrategy（仓外；LL-1 已落地）
 数据        : feed=mixed 指纹=sha256:unknown
 规则版本    : none（overrides 0 条）
 配置哈希    : sha256:7ecdb47c2890c1e7d479d69936da6273fe0bcd115efb1b414b7299ce8910cba6
@@ -466,6 +483,10 @@ run_id      : 20260927_163148_7ecdb4（COMPLETED）
 
 补充行为：manifest 有 `assembly_notes` 时逐行 `[note] ...`；状态非 `COMPLETED` 时 stderr 提示
 `[warn] run 状态 FAILED（非 COMPLETED）：<error>（指标可能不完整）`；不可算指标（NaN/null）打印 `null`（与落盘一致）。
+
+> **样例口径（LL 批已落地，2026-10-24）**：上例策略行按 LL-1 后
+> **仓外点路径**改写；历史产物中的旧点路径（LL-1 迁移前的仓内路径）**不改写**，仍按
+> 当时实际记录展示。`run.strategy_paths` 用法见 [20 §10.5](20-回测平台使用指引.md)。
 
 > 样例解读：`代码版本` 是**该产物生成时**的版本（此 run 产生于 btf 0.2.0 时代，与当前 `--version`
 > 不一致属正常）；`指纹=sha256:unknown` 表示该产物未记录数据内容哈希（无记录时如实显示 unknown，
@@ -681,13 +702,13 @@ $ bt optimize --config config.yaml --grid "run.params.top_k=5" --workers 0   # �
 
 ### 4.8 `bt dataset` —— 黄金集（构建 / 对账 / 重算）
 
-**用途**：回归测试的黄金数据集三条路——构建写盘、与主库对账、只用案例内嵌数据独立重算。
+**用途**：回归测试的黄金数据集三条路——构建写盘、与主库对账、只用案例内嵌数据独立重算；外加**数据冻结清单**（`freeze`，CL-4 / MM-7）：对回测所用区间落一份只读、不可变的「表清单＋content_hash＋anchor_date」快照。
 
 **语法**
 
 ```bash
 bt dataset [build-golden|verify|refcalc] [--cases g1|all|id,id] [--list] [--verify] [--force] [--out DIR]
-bt dataset freeze --config <config.yaml> [--mode meta|fast|full] [--out DIR]     # CL-4
+bt dataset freeze --config <config.yaml> [--mode meta|fast|full] [--out DIR]     # CL-4；产物 <anchor_date>.json（只读）
 ```
 
 **参数**
@@ -701,7 +722,7 @@ bt dataset freeze --config <config.yaml> [--mode meta|fast|full] [--out DIR]    
 | `--force` | | 关 | 显式覆盖已构建案例（留痕） |
 | `--config` | | — | **freeze**：回测配置 YAML（冻结口径随它：区间 / 表集 / 档位）；缺 ⇒ 退出码 2 |
 | `--mode` | | 随 `data.fingerprint_mode`（`meta`） | **freeze**：指纹档位 `meta|fast|full` |
-| `--out` | | `BTF_DATASETS_DIR\golden_v1\cases`（`freeze`：`BTFTOOL_FREEZE_DIR`） | 输出目录 |
+| `--out` | | `BTF_DATASETS_DIR\golden_v1\cases`（`freeze`：`BTFTOOL_FREEZE_DIR`） | 输出目录；`freeze` 在该目录落 `<anchor_date>.json` |
 
 **动作语义**
 
@@ -710,7 +731,40 @@ bt dataset freeze --config <config.yaml> [--mode meta|fast|full] [--out DIR]    
 | `build-golden` | ✅ | ✅ | 从主库构建/更新案例文件；断言漂移 → FAIL |
 | `verify` | ✅ | ❌ | 现有案例与主库对账（主库变了/案例陈旧即暴露） |
 | `refcalc` | ❌ | ❌ | 只用**案例文件内嵌数据**独立重算断言（黄金集自洽性） |
-| `freeze`（**CL-4**） | ✅（只读指纹） | ✅（**只读清单**） | 落「表清单 ＋ content_hash ＋ anchor_date」不可变清单（S-2；19 号 §72.5）；`content_hash` 与 `manifest.data_version` / RC-14 门禁**同源**（BB-1 实算）；同 `anchor_date` 重复冻结 ⇒ **幂等**（哈希一致不覆写）/ **显式冲突**（哈希不同退出 1）；内存 Feed 拒绝冻结（退出 1，不产假清单） |
+| `freeze`（**CL-4**） | ✅（只读指纹） | ✅（**只读清单** `<anchor_date>.json`） | 落「表清单（名＋行数＋日期域）＋ content_hash ＋ anchor_date」不可变清单（S-2；19 号 §72.5）；`content_hash` 与 `manifest.data_version` / RC-14 门禁**同源**（BB-1 实算）；同 `anchor_date` 重复冻结 ⇒ **幂等**（哈希一致**不覆写**，返回 `action=idempotent`）/ **显式冲突**（哈希不同 ⇒ `FileExistsError`，退出 1，不覆写不追加版本）；内存 Feed 拒绝冻结（退出 1，不产假清单）；MM-7：冻结时**进程内**临时放开 `data.dataset.{expected_hash,version}`（不落盘、不改配置），已钉旧指纹不再反噬 |
+
+**`freeze` 产物（清单契约 `freeze.v1`）**
+
+| 字段 | 含义 |
+|---|---|
+| `anchor_date` | 数据水位（表内最大日期，未裁剪）——**文件名即 `<anchor_date>.json`** |
+| `tables[]` | 每表 `name` / `rows` / `date_min` / `date_max`（表集与 RC-14 门禁**同源**） |
+| `content_hash` | 内容哈希（档位＝`--mode` / `data.fingerprint_mode`），与 `manifest.data_version` / RC-14 同源 |
+| `mode` | 指纹档位 `meta` / `fast` / `full` |
+| `created_at` / `period` / `root` / `btf_version` / `schema` | 生成时刻 / 配置区间 / 主库根 / 版本 / 契约 `freeze.v1` |
+| `validity` | S-2 有效边界注（原始库回填/重算后旧清单不可自证） |
+
+落点：`--out` 指定目录，缺省 `BTFTOOL_FREEZE_DIR`（`代码\_freeze\`）；写入后**置只读**（`S_IREAD`），不随回测覆写。
+
+**输出（`freeze`，字段格式取自实现；数值为结构示例）**
+
+```
+[ok] 冻结清单已落盘（只读）：D:\量化策略\代码\_freeze\<anchor_date>.json
+     anchor_date=<YYYY-MM-DD> | mode=fast | tables=<N> | content_hash=sha256:<...>
+```
+
+幂等（同 anchor 同哈希，不覆写）：
+
+```
+[info] 冻结清单已存在且 content_hash 一致（幂等，不覆写）：<path>
+```
+
+冲突（同 anchor 异哈希，stderr）：
+
+```
+[error] 冻结冲突：<anchor_date>.json 已存在且 content_hash 不一致——旧 <hash> / 新 <hash>；S-2 不静默覆写（R3：显式冲突报错），请先归档旧清单
+```
+
 
 **输出（`--list` 实测节选）**
 
@@ -741,9 +795,9 @@ g1_cash_div_same_day     G1  built    派息且 pay≡ex（2020+ 常态）：单
 
 | 码 | 含义 |
 |---|---|
-| 0 | 动作完成且断言全部通过（含 `--list`） |
-| 1 | 断言漂移（`[FAIL] ...`） |
-| 2 | 未知动作 / 主库不可用（路径不存在）/ 工具脚本缺失 |
+| 0 | 动作完成且断言全部通过（含 `--list`、`freeze` 新建/幂等） |
+| 1 | 断言漂移（`[FAIL] ...`）；**`freeze` 冲突**（同 anchor 异哈希，`FileExistsError`）/ 内存 Feed 拒冻 / 配置装配或主库不可用 |
+| 2 | 未知动作 / 主库不可用（路径不存在）/ 工具脚本缺失 / **`freeze` 缺 `--config`** |
 
 **示例**
 
@@ -766,6 +820,13 @@ $ bt dataset freeze --config config.yaml --mode fast --out E:\freeze   # 显式�
 - **`freeze`（CL-4）**：产出的清单文件**只读**（`BTFTOOL_FREEZE_DIR`，默认 `代码\_freeze\<anchor_date>.json`），
   **不得**被后续回测覆写；⚠ **S-2 有效边界**：只冻「清单＋哈希」，**依赖原始库不被改写**——原始库回填/重算后
   旧清单不可自证（登记要求见 08 号与 [20 号纪律](20-回测平台使用指引.md)）。
+- **`freeze` 幂等/冲突**：同 `anchor_date` 且 `content_hash` 一致 ⇒ 幂等（**不覆写**、退出 0）；同 anchor 异哈希
+  ⇒ **显式冲突**（退出 1），**不静默覆写、不追加版本**——需先归档旧清单。
+- **MM-7 自锁修复（2.0.0）**：配置里已钉 `data.dataset.expected_hash` / `version` 时，冻结入口在**进程内**
+  临时放开这两个键（只在内存、不落盘、不改配置、不影响 `bt run`），故换档（meta→fast）或重冻结可用。
+- **研究批次**：仓外 `scripts/freeze_batch.py --batch <batch_id> [--apply]` 逐份冻结并生成
+  `freezes/<batch>/index.json`；`--apply` **只改** `data.fingerprint_mode` 与 `data.dataset.expected_hash`
+  两处，任一失败整批退非零、不写 index（流程见 [20 §10.6](20-回测平台使用指引.md)）。
 
 ---
 
@@ -1110,7 +1171,11 @@ $ bt adhoc --list
 |---|---|---|
 | `[error] 配置源读取失败：...` | YAML 不可读 / 语法错 / 顶层非映射 | 检查路径与 YAML 缩进；顶层必须是 mapping |
 | `[error] 配置校验失败（N 处）：...` | Schema 违规 | 按列出的 JSON 路径逐条修（错误一次性全量给出） |
-| `[error] 策略不可加载：...`（`--resolve-strategy`） | 类名拼错 / 模块不在 sys.path | 修 `run.strategy`；项目外策略设 `PYTHONPATH` |
+| `[error] 策略不可加载：...`（`--resolve-strategy`） | 类名拼错 / 模块不在 sys.path | 修 `run.strategy`；项目外策略用 `run.strategy_paths`（推荐；LL-2 已交付）或 `PYTHONPATH` |
+| `run.strategy: 包名冲突：顶层包 '<pkg>' 已从 [...] 缓存装载，与配置声明的 strategy_paths=[...] 不符；包名冲突：请使用唯一包名（拒载，不静默沿用缓存）`（装配期 `ConfigError`） | 同名顶层包已从**别处**缓存装载（如真源 `代码/strategies`）；`sys.path` 注入不清洗 `sys.modules` ⇒ 导入会静默沿用缓存 | 用**唯一包名**（`cc_strategies`）；核对 `run.strategy_paths` 指**父目录**；**禁止** `del sys.modules` 后重导（同进程两套模块状态） |
+| `数据版本门禁未通过（RC-14）：声明 <hash> ≠ 实算 <hash>（档位 fast）——数据快照与声明不一致；如确认换数，请更新 data.dataset.version/expected_hash`（装配期 `ConfigError`） | 配置钉的 `expected_hash` 与本次实算（档位＝`data.fingerprint_mode`）不符：换数 / 换档 / 日更后指纹变化 | 确认换数 ⇒ 更新 `data.dataset.version` / `expected_hash`（研究批次按 `freeze_batch --apply` 重冻）；确认未换数 ⇒ 查档位与数据盘；**不得静默放行** |
+| `[PERF] B4 normalized 1196.28s > 1800s（raw 1459.52s / k 1.22）——回查 worker 数据路径（谓词下推 / 年表缓存 / 进程数适配）` | 归一化墙钟超预算（`k ≤ 3.0`，机器状态可判） | 按提示回查数据路径（谓词下推 / 年表缓存 / 进程数适配）；**不得改 budget** |
+| `[ENV] 标定系数 k=<k>>3.0，本机不具备判定条件——请空载重跑；不得据此判代码回归、不得改 budget` | 本机 CPU/IO 探针偏慢（k 越界） | **空载重跑**；不得据此判代码回归、不得改 budget、不得放宽断言 |
 | `[error] 装配失败：ContractVersionError: ...` | 策略/插件未声明或主版本不符 `contract_version` | 类里声明 `contract_version = CONTRACT_VERSION` |
 | `[error] 装配失败：... risk.rules 为空 ...` | 空风控链 fail-closed | 写 `risk.rules`；调试才加 `allow_empty_chain: true` |
 | `[error] 装配失败：... 覆盖度 ...` | 区间早于数据约束起点（如涨跌停） | 收窄区间；或显式 `data.allow_degraded_limit: true` |
@@ -1118,8 +1183,13 @@ $ bt adhoc --list
 | `[error] --grid 需形如 path=v1,v2，得 '...'` | grid spec 语法错 | 检查分号/逗号/等号 |
 | `[error] run 不存在或无 manifest：<id>` | run_id 写错或产物根不对 | `bt runs` 找回；必要时 `--out-dir` |
 | `[fail] R1 复核失败：摘要不一致` | 产物被改 / 口径漂移 | 对照 `manifest.code_version`、检查是否手改产物 |
-| `[error] 未知 dataset 动作：'...'` | 动作拼错 | 用 `build-golden\|verify\|refcalc` |
+| `[error] 未知 dataset 动作：'...'` | 动作拼错 | 用 `build-golden\|verify\|refcalc\|freeze` |
 | `[error] 主库不可访问: ...` | 数据盘未挂载 / 路径不对 | 检查 `BTF_DATA_DIR` |
+
+> **性能门槛判定口径（MM-8，2.0.0）**：`normalized = raw ÷ k ≤ budget`；**先判达标，再判环境**——未达标且
+> `k > 3.0` ⇒ `[ENV]`，否则 `[PERF]`；判定取 **min-of-2**（每个基准最多跑 2 次，任一次达标即通过）；
+> `k` 只放大不缩小（clamp 上限 3.0）。预算 **20 / 60 / 1800 秒未动**。
+> **2026-10-25 空载实测**：B2 **14.5s** · B3 **39.2s** · B4 外推 **1552s**。
 
 ---
 
@@ -1154,6 +1224,7 @@ $ bt adhoc --list
 | `contract_version` / `btf_contract_version` | 产物契约版本 / 契约基线 |
 | `metrics_digest` | **R1 对账锚**（`bt verify` 比对对象） |
 | `assembly_notes` | 装配期说明（如质检抽样、降级放行） |
+| `benchmarks` | 基准对照明细（**MM-6**）：每个基准一套相对指标；**首个＝主基准**（其数值亦进 `metrics.json`），其余为**对照基准**仅披露（报告「基准对照（多基准）」章节 **≥2 个才渲染**） |
 
 ### 6.3 只读命令对异常产物的行为（fail-visible）
 
@@ -1189,6 +1260,7 @@ L1 内置默认  →  L2 环境变量 BTF_*  →  L3 用户 YAML  →  L4 CLI --
 |---|---|---|
 | `schema_version` | ✅ | 固定 `"backtest.v1"` |
 | `run.strategy` | ✅ | `module:Class` 点分路径 |
+| **`run.strategy_paths`** | | **2.0.0 新增**：外部策略搜索路径（字符串数组，**绝对路径**、指向**包的父目录**）；装载前幂等注入 `sys.path`（去重、只加不删），路径不存在即 `ConfigError`；同名包冲突拒载（§4.2 / §5.3） |
 | `run.period` | ✅ | `start`/`end`（`YYYY-MM-DD`） |
 | `run.universe` | | `explicit`（symbols）/ `all` / `index`（`hs300` 别名或 `000300.SH`，PIT 快照） |
 | `run.initial_cash` | | 默认 1,000,000 |
@@ -1299,7 +1371,7 @@ $ bt cold-backup --verify <冷备目录>                  # ⑤ 异地校验（�
 ### 附录 A：速查卡（一屏带走）
 
 ```
-bt --version                                          # btf 1.3.4
+bt --version                                          # btf 2.0.0
 bt config-check <yaml> [--dump] [--resolve-strategy]  # 静态校验
 bt run --config <yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 bt runs [--latest N] [--out-dir DIR]                  # 只读清单
@@ -1308,6 +1380,7 @@ bt report --run <id> [--out HTML] [--out-dir DIR]     # 幂等出报告
 bt verify --run <id> [--out-dir DIR]                  # 重算对账
 bt optimize --config <yaml> --grid "p=v1,v2;p2=v1,v2" [--objective X] [--workers N] [--top N] [--out F]
 bt dataset [build-golden|verify|refcalc] [--cases g1|all] [--list] [--force] [--out DIR]
+bt dataset freeze --config <yaml> [--mode meta|fast|full] [--out DIR]   # 数据冻结清单（<anchor_date>.json，只读）
 bt test [--layer l1|l2|l3|l4|l5|all] [--pattern EXPR] [--path P]
 bt validate walk-forward --config <yaml> --window N [--test N] [--step N] [--mode rolling|anchored] [--purge N] [--embargo N] [--no-persist]
 bt validate mc --run <id> [--n N] [--seed N] [--out F]  # 读回产物，不重跑引擎
