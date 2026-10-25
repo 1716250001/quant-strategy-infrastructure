@@ -123,6 +123,31 @@ def _fill_from_row(row: Mapping[str, Any]) -> Fill:
     )
 
 
+def inject_strategy_paths(run_cfg: Mapping[str, Any]) -> list[Path]:
+    """按 `run.strategy_paths` **幂等**注入 `sys.path`，返回已注入目录列表。
+
+    **T-18（19 号 §149 D-2）**：`_load_strategy` 与 `optimize.walkforward.
+    declared_lookback` **共用本函数**——后者原用裸 `importlib.import_module`
+    读策略声明，仓外模块（`cc_strategies`）在 runtime 注入前必然 `ImportError`
+    ⇒ `--warmup auto` 静默回落 252（LL 批策略出仓带来的回归）。
+    口径与 `_load_strategy` 完全一致：**绝对路径、存在且为目录、去重、只加不删**。
+    """
+    injected: list[Path] = []
+    for raw in run_cfg.get("strategy_paths") or []:
+        path = Path(str(raw))
+        if not path.is_absolute():
+            raise ConfigError(
+                [f"run.strategy_paths: 须为绝对路径，得 {raw!r}"])
+        path = path.resolve()
+        if not path.is_dir():
+            raise ConfigError(
+                [f"run.strategy_paths: 路径不存在或不是目录 {path}"])
+        if str(path) not in sys.path:
+            sys.path.insert(0, str(path))
+        injected.append(path)
+    return injected
+
+
 class BTFRuntime:
     """运行时门面（04 §8.3.8 签名；M1 内核纵切）。
 
@@ -162,6 +187,12 @@ class BTFRuntime:
         self.benchmark_details: tuple[dict[str, Any], ...] = ()
         #: 数据指纹真值（BB-1 重路：装配期实算；落 manifest.data_version）
         self.data_version_info: dict[str, Any] = {}
+        #: 数据版本门禁的跳过声明（**T-18 / 19 号 §149 D-1**）：默认 `None`＝正常
+        #: 门禁；`run_walk_forward` 在每折装配前置 `"skipped_walk_forward"` ⇒
+        #: 只跳**哈希**门禁（水位门禁照旧）。是否**实际**跳过由
+        #: `version_gate_skipped_hash` 记录——未声明版本的配置不会误报"已跳过"。
+        self.version_gate_skip_reason: str | None = None
+        self.version_gate_skipped_hash: bool = False
         #: 数据不变量校验结果（批 8 CC-1..CC-6；装配期实算，落 run 目录 + 报告）
         self.data_quality: dict[str, Any] = {}
         #: 分步耗时（R5-4 / P2-4：`bt run --verbose` 与 optimize 观测；
@@ -420,17 +451,9 @@ class BTFRuntime:
         """module:Class 动态加载 + 构造参数注入（装配期，非 doc 的 init 期）。"""
         # LL-2（19 号 §133.2）：外部策略搜索路径；**幂等、去重、只加不删**。
         # 须为绝对路径（相对路径会随 CWD 漂移，破坏跨机可复现）；不存在即拒载。
-        for raw in run_cfg.get("strategy_paths") or []:
-            path = Path(str(raw))
-            if not path.is_absolute():
-                raise ConfigError(
-                    [f"run.strategy_paths: 须为绝对路径，得 {raw!r}"])
-            path = path.resolve()
-            if not path.is_dir():
-                raise ConfigError(
-                    [f"run.strategy_paths: 路径不存在或不是目录 {path}"])
-            if str(path) not in sys.path:
-                sys.path.insert(0, str(path))
+        # T-18（§149 D-2）：逻辑抽到 `inject_strategy_paths`，与 WF 的
+        # `declared_lookback` 共用同一份实现（禁第三份拷贝）。
+        injected = inject_strategy_paths(run_cfg)
         spec = run_cfg["strategy"]
         module_name, _, class_name = spec.partition(":")
         # MM-2（19 号 §135.2）：同名包冲突检测（防御层）。sys.path 注入**不清洗
@@ -440,8 +463,6 @@ class BTFRuntime:
         # （同进程两套模块状态）。判定口径：缓存模块的 `__path__`（普通模块取
         # `__file__` 父目录）须位于某个注入目录**之下**——同源复用放行、异源
         # 同名拒载；未声明 `strategy_paths` 时不检测（无注入即无本批冲突面）。
-        injected = [Path(str(raw)).resolve()
-                    for raw in (run_cfg.get("strategy_paths") or [])]
         if injected:
             top = module_name.partition(".")[0]
             cached = sys.modules.get(top)

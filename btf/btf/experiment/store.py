@@ -233,6 +233,7 @@ class LocalRunStore:
         rules_overrides: Sequence[Mapping[str, Any]] = (),
         assembly_notes: Sequence[str] = (),
         data_version: Mapping[str, Any] | None = None,
+        version_gate: str | None = None,
     ) -> RunManifest:
         """启动期：建目录 + **先写骨架 manifest**（崩溃可审计，08 §13.2）。
 
@@ -247,7 +248,8 @@ class LocalRunStore:
         manifest = RunManifest.skeleton(
             config, run_id=run_id, data_fingerprint=data_fingerprint,
             rules_version=rules_version, rules_overrides=rules_overrides,
-            assembly_notes=assembly_notes, data_version=data_version)
+            assembly_notes=assembly_notes, data_version=data_version,
+            version_gate=version_gate)
         run_id = self._unique_run_id(manifest.run_id)
         if run_id != manifest.run_id:
             manifest = replace(manifest, run_id=run_id)

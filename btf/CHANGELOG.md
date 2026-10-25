@@ -5,6 +5,55 @@
 
 ## [未发布]
 
+## [3.0.0] — 2026-10-25（**修复版：WF 数据版本门禁兼容 ＋ 仓外策略 lookback 声明**；19 号 §149–§152；T-18）
+
+> **本版无 BREAKING**——纯修复版；按 10-24「任一改动即大版本」规则升 major，但**无破坏性变更**，
+> 不删命令、不改配置字段、不改记账/撮合/成本口径。主工程版本与 btf 自此**解耦**（19 号 §153），
+> 主工程 `7.0.0` 不随本版跳动。门禁：`bt check` **10/10**、全量 pytest **1217（非 L5 1195 ＋ L5 22）/ skip 0**。
+> **O-1（文档守卫豁免词回退）不在本版**：按老大 2026-10-25 裁定「先发版，O-1 待补」，
+> 待审查方改账本文案后另批回缩（现行 6 条精确短语保留，见 18 号 §T-19）。
+
+### 新增（Added）
+
+- **回归用例 `tests/unit/test_wf_defects_149.py`（6 例）**：哈希门禁 fail-closed／折内跳哈希但保留
+  `anchor_date` 水位门禁／三处 `version_gate` 披露／仓外策略 lookback 声明解析／导入失败原因可区分。
+- **`version_gate` 披露字段**：manifest（`RunManifest.version_gate`，键恒在）＋ WF 结果 JSON（顶层与逐折）
+  ＋ 控制台 `[warn]`，三处同源。
+
+### 变更（Changed）
+
+- **`inject_strategy_paths` 抽为 runtime 模块级助手**：`_load_strategy` 与
+  `walkforward._lookback_probe` **共用同一实现**（幂等、绝对路径、存在即目录、只加不删）——
+  消除仓外策略路径注入的第三份实现。
+- **WF 折内数据版本门禁**：`version_gate=skipped_walk_forward` 时**只跳哈希门禁**，
+  `anchor_date` 水位门禁照旧 fail-closed；manifest／结果 JSON／控制台三处披露同步。
+- **`_resolve_warmup`** 返回 `(bars, source, why)`；`auto:default_252` 告警文案追加「原因：…」，
+  与「类无该属性」可区分。
+- **插件边界基线**：79 文件；history 63 条（R-1 仅重刷 `btf/runtime/run_orchestrator.py`，`--reason` 留痕）。
+- **文档计数**：工作区 **1217/1195/22**（01/07/09/11/16/README 已同步；tag 快照 1219/1196、1183/1160 保留）。
+
+### 修复（Fixed）
+
+- **D-1（P0）`bt validate walk-forward` 与 RC-14 数据版本门禁不兼容**：折区间是整段冻结区间的子区间，
+  哈希必然不同 ⇒ 原实现每折 fail-closed。现折内**只跳哈希门禁**，水位门禁保留；
+  反向对照（`anchor_date` 未来）仍 EXIT 1。
+- **D-2（P1）仓外策略 `lookback_bars` 声明失效**：`declared_lookback` 裸 `import_module` 时
+  `sys.path` 尚未注入 ⇒ 必 `ImportError` ⇒ `--warmup auto` 静默回落 252。现导入前先
+  `inject_strategy_paths`；实测 `warmup=2（auto:strategy）`，无 252 告警。
+- **R-1（P0）插件边界基线过期**：`run_orchestrator.py` 基线哈希在 13:09 刷新后仍被改动 ⇒
+  第 10 项门禁 FAIL；已走刷新入口重刷，`bt check` 10/10。
+
+### 移除（Removed）
+
+- 无。本版不删除任何命令、配置字段或行为。
+
+### 发版说明（两条）
+
+1. **WF 的 `version_gate=skipped_walk_forward` 是机制披露，不是数据一致性证明**：哈希门禁在折内被跳过
+   （子区间指纹必然不同），但 `anchor_date` 水位门禁仍生效；若需整段指纹一致，请在整段 run 上验证。
+2. **O-1 未处理**：`tests/integration/test_doc_claim_guards.py::_HISTORY_MARKERS` 仍保留 6 条精确短语；
+   审查方改 19 号 §149 L16202 文案后，执行方将按 §152 A 回缩（见 18 号 §T-19）。
+
 ## [2.0.0] — 2026-10-25（**策略出仓 ＋ 性能/披露治理收口**；19 号 §134–§143；KK/LL/MM 全批）
 
 > 本版为 **major**：策略装载范式变更 ＋ 内置策略删除（见「破坏性变更」）。记账／撮合／成本口径未变

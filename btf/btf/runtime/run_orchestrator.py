@@ -372,6 +372,9 @@ class RunOrchestrator:
             rules_overrides=self.rt._rules_overrides(),
             assembly_notes=self.rt.assembly_notes,     # P1-NEW-5：口径随产物落盘
             data_version=self.rt.data_version_info,    # BB-1：数据指纹落真值
+            # T-18（19 号 §149 D-1）：WF 折内跳过哈希门禁时**必须落盘披露**
+            version_gate=(self.rt.version_gate_skip_reason
+                          if self.rt.version_gate_skipped_hash else None),
         )
         self.rt.last_run_id = manifest.run_id
         # CC-6 产物（批 8）：校验报告随 run 落盘（**恒定落盘**：即使 enabled=false

@@ -93,5 +93,11 @@ MM-7 研究批次数据冻结（并修 `bt dataset freeze` 自锁、RC-14 门禁
 （`tests/benchmark/_perf.py`；预算 20/60/1800 未动）＋MM-5 `examples` 可装载（N15 闭环）。
 **记账/撮合/成本口径未变**；`bt check` **10/10**、全量 **1211**（非 L5 **1189** ＋ L5 **22**）/ skip 0；
 发版说明三条坑见 `CHANGELOG.md` §2.0.0。
+
+**2.0.0 → 3.0.0**（2026-10-25；**修复版**，19 号 §149–§152；T-18）：**无 BREAKING**——
+D-1（WF 与 RC-14 门禁不兼容：折内只跳哈希门禁、保留 `anchor_date` 水位门禁，三处 `version_gate`
+披露）＋ D-2（仓外策略 `lookback_bars` 声明失效：`declared_lookback` 导入前注入
+`run.strategy_paths`，`--warmup auto` 实测 2）＋ R-1（插件边界基线重刷）；O-1（文档守卫豁免词
+回退）按老大裁定**暂缓**。主工程版本与 btf **解耦**（19 号 §153），主工程 7.0.0 不动。
 """
-__version__ = "2.0.0"
+__version__ = "3.0.0"

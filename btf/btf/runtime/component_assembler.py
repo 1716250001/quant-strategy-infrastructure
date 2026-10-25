@@ -292,6 +292,11 @@ class ComponentAssembler:
         路径零成本（BB-1 纪律：网格搜索不因门禁变慢）。
         """
         cfg = self.rt.config or {}
+        # **T-18（19 号 §149 D-1）**：WF 折内允许**只跳哈希门禁**——折区间是整段
+        # 冻结区间的子区间，实算指纹必然不同（机制冲突而非换数）；水位门禁照旧
+        # （禁止一并放宽）。跳过由 run_walk_forward 显式置位，且**三处披露缺一即
+        # 验收不通过**（本处 assembly_notes / manifest.version_gate / 结果 JSON+控制台）。
+        skip_reason = getattr(self.rt, "version_gate_skip_reason", None)
         data_cfg = cfg.get("data") or {}
         ds_cfg = data_cfg.get("dataset") or {}
         declared_version = str(ds_cfg.get("version") or "").strip()
@@ -316,10 +321,18 @@ class ComponentAssembler:
                 "拒绝静默放行（RC-14：门禁的意义即「不一致即拒」）"])
         computed_hash = str(info.get("content_hash") or "")
         if declared and computed_hash != declared:
-            raise ConfigError([
-                f"数据版本门禁未通过（RC-14）：声明 {declared} ≠ 实算 "
-                f"{computed_hash}（档位 {mode}）——数据快照与声明不一致；"
-                f"如确认换数，请更新 data.dataset.version/expected_hash"])
+            if skip_reason:
+                self.rt.version_gate_skipped_hash = True
+                self.rt.assembly_notes.append(
+                    "数据版本门禁（RC-14）：**哈希门禁按折跳过**"
+                    f"（version_gate={skip_reason}）：声明 {declared} ≠ 实算 "
+                    f"{computed_hash}（档位 {mode}）——折区间为整段子区间，"
+                    "指纹必然不同（机制约束，非换数）；anchor_date 水位门禁仍生效")
+            else:
+                raise ConfigError([
+                    f"数据版本门禁未通过（RC-14）：声明 {declared} ≠ 实算 "
+                    f"{computed_hash}（档位 {mode}）——数据快照与声明不一致；"
+                    f"如确认换数，请更新 data.dataset.version/expected_hash"])
         watermarks = [d.get("date_max")
                       for d in info.get("tables_detail", {}).values()
                       if d.get("date_max")]

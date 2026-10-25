@@ -68,21 +68,23 @@ _WARMUP_DECL_ATTRS = ("lookback_bars", "required_lookback_bars",
                       "min_history_bars")
 
 
-def declared_lookback(config: Mapping[str, Any]) -> int | None:
-    """读 `run.strategy` **声明的**所需历史 bar 数（R58′；未声明 ⇒ `None`）。
+def _lookback_probe(config: Mapping[str, Any]) -> tuple[int | None, str]:
+    """→ `(声明值, 原因)`；原因 ∈ `strategy`／`类无该属性`／`导入失败：<msg>`／`无 run.strategy`。
 
-    约定：策略类声明 `lookback_bars`（int；或 `lookback_bars()` 返回 int）；
-    本函数只读配置 + 类属性——**不装配、不运行引擎**（零副作用）。
-    未声明 ⇒ 调用方按 `DEFAULT_WARMUP_BARS` 保守默认 **并 WARN**（禁静默）。
+    **T-18（19 号 §149 D-2）**：导入前先按 `run.strategy_paths` **幂等注入
+    `sys.path`**（与 `Runtime._load_strategy` 共用 `inject_strategy_paths`）——
+    仓外策略（`cc_strategies`）否则必 `ImportError`，`--warmup auto` 静默回落 252。
     """
     run_cfg = config.get("run") or {}
     module_name, _, class_name = str(run_cfg.get("strategy") or "").partition(":")
     if not module_name or not class_name:
-        return None
+        return (None, "无 run.strategy")
     try:
+        from btf.runtime._runtime import inject_strategy_paths
+        inject_strategy_paths(run_cfg)
         cls = getattr(importlib.import_module(module_name), class_name)
-    except (ImportError, AttributeError):
-        return None
+    except Exception as exc:           # 注入/导入失败 ⇒ 降级，但**原因可区分**
+        return (None, f"导入失败：{type(exc).__name__}: {exc}")
     for attr in _WARMUP_DECL_ATTRS:
         val = getattr(cls, attr, None)
         if val is None:
@@ -93,23 +95,34 @@ def declared_lookback(config: Mapping[str, Any]) -> int | None:
             except Exception:                       # 声明不可用 ⇒ 视为未声明
                 continue
         if isinstance(val, int) and not isinstance(val, bool) and val > 0:
-            return int(val)
-    return None
+            return (int(val), "strategy")
+    return (None, "类无该属性")
+
+
+def declared_lookback(config: Mapping[str, Any]) -> int | None:
+    """读 `run.strategy` **声明的**所需历史 bar 数（R58′；未声明 ⇒ `None`）。
+
+    约定：策略类声明 `lookback_bars`（int；或 `lookback_bars()` 返回 int）；
+    本函数只读配置 + 类属性——**不装配、不运行引擎**（零副作用）。
+    未声明 ⇒ 调用方按 `DEFAULT_WARMUP_BARS` 保守默认 **并 WARN**（禁静默）。
+    """
+    return _lookback_probe(config)[0]
 
 
 def _resolve_warmup(config: Mapping[str, Any],
-                    explicit: int | None) -> tuple[int, str]:
-    """→ `(warmup_bars, source)`；source ∈ `explicit`／`auto:strategy`／
-    `auto:default_252`／`legacy_zero`（§107.3.2-4/5）。"""
+                    explicit: int | None) -> tuple[int, str, str]:
+    """→ `(warmup_bars, source, why)`；source ∈ `explicit`／`auto:strategy`／
+    `auto:default_252`／`legacy_zero`（§107.3.2-4/5）；`why` 供 WARN 文案分化。"""
     if explicit is not None:
         n = int(explicit)
         if n < 0:
             raise ValueError(f"warmup 须 ≥ 0，得 {explicit!r}")
-        return (n, "legacy_zero" if n == 0 else "explicit")
-    look = declared_lookback(config)
+        return (n, "legacy_zero" if n == 0 else "explicit", "explicit")
+    look, why = _lookback_probe(config)
     if look is not None:
-        return (look, "auto:strategy")
-    return (DEFAULT_WARMUP_BARS, "auto:default_252")
+        return (look, "auto:strategy", why)
+    return (DEFAULT_WARMUP_BARS, "auto:default_252", why)
+
 
 #: 汇总统计的候选指标键（逐折交集存在者才进 summary；含基准项——配基准时）
 _SUMMARY_KEYS = (
@@ -283,12 +296,13 @@ def run_walk_forward(
     """
     from btf.runtime import BTFRuntime
 
-    warm_bars, warm_src = _resolve_warmup(config, warmup)
+    warm_bars, warm_src, warm_why = _resolve_warmup(config, warmup)
     notes: list[str] = []
     if warm_src == "auto:default_252":
         notes.append(
             "策略未声明 lookback（`lookback_bars`）⇒ OOS 折 warm-up 采用**保守默认** "
-            f"{DEFAULT_WARMUP_BARS} 交易日（warmup_source=auto:default_252）；"
+            f"{DEFAULT_WARMUP_BARS} 交易日（warmup_source=auto:default_252；"
+            f"原因：{warm_why}）；"
             "可用 `--warmup N` 显式指定（`--warmup 0` 复现旧行为）")
         logger.warning("walk-forward：%s", notes[-1])
     elif warm_src == "legacy_zero":
@@ -301,6 +315,17 @@ def run_walk_forward(
                             purge=purge, embargo=embargo)
     step_eff = test if step is None else step
     idx_of = {d.to_ymd(): i for i, d in enumerate(days)}     # 交易日粒度反查
+
+    def _fold_runtime(period_cfg: Mapping[str, Any]) -> Any:
+        """**T-18（19 号 §149 D-1）**：折内**只跳哈希门禁**（水位门禁照旧）。
+
+        折区间只是整段冻结区间的子区间 ⇒ 实算指纹必然与整段声明不同（机制冲突，
+        非换数）；跳过必须三处披露（manifest / 结果 JSON / 控制台），见下方 `version_gate`。
+        """
+        rt = BTFRuntime()
+        rt.version_gate_skip_reason = "skipped_walk_forward"
+        return rt.load_config(period_cfg).build()
+
     folds: list[dict[str, Any]] = []
     for w in windows:
         fold: dict[str, Any] = {"index": w.index, **{k: v for k, v in
@@ -329,16 +354,15 @@ def run_walk_forward(
             f"purge={purge}, embargo={embargo}, warmup={eff_warm}"
             f"[{warm_src}]）")
         if include_is:
-            rt_tr = BTFRuntime().load_config(
-                _fold_period(config, w, "train")).build()
+            rt_tr = _fold_runtime(_fold_period(config, w, "train"))
             rt_tr.assembly_notes.append(note + "｜段=训练（IS）")
             res_tr = rt_tr.run(persist=False)
             fold["train_metrics"] = _metrics_of(rt_tr, res_tr)
         else:
             fold["train_metrics"] = None
 
-        rt_te = BTFRuntime().load_config(
-            _fold_period(config, w, "test", warm_start=warm_start)).build()
+        rt_te = _fold_runtime(
+            _fold_period(config, w, "test", warm_start=warm_start))
         rt_te.assembly_notes.append(
             note + f"｜段=测试（OOS，判定只看本段；exec 含热身 {eff_warm} 日，"
                    f"指标口径仅 {ts_ymd}~{te_ymd}）")
@@ -346,6 +370,11 @@ def run_walk_forward(
         fold["test_metrics"] = _metrics_of(rt_te, res_te,
                                            test_start=w.test_start)
         fold["run_id"] = getattr(res_te, "run_id", None)
+        # **T-18（§149 D-1）**：披露"本折是否跳过了哈希门禁"（未声明版本的配置
+        # 不会到这里 ⇒ 恒 None，不会误报）
+        fold["version_gate"] = ("skipped_walk_forward"
+                                if getattr(rt_te, "version_gate_skipped_hash", False)
+                                else None)
         folds.append(fold)
 
     summary: dict[str, dict[str, float]] = {}
@@ -363,6 +392,12 @@ def run_walk_forward(
             "max": max(vals),
             "stdev": statistics.stdev(vals) if len(vals) > 1 else 0.0,
         }
+    skipped_gate = any(f.get("version_gate") for f in folds)
+    if skipped_gate:
+        logger.warning(
+            "walk-forward：数据版本门禁的**哈希门禁按折跳过**"
+            "（version_gate=skipped_walk_forward；anchor_date 水位门禁仍生效）"
+            "——折区间为整段子区间，实算指纹必然不同（机制约束，非换数）")
     return {
         "spec": {"mode": mode, "window": train, "test": test,
                  "step": step_eff, "purge": purge, "embargo": embargo,
@@ -373,6 +408,12 @@ def run_walk_forward(
         "folds": folds,
         "summary": summary,
         "warmup_note": "；".join(notes) or None,
+        # **T-18（§149 D-1）**：结果 JSON 披露（三处之一——manifest / JSON / 控制台）
+        "version_gate": "skipped_walk_forward" if skipped_gate else None,
+        "version_gate_note": (
+            "数据版本门禁：**哈希门禁按折跳过**（version_gate=skipped_walk_forward），"
+            "anchor_date 水位门禁仍生效——折区间为整段冻结区间的子区间，"
+            "实算指纹必然与整段声明不同（机制约束，非换数）" if skipped_gate else None),
         "note": ("逐折 OOS 指标全量输出（含最差折）；summary 含 min/max——"
                  "不得只报最优。**只报数字、不判定策略有效**（ADR-13）。"
                  "**OOS 折含 warm-up**（exec_range 含热身；metric_range 仅 test "

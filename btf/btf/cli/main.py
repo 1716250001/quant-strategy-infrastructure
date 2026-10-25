@@ -918,6 +918,10 @@ def _cmd_validate(args: argparse.Namespace) -> int:
               f" | warmup={spec['warmup']}（{spec['warmup_source']}）")
         if report.get("warmup_note"):
             print(f"[warn] {report['warmup_note']}")
+        # **T-18（19 号 §149 D-1）**：控制台披露（三处之一）——跳过哈希门禁
+        # 必须可见，禁止无披露地跳过
+        if report.get("version_gate"):
+            print(f"[warn] {report['version_gate_note']}")
         keys = ("sharpe_ratio", "annualized_return", "max_drawdown",
                 "total_return")
         print(f"{'折':>3}  {'训练窗':<23} {'测试窗':<23}  "

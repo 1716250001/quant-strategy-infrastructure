@@ -210,6 +210,13 @@ class RunManifest:
     #: metrics 只许数值）。空元组＝未配基准（RC-09）。报告据此渲染对照表。
     benchmarks: tuple[Mapping[str, Any], ...] = ()
 
+    #: 数据版本门禁的**跳过声明**（**T-18 / 19 号 §149 D-1**）：`None`＝正常门禁；
+    #: `"skipped_walk_forward"`＝WF 折内**只跳过哈希门禁**、`anchor_date` 水位门禁
+    #: 仍生效。原因：折区间只是整段冻结区间的子区间，实算指纹必然不同（机制冲突，
+    #: 非换数）——故必须显式披露，**禁止无披露地跳过**（三处披露：本字段/结果 JSON/
+    #: 控制台，缺一即验收不通过）。
+    version_gate: str | None = None
+
     # ── 生命周期 ──
     @classmethod
     def skeleton(
@@ -222,6 +229,7 @@ class RunManifest:
         rules_overrides: Sequence[Mapping[str, Any]] = (),
         assembly_notes: Sequence[str] = (),
         data_version: Mapping[str, Any] | None = None,
+        version_gate: str | None = None,
         now: datetime | None = None,
     ) -> RunManifest:
         """启动期骨架（status=RUNNING，metrics_digest=None——崩溃可审计）。"""
@@ -239,6 +247,7 @@ class RunManifest:
             rules_overrides=tuple(rules_overrides),
             seed=collect_seed(config),
             assembly_notes=tuple(assembly_notes),
+            version_gate=version_gate,
         )
 
     def completed(self, metrics: Mapping[str, float]) -> RunManifest:
@@ -269,6 +278,8 @@ class RunManifest:
             "error": self.error,
             "assembly_notes": list(self.assembly_notes),
             "benchmarks": [dict(row) for row in self.benchmarks],
+            # T-18（§149 D-1）：None 也照写（键恒在）——"有没有跳过"必须可判定
+            "version_gate": self.version_gate,
         }
 
     @classmethod
@@ -304,6 +315,8 @@ class RunManifest:
             assembly_notes=tuple(data.get("assembly_notes") or ()),
             # 同前：MM-6 前产物无该键 → 空元组（旧 run 照常可读可报告）
             benchmarks=tuple(data.get("benchmarks") or ()),
+            # T-18（§149 D-1）：旧产物无该键 ⇒ None（＝正常门禁，未跳过）
+            version_gate=data.get("version_gate"),
         )
 
 
