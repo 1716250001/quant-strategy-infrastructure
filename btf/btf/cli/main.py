@@ -253,10 +253,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # 极短区间告警（BB-4 / OBS-1，19 号 §33.6④）：**不阻断**，但必须提示
     # ——极短区间的部分指标"数学有定义、业务无意义"（如 3 日区间
     # information_ratio = −31.83），会污染 optimize --objective 排序。
-    if result.n_days < SHORT_PERIOD_TRADING_DAYS:
+    if result.n_days == 0:
+        print("[warn] 未读到任何交易日（检查 feed↔标的路由/数据区间）——"
+              "本次运行不含策略信息（C-3 / 19 号 §163）")
+    elif result.n_days < SHORT_PERIOD_TRADING_DAYS:
         print(f"[warn] 区间仅 {result.n_days} 个交易日（< "
               f"{SHORT_PERIOD_TRADING_DAYS}）：部分指标数学有定义但业务无意义，"
               f"勿用于 optimize --objective 排序（19 号 OBS-1/BB-4）")
+    if len(result.fills) == 0:
+        print("[warn] ⚠ 本次运行零成交（n_fills=0）：指标不含策略信息，"
+              "不得作为表现证据（C-1 / 19 号 §163）")
     return 0
 
 
@@ -269,11 +275,13 @@ def _args_run(p: argparse.ArgumentParser) -> None:
     p.add_argument("--out", help="产物根目录（默认 BTF_OUTPUT_DIR/runs）")
     p.add_argument("--verbose", action="store_true",
                    help="输出分步耗时 / 数据质检 / 数据指纹（R5-4）")
-    p.add_argument("--delisted-settlement", choices=("carry", "writeoff"),
+    p.add_argument("--delisted-settlement",
+                   choices=("carry", "writeoff", "writeoff_at_delist"),
                    dest="delisted_settlement",
-                   help="退市持仓残值口径（CL-3 / 19 号 §72.4）：carry=残值"
-                        "携带（默认＝现状）；writeoff=按 0 核销（压力口径，"
-                        "仅末日快照清零并下调 NAV）")
+                   help="退市持仓残值口径（CL-3 / K-2；19 号 §72.4/§163）："
+                        "carry=残值携带（默认＝现状）；writeoff=按 0 核销（压力口径，"
+                        "仅末日快照清零并下调 NAV）；writeoff_at_delist="
+                        "自末次 bar 次一交易日起逐日核销（终值同 writeoff）")
 
 
 # ─────────────────────────────────────────────────────────────

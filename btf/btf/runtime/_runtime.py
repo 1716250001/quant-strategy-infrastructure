@@ -311,6 +311,9 @@ class BTFRuntime:
         # `fund_daily`）⇒ 门禁与 `bt dataset freeze`/manifest 的指纹**不同源**，
         # 冻结值钉不住（钉了必报不匹配）。今移到宇宙解析之后：门禁、冻结清单、
         # manifest `data_version` 三者同一表集（纯股票宇宙下逐位不变）。
+        # C-2（19 号 §163）：feed↔标的路由校验——必须在宇宙解析之后、
+        # 数据版本门禁之前；不匹配即 ConfigError（不悄悄改 daily_table）。
+        self._guard_feed_routing()
         self._guard_dataset_version(period)
 
         # ETF 复权因子覆盖守卫（**RC-04，2026-10-05**）：**条件降级**——仅当
@@ -542,6 +545,10 @@ class BTFRuntime:
                 f"扩展：经 registry.register 注册后即可用）：{exc}"]) from exc
 
     # ── ③ 执行 ──
+    def _guard_feed_routing(self) -> None:
+        """feed↔标的路由守卫（C-2 / 19 号 §163）。"""
+        return ComponentAssembler(self).guard_feed_routing()
+
     def _guard_benchmark(self, period: Mapping[str, Any]) -> None:
         """装配期基准守卫（R4：逻辑下沉到 `component_assembler`）。"""
         return ComponentAssembler(self).guard_benchmark(period)
@@ -596,7 +603,11 @@ class BTFRuntime:
         API 侧记 warning，CLI 侧另行打印到 stdout（用户可见）。
         """
         n_days = getattr(result, "n_days", 0) or 0
-        if 0 < n_days < SHORT_PERIOD_TRADING_DAYS:
+        if n_days == 0:
+            logger.warning(
+                "未读到任何交易日（检查 feed↔标的路由/数据区间）——"
+                "本次运行不含策略信息（C-3 / 19 号 §163）")
+        elif n_days < SHORT_PERIOD_TRADING_DAYS:
             logger.warning(
                 "极短区间：%d 个交易日（< %d）——部分指标数学有定义但业务无意义，"
                 "勿用于 optimize --objective 排序（19 号 OBS-1/BB-4）",

@@ -81,6 +81,31 @@ class ComponentAssembler:
             tables.add("index_daily")
         return sorted(tables)
 
+    def guard_feed_routing(self) -> None:
+        """装配期 feed↔标的路由校验（C-2 / 19 号 §163）。
+
+        对宇宙逐标的取 `daily_table_of(sym)`，与当前 feed 的 `daily_tables`
+        能力表比对；不匹配即 `ConfigError`，点名标的与所需表。**不采纳**
+        自动路由（会改变同一配置历史 run 的数字，破坏可比性）。
+        自定义 Feed 未声明 `daily_tables` ⇒ 跳过（不阻断第三方 Feed）。
+        """
+        from btf.data.tables_meta import daily_table_of
+
+        caps = getattr(self.rt.feed, "daily_tables", None)
+        if not caps:
+            return
+        feed_name = str((self.rt.config.get("data") or {}).get("feed") or "?")
+        bad = [(sym, daily_table_of(sym)) for sym in self.rt.instruments
+               if daily_table_of(sym) not in caps]
+        if bad:
+            raise ConfigError([
+                f"feed↔标的路由不匹配：{sym} 需要 `{table}` 表，但 data.feed="
+                f"{feed_name} 仅支持 {sorted(caps)}——请改用 data.feed="
+                f"`mixed`（三表自动路由），或从宇宙移除该标的"
+                for sym, table in bad])
+        logger.info("feed 路由校验通过：%d 标的（%s 能力表 %s）",
+                    len(self.rt.instruments), feed_name, sorted(caps))
+
     def guard_benchmark(self, period: Mapping[str, Any]) -> None:
         """装配期基准守卫（P1-NEW-6）：形制 + 区间覆盖（零行即 ConfigError）。
 

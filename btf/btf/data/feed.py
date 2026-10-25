@@ -310,6 +310,9 @@ class TushareParquetFeed:
     """
 
     contract_version = CONTRACT_VERSION
+    #: **C-2（19 号 §163）**：本 Feed 的日线表能力表——装配期按
+    #: `daily_table_of(sym)` 比对，不匹配即 ConfigError（不悄悄补路由）。
+    daily_tables = frozenset({"daily"})
 
     def __init__(self, root: Path | None = None, *, state_provider: Any = None):
         """`state_provider`：状态面板合成器（`StateSynthesizer`），**构造期注入**。
@@ -730,6 +733,8 @@ class MixedDailyFeed:
     contract_version = CONTRACT_VERSION
     #: 截面迭代必须显式给出 symbols（engine 据此传入交易宇宙）
     requires_explicit_symbols = True
+    #: **C-2（19 号 §163）**：三表能力（股票/ETF/指数）。
+    daily_tables = frozenset({"daily", "fund_daily", "index_daily"})
 
     #: 日线列（三表同构，05 §9.4 T-01 / T-12）
     COLUMNS = ("ts_code", "trade_date", "open", "high", "low",

@@ -186,6 +186,9 @@ ETF = "510300.SH"
 
 def _etf_cfg(dataset: dict | None = None) -> dict:
     cfg = _lib_cfg(dataset)
+    # P17 / §163 C-2：ETF 宇宙必须走 mixed（tushare_parquet 仅 daily，
+    # 装配期已 fail-closed；本测试验证的是 ETF 表集与门禁同源）。
+    cfg["data"]["feed"] = "mixed"
     cfg["run"]["params"]["symbol"] = ETF
     cfg["run"]["universe"] = {"source": "explicit", "symbols": [ETF]}
     return cfg

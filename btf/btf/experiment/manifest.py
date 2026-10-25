@@ -217,6 +217,10 @@ class RunManifest:
     #: 控制台，缺一即验收不通过）。
     version_gate: str | None = None
 
+    #: **C-1（19 号 §163）**：本次 run 是否零成交（`n_fills == 0`）——
+    #: 下游机械识别「空跑」，不必自行从 metrics 推断；旧产物无该键 ⇒ False。
+    is_empty: bool = False
+
     # ── 生命周期 ──
     @classmethod
     def skeleton(
@@ -280,6 +284,8 @@ class RunManifest:
             "benchmarks": [dict(row) for row in self.benchmarks],
             # T-18（§149 D-1）：None 也照写（键恒在）——"有没有跳过"必须可判定
             "version_gate": self.version_gate,
+            # C-1（§163）：键恒在（旧读取器忽略即可）
+            "is_empty": self.is_empty,
         }
 
     @classmethod
@@ -317,6 +323,8 @@ class RunManifest:
             benchmarks=tuple(data.get("benchmarks") or ()),
             # T-18（§149 D-1）：旧产物无该键 ⇒ None（＝正常门禁，未跳过）
             version_gate=data.get("version_gate"),
+            # C-1（§163）：旧产物无该键 ⇒ False（非空跑）
+            is_empty=bool(data.get("is_empty", False)),
         )
 
 

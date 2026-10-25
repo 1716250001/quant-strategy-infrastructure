@@ -51,6 +51,8 @@ def compute_run_metrics(
                           if analyzer_names is not None else None,
                           resolver=resolver,
                           consolidations=consolidations)
-    if extras is not None:
+    # C-1（19 号 §163）：零成交 run 的基准相对项**不并入** metrics
+    # （键缺失，不用 None——metrics 只允许数值）；也不计算对照明细。
+    if extras is not None and len(fills) > 0:
         metrics.update(extras(snapshots) or {})
     return metrics

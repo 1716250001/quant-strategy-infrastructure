@@ -87,6 +87,10 @@ def _delisted_holding_notes(result: Any) -> list[str]:
     """
     mode = str(getattr(result, "delisted_settlement", "carry") or "carry")
     amount = float(getattr(result, "delisted_writeoff_amount", 0.0) or 0.0)
+    if mode == "writeoff_at_delist":
+        per = list(getattr(result, "delisted_settlement_notes", ()) or ())
+        if per:
+            return per
     notes: list[str] = []
     for item in getattr(result, "delisted_holdings", ()) or ():
         sym = str((item or {}).get("symbol", "?"))
@@ -408,6 +412,10 @@ class RunOrchestrator:
                 getattr(result, "consolidations", ()) or ())
             trades = pair_fills_to_trades(result.fills,
                                           consolidations=consolidations)
+            # C-1（19 号 §163）：零成交标记必须随 manifest 落盘（键恒在；
+            # `save_metrics → complete()` 从盘上读骨架再补全，故先写）。
+            manifest = replace(manifest, is_empty=(len(result.fills) == 0))
+            store.write_manifest(manifest)
             store.save_snapshots(manifest.run_id, result.snapshots)
             store.save_fills(manifest.run_id, result.fills)
             store.save_trades(manifest.run_id, trades)
