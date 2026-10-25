@@ -28,7 +28,6 @@ __all__ = [
     "OUTPUT_DIR",
     "PACKAGE_ROOT",
     "PROJECT_ROOT",
-    "QIDIAN_REF",
     "RUNS_DIR",
     "WORKSPACE_ROOT",
 ]
@@ -87,8 +86,3 @@ CORP_ACTION_DIR = _from_env("BTFTOOL_CORP_ACTION_DIR",
 # 19 号 §69.4：`BTF_` 前缀会被配置层当覆盖键注入 ⇒ 校验崩）。
 FREEZE_DIR = _from_env("BTFTOOL_FREEZE_DIR", PROJECT_ROOT / "_freeze")
 
-# 奇点战法信号层真源（M3 6.3；赤潮侧 `代码/strategies/qidian.py`）——标的池与
-# 阈值常量**运行时读取**，不在 btf 复制清单。BTF_QIDIAN_REF 可覆盖。
-QIDIAN_REF = _from_env(
-    "BTF_QIDIAN_REF", PROJECT_ROOT.parent / "strategies" / "qidian.py"
-)

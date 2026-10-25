@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """规则镜像导出：md_core 镜像区 → rules_mirror_v77.json（M3 任务 6.1）。
 
-    python tools/export_rules_mirror.py [--out 赤潮/rules_mirror_v77.json]
-                                        [--mdcore-root d:/量化策略/赤潮]
+    python tools/export_rules_mirror.py [--out <RULES_MIRROR>]
+                                        [--mdcore-root <CHICHAO_ROOT>]
 
 H2 单一真源链路（04 §8.3.7）：
     规则源 赤潮/rules/single-source.md（v7.7，权威·人读）
@@ -27,6 +27,10 @@ from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _paths import CHICHAO_ROOT, RULES_MIRROR
 
 #: 单位口径（md_core 镜像区口径：比率 vs 百分数）
 UNITS: dict[str, str] = {
@@ -89,9 +93,9 @@ def load_from_mdcore(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="规则镜像导出（H2 单一真源）")
-    parser.add_argument("--out", default=r"D:\量化策略\赤潮\rules_mirror_v77.json",
+    parser.add_argument("--out", default=str(RULES_MIRROR),
                         help="输出 JSON 路径")
-    parser.add_argument("--mdcore-root", default=r"d:\量化策略\赤潮",
+    parser.add_argument("--mdcore-root", default=str(CHICHAO_ROOT),
                         help="md_core 所在根目录")
     parser.add_argument("--version", default="v7.7", help="规则源版本标识")
     parser.add_argument("--stamp", action="store_true",

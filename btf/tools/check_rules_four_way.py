@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """规则四方机检（M3 任务 6.1；H2 单一真源）。
 
-    python tools/check_rules_four_way.py [--root d:/量化策略/赤潮]
+    python tools/check_rules_four_way.py [--root <CHICHAO_ROOT>]
                                          [--json .../rules_mirror_v77.json]
     （**不在** `bt check` 十项内：四方需赤潮源码树与镜像导出，属独立机检；单跑）
 
@@ -33,6 +33,10 @@ import json
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _paths import CHICHAO_ROOT, RULES_MIRROR
 
 EXIT_PASS, EXIT_FAIL, EXIT_ERROR = 0, 2, 3
 
@@ -245,8 +249,8 @@ def run_checks(root: Path, json_path: Path) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="规则四方机检（H2 单一真源）")
-    parser.add_argument("--root", default=r"d:\量化策略\赤潮", help="赤潮根目录")
-    parser.add_argument("--json", default=r"D:\量化策略\赤潮\rules_mirror_v77.json",
+    parser.add_argument("--root", default=str(CHICHAO_ROOT), help="赤潮根目录")
+    parser.add_argument("--json", default=str(RULES_MIRROR),
                         help="btf 规则缓存 JSON")
     args = parser.parse_args(argv)
 

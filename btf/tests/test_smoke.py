@@ -62,6 +62,51 @@ class TestChinesePathUtf8:
         assert "回测产物" in str(paths.OUTPUT_DIR) or os.environ.get("BTF_OUTPUT_DIR")
 
 
+#: D-4（19 号 §159）：硬编码盘符守卫扫描面——btf 包 ＋ examples ＋ tools；
+#: **不扫 tests/**（跨仓对账测试需真实私有路径，收敛属另案）。
+def _scan_files() -> list[Path]:
+    # 返回扫描文件清单（按路径排序；排除 __pycache__）。
+    root = Path(__file__).resolve().parents[1]
+    files: list[Path] = []
+    files.extend(p for p in (root / "btf").rglob("*.py")
+                 if "__pycache__" not in p.parts)
+    files.extend(p for p in (root / "examples").rglob("*")
+                 if p.suffix in {".py", ".yaml"} and "__pycache__" not in p.parts)
+    files.extend((root / "tools").glob("*.py"))
+    return sorted(set(files))
+
+
+def _hardcoded_drive_violations(files: list[Path]) -> list[str]:
+    # 扫描清单 → 违例清单（「文件:行号: 代码行」；空 = 全绿）。
+    # 判据：跳过 docstring（状态机）与注释（整行 #／行内 " # "），
+    # 仅对可执行代码断言不含 D:\\／C:\\ 字面量。
+    problems: list[str] = []
+    for path in files:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        in_doc = False
+        for i, raw in enumerate(text.splitlines(), 1):
+            line = raw.strip()
+            if not line:
+                continue
+            if path.suffix == ".py":
+                if line.startswith((chr(34) * 3, chr(39) * 3)):
+                    quote = line[:3]
+                    if line.endswith(quote) and len(line) > 3:
+                        continue
+                    in_doc = not in_doc
+                    continue
+                if in_doc or line.startswith("#"):
+                    continue
+            elif line.startswith("#"):
+                continue
+            code = raw.split(" # ", 1)[0]
+            for token in ("D:\\", "C:\\", "d:\\", "c:\\"):
+                if token in code:
+                    problems.append(f"{path}:{i}: {code.strip()}")
+                    break
+    return problems
+
+
 @pytest.mark.smoke
 class TestPathsDiscipline:
     """路径派生纪律（ADR-4：反例=config.py:101 硬编码盘符）。"""
@@ -79,34 +124,34 @@ class TestPathsDiscipline:
             importlib.reload(paths)
 
     def test_no_hardcoded_drive_in_source(self):
-        """paths.py 源码中禁止硬编码盘符（ADR-4 的机检落地）。
+        """全仓源码禁止硬编码盘符（ADR-4；D-4 扩至 btf/examples/tools）。
 
-        检查逻辑：跳过 docstring 块（状态机）与行内注释（剥离 ` # ` 之后），
-        仅对可执行代码断言不含 "D:\\" / "C:\\" 字面量。
+        §159 D-4：扫描面 = `btf/**/*.py` ＋ `examples/**/*.{py,yaml}` ＋
+        `tools/*.py`（**不扫 tests/**）；跳过 docstring 与注释后，对可执行
+        代码断言不含 `D:\\`／`C:\\` 字面量。扫描条目数须 ≥ 105。
         """
-        src = Path(paths.__file__).read_text(encoding="utf-8")
-        in_doc = False
-        for raw in src.splitlines():
-            line = raw.strip()
-            if not line:
-                continue
-            # docstring 状态机：首尾行翻转；docstring 内部行跳过
-            if line.startswith(('"""', "'''")):
-                quote = line[:3]
-                if line.endswith(quote) and len(line) > 3:
-                    continue  # 单行 docstring
-                in_doc = not in_doc
-                continue
-            if in_doc or line.startswith("#"):
-                continue
-            # 剥离行内注释（保守：仅认 " # " 形式）
-            code = raw.split(" # ", 1)[0]
-            assert "D:\\" not in code, f"硬编码盘符违例: {code}"
-            assert "C:\\" not in code, f"硬编码盘符违例: {code}"
+        files = _scan_files()
+        assert len(files) >= 105, f"扫描面不足：{len(files)}（期望 ≥105）"
+        problems = _hardcoded_drive_violations(files)
+        print(f"\n[drive-guard] 扫描 {len(files)} 文件 ⇒ {len(problems)} 违例")
+        assert not problems, "硬编码盘符违例：\n" + "\n".join(problems)
 
     def test_runs_dir_under_output(self):
         assert paths.RUNS_DIR.parent == paths.OUTPUT_DIR
 
+@pytest.mark.smoke
+def test_guard_catches_hardcoded_drive(tmp_path):
+    """守卫必须能红：临时文件注入 `X = r"D:\\foo"` ⇒ 必须检出（19 号 §159 D-4）。"""
+    bad = tmp_path / "bad_drive.py"
+    bad.write_text('X = r"D:\\foo"\n', encoding="utf-8")
+    problems = _hardcoded_drive_violations([bad])
+    print("\n[reverse] 注入 D:\\ 违例 ⇒ "
+          + ("\n".join(problems) if problems else "未检出"))
+    assert problems, "守卫未检出硬编码盘符（失效）"
+    assert "bad_drive.py" in problems[0]
+    current = _hardcoded_drive_violations(_scan_files())
+    print(f"[reverse] 现状扫描 ⇒ {len(current)} 违例")
+    assert not current
 
 @pytest.mark.smoke
 class TestEnvFingerprint:

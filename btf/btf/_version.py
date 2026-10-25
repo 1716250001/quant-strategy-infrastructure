@@ -104,5 +104,10 @@ D-1（WF 与 RC-14 门禁不兼容：折内只跳哈希门禁、保留 `anchor_d
 T-B 扫描范围**摘除 19 号审查留痕**（不再做 warm-up 数值校验），`_HISTORY_MARKERS` **整表删除**
 （22 条），`_warmup_number_ok` 只保留「声明值／`--warmup 0`」；新增反向测试
 `test_tb_catches_wrong_warmup_in_current_doc`（写错 ⇒ 必红）。产品代码零改动。
+
+**3.0.1 → 4.0.0**（2026-10-25；19 号 §159 解耦残留清理；**major：移除公开导出 QIDIAN_REF**）：
+tools/ 私有路径收敛为 `tools/_paths.py` 单点派生（8 脚本＋cold_backup）；删除
+`btf.config.paths.QIDIAN_REF` 死常量；`examples/config_sample.yaml` 去私有路径（占位符）；
+硬编码盘符守卫扩至 btf/examples/tools 全仓（含反向测试）。回测口径零改动。
 """
-__version__ = "3.0.1"
+__version__ = "4.0.0"

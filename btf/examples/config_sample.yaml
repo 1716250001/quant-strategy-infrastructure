@@ -20,7 +20,8 @@ risk:
   rules: [{name: "max_weight", params: {limit: 0.10}}, {name: "cash_check"}, {name: "tradability"}]
 rules:
   source: "mirror_json"
-  path: "D:/量化策略/赤潮/rules_mirror_v77.json"
+  # 由 tools/export_rules_mirror.py 导出后填绝对路径；示例不指向任何私有仓
+  path: "<RULES_MIRROR_JSON_ABS_PATH>"
   overrides: []
 seed: {master: 20260926}
 report:

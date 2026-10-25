@@ -6,7 +6,7 @@
 裁决六-2 定 **冷备时机 = "修改完成、判定为真正 v1.0"时**（v1.0 定版快照）。
 本工具把该动作**工具化**——定版日一条命令，产出可独立校验的冷备包。
 
-产物（默认 `D:\\量化策略\\备份\\<YYYYMMDD-HHMM>-btf-<version>-cold\\`）：
+产物（默认 `<BACKUP_ROOT>\\<YYYYMMDD-HHMM>-btf-<version>-cold\\`）：
 
     btf-src/            源码树副本（含 tests/tools/schemas/examples/配置）
     MANIFEST.json       版本 / 时间 / 依据 / 逐文件 sha256 / 计数 / 总字节
@@ -21,7 +21,7 @@
 
 用法：
     python tools/cold_backup.py                    # 冷备当前版本
-    python tools/cold_backup.py --reason "v1.0 定版" --out D:\\backup
+    python tools/cold_backup.py --reason "v1.0 定版" --out <BACKUP_ROOT>
     python tools/cold_backup.py --verify <目录>     # 校验既有冷备
 退出码：0=成功 / 1=失败
 """
@@ -36,7 +36,11 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUT = Path(r"D:\量化策略\备份")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _paths import BACKUP_ROOT
+
+DEFAULT_OUT = BACKUP_ROOT
 
 #: 纳入冷备的顶层条目（源码 + 配置 + 文档 + 测试 + 工具）
 INCLUDE = ("btf", "tests", "tools", "schemas", "examples",

@@ -35,10 +35,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-#: LL-1（19 号 §133）：策略实现已迁仓外；直接 import 需显式注入父目录
-_EXTERNAL_STRATEGIES = Path(r"D:\量化策略\赤潮\研究")
-if str(_EXTERNAL_STRATEGIES) not in sys.path:
-    sys.path.insert(0, str(_EXTERNAL_STRATEGIES))
+#: LL-1（19 号 §133）：策略实现已迁仓外；路径经 tools/_paths 单点派生（§159 D-1）
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _paths import STRATEGY_ROOT
+
+if str(STRATEGY_ROOT) not in sys.path:
+    sys.path.insert(0, str(STRATEGY_ROOT))
 
 KEY_METRICS = ("final_nav", "total_return", "annualized_return", "sharpe_ratio",
                "max_drawdown", "calmar_ratio", "n_fills", "total_fees",
@@ -62,7 +64,7 @@ def build_config(pool_symbols: list[str], start: str, end: str,
         "schema_version": "backtest.v1",
         "run": {
             "strategy": "cc_strategies.qidian_replica:QidianStrategy",
-            "strategy_paths": [str(_EXTERNAL_STRATEGIES)],
+            "strategy_paths": [str(STRATEGY_ROOT)],
             "params": {"weight": weight},
             "universe": {"source": "explicit", "symbols": pool_symbols},
             "period": {"start": start, "end": end},

@@ -30,8 +30,12 @@ from datetime import date
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, r"d:\量化策略\代码\btf")  # btf 包
-sys.path.insert(0, r"d:\量化策略\赤潮")  # md_core 包
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # btf 包
+sys.path.insert(0, str(Path(__file__).resolve().parent))         # tools/_paths（平级）
+
+from _paths import CHICHAO_ROOT
+
+sys.path.insert(0, str(CHICHAO_ROOT))  # md_core 包
 
 import pandas as pd
 from btf.config.paths import MARKET_DATA_DIR

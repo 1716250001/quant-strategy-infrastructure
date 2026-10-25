@@ -2,8 +2,8 @@
 """v7.7 对账：btf 选股/LIQ 状态 vs md_core（M3 任务 6.2 验收 A1/A2）。
 
     python tools/align_v77.py --date 20260923
-                              [--root d:/量化策略/赤潮]
-                              [--json D:/量化策略/赤潮/rules_mirror_v77.json]
+                              [--root <CHICHAO_ROOT>]
+                              [--json <RULES_MIRROR>]
                               [--skip-mdcore]     # 只跑 btf 侧（无 md_core 环境）
 
 A1 选股一致：btf `screen_l2`（PIT 口径）与 md_core `screen_stocks_v75`
@@ -29,11 +29,14 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent      # 代码/btf
 if str(_PROJECT_ROOT) not in sys.path:                      # 脚本自举（btf 包）
     sys.path.insert(0, str(_PROJECT_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))    # tools/_paths（平级）
+
+from _paths import CHICHAO_ROOT, RULES_MIRROR
 
 EXIT_OK, EXIT_DIFF, EXIT_ERROR = 0, 1, 3
 
-DEFAULT_ROOT = r"d:\量化策略\赤潮"
-DEFAULT_JSON = r"D:\量化策略\赤潮\rules_mirror_v77.json"
+DEFAULT_ROOT = str(CHICHAO_ROOT)
+DEFAULT_JSON = str(RULES_MIRROR)
 
 
 def _btf_screen(date_ymd: str, params: dict) -> list[str]:

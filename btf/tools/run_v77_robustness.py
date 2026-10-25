@@ -10,7 +10,7 @@
 
 **纪律**：
     · 只读主库 + 规则镜像；产物写 `--out`（默认 `paths.OUTPUT_DIR/v77-robustness/`，
-      即 量化策略/回测产物/v77-robustness/，与引擎 runs/ 同根）；
+      即 工作区根/回测产物/v77-robustness/，与引擎 runs/ 同根）；
     · 逐格独立 `btf` run（不共享进程内状态），失败即如实登记（不吞异常）；
     · 结论必须带 `metrics.json` 口径字段 + 相对基准算法说明（可复核）。
 
@@ -39,11 +39,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:                     # 脚本自举（btf 包）
     sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from btf.config.paths import OUTPUT_DIR  # 产物路径单一真源（paths.py）
 
+from _paths import RULES_MIRROR, STRATEGY_ROOT
+
 OUT_DEFAULT = OUTPUT_DIR / "v77-robustness"       # = 工作区根/回测产物/v77-robustness
-MIRROR = Path(r"D:\量化策略\赤潮\rules_mirror_v77.json")
 
 #: 分段区间（覆盖不同市场环境：熔断后修复 / 结构牛 / 熊市与波动 / 当前）
 PERIODS: list[tuple[str, str, str]] = [
@@ -97,7 +99,7 @@ def _config(start: str, end: str, top_k: int, cost: str = "delivered") -> dict:
         "schema_version": "backtest.v1",
         "run": {
             "strategy": "cc_strategies.v77:V77Strategy",
-            "strategy_paths": ["D:/量化策略/赤潮/研究"],
+            "strategy_paths": [str(STRATEGY_ROOT)],
             "params": {"top_k": top_k},
             "universe": {"source": "all"},
             "period": {"start": start, "end": end},
@@ -107,7 +109,7 @@ def _config(start: str, end: str, top_k: int, cost: str = "delivered") -> dict:
         "execution": execution,
         "risk": {"rules": [{"name": "tradability"}, {"name": "max_weight"},
                            {"name": "cash_check"}]},
-        "rules": {"source": "mirror_json", "path": str(MIRROR)},
+        "rules": {"source": "mirror_json", "path": str(RULES_MIRROR)},
         "report": {"benchmark": BENCHMARKS[0]},
     }
 
@@ -247,8 +249,8 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
-    if not MIRROR.is_file():
-        print(f"[error] 规则镜像缺失：{MIRROR}", file=sys.stderr)
+    if not RULES_MIRROR.is_file():
+        print(f"[error] 规则镜像缺失：{RULES_MIRROR}", file=sys.stderr)
         return 1
     out_dir = Path(args.out)
     if args.ee1:

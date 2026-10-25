@@ -5,6 +5,39 @@
 
 ## [未发布]
 
+## [4.0.0] — 2026-10-25（**解耦残留清理：tools 路径单点派生 ＋ 删 QIDIAN_REF ＋ 示例去私有路径 ＋ 守卫扩全仓**；19 号 §159）
+
+> **major / BREAKING（仅公开导出移除）**：`btf.config.paths.QIDIAN_REF` 从 `__all__` 移除
+> （外部 `from btf.config.paths import QIDIAN_REF` 会 `ImportError`）。
+> **回测口径零改动**（记账／撮合／成本／风控未动；`btf/` 包内私有语义清零）。
+> 门禁：`bt check` **10/10**、全量 pytest **1219（非 L5 1197 ＋ L5 22）/ skip 0**。
+
+### 变更（Changed）
+
+- **tools 私有路径单点派生（D-1）**：新增 `tools/_paths.py`（`CHICHAO_ROOT`／
+  `STRATEGY_ROOT`／`RULES_MIRROR`／`BACKUP_ROOT`，环境变量可覆盖）；8 个策略/对账脚本
+  ＋ `cold_backup.py` 改平级 import，删除硬编码盘符与私有根。
+- **删除 QIDIAN_REF 死常量（D-2）**：`btf/config/paths.py` 删定义／注释／`__all__` 条目；
+  插件边界基线已按 `--update --reason "§159 D-2 删除 QIDIAN_REF 死常量"` 刷新
+  （history 新增 1 条；核心 79 文件）。
+- **示例配置去私有路径（D-3）**：`examples/config_sample.yaml` 的 `rules.path` 改占位符
+  `<RULES_MIRROR_JSON_ABS_PATH>`；`rules.source` 结构不变（`TestSample06` 覆盖保留）。
+- **硬编码盘符守卫扩全仓（D-4）**：`tests/test_smoke.py` 扫描面扩至 `btf/**/*.py`
+  ＋ `examples/**/*.{py,yaml}` ＋ `tools/*.py`（**110 文件**；不扫 `tests/`）；
+  新增反向测试 `test_guard_catches_hardcoded_drive`（注入 `D:\` ⇒ 必检出）。
+- **计数口径**：工作区 **1219/1197/22**（新增 1 例 D-4 反向测试；`l2` 219、`smoke` 15、
+  未打层 271；**tag 快照 1219/1196、1183/1160 保留**）。
+
+### 移除（Removed）
+
+- **`btf.config.paths.QIDIAN_REF`**：零消费死常量（全仓 grep 仅定义/注释/`__all__`），
+  其默认值指向 `代码/strategies/qidian.py`，是 btf 包内最后一处策略层路径耦合。
+  公开导出移除即本版 major 的依据；**不删** `代码/strategies/` 任何文件。
+
+### 修复（Fixed）
+
+- 无（本版为解耦清理，非缺陷修复）。
+
 ## [3.0.1] — 2026-10-25（**O-1 补全：T-B 摘除审查留痕档 ＋ 删除豁免表 ＋ 反向测试**；19 号 §156）
 
 > 纯测试/文档补丁，**产品代码零改动**（`btf/` 下仅 `_version.py`）；**本版无 BREAKING**。

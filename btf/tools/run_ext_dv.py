@@ -25,8 +25,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 from btf.config import paths
 
 import run_v77_robustness as rob
+from _paths import RULES_MIRROR, STRATEGY_ROOT
 
-MIRROR = Path(r"D:\量化策略\赤潮\rules_mirror_v77.json")
 STRATEGY = "cc_strategies.ext_dv:ExtDvStrategy"
 
 #: 臂：(id, variant, top_k, rank_key, 说明)
@@ -48,7 +48,7 @@ def _config(variant: str, top_k: int, rank_key: str, panel: str) -> dict:
         "schema_version": "backtest.v1",
         "run": {
             "strategy": STRATEGY,
-            "strategy_paths": ["D:/量化策略/赤潮/研究"],
+            "strategy_paths": [str(STRATEGY_ROOT)],
             "params": {"variant": variant, "top_k": top_k,
                        "rank_key": rank_key, "panel_path": panel},
             "universe": {"source": "all"},
@@ -62,7 +62,7 @@ def _config(variant: str, top_k: int, rank_key: str, panel: str) -> dict:
         "risk": {"rules": [{"name": "tradability"},
                            {"name": "max_weight", "params": {"max_weight": 0.95}},
                            {"name": "cash_check"}]},
-        "rules": {"source": "mirror_json", "path": str(MIRROR)},
+        "rules": {"source": "mirror_json", "path": str(RULES_MIRROR)},
         "report": {"benchmark": "000300.SH"},
     }
 

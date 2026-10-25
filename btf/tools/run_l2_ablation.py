@@ -54,11 +54,11 @@ if str(ROOT) not in sys.path:                     # 脚本自举（btf 包）
 from btf.config.paths import OUTPUT_DIR
 
 OUT_DEFAULT = OUTPUT_DIR / "l2-ablation"
-MIRROR = Path(r"D:\量化策略\赤潮\rules_mirror_v77.json")
 
 #: **唯一的事务管线**：基准序列与 IR 算法一律取自 run_v77_robustness
 sys.path.insert(0, str(ROOT / "tools"))
 import run_v77_robustness as rob
+from _paths import RULES_MIRROR, STRATEGY_ROOT
 
 PERIODS = rob.PERIODS
 BENCHMARKS = rob.BENCHMARKS
@@ -115,7 +115,7 @@ def _config(start: str, end: str, selection: str, ranking: str,
         "schema_version": "backtest.v1",
         "run": {
             "strategy": STRATEGY,
-            "strategy_paths": ["D:/量化策略/赤潮/研究"],
+            "strategy_paths": [str(STRATEGY_ROOT)],
             "params": {"selection": selection, "ranking": ranking,
                        "top_k": top_k, "seed": seed},
             "universe": {"source": "all"},
@@ -137,7 +137,7 @@ def _config(start: str, end: str, selection: str, ranking: str,
                       "handler_params": {"volume_participation": None}},
         "risk": {"rules": [{"name": "tradability"}, {"name": "max_weight"},
                            {"name": "cash_check"}]},
-        "rules": {"source": "mirror_json", "path": str(MIRROR)},
+        "rules": {"source": "mirror_json", "path": str(RULES_MIRROR)},
         "report": {"benchmark": BENCHMARKS[0]},
     }
 
@@ -241,8 +241,8 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
-    if not MIRROR.is_file():
-        print(f"[error] 规则镜像缺失：{MIRROR}", file=sys.stderr)
+    if not RULES_MIRROR.is_file():
+        print(f"[error] 规则镜像缺失：{RULES_MIRROR}", file=sys.stderr)
         return 1
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
