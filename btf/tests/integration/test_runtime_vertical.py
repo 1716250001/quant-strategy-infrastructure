@@ -6,14 +6,13 @@ M1 留白显式化（risk 接线 / mirror_json 已随 M2/M3 交付；指数宇�
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from btf import registry
 from btf.domain.contracts import CONTRACT_VERSION
 from btf.experiment.store import LocalRunStore
 from btf.runtime import BTFRuntime
 
+from tests.fixtures.private_paths import RULES_MIRROR
 from tests.fixtures.scenarios import t_plus1_scenario
 
 FEED_NAME = "vertical_test_feed"
@@ -162,7 +161,7 @@ class TestRuntimeExplicitGaps:
 
     def test_mirror_json_rules_provider(self, runtime_config):
         """rules.source=mirror_json（M3 任务 6.1）：镜像 JSON → RulesProvider。"""
-        mirror = Path(r"D:\量化策略\赤潮\rules_mirror_v77.json")
+        mirror = RULES_MIRROR
         if not mirror.is_file():
             pytest.skip("规则镜像未导出（先跑 tools/export_rules_mirror.py）")
         runtime_config["rules"] = {"source": "mirror_json", "path": str(mirror)}

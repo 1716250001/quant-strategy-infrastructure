@@ -14,7 +14,7 @@ btf 文档守卫**不得 import 仓外包**（MM-3 前经仓外 import 取值，
 
 取值依据：`QIDIAN_LOOKBACK_BARS = QidianStrategy.lookback_bars()` 实跑实测
 （2026-10-24，btf v1.3.4 工作区）＝ **1020**。
-再生成方法：`sys.path.insert(0, r"D:\量化策略\赤潮\研究")` 后
+再生成方法：`sys.path.insert(0, <STRATEGY_ROOT>)` 后
 `from cc_strategies.qidian_replica import QidianStrategy;
 QidianStrategy.lookback_bars()`。
 """

@@ -21,10 +21,11 @@ from btf.registry import RULES_PROVIDER
 from btf.strategy.rules import MirrorJsonRulesProvider, StaticRulesProvider
 
 import export_rules_mirror as exporter
+from tests.fixtures.private_paths import RULES_MIRROR
 
 pytestmark = [pytest.mark.l1]
 
-MIRROR_JSON = Path(r"D:\量化策略\赤潮\rules_mirror_v77.json")
+MIRROR_JSON = RULES_MIRROR
 
 V75 = {"pe_max": 30.0, "pb_max": 3.0, "roe_min": 5.0, "dv_min": 1.0}
 LIQ = {"sh_crisis": -5.0, "sh_watch": -3.0, "small_crisis": -6.0,

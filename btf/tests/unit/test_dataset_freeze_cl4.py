@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 from btf.app.services import freeze_payload, write_freeze_manifest
+from btf.config.paths import MARKET_DATA_DIR
 
 pytestmark = [pytest.mark.l1]
 
@@ -55,7 +56,7 @@ class TestFreezePayloadCl4:
         """判据 A：R1 五字段齐备；`content_hash` 与 BB-1 实算**逐字同源**。"""
         payload = freeze_payload(_info(), period={"start": "2024-01-01",
                                                   "end": "2024-06-30"},
-                                 root="D:/全量数据/market_data")
+                                 root=str(MARKET_DATA_DIR))
         for key in ("anchor_date", "tables", "content_hash", "mode",
                     "created_at"):
             assert payload.get(key) not in (None, "", []), key

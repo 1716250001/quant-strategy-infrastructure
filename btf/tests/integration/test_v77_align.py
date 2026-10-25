@@ -23,11 +23,12 @@ from btf.data import parquet_reader as pr
 from btf.data.fundamentals import daily_basic_of, roe_pit_of, screen_l2
 from btf.data.liq import CONFIRM, CRISIS, NORMAL, RECOVERY, WATCH, LiqState, state_of
 
+from tests.fixtures.private_paths import CHICHAO_ROOT, RULES_MIRROR
+
 pytestmark = [pytest.mark.l4]
 
 ROOT = Path(MARKET_DATA_DIR)
-CHICHAO_ROOT = Path(r"d:\量化策略\赤潮")
-MIRROR_JSON = CHICHAO_ROOT / "rules_mirror_v77.json"
+MIRROR_JSON = RULES_MIRROR
 TRADE_DATE = "20260923"
 
 VALID_STATES = {NORMAL, WATCH, CRISIS, RECOVERY}

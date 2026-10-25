@@ -23,6 +23,8 @@ from btf.data.liq import (
     state_of,
 )
 
+from tests.fixtures.private_paths import RULES_MIRROR
+
 pytestmark = [pytest.mark.l5]
 
 ROOT = Path(MARKET_DATA_DIR)
@@ -49,7 +51,7 @@ THRESHOLDS = {
 }
 
 #: 生产镜像（可用时与 THRESHOLDS 对账；不可用时跳过而非放行）
-MIRROR = Path(r"D:\量化策略\赤潮\rules_mirror_v77.json")
+MIRROR = RULES_MIRROR
 
 
 def test_thresholds_match_mirror():

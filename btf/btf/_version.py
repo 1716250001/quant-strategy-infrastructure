@@ -109,5 +109,10 @@ T-B 扫描范围**摘除 19 号审查留痕**（不再做 warm-up 数值校验�
 tools/ 私有路径收敛为 `tools/_paths.py` 单点派生（8 脚本＋cold_backup）；删除
 `btf.config.paths.QIDIAN_REF` 死常量；`examples/config_sample.yaml` 去私有路径（占位符）；
 硬编码盘符守卫扩至 btf/examples/tools 全仓（含反向测试）。回测口径零改动。
+
+**4.0.0 → 4.0.1**（2026-10-25；19 号 §161 遗留清理；**纯 tests/ 补丁**）：
+L-1 `test_qidian_engine_rerun.py` → `test_etf_limit_channel.py`；L-2 tests 私有路径收敛到
+`tests/fixtures/private_paths.py`；L-3 守卫 raw-docstring 前缀识别 ＋ 纳入 tests（自指豁免）；
+L-4 正斜杠 token 补齐（8 种）。产品代码零改动。
 """
-__version__ = "4.0.0"
+__version__ = "4.0.1"

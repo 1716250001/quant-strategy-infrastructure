@@ -34,7 +34,7 @@ risk:
   rules: [{name: "max_weight", params: {limit: 0.10}}, {name: "cash_check"}, {name: "tradability"}]
 rules:
   source: "mirror_json"
-  path: "D:/量化策略/赤潮/rules_mirror_v77.json"
+  path: "<RULES_MIRROR_JSON_ABS_PATH>"
   overrides: []
 seed: {master: 20260926}
 report:
@@ -206,13 +206,13 @@ class TestMask:
         cfg = {
             "data": {"feed": "tushare_parquet",
                      "feed_params": {"tushare_token": "SECRET",
-                                     "root": "D:/data"}},
+                                     "root": "<DATA_ROOT>"}},
             "run": {"api_key": "abc", "initial_cash": 100},
             "report": {"password": "x", "sections": ["summary"]},
         }
         m = mask_config(cfg)
         assert m["data"]["feed_params"]["tushare_token"] == "***"
-        assert m["data"]["feed_params"]["root"] == "D:/data"
+        assert m["data"]["feed_params"]["root"] == "<DATA_ROOT>"
         assert m["run"]["api_key"] == "***"
         assert m["report"]["password"] == "***"
         assert m["run"]["initial_cash"] == 100

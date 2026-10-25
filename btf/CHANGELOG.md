@@ -5,6 +5,36 @@
 
 ## [未发布]
 
+## [4.0.1] — 2026-10-25（**遗留清理：改名 ＋ tests 路径收敛 ＋ 守卫扩 tests（修 raw docstring 漏判/正斜杠）**；19 号 §161）
+
+> **纯 tests/ 补丁**：`btf/` 包内产品代码零改动（仅 `_version.py`）；本版无 BREAKING。
+> 门禁：`bt check` **10/10**、全量 pytest **1219（非 L5 1197 ＋ L5 22）/ skip 0**。
+
+### 变更（Changed）
+
+- **L-1 改名**：`tests/integration/test_qidian_engine_rerun.py` →
+  `tests/integration/test_etf_limit_channel.py`；docstring 首行改中性描述，
+  **断言逻辑零改动**（零外部引用）。
+- **L-2 tests 私有路径收敛**：新增 `tests/fixtures/private_paths.py`
+  （`CHICHAO_ROOT`／`STRATEGY_ROOT`／`RULES_MIRROR`，与 `tools/_paths.py` 同名环境变量）；
+  `test_v77_align`／`test_runtime_vertical`／`test_liq_precompute`／`test_rules_mirror`
+  改引用；`test_config::SAMPLE_06` 的 `rules.path` 改占位符（与示例 yaml 对齐）；
+  `strategy_contract.py` 再生成方法改 `<STRATEGY_ROOT>` 文字占位；
+  `test_project_root_contains_chinese` 改「含非 ASCII 字符」语义断言。
+
+### 修复（Fixed）
+
+- **守卫 raw-docstring 漏判（D-3-1）**：`_DOC_OPEN` 认 raw 三引号前缀（如 `r`＋三引号）等；
+  单行闭合判定改为「开引号之后仍有内容且以同引号闭合」，避免把裸前缀开引号误判为单行。
+- **正斜杠 token 补齐（L-4）**：`_DRIVE_TOKENS` 由 4 种扩到 **8 种**
+  （`D:\`／`C:\`／`d:\`／`c:\`／`D:/`／`C:/`／`d:/`／`c:/`；宁窄不宽，不泛化全盘符）。
+- **tests 纳入扫描面（L-3）**：`_scan_files()` 纳入 `tests/**/*.py`，**显式豁免
+  `tests/test_smoke.py`**（token 元组与反向注入样本必须含盘符字面量）；
+  扫描条目 **229**（btf 83＋examples 4＋tools 23＋tests 120−守卫自身 1）。
+- **三处正斜杠用法清理**：`test_config::TestMask` 的 `feed_params.root` 与断言改
+  `<DATA_ROOT>`；`test_dataset_freeze_cl4` 的 `root=` 改 `str(MARKET_DATA_DIR)`。
+
+
 ## [4.0.0] — 2026-10-25（**解耦残留清理：tools 路径单点派生 ＋ 删 QIDIAN_REF ＋ 示例去私有路径 ＋ 守卫扩全仓**；19 号 §159）
 
 > **major / BREAKING（仅公开导出移除）**：`btf.config.paths.QIDIAN_REF` 从 `__all__` 移除
