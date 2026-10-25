@@ -105,7 +105,7 @@ btf\
 ├─ benchmarks\         B1–B5 基准留档
 ├─ examples\           示例策略（rotation.py）+ 配置
 ├─ tools\              常驻工具 21 个（十项门禁脚本 + 对账/复跑/冷备/预算/独立环境裸验证）+ probes\ 探针
-└─ tests\              1217 项（unit / integration / regression / system / benchmark / perf / fixtures；非 L5 1195 ＋ L5 22；V1.2.4 tag 快照口径＝1219）
+└─ tests\              1218 项（unit / integration / regression / system / benchmark / perf / fixtures；非 L5 1196 ＋ L5 22；V1.2.4 tag 快照口径＝1219）
 ```
 
 - **命令族 13 条**：`config-check` / `run` / `report` / `verify` / `test` / `dataset` / `optimize` / `validate` / `data` + `check` / `cold-backup` / `runs` / `show`（另有 `bt --version`）
@@ -194,7 +194,7 @@ python main.py alt-update / alt-audit / alt-backfill / alt-us / alt-verify
 
 # 回测工具（btf；短命令 bt / pyramid 已装在本 venv\Scripts\ 下）
 cd btf
-..\_venv\Scripts\python.exe -m pytest           # 全量测试（1217 项；非 L5 1195 ＋ L5 22；V1.2.4 tag 快照口径＝1219）
+..\_venv\Scripts\python.exe -m pytest           # 全量测试（1218 项；非 L5 1196 ＋ L5 22；V1.2.4 tag 快照口径＝1219）
 ..\_venv\Scripts\python.exe tools\check.py      # 等价于 bt check（10/10 门禁）
 bt run -c <config> / bt report / bt verify / bt check   # 跑回测 / 报告 / 复核 / 门禁
 ```
