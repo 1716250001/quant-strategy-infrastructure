@@ -35,6 +35,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+#: LL-1（19 号 §133）：策略实现已迁仓外；直接 import 需显式注入父目录
+_EXTERNAL_STRATEGIES = Path(r"D:\量化策略\赤潮\研究")
+if str(_EXTERNAL_STRATEGIES) not in sys.path:
+    sys.path.insert(0, str(_EXTERNAL_STRATEGIES))
+
 KEY_METRICS = ("final_nav", "total_return", "annualized_return", "sharpe_ratio",
                "max_drawdown", "calmar_ratio", "n_fills", "total_fees",
                "turnover_annualized", "n_trading_days")
@@ -56,7 +61,8 @@ def build_config(pool_symbols: list[str], start: str, end: str,
     return {
         "schema_version": "backtest.v1",
         "run": {
-            "strategy": "btf.strategy.qidian:QidianStrategy",
+            "strategy": "cc_strategies.qidian_replica:QidianStrategy",
+            "strategy_paths": [str(_EXTERNAL_STRATEGIES)],
             "params": {"weight": weight},
             "universe": {"source": "explicit", "symbols": pool_symbols},
             "period": {"start": start, "end": end},
@@ -95,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from btf.domain.types import TradingDate
     from btf.runtime import BTFRuntime, make_store
-    from btf.strategy.qidian import load_reference, pool_of
+    from cc_strategies.qidian_replica import load_reference, pool_of
 
     reference = load_reference()
     pool = pool_of(reference)

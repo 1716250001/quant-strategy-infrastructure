@@ -5,7 +5,9 @@ DXP 瘦身后取代 Cookiecutter 模板——终审轻微 3）。
 **外部策略接入（19 号 §24.6 补文档，2026-09-28）**
 
 策略可以放在**项目之外**（btf 核心零改动即可接入——19 号第五轮实测以
-`代码\\_scratch\\ext_strategy\\ma_cross.py` 一次通过）。三步：
+`代码\\_scratch\\ext_strategy\\ma_cross.py` 一次通过）。**btf 仓内不得存放任何策略实现**
+（`tests/fixtures/` 夹具与 `examples/rotation.py` 装载样板除外）；下文 `ext_strategy`
+为**仓外**目录。三步：
 
 1. **写策略**（`StrategyBase` 子类，必须显式声明 `contract_version`）：
 
@@ -22,10 +24,13 @@ DXP 瘦身后取代 Cookiecutter 模板——终审轻微 3）。
    ```
 
 2. **放进 import 路径**：`run.strategy` 只接受**点分模块名**（schema 正则禁止
-   路径符），故策略包须在 `sys.path` 上——两种方式：
-   - 放到 btf 根目录下的包（如 `ext_strategy/`）；或
-   - 经环境变量注入：`set PYTHONPATH=D:\\path\\to\\your_strategies`（PowerShell
+   路径符），故策略包须在 `sys.path` 上——两种可用方式（另列一条禁止）：
+   - **配置声明（推荐）**：`run.strategy_paths: ["D:\\path\\to"]`（指向包的**父目录**；
+     runtime 在装载前**幂等注入 `sys.path`，只加不删**）。**LL-2 已交付（2026-10-24）**。
+   - **环境变量（临时）**：`set PYTHONPATH=D:\\path\\to\\your_strategies`（PowerShell
      会话级；实测 `PYTHONPATH=…\\_scratch` 后 `ext_strategy.ma_cross:MaCross` 可解析）。
+     **不推荐用于正式产物**：配置不自解释、跨机不可复现。
+   - **禁止**：把策略包放到 btf 根目录下（等于策略回仓，违背「策略代码不在工具仓」）。
    - **本仓库示例（`examples.rotation`）开箱提示（N15，19 号 §73.5）**：
      **editable 安装（PEP 660）只暴露 `btf` 包、不暴露仓库根** ⇒ 直接
      `bt run --config examples/config_rotation.yaml` 会报
@@ -39,6 +44,7 @@ DXP 瘦身后取代 Cookiecutter 模板——终审轻微 3）。
    ```yaml
    run:
      strategy: "ext_strategy.ma_cross:MaCross"   # module:Class
+     strategy_paths: ["D:\\path\\to"]            # 包的父目录（LL-2 已交付）
      params: {fast: 5, slow: 20}                 # 构造参数直注入（名字须匹配，
                                                  # 类型须可 float/int 化）
    ```

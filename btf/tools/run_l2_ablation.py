@@ -63,7 +63,7 @@ import run_v77_robustness as rob
 PERIODS = rob.PERIODS
 BENCHMARKS = rob.BENCHMARKS
 
-STRATEGY = "btf.strategy.l2_ablation:L2AblationStrategy"
+STRATEGY = "cc_strategies.l2_ablation:L2AblationStrategy"
 
 #: 消融臂（selection, ranking, 说明）
 ARMS: list[tuple[str, str, str, str]] = [
@@ -115,6 +115,7 @@ def _config(start: str, end: str, selection: str, ranking: str,
         "schema_version": "backtest.v1",
         "run": {
             "strategy": STRATEGY,
+            "strategy_paths": ["D:/量化策略/赤潮/研究"],
             "params": {"selection": selection, "ranking": ranking,
                        "top_k": top_k, "seed": seed},
             "universe": {"source": "all"},

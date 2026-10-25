@@ -209,6 +209,13 @@ def freeze_dataset(
 
     实算经 `BTFRuntime.dataset_fingerprint`（BB-1 同源）；内存 Feed
     （`mode=in-memory`）无法冻结 ⇒ 显式报错（不静默产出假清单）。
+
+    **MM-7（19 号 §138.2）——冻结不受已钉指纹反噬**：`data.dataset` 里的
+    `expected_hash`/`version` 是**上一次**冻结的结果，若让 RC-14 门禁先跑，
+    换档（meta→fast）或重冻结永远不可能——实算值必然与旧声明不符即 ConfigError
+    （实测：`声明 sha256:9faf17… ≠ 实算 sha256:4e4e74…（档位 fast）`）。故在本
+    **进程内临时放开**这两个哈希键（只改内存 dict，不落盘、不写配置、不影响
+    任何 `bt run` 路径）；数据水位（`anchor_date`）与表集口径照常实算。
     """
     from btf.config.paths import FREEZE_DIR
     from btf.runtime import BTFRuntime
@@ -218,6 +225,9 @@ def freeze_dataset(
         ovr.setdefault("data", {})["fingerprint_mode"] = mode
     rt = BTFRuntime().load_config(config, environ=filter_btf_env(environ),
                                   overrides=ovr or None)
+    dataset_cfg = rt.config.setdefault("data", {}).setdefault("dataset", {})
+    dataset_cfg.pop("expected_hash", None)
+    dataset_cfg.pop("version", None)
     rt.build()
     info = rt.dataset_fingerprint()
     if str(info.get("mode")) == "in-memory":
@@ -475,7 +485,13 @@ def run_mc(
         "note": ("分布披露（p05/p50/p95 + 双侧 p 值）；只报数字不判定"
                  "（ADR-13）；扰动在收益序列层，撮合规则逐位不变（09 #12）"),
     }
-    bench = (cfg.get("report") or {}).get("benchmark")
+    # MM-6（19 号 §137 B ④）：多基准时噪声对照**只用主基准**（首个）——其余
+    # 基准不参与（避免语义分叉：噪声基线是单一对照分布，混入第二个基准即
+    # "拿谁当随机世界"不可解释）。
+    from btf.config.loader import benchmark_symbols
+
+    _symbols = benchmark_symbols(cfg.get("report") or {})
+    bench = _symbols[0] if _symbols else None
     n_hold = max(1, sum(1 for s in bundle.snapshots
                         if getattr(s, "positions_qty", None)))
     if bench:

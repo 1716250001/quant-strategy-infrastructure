@@ -204,6 +204,12 @@ class RunManifest:
     #: 由报告披露区渲染（与 `degraded_notes` 对称）；空元组 = 无披露项。
     assembly_notes: tuple[str, ...] = ()
 
+    #: 基准对照明细（**MM-6**，19 号 §137 B）：`report.benchmark` 支持 1–3 个
+    #: 代码的数组，每个基准一条 `{symbol, primary, <相对指标…>}`——首个＝主基准
+    #: （其数值同时进 `metrics.json`），其余基准**只在此披露**（P0-NEW-7：
+    #: metrics 只许数值）。空元组＝未配基准（RC-09）。报告据此渲染对照表。
+    benchmarks: tuple[Mapping[str, Any], ...] = ()
+
     # ── 生命周期 ──
     @classmethod
     def skeleton(
@@ -262,6 +268,7 @@ class RunManifest:
             "metrics_digest": self.metrics_digest,
             "error": self.error,
             "assembly_notes": list(self.assembly_notes),
+            "benchmarks": [dict(row) for row in self.benchmarks],
         }
 
     @classmethod
@@ -295,6 +302,8 @@ class RunManifest:
             error=data.get("error"),
             # 向后兼容：旧产物无该键 → 空元组（读取器不因缺键失败）
             assembly_notes=tuple(data.get("assembly_notes") or ()),
+            # 同前：MM-6 前产物无该键 → 空元组（旧 run 照常可读可报告）
+            benchmarks=tuple(data.get("benchmarks") or ()),
         )
 
 

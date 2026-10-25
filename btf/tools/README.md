@@ -35,4 +35,9 @@
     一次性性能/等价性探针（probe_layout / probe_sort_equiv / probe_sorted /
     profile_b1 / profile_b1_breakdown）——**不被任何代码 import**、不进门禁，
     留档备查；结论已写进代码注释与 benchmarks/README.md，故不保证随版本可跑。
+
+已迁出（**裸脚本，非 btf 口径**）：
+    run_stoploss_ablation.py  已迁 `D:\量化策略\赤潮\研究\_裸脚本\`（2026-10-24，
+                              19 号 §132.1 KK-2）——脚本内自算收益/胜率/回撤，
+                              **绩效数字不得引用为 btf 口径**。
 """

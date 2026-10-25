@@ -221,10 +221,19 @@ def _assembly_disclosures(manifest: Any) -> tuple[str, ...]:
     if universe_src:
         out.append(f"标的宇宙口径：`run.universe.source={universe_src}`"
                    f"（装配期解析结果见上；跨区间比较须核对同一机会集）")
-    benchmark = (cfg.get("report") or {}).get("benchmark")
-    if benchmark:
-        out.append(f"基准对比：`{benchmark}`——相对指标取自同期指数收盘价"
-                   f"（缺日 fail-closed，不前向填充；19 号 R2.5/P1-10）")
+    # MM-6（19 号 §137 B）：多基准口径——首个＝主基准（进 metrics），其余
+    # 只进披露区（`report.benchmarks[]`），此处显式点名以免"算了却没披露"。
+    from btf.config.loader import benchmark_symbols
+
+    benchmarks = benchmark_symbols(cfg.get("report") or {})
+    if benchmarks:
+        text = (f"基准对比：`{benchmarks[0]}`（**主基准**——相对指标取自同期"
+                f"指数收盘价，缺日 fail-closed，不前向填充；19 号 R2.5/P1-10）")
+        if len(benchmarks) > 1:
+            others = "、".join(f"`{s}`" for s in benchmarks[1:])
+            text += (f"；对照基准 {others}——**只进披露区**（不写入 metrics，"
+                     f"P0-NEW-7/MM-6）")
+        out.append(text)
     else:
         # RC-09（2026-10-05）：基准**软强制**的披露半边——不配不阻断（保持
         # 灵活），但「无基准对照」必须显式标注：IR/超额等相对指标不存在，
@@ -232,6 +241,38 @@ def _assembly_disclosures(manifest: Any) -> tuple[str, ...]:
         out.append("**无基准对照**（`report.benchmark` 未配置）：IR / 超额等"
                    "相对指标不存在——不得以绝对收益替代基准结论（RC-09）")
     return tuple(out)
+
+
+def _benchmark_table(manifest: Any) -> str:
+    """多基准对照表（**MM-6**，19 号 §137 B 验收 ③）：≥2 个基准才渲染。
+
+    数据取 `manifest.benchmarks`（run 期落盘，`report.benchmarks[]`）——本层
+    **不重算**（铁律 5 禁 viz → analytics；且报告须与落盘同源，不得二次口径）。
+    单基准 ⇒ 空串（不新增章节；既有报告结构零变化）。
+    """
+    rows = list(getattr(manifest, "benchmarks", ()) or ())
+    if len(rows) < 2:
+        return ""
+    header = ["基准", "角色", "基准总收益", "超额收益", "年化超额", "跟踪误差",
+              "信息比率", "beta", "alpha（年化）", "上行捕获", "下行捕获"]
+    body = []
+    for row in rows:
+        row = dict(row)
+        body.append([
+            row.get("symbol", "—"),
+            "主基准（进 metrics）" if row.get("primary") else "对照（仅披露）",
+            _fmt(row.get("benchmark_total_return")),
+            _fmt(row.get("excess_return")),
+            _fmt(row.get("annualized_excess")),
+            _fmt(row.get("tracking_error")),
+            _fmt(row.get("information_ratio")),
+            _fmt(row.get("beta")),
+            _fmt(row.get("alpha_annualized")),
+            _fmt(row.get("up_capture")),
+            _fmt(row.get("down_capture")),
+        ])
+    return _table(body, header)
+
 
 
 #: 报告模板。**转义纪律（Z-1 / 19 号 §26.2 / 铁律新 14）**：
@@ -395,6 +436,15 @@ class ReportBuilder:
             #   真实 CLI 产物仅有 4 章；该缺陷使"数据指纹"无处可见）。
             forced = [s for s in sections if s["id"] in _MANDATORY_SECTIONS]
             sections = kept + [s for s in forced if s not in kept]
+
+        # **MM-6（19 号 §137 B 验收 ③）**：多基准对照表——≥2 个基准才出现；
+        # 置于强制章节之前（**不受 `report.sections` 过滤**：对照基准的相对
+        # 指标只存在于本表，被过滤即等于"算了不披露"）
+        benchmark_html = _benchmark_table(self.bundle.manifest)
+        if benchmark_html:
+            sections.insert(1, {"id": "benchmark_comparison",
+                                "title": "基准对照（多基准）",
+                                "html": benchmark_html})
 
         env = Environment(autoescape=True, undefined=StrictUndefined)
         template = env.from_string(_TEMPLATE)

@@ -14,12 +14,10 @@ from btf.data.liq import (
     POSITION_CAPS,
     RECOVERY,
     WATCH,
-    LiqState,
     classify,
     state_of,
 )
 from btf.domain.types import TradingDate
-from btf.strategy.v77 import V77Strategy
 
 pytestmark = [pytest.mark.l1]
 
@@ -205,58 +203,5 @@ class TestRecoverySequence:
         assert POSITION_CAPS[RECOVERY] == 10.0
 
 
-class TestV77Strategy:
-    def _strategy(self, status, picks, **kw) -> V77Strategy:
-        def liq_fn(ymd, thresholds, root=None, prev=None):
-            return LiqState(date=ymd, status=status, sh_pct=0.0, small_pct=0.0,
-                            down_cnt=0, down_ratio=0.0, triggers=(),
-                            raw=status)
-
-        return V77Strategy(FakeRules(), top_k=3, liq_fn=liq_fn,
-                           screen_fn=lambda *a, **k: picks, **kw)
-
-    def test_crisis_goes_flat(self):
-        strategy = self._strategy(CRISIS, ["000001.SZ", "600000.SH"])
-        ctx = FakeCtx()
-        strategy.on_close(ctx, _day("20240103"))
-        assert ctx.targets[-1].targets == {}
-
-    def test_normal_equal_weight_within_cap(self):
-        """NORMAL：top_k 等权，总仓位 ≤ 5 成。"""
-        strategy = self._strategy(NORMAL, ["000001.SZ", "600000.SH",
-                                           "000651.SZ"])
-        ctx = FakeCtx()
-        strategy.on_close(ctx, _day("20240103"))
-        targets = ctx.targets[-1].targets
-        assert len(targets) == 3
-        assert sum(targets.values()) == pytest.approx(0.5)
-        assert len(set(targets.values())) == 1
-
-    def test_watch_caps_at_two_tenths(self):
-        strategy = self._strategy(WATCH, ["000001.SZ", "600000.SH"])
-        ctx = FakeCtx()
-        strategy.on_close(ctx, _day("20240103"))
-        assert sum(ctx.targets[-1].targets.values()) == pytest.approx(0.2)
-
-    def test_monthly_rebalance_only_once(self):
-        strategy = self._strategy(NORMAL, ["000001.SZ"])
-        ctx = FakeCtx()
-        for ymd in ("20240102", "20240103", "20240104", "20240201"):
-            strategy.on_close(ctx, _day(ymd))
-        assert len(ctx.targets) == 2          # 1 月一次 + 2 月一次
-
-    def test_empty_screen_goes_flat(self):
-        strategy = self._strategy(NORMAL, [])
-        ctx = FakeCtx()
-        strategy.on_close(ctx, _day("20240103"))
-        assert ctx.targets[-1].targets == {}
-
-    def test_last_state_recorded(self):
-        """Z-6 单步递推：策略保留**前一日状态**（确认/恢复期记忆随之回传）。"""
-        strategy = self._strategy(CRISIS, ["000001.SZ"])
-        ctx = FakeCtx()
-        strategy.on_close(ctx, _day("20240103"))
-        strategy.on_close(ctx, _day("20240104"))
-        assert strategy._last_state is not None
-        assert strategy._last_state.status == CRISIS
-        assert strategy.last_state is not None
+# 策略实现已迁仓外（LL-1，19 号 §133）；本文件只保留数据层 LIQ 纯函数测试。
+# `V77Strategy` 行为断言随策略迁 `赤潮/研究/cc_strategies/tests/test_v77_strategy.py`。

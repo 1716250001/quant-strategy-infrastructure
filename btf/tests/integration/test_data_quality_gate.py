@@ -87,7 +87,7 @@ def _config(root: Path, **quality) -> dict:
     return {
         "schema_version": "backtest.v1",
         "run": {
-            "strategy": "btf.strategy.monthly:MonthlyEqualWeight",
+            "strategy": "tests.fixtures.monthly_equal:MonthlyEqualWeight",
             "params": {"symbols": [SYM, SYM2]},
             "universe": {"source": "explicit", "symbols": [SYM, SYM2]},
             "period": {"start": "2024-01-02", "end": "2024-01-15"},

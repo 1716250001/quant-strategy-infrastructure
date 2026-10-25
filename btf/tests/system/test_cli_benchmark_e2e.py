@@ -52,7 +52,8 @@ def _feed_registered():
     return feed
 
 
-def _write_config(tmp_path: Path, *, benchmark: str = BENCHMARK) -> Path:
+def _write_config(tmp_path: Path, *,
+                  benchmark: str | list[str] = BENCHMARK) -> Path:
     import yaml
 
     cfg = {
@@ -172,3 +173,111 @@ class TestCliBenchmarkEndToEnd:
         rt = BTFRuntime().load_config(str(cfg))
         with pytest.raises(Exception, match=r"无任何行情|index_daily 零行"):
             rt.build()
+
+
+#: 第二基准（上证指数；主库 index_daily 同区间有行情——已实测 5 日）
+SECOND_BENCHMARK = "000001.SH"
+
+#: 相对指标键（相对指标集全量；主基准独占 metrics 的断言对象）
+_RELATIVE_KEYS = ("benchmark_total_return", "excess_return",
+                  "annualized_excess", "tracking_error", "information_ratio",
+                  "beta", "alpha_annualized", "up_capture", "down_capture")
+
+
+def _same(left: float, right: float) -> bool:
+    """浮点逐位等价（NaN＝NaN 视为相同——capture 类指标可能 NaN）。"""
+    if left != left or right != right:
+        return left != left and right != right
+    return left == right
+
+
+@requires_mainlib
+class TestCliMultiBenchmark:
+    """MM-6（19 号 §137 B）：**CLI 真入口**双基准同跑（铁律新 13）。
+
+    派单验收 ①②③④：
+        ① 单基准配置仍单值通过（见 `_write_config` 默认参数与上方既有用例）；
+        ② 双基准一次 run 同时产出两套相对指标，且**主基准数值 == 单基准时
+           的数值（逐位）**，metrics 键集**不多不少**（第二基准不得污染）；
+        ③ 报告渲染多基准对照表；④ `verify` 摘要一致（R1 digest 口径不变）。
+    """
+
+    def _run_once(self, main, cfg: Path, out_dir: Path) -> str:
+        assert main(["run", "--config", str(cfg),
+                     "--out", str(out_dir)]) == 0
+        dirs = [p for p in out_dir.iterdir() if p.is_dir()]
+        assert len(dirs) == 1, f"run 目录异常：{dirs}"
+        return dirs[0].name
+
+    def test_multi_benchmark_primary_metrics_equal_single(self, _feed_registered,
+                                                          tmp_path):
+        from btf.cli.main import main
+
+        single_dir, multi_dir = tmp_path / "s", tmp_path / "m"
+        single_dir.mkdir()
+        multi_dir.mkdir()
+        run_single = self._run_once(
+            main, _write_config(single_dir, benchmark=BENCHMARK),
+            single_dir / "runs")
+        run_multi = self._run_once(
+            main,
+            _write_config(multi_dir,
+                          benchmark=[BENCHMARK, SECOND_BENCHMARK]),
+            multi_dir / "runs")
+
+        m1 = json.loads((single_dir / "runs" / run_single / "metrics.json")
+                        .read_text(encoding="utf-8"))["metrics"]
+        m2 = json.loads((multi_dir / "runs" / run_multi / "metrics.json")
+                        .read_text(encoding="utf-8"))["metrics"]
+
+        # ② 键集不多不少 + 主基准数值逐位相同（加第二个基准**不改**任何数值）
+        assert set(m2) == set(m1), "双基准改动了 metrics 键集（第二基准污染）"
+        for key in _RELATIVE_KEYS:
+            assert key in m2, key
+            assert _same(m1[key], m2[key]), (
+                f"{key}: 单基准 {m1[key]!r} ≠ 双基准主基准 {m2[key]!r}"
+                f"（R1 digest 口径被破坏）")
+        # P0-NEW-7：metrics 只许数值——第二基准代码/元信息不得混入
+        assert SECOND_BENCHMARK not in json.dumps(m2), "第二基准代码混入 metrics"
+
+        # ③ 披露：manifest.benchmarks 两条（首个＝主基准）
+        mf = json.loads((multi_dir / "runs" / run_multi / "manifest.json")
+                        .read_text(encoding="utf-8"))
+        rows = mf["benchmarks"]
+        assert [r["symbol"] for r in rows] == [BENCHMARK, SECOND_BENCHMARK]
+        assert [r["primary"] for r in rows] == [True, False]
+        for row in rows:
+            for key in _RELATIVE_KEYS:
+                assert key in row, f"披露明细缺 {key}（每个基准须一套）"
+        # 主基准披露数值与 metrics 同源（同一计算，不得两套口径）
+        for key in _RELATIVE_KEYS:
+            assert _same(rows[0][key], m2[key]), key
+
+        # ③ 渲染级：多基准对照表**成形**（标签级断言，Z-1/铁律新 14）
+        assert main(["report", "--run", run_multi,
+                     "--out-dir", str(multi_dir / "runs")]) == 0
+        html = (multi_dir / "runs" / run_multi / "report.html").read_text(
+            encoding="utf-8")
+        assert "基准对照（多基准）" in html, "多基准对照章节缺失"
+        assert BENCHMARK in html and SECOND_BENCHMARK in html
+        assert "<table><thead>" in html, "对照表未成形（正文被转义？）"
+        assert "&lt;div class=" not in html
+
+        # ④ verify：落盘口径未变 ⇒ 复核摘要仍一致
+        for out_dir, run_id in ((single_dir / "runs", run_single),
+                                (multi_dir / "runs", run_multi)):
+            assert main(["verify", "--run", run_id,
+                         "--out-dir", str(out_dir)]) == 0, (
+                f"{run_id} 复核不一致（多基准污染了 R1 digest？）")
+
+    def test_second_benchmark_without_data_rejected_at_assembly(
+            self, _feed_registered, tmp_path):
+        """MM-6：次基准同样过装配期守卫（拼错即拒，不跑完整段才崩）。"""
+        from btf.runtime import BTFRuntime
+
+        cfg = _write_config(tmp_path,
+                            benchmark=[BENCHMARK, "999999.SH"])
+        rt = BTFRuntime().load_config(str(cfg))
+        with pytest.raises(Exception, match=r"无任何行情|index_daily 零行"):
+            rt.build()
+

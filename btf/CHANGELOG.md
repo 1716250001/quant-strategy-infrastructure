@@ -5,6 +5,88 @@
 
 ## [未发布]
 
+## [2.0.0] — 2026-10-25（**策略出仓 ＋ 性能/披露治理收口**；19 号 §134–§143；KK/LL/MM 全批）
+
+> 本版为 **major**：策略装载范式变更 ＋ 内置策略删除（见「破坏性变更」）。记账／撮合／成本口径未变
+> ——本版改动集中在**策略装载、披露、数据版本门禁与性能门槛**。门禁：`bt check` **10/10**、
+> 全量 pytest **1211（非 L5 1189 ＋ L5 22）/ skip 0**。
+
+### 破坏性变更（BREAKING）
+
+- **策略装载范式变更（两步迁移法）**：具体策略已出仓（现址 `D:\量化策略\赤潮\研究\cc_strategies\`，
+  MM-1 由 `strategies` 改名以避免与真源 `代码/strategies` 同包名撞车）。
+  - 旧：`run.strategy: "btf.strategy.qidian:QidianStrategy"`
+  - 新：`run.strategy: "cc_strategies.qidian_replica:QidianStrategy"`
+    ＋ `run.strategy_paths: ["D:/量化策略/赤潮/研究"]`
+  - 旧写法一律 `ImportError`（`btf/strategy/` 仅剩 5 个接口文件：`base/context/rebalance/rules/__init__`）。
+- **删除内置策略**：`btf/strategy/{qidian,v77,monthly,l2_ablation}.py`；连带删测试 3 个
+  （`tests/regression/test_qidian_l3.py`、`tests/system/test_v77_full_range.py`、
+  `tests/unit/test_qidian_signals.py`）与工具 1 个（`tools/run_stoploss_ablation.py`）。
+  - 说明：`ava／l5_stop／fs_events／bond_port／ext_dv` 与 3 个 `*_inputs` 数据口**早于 v1.3.4 已迁出**，
+    不属本版 diff（19 号 §143 A-1 把它们计入"本版删除"，与 `git diff v1.3.4` 不符，以本处为准）。
+- **配置契约放宽**：`report.benchmark` 由 `string` → `string | array`（1–3 个、`uniqueItems`）。
+  向后兼容：单值语义逐字不变；数组**首个＝主基准**，只有它的相对指标进 `metrics.json`（R1 digest 不受影响）。
+
+### 新增（Added）
+
+- **`run.strategy_paths`（LL-2）**：`module:Class` 点路径装载 + `sys.path` 注入（只加不删、绝对路径、
+  fail-closed、幂等去重）。
+- **同名包冲突检测（MM-2）**：`_load_strategy` 装载前核缓存包的 `__path__`／`__file__` 归属——
+  异源同名即 `ConfigError`（禁静默沿用缓存、禁 `del sys.modules` 重导）；单测 3 例。
+- **文档守卫双侧互校（MM-3）**：`tests/fixtures/strategy_contract.py`（`QIDIAN_LOOKBACK_BARS=1020`，实跑取值）
+  ↔ 仓外 `cc_strategies/tests/test_contract_sync.py`；原 `except ImportError: pytest.skip` 空转已删
+  （夹具漂移 ⇒ btf 守卫红；策略漂移 ⇒ 仓外侧红，双向可证伪）。
+- **多基准（MM-6）**：`RunManifest.benchmarks`（每基准一套 excess/年化超额/TE/IR/beta/alpha/上下行捕获）；
+  报告「基准对照（多基准）」章节（≥2 个才出现，不受 `report.sections` 过滤）；`noise_baseline` 用主基准。
+- **研究批次数据冻结（MM-7）**：仓外 `scripts/freeze_batch.py`（`--batch/--apply`，任一失败整批退非零、
+  不写 index）＋ `freezes/README.md`；24 份研究配置改 `data.fingerprint_mode: "fast"` ＋ fast 指纹
+  （批次 `20261024`，24 条清单 / 7 个不同指纹）。
+- **归一化墙钟性能门槛（MM-8）**：`tests/benchmark/_perf.py`（CPU/IO 探针、`machine_factor` 只放大不缩小、
+  min-of-2、`[ENV]` 与 `[PERF]` 分离）；B2/B3/B4 判定改 `raw ÷ 本机标定系数`（**预算 20/60/1800 未动**）。
+- **`examples` 随安装暴露（MM-5，N15 闭环）**：`packages.find.include = ["btf*", "examples*"]` ＋
+  `examples/__init__.py`（声明不做 `sys.path` 注入）；`bt run --config examples/config_rotation.yaml`
+  在中性目录亦可装载。
+- **新测试**：`tests/unit/{test_strategy_paths,test_load_conflict_mm2,test_benchmark_multi_mm6,
+  test_symbol_range_equiv}.py`；新夹具 `tests/fixtures/{monthly_equal,strategy_contract}.py`。
+- **仓外工具入仓**：`tools/run_ext_dv.py`（MM-1 路径同步）、`tools/run_patched.py`。
+
+### 变更（Changed）
+
+- **数据版本门禁（RC-14）改到宇宙解析之后**：门禁、`bt dataset freeze`、manifest `data_version` 三者
+  **表集同源**（原 ETF 宇宙门禁按字面 `daily` 实算、实际读 `fund_daily` ⇒ 冻结值永远钉不住）；附回归例
+  `TestGateTableSetMatchesActualUse`。
+- **基准装配守卫**：多基准**逐个**校验形制与区间覆盖，错误信息点名具体基准（不再"主基准过了、次基准跑完才崩"）。
+- **L5 判定口径**：改为 `normalized = raw ÷ k ≤ budget`（k 只许放大、上限 3.0；**先判达标，再判环境**）。
+- **插件边界基线**：79 文件；history 新增 2 条（MM-6 7 文件／MM-7 2 文件，reason 带工单号，D-BASE-1）。
+- **文档计数口径**：工作区 **1211/1189/22**（01/07/09/11/16/README 同步；tag 快照口径保留未动）。
+
+### 移除（Removed）
+
+- `btf/strategy/{qidian,v77,monthly,l2_ablation}.py`（4 个内置策略实现；实现迁至 `cc_strategies`）。
+- 连带删除：`tests/regression/test_qidian_l3.py`、`tests/system/test_v77_full_range.py`、
+  `tests/unit/test_qidian_signals.py`、`tools/run_stoploss_ablation.py`。
+- 装载入口 `btf.strategy.<具体策略>` 不再可用（改 `cc_strategies.<模块>:<类>` ＋ `run.strategy_paths`）。
+- （历史说明）`ava／l5_stop／fs_events／bond_port／ext_dv` 与 3 个 `*_inputs` 数据口在 1.3.x 已迁出，非本版 diff。
+
+### 修复（Fixed）
+
+- **`bt dataset freeze` 自锁**：已钉 `expected_hash` 会让 `--mode fast` 在 RC-14 处必败（换档／重冻结永远不可能）
+  ——现冻结入口**进程内**放开 `data.dataset.{expected_hash,version}`（不落盘、不改配置、`bt run` 路径零影响）。
+- **文档守卫空转**：`test_doc_claim_guards` 的 T-B 原经仓外包 import 取值，双包同名后沦为全量唯一 skip；
+  现读 `tests/fixtures/strategy_contract.py` 并与仓外侧互校。
+- **N15**：`bt run --config examples/*` 原必失败（`examples` 不在打包面）→ 已修。
+- **双包同名撞车**：迁出包与真源 `代码/strategies` 同名导致 `sys.modules` 静默沿用缓存（守卫失真的根因）
+  → 改名 `cc_strategies` ＋ 装载期冲突检测。
+
+### 发版说明（三条必须转达的坑）
+
+1. **`tests/benchmark/_perf.py` 的 `CPU_REF=0.2070s`／`IO_REF=0.0537s` 是本机空载采样**：换机须重取并留痕，
+   否则标定系数失真（19 号 §141／§142）。
+2. **24 份研究配置的 `expected_hash` 是 2026-10-24 的 fast 指纹**：过一天日更即失效（**设计意图**，非缺陷）；
+   研究批次开跑前先 `python scripts/freeze_batch.py --batch <新批次> --apply`。
+3. **`btf/strategy/` 只剩 5 个接口文件**：任何外部文档／脚本若仍写 `btf.strategy.<具体策略>` 会 `ImportError`；
+   改用 `cc_strategies.<模块>:<类>` ＋ `run.strategy_paths`。
+
 ## [1.3.4] — 2026-10-14（**L2 治理批 HH-1~HH-6**；老大 21:4x 批复「一次全量派单」，19 号 §128）
 
 ### 新增（Added）

@@ -178,3 +178,41 @@ class TestFileFeedGate:
         rt = BTFRuntime().load_config(
             _lib_cfg({"anchor_date": "2020-01-01"})).build()
         assert any("数据版本门禁通过" in n for n in rt.assembly_notes)
+
+
+#: ETF（510300.SH）——`daily_table_of` 映射到 `fund_daily`（MM-7 判据）
+ETF = "510300.SH"
+
+
+def _etf_cfg(dataset: dict | None = None) -> dict:
+    cfg = _lib_cfg(dataset)
+    cfg["run"]["params"]["symbol"] = ETF
+    cfg["run"]["universe"] = {"source": "explicit", "symbols": [ETF]}
+    return cfg
+
+
+@requires_mainlib
+class TestGateTableSetMatchesActualUse:
+    """MM-7 顺序订正：门禁算哈希的表集必须 = **实际用表**（不是 ``daily``）。
+
+    缺陷（实测发现）：`_guard_dataset_version` 原在 `_resolve_instruments`
+    之前调用，`_data_tables()` 因宇宙为空退化为字面 `{"daily"}`；ETF 宇宙
+    实际读 `fund_daily` ⇒ 门禁实算哈希与 `bt dataset freeze`/manifest 的
+    指纹**不同源**，「把冻结值钉进配置」必然报不匹配（冻结不可用）。
+    纯股票宇宙两套表集恰好重合，故历史上从未暴露。
+    """
+
+    def test_gate_accepts_freeze_fingerprint_for_etf(self):
+        from btf.runtime import BTFRuntime
+
+        frozen = BTFRuntime().load_config(
+            _etf_cfg()).build().dataset_fingerprint()
+        assert "fund_daily" in frozen["tables"], frozen["tables"]
+        assert "daily" not in frozen["tables"], (
+            f"ETF 宇宙的表集含 daily：{frozen['tables']}")
+        rt = BTFRuntime().load_config(_etf_cfg({
+            # 冻结清单里的 fast/meta 值——门禁须接受"同源实算"的结果
+            "expected_hash": frozen["content_hash"],
+            "anchor_date": "2024-01-01"})).build()
+        assert any("数据版本门禁通过" in n for n in rt.assembly_notes)
+

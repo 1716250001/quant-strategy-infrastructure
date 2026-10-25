@@ -417,6 +417,15 @@ class RunOrchestrator:
                 resolver=lambda name: registry.resolve(registry.ANALYZER, name),
                 consolidations=consolidations)          # R61′：逐笔口径配对同源
             manifest = store.save_metrics(manifest.run_id, metrics)
+            # **MM-6（19 号 §137 B）**：多基准对照明细随 manifest 落盘
+            # （`report.benchmarks[]`）——主基准数值已在 metrics（上一步），
+            # 其余基准**只在此披露**（P0-NEW-7：metrics 只许数值）。单基准
+            # 亦落一条（同一口径，报告据此渲染对照/披露，不改 digest）。
+            if self.rt.benchmark_details:
+                manifest = replace(
+                    manifest, benchmarks=tuple(self.rt.benchmark_details))
+                store.write_manifest(manifest)
+
         except Exception as exc:                    # 崩溃审计：留 FAILED 终态
             store.mark_failed(manifest.run_id, f"{type(exc).__name__}: {exc}")
             raise

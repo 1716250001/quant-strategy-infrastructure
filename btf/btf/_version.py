@@ -84,5 +84,14 @@ AttributeError））＋ **HH-3 `adhoc` 收编为 `bt adhoc`**（**十四命令�
 **文档侧**：HH-4 **A1「偶然产物」加注 22 处**（标注式：仅追加、零历史数字改动；
 19 号部分由审查方）＋ HH-5 第一代背离实现并入归档
 （`_archive/背离扫描器-20260924/工作区技能版-第一代/`，9 文件 sha256 校验）。
+**1.3.4 → 2.0.0**（2026-10-25；**策略出仓 ＋ 性能/披露治理收口**；KK/LL/MM 全批，19 号 §134–§143）：
+**major（破坏性：策略装载范式变更）**——具体策略出仓至 `cc_strategies`（`run.strategy` 改点路径
+＋ `run.strategy_paths` 注入；删 `btf/strategy/{qidian,v77,monthly,l2_ablation}.py` 及连带测试 3 个、
+工具 1 个）；`report.benchmark` 放宽为 `string | array(1–3)`（首个＝主基准，R1 digest 口径不变）。
+能力/修复：LL-2 装载范式＋MM-2 同名包冲突检测＋MM-3 文档守卫双侧互校＋MM-6 多基准披露＋
+MM-7 研究批次数据冻结（并修 `bt dataset freeze` 自锁、RC-14 门禁表集错位）＋MM-8 归一化墙钟门槛
+（`tests/benchmark/_perf.py`；预算 20/60/1800 未动）＋MM-5 `examples` 可装载（N15 闭环）。
+**记账/撮合/成本口径未变**；`bt check` **10/10**、全量 **1211**（非 L5 **1189** ＋ L5 **22**）/ skip 0；
+发版说明三条坑见 `CHANGELOG.md` §2.0.0。
 """
-__version__ = "1.3.4"
+__version__ = "2.0.0"

@@ -232,23 +232,31 @@ class YearTableStore:
         self, table: str, symbol: str, start_ymd: str, end_ymd: str,
         columns: Sequence[str],
     ) -> pa.Table:
-        """某标的日期区间（逐年 is_in 过滤 + 区间过滤 + 拼接）。"""
+        """某标的日期区间（**谓词下推** + 边界年区间过滤 + 拼接）。
+
+        KK-1（19 号 §132.1）：走 `read_year_where()` 的 parquet 原生
+        `filters=[("ts_code","in",[symbol])]`，仅物化本标的本年行；
+        **签名与返回内容不变**（行序不承诺——`adjust` 侧已自行排序）。
+        """
+        meta = TABLES.get(table)
+        if meta is None:
+            raise ValueError(f"表未登记: {table}")
+        date_col = meta.date_col
+        if date_col is None:
+            raise ValueError(f"表 {table} 无日期列（静态表）")
         cols = tuple(dict.fromkeys((*columns, "ts_code", "trade_date")))
         y0, y1 = int(start_ymd[:4]), int(end_ymd[:4])
         parts: list[pa.Table] = []
         for year in range(y0, y1 + 1):
-            t, _index, date_col, _key_col = self._load(table, year, cols)
+            t = self.read_year_where(table, year, cols, [symbol])
             if t is None or not t.num_rows:
                 continue
-            mask = pc.equal(t.column("ts_code"), symbol)
             if year == y0 or year == y1:
-                mask = pc.and_(
-                    mask,
-                    pc.and_(pc.greater_equal(t.column(date_col), start_ymd),
-                            pc.less_equal(t.column(date_col), end_ymd)))
-            part = t.filter(mask)
-            if part.num_rows:
-                parts.append(part)
+                t = t.filter(pc.and_(
+                    pc.greater_equal(t.column(date_col), start_ymd),
+                    pc.less_equal(t.column(date_col), end_ymd)))
+            if t.num_rows:
+                parts.append(t)
         if not parts:
             return pa.table({})
         return pa.concat_tables(parts)

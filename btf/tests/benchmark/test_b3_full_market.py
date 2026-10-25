@@ -88,9 +88,17 @@ def test_b3_two_year_scan_evidence(instruments):
     """B3 证据段：2 年全市场截面扫描（2015–2016）吞吐登记。
 
     10 年全尺度硬门槛见下一条（2026-09-27 CP1 性能专项达标：32.9s < 60s）。
+    **MM-8（19 号 §140）**：门槛按归一化墙钟判定；首次未达标才跑第二次。
     """
-    elapsed, n_days, n_fills, n_rej = _run_scan(
-        date(2015, 1, 1), date(2016, 12, 31), instruments)
+    from tests.benchmark import _perf
+
+    elapsed, n_days, n_fills, n_rej = _perf.run_budget(
+        "B3-evidence",
+        lambda: _run_scan(date(2015, 1, 1), date(2016, 12, 31), instruments),
+        B3_LIMIT_SECONDS,
+        hint=("2 年尺度即超预算 ⇒ 十年尺度必超标：回查全市场扫描路径"
+              "（触发架构复查 / CP1 性能专项）"),
+        seconds=lambda row: row[0])
     per_day = elapsed / max(n_days, 1)
     print(f"\nB3-evidence: {n_days} 交易日 × {len(instruments)} 标的 | "
           f"{n_fills:,} 成交 / {n_rej:,} 拒单 | {elapsed:.1f}s"
@@ -98,9 +106,6 @@ def test_b3_two_year_scan_evidence(instruments):
           f"{per_day * 2440:.0f}s vs 预算 {B3_LIMIT_SECONDS:.0f}s）")
     assert n_days > 400, "交易日数异常"
     assert n_fills > 5_000, "成交笔数量级异常（截面策略应大规模调仓）"
-    assert elapsed < B3_LIMIT_SECONDS, (
-        f"2 年尺度即超 B3 预算：{elapsed:.1f}s——十年尺度必超标，"
-        f"触发架构复查（CP1 性能专项）")
 
 
 def test_b3_full_decade_scan(instruments):
@@ -116,10 +121,21 @@ def test_b3_full_decade_scan(instruments):
          三次持仓遍历 → 一次）。
     语义不变量：1 年尺度成交 26,648 笔优化前后逐位一致；黄金集 L3 对账
     （容差 1e-10）全绿。
+
+    **MM-8（19 号 §140）**：60s 预算不改，判定改为 `raw ÷ 本机标定系数`
+    （只许放大）；首次未达标才跑第二次。
     """
-    elapsed, n_days, fills, rejections = _run_scan(START, END, instruments)
+    from tests.benchmark import _perf
+
+    elapsed, n_days, fills, rejections = _perf.run_budget(
+        "B3-decade",
+        lambda: _run_scan(START, END, instruments),
+        B3_LIMIT_SECONDS,
+        hint=("回查全市场扫描路径（per-day 消费 / 列式截面 / stk_limit 索引 / "
+              "快照单遍融合）"),
+        seconds=lambda row: row[0])
     print(f"\nB3-decade: {n_days} 交易日 × {len(instruments)} 标的 | "
           f"{fills:,} 成交 / {rejections:,} 拒单 | {elapsed:.1f}s"
-          f"（预算 {B3_LIMIT_SECONDS:.0f}s，余量 {B3_LIMIT_SECONDS / elapsed:.2f}x）")
+          f"（预算 {B3_LIMIT_SECONDS:.0f}s，按归一化墙钟判定（MM-8））")
     assert n_days > 2300
-    assert elapsed < B3_LIMIT_SECONDS
+

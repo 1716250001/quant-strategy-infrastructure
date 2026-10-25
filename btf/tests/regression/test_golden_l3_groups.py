@@ -251,15 +251,8 @@ class TestGroup8Calendar:
         snapshots = reconciled["g8_calendar_spring_festival"]["engine"].snapshots
         assert [s.date.to_ymd() for s in snapshots] == dates
 
-    def test_week_anchors_match_qidian_implementation(self, reconciled):
-        """构建器独立 W-FRI 实现 ≡ `btf.strategy.qidian.week_end_of`（互校）。"""
-        from btf.strategy.qidian import week_end_of
-
-        cal = reconciled["g8_calendar_spring_festival"]["case"]["assertions"]["calendar"]
-        grouped: dict[str, list[str]] = {}
-        for day in cal["dates"]:
-            grouped.setdefault(week_end_of(day), []).append(day)
-        assert grouped == cal["week_anchors"]
+    # G8 周锚互校（原 test_week_anchors_match_qidian_implementation）随策略迁
+    # `赤潮/研究/cc_strategies/tests/test_qidian_week_anchors.py`（LL-4，19 号 §133）。
 
 
 class TestGroup9HfqChain:

@@ -127,30 +127,41 @@ class TestB2RealFeed:
         assert "201601" in monthly and len(monthly) >= 120
 
         # R4（19 号 §48）：状态面板**构造期注入**（feed 已不再 import state）
-        feed = TushareParquetFeed(ROOT, state_provider=StateSynthesizer(ROOT))
-        t0 = time.perf_counter()
-        r = Engine(
-            feed, Hs300TopN(monthly, top_n=20),
-            start=START, end=END,
-            initial_cash=1_000_000.0,
-            handler=NextOpenHandler(cost_model=FlatRateCostModel()),
-            event_log_path=tmp_path / "events.jsonl",
-        ).run()
-        elapsed = time.perf_counter() - t0
+        # **MM-8（19 号 §140）**：门槛改「归一化墙钟」——每次尝试独立建 feed/引擎
+        # （不共用引擎状态），`run_budget` 只在首次未达标时才跑第二次。
+        from tests.benchmark import _perf
 
-        n_events = sum(1 for _ in (tmp_path / "events.jsonl").open(encoding="utf-8"))
+        state: dict[str, int] = {}
+
+        def _measure() -> tuple[float, object, Path]:
+            state["n"] = state.get("n", 0) + 1
+            log_path = tmp_path / f"events-attempt{state['n']}.jsonl"
+            feed = TushareParquetFeed(ROOT, state_provider=StateSynthesizer(ROOT))
+            t0 = time.perf_counter()
+            result = Engine(
+                feed, Hs300TopN(monthly, top_n=20),
+                start=START, end=END,
+                initial_cash=1_000_000.0,
+                handler=NextOpenHandler(cost_model=FlatRateCostModel()),
+                event_log_path=log_path,
+            ).run()
+            return time.perf_counter() - t0, result, log_path
+
+        elapsed, r, events_path = _perf.run_budget(
+            "B2", _measure, B2_LIMIT_SECONDS,
+            hint=("逐日消费路径回查（全截面物化禁区/states 触板裁剪/"
+                  "_LazyCrossSection bisect）"),
+            seconds=lambda payload: payload[0])
+
+        n_events = sum(1 for _ in events_path.open(encoding="utf-8"))
         band = ("软目标内" if elapsed <= B2_SOFT_TARGET_SECONDS
                 else f"超软目标 {B2_SOFT_TARGET_SECONDS}s（负载？）")
         print(
             f"\nB2-real: {r.n_days} 交易日 | {len(r.orders)} 订单 | "
             f"{len(r.fills)} 成交 | {len(r.rejections)} 拒单 | "
             f"{n_events} 事件 | {elapsed:.2f}s"
-            f"（{band}；硬门槛 {B2_LIMIT_SECONDS}s，Z-4）"
+            f"（{band}；硬门槛 {B2_LIMIT_SECONDS}s（按归一化墙钟判定，MM-8））"
         )
         assert r.n_days > 2_400, "十年交易日数量级异常"
         assert len(r.fills) > 500, "月调仓成交量级异常（120 月×~20 标的）"
-        assert elapsed < B2_LIMIT_SECONDS, (
-            f"B2 超标：{elapsed:.2f}s ≥ 硬门槛 {B2_LIMIT_SECONDS}s（隔离基线"
-            f"≈14s 的 1.4x）——逐日消费路径回查（全截面物化禁区/"
-            f"states 触板裁剪/_LazyCrossSection bisect）"
-        )
+

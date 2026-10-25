@@ -34,7 +34,7 @@ viz = [
 bt = "btf.cli.main:main"
 
 [tool.setuptools.packages.find]
-include = ["btf*"]
+include = ["btf*", "examples*"]
 
 [tool.setuptools.dynamic]
 # 运行时版本 = 包内唯一真源（纯字面量，setuptools 可静态解析，无需 import 包）

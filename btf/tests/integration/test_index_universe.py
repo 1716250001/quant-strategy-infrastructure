@@ -100,7 +100,7 @@ class TestRuntimeIndexUniverse:
         return {
             "schema_version": "backtest.v1",
             "run": {
-                "strategy": "btf.strategy.monthly:MonthlyEqualWeight",
+                "strategy": "tests.fixtures.monthly_equal:MonthlyEqualWeight",
                 "params": {},
                 "universe": {"source": "index", **universe},
                 "period": {"start": "2019-01-01", "end": "2019-06-30"},

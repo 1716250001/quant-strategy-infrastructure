@@ -52,7 +52,7 @@ def _config() -> dict:
     return {
         "schema_version": "backtest.v1",
         "run": {
-            "strategy": "btf.strategy.monthly:MonthlyEqualWeight",
+            "strategy": "tests.fixtures.monthly_equal:MonthlyEqualWeight",
             "params": {"symbols": SYMS},
             "universe": {"source": "explicit", "symbols": SYMS},
             "period": {"start": "2016-01-01", "end": "2025-12-31"},
@@ -82,18 +82,31 @@ def test_b4_grid_search_evidence():
 
 @pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason="主库不可用")
 def test_b4_grid_search_budget():
-    """B4 硬门槛（09 §14.5）：1000 组 × B2 场景（8 进程）< 30min——外推实测。"""
-    t0 = time.perf_counter()
-    GridSearchOptimizer(workers=WORKERS).run(_config(), GRID,
-                                             objective="final_nav")
-    wall = time.perf_counter() - t0
-    extrapolated = wall * 1000 / N_COMBOS
-    print(f"\nB4: {N_COMBOS} 组合 × {WORKERS} 进程 {wall:.1f}s | "
-          f"外推 1000 组 {extrapolated:.0f}s"
-          f"（预算 {B4_LIMIT_SECONDS:.0f}s，余量 {B4_LIMIT_SECONDS / extrapolated:.2f}x）")
-    assert extrapolated < B4_LIMIT_SECONDS, (
-        f"B4 超标：外推 {extrapolated:.0f}s > {B4_LIMIT_SECONDS:.0f}s——"
-        f"回查 worker 数据路径（谓词下推 / 年表缓存 / 进程数适配）")
+    """B4 硬门槛（09 §14.5）：1000 组 × B2 场景（8 进程）< 30min——外推实测。
+
+    **MM-8（19 号 §140）**：1800s 预算**不改**，判定改为
+    `外推 ÷ 本机标定系数`（只许放大）；首次未达标才跑第二次（min-of-2）。
+    本机标定系数把"空载参考机 → 当前机器态"折算进来，解决 §139 F-2
+    「同一代码仅因起始时刻不同即跨越门槛」的不可重复性。
+    """
+    from tests.benchmark import _perf
+
+    def _measure() -> float:
+        t0 = time.perf_counter()
+        report = GridSearchOptimizer(workers=WORKERS).run(
+            _config(), GRID, objective="final_nav")
+        wall = time.perf_counter() - t0
+        print(f"\nB4: {N_COMBOS} 组合 × {WORKERS} 进程 {wall:.1f}s | "
+              f"线性外推 1000 组 {wall * 1000 / N_COMBOS:.0f}s"
+              f"（预算 {B4_LIMIT_SECONDS:.0f}s）")
+        assert report["n_combos"] == N_COMBOS
+        return wall
+
+    _perf.run_budget(
+        "B4", _measure, B4_LIMIT_SECONDS,
+        hint="回查 worker 数据路径（谓词下推 / 年表缓存 / 进程数适配）",
+        seconds=lambda wall: wall * 1000 / N_COMBOS)
+
 
 
 @pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason="主库不可用")

@@ -182,9 +182,30 @@ def load_config(
     return cfg
 
 
+def benchmark_symbols(report_cfg: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """`report.benchmark` 归一（**MM-6**，19 号 §137 B）：单值/数组 → 代码元组。
+
+    口径（派单原文）：**首个＝主基准**——只有主基准的相对指标进
+    `metrics.json`（键名与数值口径逐字不变，R1 digest 不受影响）；其余基准
+    只进 `report.benchmarks` 披露（P0-NEW-7：metrics 只许数值，基准代码属
+    元信息）。未配（缺键 / 空串 / 空数组）⇒ 空元组（无基准对照，RC-09）。
+
+    为什么不放 analytics/runtime：`viz`（报告渲染）与 `app`（噪声对照）都要
+    用同一口径，而铁律 5 禁止表现层 import `btf.analytics`——配置层是共同
+    下层（`btf.config` 与 `btf.domain` 同归最内层），唯一不破分层的位置。
+    """
+    raw = (report_cfg or {}).get("benchmark")
+    if not raw:
+        return ()
+    if isinstance(raw, str):
+        return (raw,)
+    return tuple(str(symbol) for symbol in raw)
+
+
 __all__ = [
     "DEFAULTS",
     "ConfigSourceError",
+    "benchmark_symbols",
     "deep_merge",
     "from_env",
     "load_config",

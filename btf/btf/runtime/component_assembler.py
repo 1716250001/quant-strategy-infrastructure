@@ -82,27 +82,37 @@ class ComponentAssembler:
         return sorted(tables)
 
     def guard_benchmark(self, period: Mapping[str, Any]) -> None:
-        """装配期基准守卫（P1-NEW-6）：形制 + 区间覆盖（零行即 ConfigError）。"""
-        symbol = ((self.rt.config.get("report") or {}).get("benchmark"))
-        if not symbol:
+        """装配期基准守卫（P1-NEW-6）：形制 + 区间覆盖（零行即 ConfigError）。
+
+        **MM-6（19 号 §137 B）**：`report.benchmark` 可为 1–3 个代码的数组 ⇒
+        **逐个**校验（任一个形制非法或区间零行即拒），错误信息点名是哪一个
+        ——不允许「主基准过了、次基准跑完才崩」。
+        """
+        from btf.config.loader import benchmark_symbols
+
+        symbols = benchmark_symbols(self.rt.config.get("report") or {})
+        if not symbols:
             return
-        if not self.rt._BENCHMARK_RE.match(str(symbol)):
-            raise ConfigError([
-                f"report.benchmark={symbol!r} 形制非法：应为"
-                f"「6 位数字.交易所」（如 000300.SH / 399006.SZ / 000905.SH）"])
         from btf.data.index_series import probe_index_coverage
 
-        n = probe_index_coverage(
-            str(symbol), _ymd(period["start"]).to_ymd(),
-            _ymd(period["end"]).to_ymd(), root=getattr(self.rt.feed, "root", None),
-            store=self.rt._table_store())
-        if n == 0:
-            raise ConfigError([
-                f"report.benchmark={symbol} 在区间 {period['start']}~"
-                f"{period['end']} 内无任何行情（index_daily 零行）——"
-                f"请核对基准代码或区间；装配期即拒绝，避免跑完整段回测才报错"])
-        logger.info("基准装配期校验通过：%s（区间内 %d 个交易日有行情）",
-                    symbol, n)
+        for symbol in symbols:
+            if not self.rt._BENCHMARK_RE.match(str(symbol)):
+                raise ConfigError([
+                    f"report.benchmark={symbol!r} 形制非法：应为"
+                    f"「6 位数字.交易所」（如 000300.SH / 399006.SZ / 000905.SH）"])
+
+            n = probe_index_coverage(
+                str(symbol), _ymd(period["start"]).to_ymd(),
+                _ymd(period["end"]).to_ymd(), root=getattr(self.rt.feed, "root", None),
+                store=self.rt._table_store())
+            if n == 0:
+                raise ConfigError([
+                    f"report.benchmark={symbol} 在区间 {period['start']}~"
+                    f"{period['end']} 内无任何行情（index_daily 零行）——"
+                    f"请核对基准代码或区间；装配期即拒绝，避免跑完整段回测才报错"])
+            logger.info("基准装配期校验通过：%s（区间内 %d 个交易日有行情）",
+                        symbol, n)
+
 
     def run_data_quality(self, period: Mapping[str, Any]) -> dict[str, Any]:
         """装配期数据不变量校验（CC-1..CC-5；CC-6 产物/披露见 `run()` 与报告）。

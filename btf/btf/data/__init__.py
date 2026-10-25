@@ -16,10 +16,15 @@
     adjust           AdjustService（hfq/qfq——仅研究侧指标与展示，不进引擎记账，ADR-6）
     index_series     指数收盘序列（基准取数，缺日 fail-closed）
     index_universe   index_weight 月末快照复算 PIT 指数成分宇宙
+    corp_action_probe 公司行动离线清单探针（配股/缩股；corp_actions.json）
+    etf_corp_actions  ETF/LOF 分红/折算事件（ADR-20）
     —— 治理 ——
     coverage         回测区间覆盖度守卫（必需表起点 / 降级表）
     quality          数据不变量校验 CC-1..CC-5（装配期门 + 产物 + 披露）
     version          数据内容指纹 DataVersion（meta/fast/full 三档）
+
+策略专用数据口（`ava_inputs`/`dv_inputs`/`event_inputs`）已迁**仓外**
+`赤潮/研究/cc_strategies/`（LL-1，2026-10-24；本包不再提供）。
 
 纪律：只读主库；禁止反向依赖引擎层（契约 4）；上层不得直接 import `parquet_reader`（契约 9）；
 `core` 不得依赖本包其它领域模块（契约 7）；域内模块互不依赖（契约 8，唯一已知例外 feed→state）。

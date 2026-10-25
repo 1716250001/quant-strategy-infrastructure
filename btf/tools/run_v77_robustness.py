@@ -96,7 +96,8 @@ def _config(start: str, end: str, top_k: int, cost: str = "delivered") -> dict:
     return {
         "schema_version": "backtest.v1",
         "run": {
-            "strategy": "btf.strategy.v77:V77Strategy",
+            "strategy": "cc_strategies.v77:V77Strategy",
+            "strategy_paths": ["D:/量化策略/赤潮/研究"],
             "params": {"top_k": top_k},
             "universe": {"source": "all"},
             "period": {"start": start, "end": end},

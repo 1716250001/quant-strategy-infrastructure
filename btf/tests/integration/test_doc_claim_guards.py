@@ -6,8 +6,9 @@
 - **T-A 计数守卫**：六份现状文档必须**同时声明**两个口径（「tag 快照」＋「工作区」），
   且**「工作区」值 == 实测 collect 非 L5 数**（子进程 cwd ＝ `代码/btf`；`--collect-only`
   **不带 `-q`**——本环境带 `-q` 时按行计数恒为 0，见 B3 纪律）。
-- **T-B 口径守卫**：文档中 **warm-up 上下文**数字必须 == `QidianStrategy.lookback_bars()`
-  声明值；正则带 `warm.?up` 前缀锚（**禁裸扫数字**：文档另有「冷备 252 文件 / 3446 KB」
+- **T-B 口径守卫**：文档中 **warm-up 上下文**数字必须 == 夹具 `QIDIAN_LOOKBACK_BARS`
+  （MM-3：`QidianStrategy` 在仓外，本守卫**不 import 仓外包**；取值真源见
+  `tests/fixtures/strategy_contract.py`，与仓外 `test_contract_sync.py` 双侧互校）；正则带 `warm.?up` 前缀锚（**禁裸扫数字**：文档另有「冷备 252 文件 / 3446 KB」
   「日频 `×√252`」）；显式历史/对照行按其标记放行（见 `_warmup_number_ok`）。
 - **T-C 矛盾扫描器**：先从 **19 号**提取「已交付/验收通过/闭合」的单号集合，再扫其余
   文档：出现「**待 Rxx′**」且该单号已在集合内 ⇒ 失败（**源头单一取自 19 号**，不在测试里
@@ -26,6 +27,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+from tests.fixtures.strategy_contract import QIDIAN_LOOKBACK_BARS
 
 pytestmark = [pytest.mark.l2]
 
@@ -136,10 +139,14 @@ def _warmup_number_ok(num: int, line: str, declared: int, *,
 
 
 def test_t_b_warmup_value_guard():
-    """文档 warm-up 上下文数字 == `QidianStrategy.lookback_bars()` 声明值。"""
-    from btf.strategy.qidian import QidianStrategy
+    """文档 warm-up 上下文数字 == 夹具 `QIDIAN_LOOKBACK_BARS` 声明值（MM-3）。
 
-    declared = int(QidianStrategy.lookback_bars())
+    MM-3（19 号 §135.2）前此守卫经仓外包 import 取值——包名撞车后沦为全量
+    唯一 skip（守卫空转）；现改读 `tests/fixtures/strategy_contract.py`，
+    与仓外 `cc_strategies/tests/test_contract_sync.py` 双侧互校：策略实现
+    漂移 ⇒ 仓外侧红；夹具/文档漂移 ⇒ 本守卫红（双向可证伪）。
+    """
+    declared = QIDIAN_LOOKBACK_BARS
     problems: list[str] = []
     scopes = [(name, True) for name in (*CURRENT_DOCS, USAGE_DOC)]
     scopes.append((DOC_19, False))                 # 审查留痕：历史值按标记放行

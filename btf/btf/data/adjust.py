@@ -112,6 +112,8 @@ class TushareAdjustService:
         rows = self._SHARED_ROWS.get(key)
         if rows is None:
             table = factor_table_of(symbol)          # RC-04：股票/ETF 双表路由
+            # KK-1：区间保留全历史（因子表实际覆盖 1991→）；无文件年由
+            # YearTableStore.read_year_where 的 path.is_file() 早退，不读盘。
             t = self._store().symbol_range(
                 table, symbol, "19900101", "20991231",
                 ["adj_factor"])

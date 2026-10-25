@@ -22,6 +22,7 @@ import importlib
 import inspect
 import logging
 import re
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -154,6 +155,11 @@ class BTFRuntime:
         self.assembly_notes: list[str] = []
         #: 基准代码（P0-NEW-7：元信息不混入数值指标集；报告披露区消费）
         self.benchmark_symbol: str = ""
+        #: 基准对照明细（**MM-6**，19 号 §137 B）：每个基准一条
+        #: `{symbol, primary, <相对指标…>}`——主基准数值与 metrics.json 同源，
+        #: 其余基准**只**在此披露（P0-NEW-7：metrics 只许数值）；随 manifest
+        #: 落盘 `report.benchmarks[]`，报告渲染多基准对照表。
+        self.benchmark_details: tuple[dict[str, Any], ...] = ()
         #: 数据指纹真值（BB-1 重路：装配期实算；落 manifest.data_version）
         self.data_version_info: dict[str, Any] = {}
         #: 数据不变量校验结果（批 8 CC-1..CC-6；装配期实算，落 run 目录 + 报告）
@@ -251,8 +257,6 @@ class BTFRuntime:
         # 原须**跑完整段回测**才在 `_benchmark_metrics` 报错（长区间 = 白烧）；
         # 与"区间已有装配期守卫"的既有标准不一致 → 现装配期即探测（fail-closed）。
         self._guard_benchmark(period)
-        # RC-14（2026-10-05）：数据版本门禁——声明版本/水位才生效（opt-in）
-        self._guard_dataset_version(period)
         self.step_timings["装配·前置与守卫"] = _pc() - _t
         _t = _pc()
 
@@ -268,6 +272,15 @@ class BTFRuntime:
         self.instruments = self._resolve_instruments(
             run_cfg.get("universe") or {}, _ymd(period["start"]),
             _ymd(period["end"]))
+
+        # RC-14（2026-10-05）：数据版本门禁——声明版本/水位才生效（opt-in）。
+        # **MM-7 顺序订正**：本守卫原在 `_resolve_instruments` **之前**调用，
+        # 而它按 `_data_tables()` 取表集 —— 宇宙未解析 ⇒ 表集退化为字面
+        # `{"daily"}`（实测 ETF 宇宙：门禁哈希在 `daily` 上算，实际用的是
+        # `fund_daily`）⇒ 门禁与 `bt dataset freeze`/manifest 的指纹**不同源**，
+        # 冻结值钉不住（钉了必报不匹配）。今移到宇宙解析之后：门禁、冻结清单、
+        # manifest `data_version` 三者同一表集（纯股票宇宙下逐位不变）。
+        self._guard_dataset_version(period)
 
         # ETF 复权因子覆盖守卫（**RC-04，2026-10-05**）：**条件降级**——仅当
         # 宇宙含 ETF 时检查 `fund_adj` 起点（19991022）。为什么不并入
@@ -405,8 +418,47 @@ class BTFRuntime:
 
     def _load_strategy(self, run_cfg: Mapping[str, Any]) -> StrategyBase:
         """module:Class 动态加载 + 构造参数注入（装配期，非 doc 的 init 期）。"""
+        # LL-2（19 号 §133.2）：外部策略搜索路径；**幂等、去重、只加不删**。
+        # 须为绝对路径（相对路径会随 CWD 漂移，破坏跨机可复现）；不存在即拒载。
+        for raw in run_cfg.get("strategy_paths") or []:
+            path = Path(str(raw))
+            if not path.is_absolute():
+                raise ConfigError(
+                    [f"run.strategy_paths: 须为绝对路径，得 {raw!r}"])
+            path = path.resolve()
+            if not path.is_dir():
+                raise ConfigError(
+                    [f"run.strategy_paths: 路径不存在或不是目录 {path}"])
+            if str(path) not in sys.path:
+                sys.path.insert(0, str(path))
         spec = run_cfg["strategy"]
         module_name, _, class_name = spec.partition(":")
+        # MM-2（19 号 §135.2）：同名包冲突检测（防御层）。sys.path 注入**不清洗
+        # sys.modules**——若顶层包已被同进程从别处装载缓存（如真源
+        # `代码/strategies`），importlib 会静默沿用缓存模块（MM-3 前 D-1 守卫
+        # 空转的根因），故装载前显式拒绝；**禁止** `del sys.modules` 后重导
+        # （同进程两套模块状态）。判定口径：缓存模块的 `__path__`（普通模块取
+        # `__file__` 父目录）须位于某个注入目录**之下**——同源复用放行、异源
+        # 同名拒载；未声明 `strategy_paths` 时不检测（无注入即无本批冲突面）。
+        injected = [Path(str(raw)).resolve()
+                    for raw in (run_cfg.get("strategy_paths") or [])]
+        if injected:
+            top = module_name.partition(".")[0]
+            cached = sys.modules.get(top)
+            if cached is not None:
+                known = [Path(p).resolve()
+                         for p in getattr(cached, "__path__", [])]
+                origin = getattr(cached, "__file__", None)
+                if origin is not None:
+                    known.append(Path(origin).resolve().parent)
+                same_origin = any(p.is_relative_to(root)
+                                  for p in known for root in injected)
+                if not same_origin:
+                    raise ConfigError([
+                        f"run.strategy: 包名冲突：顶层包 {top!r} 已从"
+                        f" {[str(p) for p in known]} 缓存装载，与配置声明的"
+                        f" strategy_paths={[str(p) for p in injected]} 不符；"
+                        f"包名冲突：请使用唯一包名（拒载，不静默沿用缓存）"])
         try:
             cls = getattr(importlib.import_module(module_name), class_name)
         except (ImportError, AttributeError) as exc:
@@ -590,11 +642,31 @@ class BTFRuntime:
         （有 `.snapshots`）时自动取值——与 `compute_all` / `_snapshot_ymd` 的
         "双形态容忍"口径一致（复核路径是 `SnapshotRecord`，运行路径是
         `PortfolioSnapshot`，本处则可能是整个 result）。
+
+        **MM-6（19 号 §137 B）**：`report.benchmark` 可为 1–3 个代码的数组。
+        **首个＝主基准**：只有主基准的数值进 `metrics.json`（键名/数值口径
+        **逐字不变** ⇒ R1 digest 不受影响）；其余基准只算**披露明细**存
+        `self.benchmark_details`（随 manifest 落 `report.benchmarks[]`，报告
+        渲染对照表）——P0-NEW-7：metrics 只许数值，第二基准不得污染。
         """
         if hasattr(snapshots, "snapshots"):
             snapshots = snapshots.snapshots
-        symbol = ((self.config.get("report") or {}).get("benchmark"))
-        return self._relative_metrics_for(symbol, snapshots)
+        from btf.config.loader import benchmark_symbols
+
+        symbols = benchmark_symbols(self.config.get("report") or {})
+        self.benchmark_details = ()
+        if not symbols:
+            return {}
+        # 主基准（首个）——唯一进 metrics 的一条
+        metrics = self._relative_metrics_for(symbols[0], snapshots)
+        if not metrics:
+            return {}
+        details = [dict(metrics, symbol=symbols[0], primary=True)]
+        for symbol in symbols[1:]:
+            row = self._compute_relative(symbol, snapshots)
+            details.append(dict(row, symbol=symbol, primary=False))
+        self.benchmark_details = tuple(details)
+        return metrics
 
     def _relative_metrics_for(
         self, symbol: Any, snapshots: Sequence[Any], *,
@@ -608,7 +680,21 @@ class BTFRuntime:
 
         本助手同时供 `verify_run` 使用（R1 复核须与落盘口径一致：原复核只算
         基础 15 项、落盘含基准项 → 配了基准的 run 复核摘要必然不符）。
+
+        MM-6（19 号 §137 B）：本助手只算**一个**基准；多基准分发在
+        `_benchmark_metrics`（主基准经本助手进 metrics，其余经 `_compute_relative`
+        只进披露）——单一计算真源不变。
         """
+        metrics = self._compute_relative(symbol, snapshots, analysis=analysis)
+        if metrics:
+            self.benchmark_symbol = str(symbol)
+        return metrics
+
+    def _compute_relative(
+        self, symbol: Any, snapshots: Sequence[Any], *,
+        analysis: Mapping[str, Any] | None = None,
+    ) -> dict[str, float]:
+        """单个基准的数值型相对指标（MM-6 拆出的纯计算半边，无身份副作用）。"""
         if not symbol or not snapshots:
             return {}
         from btf.analytics.benchmark import relative_metrics
@@ -630,10 +716,11 @@ class BTFRuntime:
             navs, bench_closes, symbol=str(symbol),
             risk_free_rate=float(analysis.get("risk_free_rate", 0.0)),
             annualization_factor=int(analysis.get("annualization_factor", 252)))
-        self.benchmark_symbol = str(metrics.pop("benchmark_symbol", symbol) or "")
-        logger.info("基准对比：%s（%d 日对齐）→ %d 项相对指标已并入 metrics",
+        metrics.pop("benchmark_symbol", None)      # 元信息剥离（P0-NEW-7）
+        logger.info("基准对比：%s（%d 日对齐）→ %d 项相对指标已计算",
                     symbol, len(days), len(metrics))
         return metrics
+
 
     def _run_engine(self, event_log_path) -> Any:
         """Engine 构造与执行（落盘与否共用）。"""
@@ -706,8 +793,14 @@ class BTFRuntime:
         # 基准相对指标（P0-NEW-7 衍生修复）：落盘 metrics 含基准项，复核原只算
         # 基础 15 项 → 配了基准的 run 摘要**必然不符**（假告警）；基准号取自
         # manifest 生效配置（与落盘同源，不依赖当前 runtime.config）。
-        symbol = ((bundle.manifest.config_effective.get("report") or {})
-                  .get("benchmark"))
+        # **MM-6（19 号 §137 B）**：多基准时只复核**主基准**（首个）——落盘
+        # metrics 只含主基准数值，其余基准在披露区（不进 digest）。
+        from btf.config.loader import benchmark_symbols
+
+        symbols = benchmark_symbols(
+            bundle.manifest.config_effective.get("report") or {})
+        symbol = symbols[0] if symbols else None
+
         # **R61′（N63；§114.2 第 1 条）**：复核路径的折算序列**从产物还原**
         # （`events.jsonl` 的已应用 `corporate_action`——与落盘路径同源；
         # 采样降级日志缺事件时 WARN，见 `consolidations_from_events`）。
