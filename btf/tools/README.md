@@ -31,6 +31,13 @@
                               实测（2026-10-11）：独立 venv → 底座 28 包 ＋ btf 9 包
                               → `btf 1.3.1`（真入口）→ `tests/unit` 全绿。
 
+只读审计/预检（K-0，§163；**不在十项门禁内**，不 import btf 核心改写）：
+    zero_fill_check.py        零成交 run 体检（EMPTY/SUSPECT/OK；`--selftest` 含负向）
+    delist_audit.py           退市残仓审计（zombie_weight / 按退市日写零修正对照）
+    stkdiv_audit.py           送转股与 adj_factor 不一致的「凭空增益」审计（P14）
+    feed_universe_check.py    Feed × 标的路由预检（P17 前置；`--probe` 真数 bar）
+    schema_guard.py           CLI/loader/runtime 消费键 vs schema 声明一致性守卫
+
 探针（`probes/` 子目录，CLI 审查报告-20260930 P3 归档）：
     一次性性能/等价性探针（probe_layout / probe_sort_equiv / probe_sorted /
     profile_b1 / profile_b1_breakdown）——**不被任何代码 import**、不进门禁，

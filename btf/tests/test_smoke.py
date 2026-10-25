@@ -144,10 +144,10 @@ class TestPathsDiscipline:
         §161 L-3：扫描面 = `btf/**/*.py` ＋ `examples/**/*.{py,yaml}` ＋
         `tools/*.py` ＋ `tests/**/*.py`（**排除守卫自身** `test_smoke.py`）；
         跳过 docstring（含 `r\"\"\"` 等前缀）与注释后，对可执行代码断言不含
-        8 种盘符 token（反斜杠四式 ＋ 正斜杠四式）。扫描条目数须 ≥ 228。
+        8 种盘符 token（反斜杠四式 ＋ 正斜杠四式）。扫描条目数须 ≥ 235（K-0 后实测）。
         """
         files = _scan_files()
-        assert len(files) >= 228, f"扫描面不足：{len(files)}（期望 ≥228）"
+        assert len(files) >= 235, f"扫描面不足：{len(files)}（期望 ≥235）"
         problems = _hardcoded_drive_violations(files)
         print(f"\n[drive-guard] 扫描 {len(files)} 文件 ⇒ {len(problems)} 违例")
         assert not problems, "硬编码盘符违例：\n" + "\n".join(problems)
