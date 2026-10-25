@@ -42,7 +42,7 @@
 |---|---|---|---|
 | `execution.slippage` | **`none`** | 零滑点，系统性高估收益 | RC-01 |
 | `execution.handler_params.volume_participation` | **未设（= 100% 成交）** | 无视流动性约束 | RC-02 |
-| `report.benchmark` | **可不配** | 无基准裸奔，超额无锚 | RC-09 |
+| `report.benchmark` | **可不配** | 无基准裸奔，超额无锚（**MM-6**：亦可 1–3 个代码的数组，首个＝主基准——只有它进 `metrics.json`） | RC-09 |
 | `cost_model` | `flat_rate`（印花税恒 0.05%） | 2023-08 前 7.5 年卖出印花税按半价计 | RC-05 / 19 号 §60 |
 
 > ⚠ **默认值不等于推荐值。** 上表为**当前实测**的默认行为，不是最佳实践；
@@ -449,7 +449,7 @@ bt show --run <run_id> [--out-dir DIR]
 run_id      : 20260927_163148_7ecdb4（COMPLETED）
 产物目录    : D:\量化策略\回测产物\runs\20260927_163148_7ecdb4
 期间        : 2019-06-26 → 2026-09-23（初始资金 1000000.0）
-策略        : btf.strategy.qidian:QidianStrategy
+策略        : cc_strategies.qidian_replica:QidianStrategy（仓外；LL-1 已落地）
 数据        : feed=mixed 指纹=sha256:unknown
 规则版本    : none（overrides 0 条）
 配置哈希    : sha256:7ecdb47c2890c1e7d479d69936da6273fe0bcd115efb1b414b7299ce8910cba6
@@ -466,6 +466,10 @@ run_id      : 20260927_163148_7ecdb4（COMPLETED）
 
 补充行为：manifest 有 `assembly_notes` 时逐行 `[note] ...`；状态非 `COMPLETED` 时 stderr 提示
 `[warn] run 状态 FAILED（非 COMPLETED）：<error>（指标可能不完整）`；不可算指标（NaN/null）打印 `null`（与落盘一致）。
+
+> **样例口径（LL 批已落地，2026-10-24）**：上例策略行按 LL-1 后
+> **仓外点路径**改写；历史产物中的旧点路径（LL-1 迁移前的仓内路径）**不改写**，仍按
+> 当时实际记录展示。`run.strategy_paths` 用法见 [20 §10.5](20-回测平台使用指引.md)。
 
 > 样例解读：`代码版本` 是**该产物生成时**的版本（此 run 产生于 btf 0.2.0 时代，与当前 `--version`
 > 不一致属正常）；`指纹=sha256:unknown` 表示该产物未记录数据内容哈希（无记录时如实显示 unknown，
@@ -1110,7 +1114,7 @@ $ bt adhoc --list
 |---|---|---|
 | `[error] 配置源读取失败：...` | YAML 不可读 / 语法错 / 顶层非映射 | 检查路径与 YAML 缩进；顶层必须是 mapping |
 | `[error] 配置校验失败（N 处）：...` | Schema 违规 | 按列出的 JSON 路径逐条修（错误一次性全量给出） |
-| `[error] 策略不可加载：...`（`--resolve-strategy`） | 类名拼错 / 模块不在 sys.path | 修 `run.strategy`；项目外策略设 `PYTHONPATH` |
+| `[error] 策略不可加载：...`（`--resolve-strategy`） | 类名拼错 / 模块不在 sys.path | 修 `run.strategy`；项目外策略用 `run.strategy_paths`（推荐；LL-2 已交付）或 `PYTHONPATH` |
 | `[error] 装配失败：ContractVersionError: ...` | 策略/插件未声明或主版本不符 `contract_version` | 类里声明 `contract_version = CONTRACT_VERSION` |
 | `[error] 装配失败：... risk.rules 为空 ...` | 空风控链 fail-closed | 写 `risk.rules`；调试才加 `allow_empty_chain: true` |
 | `[error] 装配失败：... 覆盖度 ...` | 区间早于数据约束起点（如涨跌停） | 收窄区间；或显式 `data.allow_degraded_limit: true` |
@@ -1154,6 +1158,7 @@ $ bt adhoc --list
 | `contract_version` / `btf_contract_version` | 产物契约版本 / 契约基线 |
 | `metrics_digest` | **R1 对账锚**（`bt verify` 比对对象） |
 | `assembly_notes` | 装配期说明（如质检抽样、降级放行） |
+| `benchmarks` | 基准对照明细（**MM-6**）：每个基准一套相对指标；首个＝主基准（其数值亦进 `metrics.json`），其余仅披露 |
 
 ### 6.3 只读命令对异常产物的行为（fail-visible）
 
