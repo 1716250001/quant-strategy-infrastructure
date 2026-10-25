@@ -114,5 +114,10 @@ tools/ 私有路径收敛为 `tools/_paths.py` 单点派生（8 脚本＋cold_ba
 L-1 `test_qidian_engine_rerun.py` → `test_etf_limit_channel.py`；L-2 tests 私有路径收敛到
 `tests/fixtures/private_paths.py`；L-3 守卫 raw-docstring 前缀识别 ＋ 纳入 tests（自指豁免）；
 L-4 正斜杠 token 补齐（8 种）。产品代码零改动。
+
+**4.0.1 → 5.0.0**（2026-10-25；19 号 §163 卡夏补丁吸收批；**major：新增公开枚举值
+`writeoff_at_delist` ＋ 新增 ConfigError 路径**；默认口径不变）：K-0 五工具移植；
+K-1 P15 零成交 fail-loud／P17 feed 路由／C-3 判据统一；K-2 P10 第三档。计数
+1227/1205/22；`carry`／`tushare_parquet`／有成交指标口径均不变。
 """
-__version__ = "4.0.1"
+__version__ = "5.0.0"

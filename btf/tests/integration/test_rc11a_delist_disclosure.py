@@ -276,6 +276,39 @@ class TestDelistedSettlementCl3:
         assert "§72.4" in joined                          # 口径出处
         assert "未取区间外价" in joined                   # 防前视声明
 
+    def test_writeoff_at_delist_path_and_final_value(self):
+        """K-2：三档对照——终值与 writeoff 相同，但末日不再假暴跌。"""
+        from btf.analytics.metrics import audit_nav_four
+
+        r_carry = BTFRuntime().load_config(
+            self._cfg_with_mode("carry")).build().run(persist=False)
+        r_wo = BTFRuntime().load_config(
+            self._cfg_with_mode("writeoff")).build().run(persist=False)
+        r_daily = BTFRuntime().load_config(
+            self._cfg_with_mode("writeoff_at_delist")).build().run(persist=False)
+
+        # 终值／核销额与 writeoff 逐位相同
+        assert r_daily.snapshots[-1].total_value == pytest.approx(
+            r_wo.snapshots[-1].total_value, rel=1e-12)
+        assert r_daily.delisted_writeoff_amount == pytest.approx(
+            r_wo.delisted_writeoff_amount, rel=1e-12)
+        # 末日 daily_return 不再假暴跌（= carry 的无变动，而不是 writeoff 的一次性下挫）
+        assert r_daily.snapshots[-1].daily_return == pytest.approx(
+            r_carry.snapshots[-1].daily_return, rel=1e-12)
+        assert r_daily.snapshots[-1].daily_return > r_wo.snapshots[-1].daily_return
+        # D3 = 末次 bar（D2）的次一交易日：残值在这一天开始扣
+        assert r_daily.snapshots[2].daily_return < r_carry.snapshots[2].daily_return
+        assert SYM not in r_daily.snapshots[2].positions_qty
+        # NAV 四式仍一致
+        assert audit_nav_four(r_daily.snapshots) == []
+        # 披露：逐标的起点 + 残值
+        rt = BTFRuntime().load_config(
+            self._cfg_with_mode("writeoff_at_delist")).build()
+        rt.run(persist=False)
+        joined = " | ".join(rt.assembly_notes)
+        assert "writeoff_at_delist" in joined and D3.to_ymd() in joined
+        assert r_daily.delisted_settlement_notes
+
     def test_cli_flag_end_to_end(self, delist_feed, tmp_path):
         """真入口：`bt run --delisted-settlement writeoff` ⇒ 退出 0；口径进
         config_effective（可追溯）＋ 披露落 manifest。"""

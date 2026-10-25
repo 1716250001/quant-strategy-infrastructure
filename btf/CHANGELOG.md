@@ -5,6 +5,53 @@
 
 ## [未发布]
 
+## [5.0.0] — 2026-10-25（**卡夏补丁吸收批：K-0 五工具 ＋ K-1 fail-loud ＋ K-2 P10 第三档**；19 号 §163）
+
+> **major（配置层）**：新增公开枚举值 `run.delisted_settlement=writeoff_at_delist`
+> ＋ 新增 `ConfigError` 路径（feed↔标的路由不匹配）。**默认口径不变**
+> （`carry` 仍默认、`tushare_parquet` 仍只读 `daily`、`n_fills>0` 指标路径不改）。
+> 门禁：`bt check` **10/10**、全量 pytest **1227（非 L5 1205 ＋ L5 22）/ skip 0**。
+
+### 新增（Added）
+
+- **K-0 五工具（只读）**：`tools/zero_fill_check.py`／`delist_audit.py`／
+  `stkdiv_audit.py`／`feed_universe_check.py`／`schema_guard.py`——全部经
+  `tools/_paths.py` 派生、零盘符字面量；`schema_guard` 的 `RUNTIME_KEYS` 按本仓
+  schema 重核（含 `run.strategy_paths`／`report.benchmark` string|array／
+  `analysis.metrics` 名字表）；README 体例补齐。
+- **K-2 第三档 `writeoff_at_delist`**：schema enum／CLI choices／Engine 三档校验；
+  自该股末次 bar 的**次一交易日**起逐日扣减残值（终值与 `writeoff` 逐位相同，
+  但路径正确）；`RunResult.delisted_settlement_notes` 披露逐标的起点＋残值。
+
+### 修复（Fixed）
+
+- **P15 零成交 fail-loud**：`n_fills == 0` ⇒ **10 项基准相对项不并入 metrics**
+  （键缺失，不用 None）＋ CLI 显式告警「本次运行零成交…不得作为表现证据」＋
+  manifest 增 `is_empty`（键恒在，旧产物缺键 ⇒ False）。
+- **P17 feed↔标的路由**：装配期遍历宇宙，按 `daily_table_of(sym)` 与 feed
+  `daily_tables` 比对；不匹配即 `ConfigError`（点名标的与所需表）。
+  `TushareParquetFeed` 能力=`{"daily"}`、`MixedDailyFeed`=三表；**不采纳**
+  自动改 `daily_table`（同一配置历史 run 会变数字）；`n_days == 0` 收尾告警。
+- **C-3 判据统一**：`_warn_if_short_period` 与 CLI 对齐；`n_days==0` ⇒
+  「未读到任何交易日（检查 feed↔标的路由/数据区间）」，`0<n_days<20` 保留
+  「极短区间」措辞。
+
+### 变更（Changed）
+
+- **指标口径**：零成交 run 的 `benchmark_details` 不再计算（相对项无处可落，
+  避免把空跑的相对值当披露）；有成交 run 的基准相对项路径**逐字不变**。
+- **计数**：工作区 **1227/1205/22**（新增 K-1/K-2 反向测试 8 例；tag 快照
+  1219/1196、1183/1160 保留）。
+
+### 说明（两条）
+
+1. **K-2 三个实现坑**：`PortfolioSnapshot.date` 是 `TradingDate` 而
+   `last_trade_date` 是 8 位 str（必须 `date.to_ymd()`）；逐日**先并入 peak
+   再算 drawdown**；peak **随日累积**，不能沿用一次性 `max(前 N-1)`。
+2. **P15 空跑**：`metrics.json` 只允许数值，故用**键缺失**而非 `None`；下游
+   `app/services.py` 的 `if k in bundle.metrics` 与 `viz/report.py` 的 `.get()`
+   已核可容忍缺失。
+
 ## [4.0.1] — 2026-10-25（**遗留清理：改名 ＋ tests 路径收敛 ＋ 守卫扩 tests（修 raw docstring 漏判/正斜杠）**；19 号 §161）
 
 > **纯 tests/ 补丁**：`btf/` 包内产品代码零改动（仅 `_version.py`）；本版无 BREAKING。

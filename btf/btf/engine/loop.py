@@ -94,6 +94,8 @@ class RunResult:
     delisted_settlement: str = "carry"
     #: writeoff 的核销额（元；0 = 未核销/无退市持仓）——披露与手算校验锚点。
     delisted_writeoff_amount: float = 0.0
+    #: **K-2（19 号 §163）**：`writeoff_at_delist` 的逐标的起点/残值披露。
+    delisted_settlement_notes: list[str] = field(default_factory=list)
     #: **CL-2 第二段（R5′，19 号 §79.4）**：配股行权审计（逐事件：获配股数 /
     #: 缴款额 / 现金缺口 / 理论除权价 / 上市日）——runtime 转 run 元数据与披露。
     rights_events: list[dict[str, Any]] = field(default_factory=list)
@@ -175,6 +177,91 @@ def _writeoff_settlement(portfolio: Portfolio, result: RunResult) -> float:
     return residual
 
 
+def _writeoff_at_delist_settlement(
+    portfolio: Portfolio, result: RunResult
+) -> tuple[float, list[str]]:
+    """`writeoff_at_delist`：自末次 bar 的**次一交易日**起逐日扣减残值。
+
+    19 号 §163 K-2。与 `writeoff` 的终值相同（残值总额一致），但路径正确：
+    不再把多年损失压在末日。**三个坑**（派单 C-4）：① `PortfolioSnapshot.date`
+    是 `TradingDate`，`last_trade_date` 是 8 位 str——必须 `date.to_ymd()` 比较；
+    ② 逐日**先并入 peak 再算 drawdown**；③ peak 随日累积，不能沿用一次性
+    `max(前 N-1)`。残值基准 / 权重缩放语义与 `_writeoff_settlement` 逐字一致。
+    """
+    entries: list[tuple[str, str, float]] = []
+    total = 0.0
+    for item in result.delisted_holdings:
+        sym = str((item or {}).get("symbol") or "")
+        pos = portfolio.positions.get(sym)
+        if not sym or pos is None or not pos.qty:
+            continue
+        last_bar = str((item or {}).get("last_trade_date") or "")
+        if not last_bar:
+            continue
+        residual = float(pos.qty * portfolio._last_close.get(sym, pos.avg_cost))
+        if not residual:
+            continue
+        entries.append((sym, last_bar, residual))
+        total += residual
+    if not entries or not result.snapshots:
+        return 0.0, []
+
+    snapshots = result.snapshots
+    base = snapshots[0].total_value
+    peak: float | None = None
+    prev_tv: float | None = None
+    starts: dict[str, str] = {}
+
+    for i, snap in enumerate(snapshots):
+        day = snap.date.to_ymd()          # 坑①：TradingDate → 8 位 str
+        active = [(s, r) for s, last, r in entries if day > last]
+        for s, last, _r in entries:
+            if day > last and s not in starts:
+                starts[s] = day
+        if not active:
+            peak = max(peak, snap.total_value) if peak is not None else snap.total_value
+            prev_tv = snap.total_value
+            continue
+        old_tv = snap.total_value
+        day_residual = sum(r for _s, r in active)
+        new_tv = old_tv - day_residual
+        scale = (old_tv / new_tv) if new_tv else 0.0
+        drop = {s for s, _r in active}
+        # 坑②③：先并入 peak，再算 drawdown；peak 随日累积
+        new_peak = max(peak, new_tv) if peak is not None else new_tv
+        snapshots[i] = replace(
+            snap,
+            market_value=snap.market_value - day_residual,
+            total_value=new_tv,
+            weights={k: v * scale for k, v in snap.weights.items()
+                     if k not in drop},
+            positions_qty={k: v for k, v in snap.positions_qty.items()
+                           if k not in drop},
+            daily_return=(0.0 if not prev_tv else new_tv / prev_tv - 1.0),
+            cumulative_return=(0.0 if not base else new_tv / base - 1.0),
+            drawdown=(0.0 if not new_peak else new_tv / new_peak - 1.0),
+        )
+        peak = new_peak
+        prev_tv = new_tv
+
+    notes: list[str] = []
+    for sym, last, residual in entries:
+        start = starts.get(sym)
+        if start:
+            notes.append(
+                f"退市持仓残值披露：{sym} 于区间末仍持仓且已退市——残值口径 = "
+                f"**逐日核销**（`writeoff_at_delist`；自末次交易日 {last} 的"
+                f"次一交易日 {start} 起逐日扣减残值 {residual:.2f} 元；"
+                f"核销基准 = 区间内**末次可用收盘价**（**未取区间外价**——防前视）；"
+                f"口径出处：19 号 §163 K-2）")
+        else:
+            notes.append(
+                f"退市持仓残值披露：{sym} 于区间末仍持仓且已退市——残值口径 = "
+                f"**逐日核销**（`writeoff_at_delist`），但末次交易日 {last} 后"
+                f"区间内无次一交易日，残值 {residual:.2f} 元未扣减（区间边界）")
+    return total, notes
+
+
 class _AdjustedDataSource(Mapping[str, Bar]):
     """**消费侧复权视图**（R62′/N64；19 号 §118）：`ctx.bar()` 读到的当日 bar。
 
@@ -236,10 +323,12 @@ class Engine:
         price_view: str = "adjusted",
         adjust_service: Any | None = None,
     ):
-        if delisted_settlement not in ("carry", "writeoff"):
+        if delisted_settlement not in ("carry", "writeoff",
+                                        "writeoff_at_delist"):
             raise ValueError(
-                f"delisted_settlement 须为 carry|writeoff，得"
-                f" {delisted_settlement!r}（CL-3 / 19 号 §72.4）")
+                f"delisted_settlement 须为 carry|writeoff|"
+                f"writeoff_at_delist，得 {delisted_settlement!r}"
+                f"（CL-3 / K-2；19 号 §72.4/§163）")
         if price_view not in ("nominal", "adjusted"):
             raise ValueError(
                 f"price_view 须为 nominal|adjusted，得 {price_view!r}"
@@ -571,6 +660,11 @@ class Engine:
                 and result.delisted_holdings and result.snapshots):
             result.delisted_writeoff_amount = _writeoff_settlement(
                 portfolio, result)
+        elif (self._delisted_settlement == "writeoff_at_delist"
+                and result.delisted_holdings and result.snapshots):
+            (result.delisted_writeoff_amount,
+             result.delisted_settlement_notes) = \
+                _writeoff_at_delist_settlement(portfolio, result)
         # CL-2 第二段（R5′，19 号 §79.4）：审计转出 ＋ 锁定期卖出警告。
         # 披露纪律：现金缺口 / 锁定期内卖出**必须可观测**（§79.3 #2/#3），
         # 故 logger.warning（非静默）＋ 转 run 元数据（runtime 侧装配说明）。

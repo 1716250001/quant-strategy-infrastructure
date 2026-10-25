@@ -66,9 +66,9 @@
         },
         "initial_cash": { "type": "number", "exclusiveMinimum": 0 },
         "delisted_settlement": {
-          "enum": ["carry", "writeoff"],
+          "enum": ["carry", "writeoff", "writeoff_at_delist"],
           "default": "carry",
-          "description": "退市持仓残值口径（CL-3 / 19 号 §72.4）：carry=残值按区间内末次可用收盘价携带（默认＝现状，数值零回归）；writeoff=按 0 核销（压力口径；仅末日快照清零并下调 NAV，核销基准不取区间外价——防前视）"
+          "description": "退市持仓残值口径（CL-3 / 19 号 §72.4、§163 K-2）：carry=残值按区间内末次可用收盘价携带（默认＝现状，数值零回归）；writeoff=按 0 核销（压力口径；仅末日快照清零并下调 NAV）；writeoff_at_delist=自末次 bar 次一交易日起逐日扣减残值（终值与 writeoff 相同，但路径正确）；两档核销基准均不取区间外价——防前视"
         },
         "event_log": {
           "type": ["string", "null"],
