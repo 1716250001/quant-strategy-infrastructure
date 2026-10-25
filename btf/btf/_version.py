@@ -99,5 +99,10 @@ D-1（WF 与 RC-14 门禁不兼容：折内只跳哈希门禁、保留 `anchor_d
 披露）＋ D-2（仓外策略 `lookback_bars` 声明失效：`declared_lookback` 导入前注入
 `run.strategy_paths`，`--warmup auto` 实测 2）＋ R-1（插件边界基线重刷）；O-1（文档守卫豁免词
 回退）按老大裁定**暂缓**。主工程版本与 btf **解耦**（19 号 §153），主工程 7.0.0 不动。
+
+**3.0.0 → 3.0.1**（2026-10-25；19 号 §156 O-1 补全；**纯测试/文档补丁**）：
+T-B 扫描范围**摘除 19 号审查留痕**（不再做 warm-up 数值校验），`_HISTORY_MARKERS` **整表删除**
+（22 条），`_warmup_number_ok` 只保留「声明值／`--warmup 0`」；新增反向测试
+`test_tb_catches_wrong_warmup_in_current_doc`（写错 ⇒ 必红）。产品代码零改动。
 """
-__version__ = "3.0.0"
+__version__ = "3.0.1"

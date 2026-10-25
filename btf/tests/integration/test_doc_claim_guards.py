@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 """L2：**文档披露数字守卫**（R60′，2026-10-09；19 号 §109.5/§110.2）。
 
-四组守卫（**只读**文档，含 19 号；**不写**任何文件；不碰业务代码）：
+四组守卫（**只读**文档；T-C 读 19 号作完成清单源头；**不写**任何文件；不碰业务代码）：
 
 - **T-A 计数守卫**：六份现状文档必须**同时声明**两个口径（「tag 快照」＋「工作区」），
   且**「工作区」值 == 实测 collect 非 L5 数**（子进程 cwd ＝ `代码/btf`；`--collect-only`
   **不带 `-q`**——本环境带 `-q` 时按行计数恒为 0，见 B3 纪律）。
-- **T-B 口径守卫**：文档中 **warm-up 上下文**数字必须 == 夹具 `QIDIAN_LOOKBACK_BARS`
-  （MM-3：`QidianStrategy` 在仓外，本守卫**不 import 仓外包**；取值真源见
-  `tests/fixtures/strategy_contract.py`，与仓外 `test_contract_sync.py` 双侧互校）；正则带 `warm.?up` 前缀锚（**禁裸扫数字**：文档另有「冷备 252 文件 / 3446 KB」
-  「日频 `×√252`」）；显式历史/对照行按其标记放行（见 `_warmup_number_ok`）。
+- **T-B 口径守卫**：**现状文档＋20 号**的 **warm-up 上下文**数字必须 == 夹具
+  `QIDIAN_LOOKBACK_BARS`（MM-3：`QidianStrategy` 在仓外，本守卫**不 import 仓外包**；
+  取值真源见 `tests/fixtures/strategy_contract.py`，与仓外 `test_contract_sync.py`
+  双侧互校）；**19 号审查留痕不参与 T-B 数值校验**（O-1 补全，19 号 §156）；
+  正则带 `warm.?up` 前缀锚（**禁裸扫数字**：文档另有「冷备 252 文件 / 3446 KB」
+  「日频 `×√252`」）。
 - **T-C 矛盾扫描器**：先从 **19 号**提取「已交付/验收通过/闭合」的单号集合，再扫其余
   文档：出现「**待 Rxx′**」且该单号已在集合内 ⇒ 失败（**源头单一取自 19 号**，不在测试里
   硬编码完成清单）。
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -38,7 +41,7 @@ BTF_ROOT = _HERE.parents[2]
 DOC_DIR = _HERE.parents[3] / "代码架构" / "回测工具架构"
 CHANGELOG = BTF_ROOT / "CHANGELOG.md"
 
-#: 被测「现状文档」组（T-A/T-B 严格档；19 号单列——见 T-B 的历史放行）
+#: 被测「现状文档」组（T-A/T-B/T-C；19 号只作 T-C 的完成清单源头）
 CURRENT_DOCS = (
     "README.md",
     "01-总览与定位.md",
@@ -108,62 +111,65 @@ _WARMUP_PAT = re.compile(
     r"(?<![_\w])warm[-\s]?up[^\d\n]{0,48}?(?<![_\w.])(\d{1,4})(?!\d)"
     r"(?!\s*(?:-|→|~|—)\s*\d)(?!\s*(?:笔|%|倍))")
 
-#: 历史/对照行标记（原样留痕的显式上下文；**不做数值豁免**——数值仍须来自这些行）
-#: **R66′ 补 `auto:strategy`**（非严格档/19号）：该标记行记录的是**策略声明#: 推导**（R58′/R59′ 机制）的实测留痕（如 §126.2 「warmup=6（auto:strategy）」），
-#: 属"当时机制实测"类——严格档（现状文档）不受影响（auto:strategy 行仍须 =1020）。
-_HISTORY_MARKERS = (
-    "§10", "§11", "降级口径", "--warmup 252", "252 与 1020", "反向验证",
-    "auto:default_252", "auto:strategy", "修复后重跑", "修复前", "当时", "历史", "对照",
-    "现象", "实跑输出", "原样",
-    # T-18（19 号 §149 D-2 ／ §150 F）：审查账本**引述缺陷/对照改前改后**的精确短语。
-    # 按 §150 O-1② 保留但收紧并登记（用途与边界见 16 号 §32.3 注）；禁止再放宽为单词。
-    "静默退化 252", "252 告警",
-    "warmup=60（旧）", "--warmup 60", "auto`（=策略声明", "warmup 选错",
-)
 
+def _warmup_number_ok(num: int, line: str, declared: int) -> bool:
+    """只接受：声明值／`--warmup 0`（旧行为对照开关）。
 
-def _warmup_number_ok(num: int, line: str, declared: int, *,
-                      strict: bool) -> bool:
-    """`strict=True`（**现状文档**）只接受：声明值／`--warmup 0`（旧行为对照开关）。
-
-    `strict=False`（**19 号＝审查留痕**，历史记录不得改写）额外放行：显式历史/对照标记行、
-    `>` 引述块（原样引述旧文本）——**这两档的划分是设计要点**：现状文档若写旧值即「矛盾」，
-    而 19 号写旧值属「当时实测留痕」。（`§1xx` 类章节引用**不算**历史标记——
-    否则现状文档只要引一节 §109 就能夹带旧值；C1 反向验证曾实证该漏洞。）
+    **O-1 补全（19 号 §156）**：19 号审查留痕不再参与 T-B 数值校验——本函数无
+    `strict` 形参、无豁免词表；现状文档写错值即红。
     """
     if num == declared:
         return True
-    if num == 0 and "--warmup" in line:            # 旧行为对照开关（合法值 0）
-        return True
-    if strict:
-        return False
-    if line.lstrip().startswith(">") and "「" in line:    # 原样引述旧文本
-        return True
-    return any(m in line for m in _HISTORY_MARKERS)
+    return num == 0 and "--warmup" in line
+
+
+def _tb_warmup_problems() -> list[str]:
+    """T-B 检查主体：扫「现状文档＋20 号」，返回问题清单（空＝通过）。"""
+    declared = QIDIAN_LOOKBACK_BARS
+    problems: list[str] = []
+    for name in (*CURRENT_DOCS, USAGE_DOC):
+        for i, ln in enumerate(_read(name), 1):
+            for m in _WARMUP_PAT.finditer(ln):
+                num = int(m.group(1))
+                if not _warmup_number_ok(num, ln, declared):
+                    problems.append(
+                        f"{DOC_DIR / name}:{i} 声明值=warm-up {num}；"
+                        f"实测值=声明 {declared}（行={ln.strip()[:90]}）")
+    return problems
 
 
 def test_t_b_warmup_value_guard():
-    """文档 warm-up 上下文数字 == 夹具 `QIDIAN_LOOKBACK_BARS` 声明值（MM-3）。
+    """现状文档 warm-up 上下文数字 == 夹具 `QIDIAN_LOOKBACK_BARS` 声明值（MM-3）。
 
     MM-3（19 号 §135.2）前此守卫经仓外包 import 取值——包名撞车后沦为全量
     唯一 skip（守卫空转）；现改读 `tests/fixtures/strategy_contract.py`，
     与仓外 `cc_strategies/tests/test_contract_sync.py` 双侧互校：策略实现
     漂移 ⇒ 仓外侧红；夹具/文档漂移 ⇒ 本守卫红（双向可证伪）。
+
+    **O-1 补全（19 号 §156）**：19 号审查留痕已从本守卫移除，不再需要豁免词表。
     """
-    declared = QIDIAN_LOOKBACK_BARS
-    problems: list[str] = []
-    scopes = [(name, True) for name in (*CURRENT_DOCS, USAGE_DOC)]
-    scopes.append((DOC_19, False))                 # 审查留痕：历史值按标记放行
-    for name, strict in scopes:
-        for i, ln in enumerate(_read(name), 1):
-            for m in _WARMUP_PAT.finditer(ln):
-                num = int(m.group(1))
-                if not _warmup_number_ok(num, ln, declared, strict=strict):
-                    scope = "现状文档" if strict else "留痕档"
-                    problems.append(
-                        f"{DOC_DIR / name}:{i} 声明值=warm-up {num}（{scope}）；"
-                        f"实测值=声明 {declared}（行={ln.strip()[:90]}）")
+    problems = _tb_warmup_problems()
     assert not problems, "\n".join(problems)
+
+
+def test_tb_catches_wrong_warmup_in_current_doc(tmp_path, monkeypatch):
+    """T-B 必须能红：现状文档副本写错 warmup ⇒ 断言失败（19 号 §156 C）。"""
+    for name in (*CURRENT_DOCS, USAGE_DOC):
+        shutil.copy2(DOC_DIR / name, tmp_path / name)
+    bad = tmp_path / "09-测试验证与基准.md"
+    bad.write_text(
+        bad.read_text(encoding="utf-8")
+        + "\n> 反向测试注入：warmup=999（故意写错）\n",
+        encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "DOC_DIR", tmp_path)
+
+    problems = _tb_warmup_problems()
+    print("\n[reverse] 注入 warmup=999 ⇒ T-B 问题：\n" + "\n".join(problems))
+    assert problems, "T-B 未检出错误 warm-up 值（守卫失效）"
+
+    with pytest.raises(AssertionError) as ei:
+        test_t_b_warmup_value_guard()
+    print("\n[reverse] T-B 原始断言失败（预期）：\n" + str(ei.value))
 
 
 # ───────────────────────── T-C 矛盾扫描器 ─────────────────────────
