@@ -193,7 +193,7 @@ class ComponentAssembler:
         price_tables = ("daily",) + (("fund_daily",) if "etf" in classes else ())
         limit_tables = ("stk_limit",) + (("etf_limit",) if "etf" in classes else ())
         t0 = perf_counter()
-        from btf.data.quality import calendar_days, run_checks
+        from btf.data.quality import NON_BLOCKING_RULES, calendar_days, run_checks
 
         start_ymd = _ymd(period["start"]).to_ymd()
         end_ymd = _ymd(period["end"]).to_ymd()
@@ -245,14 +245,28 @@ class ComponentAssembler:
         # 报告披露（CC-6）：走既有**强制章节**「假设与披露」通道（assembly_notes
         # → manifest → 报告），不新增模板章节（避免动渲染器）
         self.rt.assembly_notes.append(
-            "数据不变量校验（CC-1..CC-5，装配期）："
-            + ("全部通过" if report.ok else
+            "数据不变量校验（CC-1..CC-5 阻断 ＋ CC-7 只报，装配期）："
+            + ("全部通过（阻断项）" if report.ok else
                f"发现 {report.n_findings} 行异常（"
                + "、".join(f"{r.rule}:{r.n_findings}"
-                           for r in report.rules if not r.ok)
+                           for r in report.rules
+                           if not r.ok and r.rule not in NON_BLOCKING_RULES)
                + "）——明细见 run 目录 data_quality_report.json")
             + (f"；标的抽样 {len(symbols)}/{len(self.rt.instruments)}"
                "（data.quality.max_symbols）" if sampled else ""))
+        # P14（19 号 §172 C）：CC-7 **只报不阻断**，但披露**不得省略**
+        cc7 = next((r for r in report.rules if r.rule == "CC-7"), None)
+        if cc7 is not None:
+            if cc7.findings:
+                self.rt.assembly_notes.append(
+                    "CC-7 送转一致性（只报不阻断）："
+                    + "；".join(f"{f.detail} → {f.n_rows} 条"
+                                 for f in cc7.findings)
+                    + "（明细见 run 目录 data_quality_report.json）")
+            else:
+                self.rt.assembly_notes.append(
+                    f"CC-7 送转一致性（只报不阻断）：{cc7.checked_rows} "
+                    "个送转事件均检出因子跳变")
         payload["seconds_assembly"] = round(perf_counter() - t0, 4)
         if qcfg.get("strict", False) and not report.ok:
             raise DataQualityError(

@@ -5,7 +5,9 @@
     stk_limit   → limit_up_price / limit_down_price（股票）
     etf_limit   → 同上（**ETF，V3-2；起点 2019-06-26**，E3；更早由 BoardRule
                   按 pre_close ±10% 计算回退并登记 `fallback_limit_dates` 披露）
-    suspend_d   → is_suspended（口径=当天在表即停牌）
+    suspend_d   → is_suspended（口径：**仅 `suspend_type=S` 且 `suspend_timing`
+                  为空**＝全日停牌；`R` 复牌与盘中停牌**不判停牌**——19 号
+                  §172 B，与 `quality._full_day_suspensions` 逐字对齐）
     namechange  → is_st（name 含 'ST' ∧ start≤d<end；end 空视为仍生效）
     stock_basic → is_delisted（delist_date ≤ d）/ list_date（宇宙过滤在 universe 层）
     daily       → is_limit_up / is_limit_down（收盘触及，容差 1e-4；**股票口径**）
@@ -249,14 +251,29 @@ class StateSynthesizer:
             self._limit_day_cache[key] = rows
         return rows
 
-    # ── suspend_d：年度缓存 (code, ymd) 集合 ──
+    # ── suspend_d：年度缓存 (code, ymd) 集合（**仅全日停牌**）──
     def _suspensions(self, year: int) -> set[tuple[str, str]]:
+        """全日停牌对（`suspend_type=S` 且 `suspend_timing` 为空）。
+
+        **§172 B（19 号）口径修正**：原实现 `set(zip(ts_code, trade_date))`
+        不筛类型 ⇒ `R`（复牌）与「盘中停牌」同被判 `is_suspended=True`。
+        现与 `quality._full_day_suspensions` 对齐：只有 `S`＋无 `timing` 才是
+        **不可交易**。实测（2024）：S 全日 3,368 / S 盘中 43 / R 321。
+        """
         if year not in self._suspend_cache:
-            t = self._store.read_file("suspend_d", year=year)
+            t = self._store.read_file(
+                "suspend_d", year=year,
+                columns=["ts_code", "trade_date", "suspend_type",
+                         "suspend_timing"])
             s: set[tuple[str, str]] = set()
             if t is not None:
-                s = set(zip(t.column("ts_code").to_pylist(),
-                            t.column("trade_date").to_pylist(), strict=True))
+                for code, day, typ, timing in zip(
+                        t.column("ts_code").to_pylist(),
+                        t.column("trade_date").to_pylist(),
+                        t.column("suspend_type").to_pylist(),
+                        t.column("suspend_timing").to_pylist(), strict=True):
+                    if typ == "S" and not timing:
+                        s.add((code, day))
             self._suspend_cache[year] = s
         return self._suspend_cache[year]
 

@@ -316,6 +316,13 @@ class BTFRuntime:
         self._guard_feed_routing()
         self._guard_dataset_version(period)
 
+        # §172（19 号）口径披露：`is_suspended` 判定版本——事后可判定某 run
+        # 属于「R/盘中停牌也算停牌」的旧侧还是「仅全日停牌」的新侧。
+        self.assembly_notes.append(
+            "is_suspended 口径：v7.0.0（仅 `suspend_type=S` 且 `suspend_timing` "
+            "为空 ⇒ 不可交易；`R` 复牌与盘中停牌放行）——**跨 7.0.0 边界回测"
+            "结果不可直接比较**")
+
         # ETF 复权因子覆盖守卫（**RC-04，2026-10-05**）：**条件降级**——仅当
         # 宇宙含 ETF 时检查 `fund_adj` 起点（19991022）。为什么不并入
         # `DEGRADED_TABLES`：该表与股票结论无关，无条件检查会让 1999 年前的
