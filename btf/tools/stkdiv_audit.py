@@ -35,11 +35,16 @@ import pandas as pd
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from btf.config.paths import MARKET_DATA_DIR
 
+from _paths import SCRATCH_ROOT
+
 MIRROR = str(MARKET_DATA_DIR)
-CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stkdiv_mismatch_20261021.csv")
+#: **§176（19 号）**：临时产物默认落 `代码/_scratch`（不再写 tools/ 污染仓内）；
+#: `--out DIR` 可覆盖（main 内改写本模块级变量）。
+CACHE = str(SCRATCH_ROOT / "stkdiv_mismatch_20261021.csv")
 
 
 def build_events(force: bool = False) -> pd.DataFrame:
@@ -200,12 +205,19 @@ def main() -> int:
     ap.add_argument("--events", action="store_true")
     ap.add_argument("--rebuild", action="store_true")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--out", metavar="DIR",
+                    help="输出目录（默认 代码/_scratch；§176）")
     a = ap.parse_args()
+
+    global CACHE
+    out_dir = (Path(a.out).resolve() if a.out else SCRATCH_ROOT)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    CACHE = str(out_dir / "stkdiv_mismatch_20261021.csv")
 
     ev = build_events(force=a.rebuild)
     risk = {(r.code, r.ex_date): float(r.stk_div) for r in ev.itertuples(index=False)}
     print(f"[风险集] 送转>0 且 adj_factor 未变：{len(risk)} 个 (code, ex_date) / "
-          f"{ev.code.nunique()} 只（cache={os.path.basename(CACHE)}）")
+          f"{ev.code.nunique()} 只（cache={CACHE}）")
     if a.events:
         print(ev.to_string(index=False))
         return 0
@@ -259,7 +271,7 @@ def main() -> int:
             print(f"  {r.run:<30}事件{r.n_events:>3}  凭空增益 {r.total_gain:>14,.0f}  "
                   f"年化 {r.ann_before:+.2%} → {r.ann_after:+.2%}"
                   f"（Δ{(r.ann_after-r.ann_before)*100:+.2f}pp）  MDD {r.mdd_before:.2%} → {r.mdd_after:.2%}")
-        out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stkdiv_hits_20261021.csv")
+        out = str(out_dir / "stkdiv_hits_20261021.csv")
         df.to_csv(out, index=False, encoding="utf-8-sig")
         print(f"\n[csv] {out}")
         return 1

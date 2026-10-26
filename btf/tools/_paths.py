@@ -28,3 +28,8 @@ RULES_MIRROR = Path(os.environ.get("BTF_RULES_MIRROR")
 #: 备份根（冷备产物默认落点；BTF_BACKUP_ROOT 可覆盖）
 BACKUP_ROOT = Path(os.environ.get("BTF_BACKUP_ROOT")
                    or _WORKSPACE_ROOT / "备份").resolve()
+#: 临时产物的**唯一默认落点**（审计/检查工具的 CSV、缓存等；BTF_SCRATCH_ROOT 可覆盖）。
+#: **不得**再让各工具写进仓内（§176：`stkdiv_audit` 三次污染仓内的根因＝缺本锚点）。
+#: 既有惯例：`check.py` 日志、pytest `--basetemp` 均落 `代码/_scratch/`。
+SCRATCH_ROOT = Path(os.environ.get("BTF_SCRATCH_ROOT")
+                    or _WORKSPACE_ROOT / "代码" / "_scratch").resolve()
