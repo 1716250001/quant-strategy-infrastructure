@@ -46,6 +46,28 @@ def _ymd(s: str) -> TradingDate:
 #: 不应重复付算力；跨进程的 `bt run` 仍会重新实算 ⇒ 数据重写可检出。
 _FINGERPRINT_MEMO: dict[tuple, Any] = {}
 
+#: **P16 ①（19 号 §165）**：数据水位**只取行情表**。`stock_basic.date_max` 是
+#: 「最新一只股票的上市日」（实测 20260930），与数据水位语义无关——混进来会把
+#: 水位顶到最新上市日，**掩盖行情表只到区间末**的事实（`suspend_d`／`adj_factor`
+#: ／`stk_limit`／`etf_limit` 同理属状态/限价/复权侧，不是行情水位）。
+_PRICE_TABLES = frozenset({"daily", "fund_daily", "index_daily"})
+
+
+def _price_anchor(tables_detail: Mapping[str, Any], end_ymd: str) -> str:
+    """行情表数据水位：`min` 聚合 ＋ 夹取区间末（**P16 ①②③**）。
+
+    - ① 只看行情表（`_PRICE_TABLES`）：`stock_basic` 等不参与；
+    - ② **min**（不是 max）：取最滞后的行情表为真实水位，避免最新表掩盖滞后表；
+    - ③ 夹取区间末：静态/未来日期不把锚点写成未来（声明侧同口径夹取）。
+    无行情表 `date_max` ⇒ 返回空串（调用方按各自语义兜底）。
+    """
+    marks = [d["date_max"] for name, d in tables_detail.items()
+             if name in _PRICE_TABLES and d.get("date_max")]
+    if not marks:
+        return ""
+    return min(min(marks), end_ymd) if end_ymd else min(marks)
+
+
 class ComponentAssembler:
     """装配期的**门与披露**（R4 第二刀：由模块函数升级为持有显式依赖的协作类）。
 
@@ -279,12 +301,11 @@ class ComponentAssembler:
             _FINGERPRINT_MEMO[key] = fp
         self.rt.data_fingerprint_seconds = perf_counter() - t0
         detail = fp.as_dict()
-        watermarks = [d for t in detail.values()
-                      if (d := t.get("date_max")) is not None]
-        # 数据水位 = 表内最大日期，**但不晚于区间末**（部分表非年分片——如
-        # 静态/单文件表——其日期会延伸到未来，与本次回测无关；不裁剪会把
-        # 锚点写成未来日期，误导"数据水位"语义）
-        anchor = min(max(watermarks), end_ymd) if watermarks else end_ymd
+        # **P16 ①②③（19 号 §165）**：水位 = 行情表 `date_max` 的 **min**
+        # （最滞后表为真水位；排除 `stock_basic` 等静态/状态表），并夹取区间末
+        # （部分表非年分片——如静态/单文件表——日期会延伸到未来，与本次回测
+        # 无关；不裁剪会把锚点写成未来日期，误导"数据水位"语义）。
+        anchor = _price_anchor(detail, end_ymd) or end_ymd
         logger.info(
             "数据指纹（%s 档，%d 表 × %d 年，%.2fs）：%s | 数据水位 %s",
             mode, len(tables), len(years), self.rt.data_fingerprint_seconds,
@@ -307,14 +328,20 @@ class ComponentAssembler:
           - **哈希门禁（严格相等）**：装配期实算 `content_hash`（档位 =
             `data.fingerprint_mode`，缺省 meta）并比对；不一致 ⇒ ConfigError
             （附两端哈希与档位——"拒绝静默换数"）；
-          - **水位门禁（≥ 声明）**：实算水位 = 各表 `date_max` 最大值
-            （**未裁剪**——与 manifest 披露的"裁剪到区间末"锚点不同义）；
+          - **水位门禁（≥ 声明）**：实算水位 = **行情表**（`daily`／`fund_daily`
+            ／`index_daily`）`date_max` 的 **min**（P16 ①②：`stock_basic` 等
+            静态/状态表不参与；最滞后表为真水位），并**双向夹取区间末**
+            （`min(值, 区间末)`，P16 ③）——『跑 2016 却声明 2026』的历史配置
+            不误伤，而**真正数据滞后仍照红**；
           - 内存 Feed（无文件指纹）声明任何版本键 ⇒ ConfigError（无法校验，
             拒绝静默放行）；
           - 通过 ⇒ 记装配披露（声明 vs 实算 + 档位）——"这条结论锚在哪份数据"。
 
         **只在声明时计算**（opt-in；meta 档毫秒级 + 进程内 memo）——未声明
         路径零成本（BB-1 纪律：网格搜索不因门禁变慢）。
+
+        ⚠ `content_hash` 与 `anchor_date` **互不影响**：前者是数据内容哈希
+        （`fp.digest`），本门禁**不得**改动它（§165 B 末）。
         """
         cfg = self.rt.config or {}
         # **T-18（19 号 §149 D-1）**：WF 折内允许**只跳哈希门禁**——折区间是整段
@@ -359,22 +386,37 @@ class ComponentAssembler:
                     f"{computed_hash}（档位 {mode}）——数据快照与声明不一致；"
                     f"如确认换数，请更新 data.dataset.version/expected_hash"])
         watermarks = [d.get("date_max")
-                      for d in info.get("tables_detail", {}).values()
-                      if d.get("date_max")]
-        actual_anchor = max(watermarks) if watermarks else ""
+                      for name, d in info.get("tables_detail", {}).items()
+                      if name in _PRICE_TABLES and d.get("date_max")]
+        # 区间末缺失（WF 折/单测桩只给 period 子集）⇒ 不夹取，按原值比较。
+        end_ymd = _ymd(period["end"]).to_ymd() if period.get("end") else ""
+        # P16 ③：**双向夹取区间末**——声明超区间（如跑 2016 却声明 2026-09-18）
+        # 后该声明无意义，夹到区间末后与实际水位同值 ⇒ 通过；而真实滞后
+        # （actual < 声明且声明 ≤ 区间末）仍照红。
+        # 声明值允许 `YYYY-MM-DD` / `YYYYMMDD` 两形：比较/夹取一律用 8 位。
+        declared_ymd = declared_anchor.replace("-", "") if declared_anchor else ""
+        actual_anchor = min(watermarks) if watermarks else ""
+        if actual_anchor and end_ymd:
+            actual_anchor = min(actual_anchor, end_ymd)
+        declared_eff = (min(declared_ymd, end_ymd)
+                        if (declared_ymd and end_ymd) else declared_ymd)
+        clamp_note = (""
+                      if declared_eff in ("", declared_ymd)
+                      else f"（声明 {declared_anchor} 超区间末，按 {declared_eff} 夹取）")
         if declared_anchor:
             if not actual_anchor:
                 raise ConfigError([
                     "数据版本门禁未通过（RC-14）：声明了 "
                     f"data.dataset.anchor_date={declared_anchor}，但实算水位"
-                    "为空（tables_detail 无 date_max）"])
-            if actual_anchor < declared_anchor:
+                    "为空（tables_detail 无行情表 date_max）"])
+            if actual_anchor < declared_eff:
                 raise ConfigError([
-                    f"数据版本门禁未通过（RC-14）：数据水位 {actual_anchor} < "
-                    f"声明下限 {declared_anchor}——数据未更新到声明水位；"
+                    f"数据版本门禁未通过（RC-14）：行情表数据水位 {actual_anchor} "
+                    f"< 声明下限 {declared_eff}{clamp_note}——数据未更新到声明"
+                    f"水位（P16：水位只取 daily/fund_daily/index_daily 的 min）；"
                     f"请先更新数据或下调声明"])
         self.rt.assembly_notes.append(
             "数据版本门禁通过（RC-14）：声明哈希 "
             f"{declared or '（未声明）'} / 声明水位 "
-            f"{declared_anchor or '（未声明）'}；实算 {computed_hash}"
+            f"{declared_anchor or '（未声明）'}{clamp_note}；实算 {computed_hash}"
             f"（档位 {mode}）、水位 {actual_anchor or '—'}")

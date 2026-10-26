@@ -163,13 +163,19 @@ class TestFileFeedGate:
             BTFRuntime().load_config(_lib_cfg({
                 "version": "sha256:aaa", "expected_hash": "sha256:bbb"})).build()
 
-    def test_anchor_beyond_watermark_rejected(self):
-        """声明水位 ≥ 实算水位下限（2099 不可能满足）⇒ 拒。"""
+    def test_anchor_beyond_period_end_clamped_passes(self):
+        """**P16 ③（19 号 §165）**：声明水位超区间末 ⇒ 夹取后必须通过。
+
+        『跑 2016 却声明 2026-09-18』的历史配置（17 个 L2 run）旧实现会被
+        夹取后的实际水位误判为滞后；新口径**双向夹取**后两端同值 ⇒ 通过。
+        """
         from btf.runtime import BTFRuntime
 
-        with pytest.raises(ConfigError, match="数据水位"):
-            BTFRuntime().load_config(
-                _lib_cfg({"anchor_date": "2099-12-31"})).build()
+        rt = BTFRuntime().load_config(
+            _lib_cfg({"anchor_date": "2099-12-31"})).build()
+        joined = " | ".join(rt.assembly_notes)
+        assert "数据版本门禁通过" in joined
+        assert "夹取" in joined
 
     def test_anchor_within_watermark_passes(self):
         """声明水位 ≤ 实算 ⇒ 通过（数据已更新到声明水位之上）。"""
