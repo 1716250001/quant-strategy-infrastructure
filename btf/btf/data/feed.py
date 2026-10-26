@@ -26,9 +26,11 @@ from btf.domain.types import AssetClass, Instrument, TradingDate
 #: 守卫：`tests/unit/test_dividend_lag_guard.py` 全表重测——出现 >5 年即红。
 _DIV_MAX_LAG_YEARS = 5
 
-#: corporate_actions 进程内 memo（IO-3）：键 (root, start, end) → 行动元组。
+#: corporate_actions 进程内 memo（IO-3）：键 (root, start, end, symbols) →
+#: (行动元组, P18 合并披露)。
 #: 网格搜索逐组合调用同一区间（原每组合全表读 ≈0.7s）；主库只读 → 结果稳定。
-_CORPORATE_ACTIONS_CACHE: BoundedDict[tuple[str, str, str], tuple] = BoundedDict(
+_CORPORATE_ACTIONS_CACHE: BoundedDict[tuple[str, str, str, tuple | None],
+                                      tuple] = BoundedDict(
     maxsize=32, name="feed.corporate_actions")
 
 
@@ -347,6 +349,8 @@ class TushareParquetFeed:
         #: `assembly_notes`；空 = 本次无 ETF 事件/未请求）。
         self.etf_action_notes: list[str] = []
         self.etf_scan_summary: dict[str, Any] = {}
+        #: **P18（19 号 §165）**：dividend 同日重复公告合并披露（空 = 本次无合并）。
+        self.dividend_dedup_note: str = ""
 
     def attach_state_provider(self, provider: Any) -> None:
         """注入状态面板合成器（装配根调用；幂等——后注入覆盖前者）。"""
@@ -562,10 +566,16 @@ class TushareParquetFeed:
         同一行动多条实施行——仅 ann_date/imp_ann_date 等元数据字段
         不同，如 000001.SZ 20081031 两条 ann 0926/1016 全同参数；
         另有 cash_div 0.0/None 表现差异的重复公告如 600811 19960730
-        行2/行3）。去重键 = 业务字段归一化（None≡0）后
-        (symbol, ex_date, pay_date, record_date, bo, co, cd, end_date)
-        ——end_date 入键保真正同日多年度行动（600811 19960730 的
-        1994/1995 年度各一次送转）不被误删；保留首行。
+        行2/行3）。**P18（19 号 §165）**：去重键 = 业务字段归一化（None≡0）后
+        `(symbol, ex_date, pay_date, record_date, bo, co, cd)` ——**不含
+        `end_date`**（`end_date` 是方案所属年度，同一行动的重复公告常写成
+        不同年度，入键会让重复公告漏合并 ⇒ 引擎多派一次现金/送转）。
+        同日业务参数**全同** ⇒ 只留首行；**金额或送转不同 ⇒ 必须保留**
+        （真实多笔：全表 53 组，如 600188.SH@20230717 的 3.07+转 0.5 与 1.23、
+        300760.SZ@20250529 的 0.56 与 1.41）。
+        ETF 侧（`etf_corp_actions`）键为 `(ts_code, ex_date)`：语义对齐——同样
+        是「同日一个行动只入账一次」，只是 ETF 侧无多年度/多组件公告，故不
+        需要业务参数维度；两侧**互不改写**。
         重复不除 → 引擎双重送转（000001 G9 事件链偏高 29% 实测）。
 
         读取路径（**IO-3/P1-8 区间化**，19 号附录 D.3）：`dividend` 年文件按
@@ -592,7 +602,8 @@ class TushareParquetFeed:
         memo_key = (str(self.root), start.to_ymd(), end.to_ymd(), sym_key)
         cached = _CORPORATE_ACTIONS_CACHE.get(memo_key)
         if cached is not None:
-            return list(cached)
+            self.dividend_dedup_note = cached[1]
+            return list(cached[0])
 
         y0, y1 = int(start.to_ymd()[:4]), int(end.to_ymd()[:4])
         years = list(range(y0 - _DIV_MAX_LAG_YEARS, y1 + 1))
@@ -612,13 +623,18 @@ class TushareParquetFeed:
         ))
         seen: set[tuple] = set()
         out: list[CorporateAction] = []
+        n_rows = 0
         for r in t.to_pylist():
             if not r["ex_date"]:
                 continue
+            n_rows += 1
+            # **P18（19 号 §165）**：去重键**不含 `end_date`**——同日业务参数
+            # 全同即重复公告（含同参数但 `end_date` 不同的多年度写法）；
+            # 金额/送转不同 ⇒ key 不同 ⇒ 真实多笔照常保留。
             key = (r["ts_code"], r["ex_date"], r["pay_date"], r["record_date"],
                    float(r["stk_bo_rate"] or 0.0),
                    float(r["stk_co_rate"] or 0.0),
-                   float(r["cash_div"] or 0.0), r["end_date"])
+                   float(r["cash_div"] or 0.0))
             if key in seen:
                 continue
             seen.add(key)
@@ -635,6 +651,12 @@ class TushareParquetFeed:
                 ann_date=(TradingDate.from_ymd(r["ann_date"])
                           if r["ann_date"] else None),
             ))
+        merged = n_rows - len(out)
+        #: **P18 披露**：本次区间合并掉的重复公告条数（0 ⇒ 空串，不恒现）。
+        self.dividend_dedup_note = (
+            f"dividend 同日重复公告合并 {merged} 条（业务参数全同、仅 "
+            f"`end_date`/`ann_date` 不同；保留首行；P18 / 19 号 §165）"
+            if merged else "")
         # ── CL-2 第二段（R3′/R4′；19 号 §79.4）配股 / 缩股事件并入 ──
         # 来源＝离线清单 adapter（`btf.data.corp_action_probe`：akshare 快照
         # ＋ 本地 `adj_factor` 跳变真值；**不写主库**）。清单缺失 ⇒ 空表 +
@@ -663,7 +685,9 @@ class TushareParquetFeed:
         from btf.data.etf_corp_actions import action_order_key
 
         out.sort(key=action_order_key)
-        _CORPORATE_ACTIONS_CACHE[memo_key] = tuple(out)     # IO-3 进程内 memo
+        # IO-3 进程内 memo：值 = (行动元组, **P18 合并披露**)——命中缓存时也要
+        # 还原披露（否则同一进程第二次调用会丢披露，造成「同配置不同披露」）。
+        _CORPORATE_ACTIONS_CACHE[memo_key] = (tuple(out), self.dividend_dedup_note)
         return out
 
 
@@ -838,6 +862,11 @@ class MixedDailyFeed:
     def etf_action_notes(self) -> list[str]:
         """CL-2-H 披露通道（透传股票侧原型；空 = 本次无 ETF 事件/未请求）。"""
         return list(getattr(self._delegate, "etf_action_notes", ()) or ())
+
+    @property
+    def dividend_dedup_note(self) -> str:
+        """**P18（19 号 §165）**：dividend 重复公告合并披露（透传；空 = 无合并）。"""
+        return str(getattr(self._delegate, "dividend_dedup_note", "") or "")
 
     @property
     def etf_scan_summary(self) -> dict[str, Any]:

@@ -114,6 +114,16 @@ def _delisted_holding_notes(result: Any) -> list[str]:
     return notes
 
 
+def _dividend_dedup_notes(feed: Any) -> list[str]:
+    """**P18（19 号 §165）**：dividend 同日重复公告合并披露。
+
+    **披露不得恒现**：本次区间无合并（note 空）⇒ 不追加任何行；有合并 ⇒
+    一行（条数可见，便于核对"同一行动只入账一次"）。
+    """
+    note = str(getattr(feed, "dividend_dedup_note", "") or "")
+    return [note] if note else []
+
+
 def _etf_action_notes(result: Any, feed: Any) -> list[str]:
     """**CL-2-H（R32′/R35′/R36′；ADR-20）**：ETF/LOF 公司行动披露 ＋ 覆盖段。
 
@@ -350,6 +360,8 @@ class RunOrchestrator:
             self.rt.assembly_notes.extend(_corp_action_notes(result))
             self.rt.assembly_notes.extend(
                 _etf_action_notes(result, self.rt.feed))
+            self.rt.assembly_notes.extend(
+                _dividend_dedup_notes(self.rt.feed))          # P18（§165）
             self.rt.assembly_notes.extend(_price_view_notes(result))   # R62′
             self.rt._warn_if_short_period(result)
             return result
@@ -398,6 +410,7 @@ class RunOrchestrator:
             _rc11_notes = (_delisted_holding_notes(result)
                            + _corp_action_notes(result)
                            + _etf_action_notes(result, self.rt.feed)
+                           + _dividend_dedup_notes(self.rt.feed)   # P18（§165）
                            + _price_view_notes(result))      # R62′（N64）
             if _rc11_notes:
                 self.rt.assembly_notes.extend(_rc11_notes)

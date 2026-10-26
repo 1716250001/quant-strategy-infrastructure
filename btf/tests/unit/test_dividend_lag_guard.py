@@ -75,10 +75,12 @@ def _reference_actions(start: str, end: str) -> set[tuple]:
     for r in t.to_pylist():
         if not r["ex_date"]:
             continue
+        # P18（19 号 §165）：去重键与 feed 同步**不含 `end_date`**
+        # （同日业务参数全同即重复公告；金额/送转不同仍各自成键）。
         seen.add((r["ts_code"], r["ex_date"], r["pay_date"], r["record_date"],
                   float(r["stk_bo_rate"] or 0.0),
                   float(r["stk_co_rate"] or 0.0),
-                  float(r["cash_div"] or 0.0), r["end_date"]))
+                  float(r["cash_div"] or 0.0)))
     return seen
 
 
