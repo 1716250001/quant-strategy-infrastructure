@@ -599,7 +599,7 @@ P4 = [
                    "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
     TableSpec("us_qfq_factor", "stock_us_daily", "P4", "single", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_daily_universe", max_age_days=90, rotate_days=60,
+              universe_from="us_daily_universe", max_age_days=90, rotate_days=30,
               params={"adjust": "qfq-factor"},
               coerce_float_cols=["qfq_factor", "adjust"],
               strip_sentinel=False,  # ⚠ §98 E-R3 改回 False（与 hk_qfq_factor 一致）
