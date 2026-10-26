@@ -121,5 +121,15 @@ K-1 P15 零成交 fail-loud／P17 feed 路由／C-3 判据统一；K-2 P10 第�
 1227/1205/22；`carry`／`tushare_parquet`／有成交指标口径均不变。
 
 **5.0.0 → 6.0.0**（2026-10-26；19 号 §165–§168；**major：分红口径变更**——`dividend` 同日重复公告合并后，**含重复公告的 run 分红金额下降、`total_return` 微降（≤0.04pp 年化）；跨版本数字不可直接比较**）：**P16 数据水位口径**（只取 `daily`／`fund_daily`／`index_daily`、聚合改 **`min`**、**双向夹取区间末**；`stock_basic` 等静态表不参与；`content_hash` **未动**；358 run 回归仅 **3** 例 `anchor_date` 变 1 天）＋ **P18 `dividend` 去重键去 `end_date`**（真实多笔保留，合并条数入 `dividend_dedup_note` 披露，缓存命中不丢）；计数 **1242**（非 L5 1220 ＋ L5 22）。
+
+**6.0.0 → 7.0.0**（2026-10-27；19 号 §172–§177；**major：交易判定变更**）：
+**R 类停牌判定修复**——`is_suspended` 由「当天在 `suspend_d` 表即停牌」改为「**仅
+`suspend_type=S` 且 `suspend_timing` 为空**」，`R`（复牌）与盘中停牌放行，与
+`quality._full_day_suspensions` 对齐；**跨 7.0.0 边界回测结果不可比**（可能由「拒单／
+剔除」变为「成交／入选」）。＋ **P14 `CC-7` 送转一致性检查（只报不阻断）**：回看 5 年
+`dividend`，按「`stk_div>0` 且除权日 `adj_factor` 未跳」分 `phantom_shares`／
+`factor_stale`／`review` 三档披露（`CHECK_IDS` 跳过 `CC-6`），不计入 `QualityReport.ok`。
+＋ **工具落点治理**（`tools/_paths.py::SCRATCH_ROOT`，`stkdiv_audit` 不再污染仓内）。
+计数 **1249**（非 L5 1227 ＋ L5 22）。
 """
-__version__ = "6.0.0"
+__version__ = "7.0.0"
