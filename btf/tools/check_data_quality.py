@@ -179,7 +179,7 @@ def _delisting_control() -> list[str]:
 
 
 def _inject_and_detect(tmp: Path) -> list[str]:
-    """负向对照：注入 5 类缺陷，逐条验证「必须被检出」。"""
+    """负向对照：注入 6 类缺陷（CC-1..CC-5 ＋ CC-7），逐条验证「必须被检出」。"""
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -275,6 +275,48 @@ def _inject_and_detect(tmp: Path) -> list[str]:
     if rep.rules[4].ok:                       # CC-5
         warnings.append("CC-5 注入缺陷未检出（伪防线）")
 
+    # ⑥ CC-7（P14；19 号 §172 C）：注入一条「10 送 10」但 `adj_factor` 不跳 ⇒
+    #    必须被 `phantom_shares` 捕获（因子恒定窗口取自真实切片，确定性）
+    adjt = pq.read_table(tmp / "adj_factor" / "2024.parquet",
+                         columns=["ts_code", "trade_date", "adj_factor"])
+    pick = None
+    for sym in SYMS:
+        rows = sorted((d, v) for c, d, v in zip(
+            adjt.column("ts_code").to_pylist(),
+            adjt.column("trade_date").to_pylist(),
+            adjt.column("adj_factor").to_pylist(), strict=True) if c == sym)
+        for i in range(25, len(rows) - 25):
+            if len({v for _, v in rows[i - 1:i + 21]}) == 1:
+                pick = (sym, rows[i][0])
+                break
+        if pick:
+            break
+    if pick is None:
+        warnings.append("CC-7 注入失败（切片内找不到因子恒定的 20 日窗口）")
+    else:
+        dp = tmp / "dividend" / "2024.parquet"
+        dv = pq.read_table(dp)
+        vals = {"ts_code": pick[0], "end_date": pick[1], "ann_date": pick[1],
+                "div_proc": "实施", "stk_div": 10.0, "stk_bo_rate": 10.0,
+                "stk_co_rate": 0.0, "cash_div": 0.0, "cash_div_tax": 0.0,
+                "record_date": pick[1], "ex_date": pick[1], "pay_date": pick[1],
+                "div_listdate": pick[1], "imp_ann_date": pick[1]}
+        cols = {name: pa.array([vals[name]],
+                               type=dv.schema.field(name).type)
+                for name in dv.column_names if name in vals}
+        pq.write_table(pa.concat_tables([dv, pa.table(cols, schema=dv.schema)]),
+                       dp)
+        rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
+        cc7 = next(r for r in rep.rules if r.rule == "CC-7")
+        hit = f"{pick[0]}@{pick[1]}"
+        if not cc7.findings:
+            warnings.append("CC-7 注入缺陷未检出（伪防线）")
+        else:
+            samples = [s for f in cc7.findings for s in f.samples]
+            if hit not in samples:
+                warnings.append(
+                    f"CC-7 检出但样例不含注入点 {hit}（口径可疑）")
+
     for r in rep.rules:                       # ③ 不得恒空
         if r.checked_rows == 0:
             warnings.append(f"{r.rule} checked_rows=0（空洞披露，铁律新 16）")
@@ -301,7 +343,7 @@ def main() -> int:
         print("  [FAIL] checked_rows 为 0（空洞披露）")
         ok = False
 
-    print("\n=== 负向对照：注入 5 类缺陷 → 必须全部检出 ===")
+    print("\n=== 负向对照：注入 6 类缺陷 → 必须全部检出 ===")
     with tempfile.TemporaryDirectory() as td:
         warnings = _inject_and_detect(Path(td))
     if warnings:
@@ -309,7 +351,7 @@ def main() -> int:
             print(f"  [FAIL] {w}")
         ok = False
     else:
-        print("  5/5 缺陷均被检出（防线可被证伪 ✓）")
+        print("  6/6 缺陷均被检出（防线可被证伪 ✓）")
 
     print("\n=== 负向对照 ⑥：CC-2 **ST 分支**（+8% 双向）→ 传 ST 必检 / 不传必不检 ===")
     st_warnings = _st_control()

@@ -16,6 +16,13 @@
                           个股因子序列**单调不减**（复权链断裂）
     CC-5 量价互斥          ① 有行情行则 vol>0 且 amount>0（实测：2024 全市场
                           「非停牌日 vol=0」= **0 行**）；② 收盘价越出当日涨跌停价
+    CC-7 送转一致性        **P14（19 号 §172 C，只报不阻断）**：回看 5 年
+                          `dividend`，`stk_div > 0` 且 `(code, ex_date)` 的
+                          `adj_factor` 与前一交易日**相同** ⇒ 记 finding；
+                          三档 `phantom_shares`／`factor_stale`／`review`。
+                          **编号跳过 CC-6**：CC-6 已被「产物工程化」占用
+                          （`data_quality_report.json`＋`bt check` 第 8 项，
+                          不是一条规则），故规则编号从 5 直接到 7。
 
 三条设计要点（§39.2 预付的坑；落地口径）：
     ① **fail-closed 边界**：本模块只**产出报告**；由 `runtime` 决定
@@ -35,7 +42,9 @@
 from __future__ import annotations
 
 import itertools
+from bisect import bisect_left
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -51,8 +60,11 @@ __all__ = [
     "run_checks",
 ]
 
-#: 校验项编号（顺序即报告顺序）
-CHECK_IDS = ("CC-1", "CC-2", "CC-3", "CC-4", "CC-5")
+#: 校验项编号（顺序即报告顺序）。**跳过 CC-6**（产物工程化编号，非规则）。
+CHECK_IDS = ("CC-1", "CC-2", "CC-3", "CC-4", "CC-5", "CC-7")
+
+#: **不参与阻断**的规则（P14：缺陷在数据侧，阻断只会让人绕路；只报不改）
+NON_BLOCKING_RULES = frozenset({"CC-7"})
 
 _RULE_NAMES = {
     "CC-1": "OHLC 内部一致性",
@@ -60,6 +72,7 @@ _RULE_NAMES = {
     "CC-3": "日历一致性",
     "CC-4": "复权因子一致性",
     "CC-5": "量价互斥",
+    "CC-7": "送转一致性（只报不阻断）",
 }
 
 #: 涨跌幅/限价容差（比例）：真实数据的四舍五入与复权舍入会产生 0.0x% 越界
@@ -198,7 +211,8 @@ class QualityReport:
 
     @property
     def ok(self) -> bool:
-        return all(r.ok for r in self.rules)
+        #: P14：CC-7 **只报不阻断**（`strict` 不因它失败）
+        return all(r.ok for r in self.rules if r.rule not in NON_BLOCKING_RULES)
 
     @property
     def n_findings(self) -> int:
@@ -220,7 +234,9 @@ class QualityReport:
     def summary_line(self) -> str:
         """单行摘要（日志/披露用；**不得恒空**——铁律新 16）。"""
         states = "、".join(
-            f"{r.rule} {'PASS' if r.ok else f'FAIL({r.n_findings})'}"
+            (f"{r.rule} 发现 {r.n_findings}（不阻断）"
+             if r.rule in NON_BLOCKING_RULES and not r.ok
+             else f"{r.rule} {'PASS' if r.ok else f'FAIL({r.n_findings})'}")
             for r in self.rules)
         return (f"数据不变量校验：{'PASS' if self.ok else 'FAIL'}"
                 f"（{self.start}–{self.end}，{self.symbols} 标的，"
@@ -812,6 +828,104 @@ def _full_day_suspensions(store, start: str, end: str,
     return out
 
 
+def _plus_days(ymd: str, days: int) -> str:
+    """`YYYYMMDD` ＋ N 日（自然日；用于把复权因子的读取窗口推过区间末）。"""
+    return (datetime.strptime(ymd, "%Y%m%d")
+            + timedelta(days=days)).strftime("%Y%m%d")
+
+
+def _check_cc7(store: Any, start_ymd: str, end_ymd: str,
+               symbols: set[str] | None) -> RuleResult:
+    """CC-7 送转一致性（**P14；19 号 §172 C；只报不阻断**）。
+
+    回看 **5 年** `dividend`：`div_proc == 实施`、`stk_div > 0`、`ex_date`
+    在窗口内 ⇒ 每个 `(code, ex_date)` 查 `adj_factor`：
+
+    - 当日因子 ≠ 前一交易日 ⇒ **正常**（因子已随送转跳变）；
+    - 20 个交易日内**全程未跳** ⇒ `phantom_shares`（源头缺因子，如
+      `002608.SZ@20161228`：10 送 13.87、因子恒 2.604）；
+    - 20 日内**跳了但不在 `ex_date` 当日** ⇒ `factor_stale`（日期错位）；
+    - 缺当日因子行／窗口不足 ⇒ `review`（人工）。
+
+    为什么只报不阻断：缺陷在数据侧，阻断只会让人改配置绕路，不会修数据。
+    """
+    if symbols is not None and not symbols:
+        return RuleResult("CC-7", 0)
+    look_start = f"{int(start_ymd[:4]) - 5:04d}{start_ymd[4:]}"
+    events: dict[str, set[str]] = {}
+    for year in _years_between(look_start, end_ymd):
+        t = store.read_file("dividend", year=year)
+        if t is None or not t.num_rows:
+            continue
+        # 精简夹具可能缺 `stk_div`（单测合成表只建必要列）⇒ 缺列视为无送转事件
+        if not {"ts_code", "ex_date", "div_proc", "stk_div"} <= set(t.column_names):
+            continue
+        t = t.select(["ts_code", "ex_date", "div_proc", "stk_div"])
+        for code, ex, proc, sd in zip(
+                t.column("ts_code").to_pylist(),
+                t.column("ex_date").to_pylist(),
+                t.column("div_proc").to_pylist(),
+                t.column("stk_div").to_pylist(), strict=True):
+            if not ex or not (look_start <= ex <= end_ymd):
+                continue
+            if proc != "实施" or (sd or 0.0) <= 0:
+                continue
+            if symbols is not None and code not in symbols:
+                continue
+            events.setdefault(code, set()).add(ex)
+    n_events = sum(len(v) for v in events.values())
+    if not n_events:
+        return RuleResult("CC-7", 0)
+
+    adj = _table_slice(store, "adj_factor", look_start,
+                       _plus_days(end_ymd, 40),
+                       ("ts_code", "trade_date", "adj_factor"), set(events))
+    series: dict[str, list[tuple[str, float]]] = {}
+    if adj.num_rows:
+        for code, day, val in zip(
+                adj.column("ts_code").to_pylist(),
+                adj.column("trade_date").to_pylist(),
+                adj.column("adj_factor").to_pylist(), strict=True):
+            series.setdefault(code, []).append((day, float(val or 0.0)))
+        for seq in series.values():
+            seq.sort()
+
+    buckets: dict[str, list[str]] = {
+        "phantom_shares": [], "factor_stale": [], "review": []}
+    for code, exs in events.items():
+        seq = series.get(code) or []
+        dates = [d for d, _ in seq]
+        for ex in sorted(exs):
+            i = bisect_left(dates, ex)
+            if i == 0 or i >= len(seq) or dates[i] != ex:
+                buckets["review"].append(f"{code}@{ex}")
+                continue
+            base = seq[i][1]
+            if base != seq[i - 1][1]:
+                continue                       # 当日已跳变：正常
+            window = seq[i + 1:i + 21]
+            if len(window) < 20:
+                buckets["review"].append(f"{code}@{ex}")
+            elif any(v != base for _, v in window):
+                buckets["factor_stale"].append(f"{code}@{ex}")
+            else:
+                buckets["phantom_shares"].append(f"{code}@{ex}")
+
+    labels = {
+        "phantom_shares": "送转除权后 20 个交易日内 `adj_factor` **全程未跳变**"
+                          "（tushare 源头疑似缺因子）",
+        "factor_stale": "`adj_factor` 在 20 个交易日内跳变，但**不在 `ex_date` "
+                        "当日**（因子日期错位）",
+        "review": "缺 `ex_date` 当日因子行或 20 日窗口不足，需人工复核",
+    }
+    findings = tuple(
+        Finding("CC-7", "dividend＋adj_factor", labels[cls], len(buckets[cls]),
+                tuple(buckets[cls][:3]))
+        for cls in ("phantom_shares", "factor_stale", "review")
+        if buckets[cls])
+    return RuleResult("CC-7", n_events, findings)
+
+
 def run_checks(
     root: Path | str,
     start_ymd: str,
@@ -876,6 +990,8 @@ def run_checks(
                                       start_ymd, end_ymd, symbols))
     rules.append(_check_cc4(store, start_ymd, end_ymd, symbols))
     rules.append(_check_cc4_events(store, start_ymd, end_ymd, symbols))
+    # P14（19 号 §172 C）：送转一致性——**只报不阻断**（见 NON_BLOCKING_RULES）
+    rules.append(_check_cc7(store, start_ymd, end_ymd, symbols))
 
     merged: dict[str, list[RuleResult]] = {r: [] for r in CHECK_IDS}
     for r in rules:

@@ -115,7 +115,8 @@ def test_default_records_and_discloses(tmp_path: Path):
     assert artifact.is_file(), "run 目录缺 data_quality_report.json"
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["ok"] is True
-    assert all(r["checked_rows"] > 0 for r in payload["rules"]), "空洞披露"
+    assert all(r["checked_rows"] > 0 for r in payload["rules"]
+               if r["rule"] != "CC-7"), "空洞披露"      # CC-7 事件型：无送转 ⇒ 0 合法
 
 
 def test_strict_raises_on_findings(tmp_path: Path):

@@ -100,9 +100,16 @@ def test_clean_master_passes(master: Path):
 
 
 def test_checked_rows_never_empty(master: Path):
-    """铁律新 16：五条规则 `checked_rows` 均 > 0（不得恒空）。"""
+    """铁律新 16：五条阻断规则 `checked_rows` 均 > 0（不得恒空）。
+
+    **CC-7 例外（P14，19 号 §172 C）**：事件型规则——窗口内无送转事件 ⇒ 0 合法
+    （本 fixture 无 `dividend`/`stk_div`）；其非空性由 `tests/integration/
+    test_p14_cc7.py` 在真实主库上验证（600276 送转事件 > 0）。
+    """
     rep = _check(master)
     for r in rep.rules:
+        if r.rule == "CC-7":
+            continue
         assert r.checked_rows > 0, f"{r.rule} checked_rows=0（空洞披露）"
 
 
