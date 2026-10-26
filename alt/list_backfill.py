@@ -331,6 +331,74 @@ def select_batch(symbols, sp, state, budget=None, verbose=True):
 
 
 # ============================================================
+# 二·五、调度层保护（OS-R6 / R6-2，2026-10-26）
+# ------------------------------------------------------------
+# 背景（§140.0 对账）：`AltCheckpoint`（`us_backfill`/`backfill` 写）与
+# `RotateState`（本引擎写）是**两套互不可见的记录**。`us_daily_qfq` 盘上
+# 3,040 万行、ckpt done=18,052，但 RotateState **无此表** ⇒ `select_batch`
+# 把它当成"从未拉过"，一次误启动就会把全量重拉一遍（≈15 h 白烧）。
+# ============================================================
+def _table_disk_rows(name):
+    """盘上该表的 (分区数, 数据行数)——按 parquet **footer 元数据**统计。
+
+    为什么读 footer 而不是 `pd.read_parquet`：`us_daily_raw` 3,058 万行 / 55 分区，
+    只读一列也要数秒且吃内存；footer 的 num_rows 是 O(分区数) 的元数据读。
+    footer 读不出来时按"该分区有数据"保守计 1 行（宁可拦住，不可放行重拉）。
+    """
+    d = alt_table_dir(name)
+    if not os.path.isdir(d):
+        return 0, 0
+    files = sorted(f for f in os.listdir(d) if f.endswith(".parquet"))
+    if not files:
+        return 0, 0
+    import pyarrow.parquet as pq
+    n_rows = 0
+    for f in files:
+        try:
+            n_rows += int(pq.ParquetFile(os.path.join(d, f)).metadata.num_rows)
+        except Exception:  # noqa: BLE001
+            n_rows += 1
+    return len(files), n_rows
+
+
+def _guard_schedule_state(sp, state, rebuild, dry_run, verbose=True):
+    """R6-2 调度层保护：RotateState 无记录 + 盘上已有数据 ⇒ **发请求前**拒绝。
+
+    判定顺序（缺一不可）：
+      ① `--dry-run` 直接放行（零请求，且 §140 R6-4 要求 dry-run 输出不变）；
+      ② `--rebuild` 放行（显式全量重建语义，唯一越过口；打印说明）；
+      ③ RotateState 有该表记录 ⇒ 放行（正常路径，行为与改动前逐字一致）；
+      ④ RotateState 无记录且盘上有 parquet、行数 > 0 ⇒ 退出码 **4**。
+
+    ⚠ 为什么不做"自动补水位"：补水位等于**替操作者下结论**"盘上数据就是全量"，
+      而该结论恰恰是本次要防的误判（盘上可能只是历史残留的一部分）；
+      错误地补水位会让后续轮转**跳过真正缺的标的**。故只拦截 + 给出两条出路。
+    """
+    if dry_run:
+        return
+    if rebuild:
+        if verbose:
+            print("[R6-2] --rebuild：显式全量重建，越过调度层保护")
+        return
+    if state.data.get(sp.name):
+        return
+    n_files, n_rows = _table_disk_rows(sp.name)
+    if n_files == 0 or n_rows <= 0:
+        return
+    print("=" * 84)
+    print(f"[R6-2] 拒绝执行：{sp.name} 的 RotateState 无记录，"
+          f"但盘上已有 {n_files} 个分区 / {n_rows:,} 行数据")
+    print("  两套记录互不可见（AltCheckpoint vs RotateState）——若继续，"
+          "select_batch 会把全部标的当成「从未拉过」重新拉一遍。")
+    print("  处置（二选一）：")
+    print("    ① 确认确需全量重拉 ⇒ 追加 --rebuild（显式越过本保护）")
+    print("    ② 只想看进度 ⇒ python -m alt.list_backfill --table "
+          f"{sp.name} --status")
+    print("=" * 84)
+    raise SystemExit(4)
+
+
+# ============================================================
 # 三、拉取（串行 + limiter）
 # ============================================================
 def fetch_one(sp, symbol, limiter, url):
@@ -586,6 +654,8 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         raise SystemExit("清单为空，无可拉标的")
 
     state = RotateState(dry_run=dry_run)
+    # OS-R6 R6-2：调度层保护（必须在**任何请求之前**判定；dry-run 直接放行）
+    _guard_schedule_state(sp, state, rebuild, dry_run, verbose=verbose)
     if rebuild:
         todo = universe
         mode_label = "整表重建（--rebuild，影子目录）"
@@ -755,36 +825,63 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
 # ============================================================
 # 七、状态（零请求）
 # ============================================================
+def _ckpt_done_counts():
+    """R6-1：读**一次性断点** `AltCheckpoint` 的 done 条数（仅显示层，不参与调度）。
+
+    为什么读它：`us_daily_qfq` 盘上 3,040 万行、ckpt done=18,052，但 RotateState
+    无此表 ⇒ 只看 RotateState 的 `--status` 会显示"新鲜 0 / 陈旧 18,052"，是假象。
+    """
+    try:
+        ck = AltCheckpoint()
+    except Exception:  # noqa: BLE001
+        return {}
+    out = {}
+    for t, rec in (ck.data or {}).items():
+        if not isinstance(rec, dict):
+            continue
+        done = rec.get("done") or []
+        if isinstance(done, (list, tuple, set)):
+            out[t] = len(done)
+    return out
+
+
 def show_status(table=None, verbose=True, json_out=False):
     """轮转进度总览（零请求）。
 
     §128 T1-3：`--status --json` 必须真的输出**机读 JSON**（此前 `--json` 在
-    `--status` 分支之前就 return 了，参数被静默忽略）。不带 `--json` 时
-    表格输出**逐字不变**。
+    `--status` 分支之前就 return 了，参数被静默忽略）。
+    OS-R6 R6-1：合并显示 `AltCheckpoint`（一次性断点）的 done 条数——
+      RotateState 有记录的表**输出逐字不变**（R6-4），仅对"RotateState 无记录
+      但一次性断点有 done"的表追加一行说明，消除"done=0"假象。
     """
     tables = ([table] if table else
               [s.name for s in spec_mod.ALL_SPECS if s.mode == "list"])
     state = RotateState()
+    ck_done = _ckpt_done_counts()
 
     if json_out:
         out = {}
         for t in tables:
             sp = spec_mod.get(t)
+            item = {"total": None, "fresh": None, "stale": None,
+                    "oldest": None, "newest": None}
             if not (sp.universe_from or ""):
-                out[t] = {"total": None, "fresh": None, "stale": None,
-                          "oldest": None, "newest": None,
-                          "error": "no universe_from"}
-                continue
-            try:
-                uni = load_universe(sp, verbose=False)
-            except Exception as e:  # noqa: BLE001
-                out[t] = {"total": None, "fresh": None, "stale": None,
-                          "oldest": None, "newest": None,
-                          "error": str(e)[:120]}
-                continue
-            fresh, stale, oldest, newest = state.progress(t, uni, sp.rotate_days)
-            out[t] = {"total": len(uni), "fresh": fresh, "stale": stale,
-                      "oldest": oldest or None, "newest": newest or None}
+                item["error"] = "no universe_from"
+            else:
+                try:
+                    uni = load_universe(sp, verbose=False)
+                except Exception as e:  # noqa: BLE001
+                    item["error"] = str(e)[:120]
+                else:
+                    fresh, stale, oldest, newest = state.progress(
+                        t, uni, sp.rotate_days)
+                    item.update({"total": len(uni), "fresh": fresh,
+                                 "stale": stale,
+                                 "oldest": oldest or None,
+                                 "newest": newest or None})
+            item["rotate_done"] = len(state.data.get(t, {}) or {})
+            item["checkpoint_done"] = ck_done.get(t, 0)
+            out[t] = item
         print(json.dumps(out, ensure_ascii=False))
         return 0
 
@@ -795,15 +892,20 @@ def show_status(table=None, verbose=True, json_out=False):
         sp = spec_mod.get(t)
         if not (sp.universe_from or ""):
             print(f"{t:<18}  （无 universe_from，须 --symbols 显式指定）")
-            continue
-        try:
-            uni = load_universe(sp, verbose=False)
-        except Exception as e:  # noqa: BLE001
-            print(f"{t:<18}  清单读取失败: {str(e)[:50]}")
-            continue
-        fresh, stale, oldest, newest = state.progress(t, uni, sp.rotate_days)
-        print(f"{t:<18}{len(uni):>8,}{fresh:>8,}{stale:>10,}"
-              f"{oldest or '—':>14}{newest or '—':>14}")
+        else:
+            try:
+                uni = load_universe(sp, verbose=False)
+            except Exception as e:  # noqa: BLE001
+                print(f"{t:<18}  清单读取失败: {str(e)[:50]}")
+            else:
+                fresh, stale, oldest, newest = state.progress(
+                    t, uni, sp.rotate_days)
+                print(f"{t:<18}{len(uni):>8,}{fresh:>8,}{stale:>10,}"
+                      f"{oldest or '—':>14}{newest or '—':>14}")
+        # R6-1：RotateState 无记录但一次性断点有 done ⇒ 追加真实进度（不覆盖原行）
+        if not state.data.get(t) and ck_done.get(t, 0) > 0:
+            print(f"{'':<18}  ↳ AltCheckpoint done={ck_done[t]:,}"
+                  f"（RotateState 无记录；两套记录互不可见，§140 R6-1）")
     return 0
 
 
