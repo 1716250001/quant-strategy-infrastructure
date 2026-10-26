@@ -33,6 +33,14 @@ alt/list_backfill.py — 通用 list 模式引擎（建库 / 轮转更新 / 整�
   python -m alt.list_backfill --table hk_daily --budget-syms 20        # 限量试跑
   python -m alt.list_backfill --status                          # 轮转进度（零请求）
   python -m alt.list_backfill --table hk_daily --dry-run        # 只打印计划
+
+⚠ `--status --json` 键集（**契约**，R6R-3；勿擅改）：
+  每表固定键 = {total, fresh, stale, oldest, newest, rotate_done, checkpoint_done}
+  ＋ 异常时附 error。其中：
+    · rotate_done      = RotateState（本引擎的轮转水位）条数
+    · checkpoint_done  = AltCheckpoint（us_backfill/backfill 的一次性断点）done 条数
+  两者**互不可见**，故并列输出（§140 R6-1 修的就是"只看前者 ⇒ 显示 done=0 假象"）。
+  新增/删除键属接口变更，须先获批（§142 R6R-2）后再动。
 """
 import argparse
 import hashlib
