@@ -421,6 +421,18 @@ def fetch_one(sp, symbol, limiter, url):
     kw[sp.symbol_param or "symbol"] = symbol          # 接口参数名（akshare 惯例 symbol）
     df, ok, err = limiter.call(lambda: fn(**kw), url)
     if not ok:
+        # R7-1（§151）：绕 akshare stock_profile_em.py:183 的**临时补丁**；上游修复后移除。
+        # 背景（§150.9 勘误）：该接口对「源端无数据」的标的会抛
+        #   TypeError: 'NoneType' object is not subscriptable
+        # 且异常在 akshare 内部抛出 ⇒ 下方 `df is None` 防护**无机会生效**，
+        # 结果被误记为 fail（导致覆盖率低估 + 每轮反复重试浪费请求）。
+        # ⚠ 严格三条件命中才转 empty，**禁止泛化**（R7-1d）：不得写成"所有 TypeError 都 empty"。
+        if (sp.func == "stock_hk_financial_indicator_em"
+                and err
+                and err.startswith("TypeError")
+                and "'NoneType' object is not subscriptable" in err):
+            print(f"    [R7-1] {symbol} akshare 空响应异常已归类 empty")
+            return symbol, None, "empty"
         return symbol, None, err
     if df is None or len(df) == 0:
         return symbol, None, "empty"
