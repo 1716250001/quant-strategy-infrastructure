@@ -647,6 +647,52 @@ P4 = [
               note="美股三表（长表 9 列，逐 (symbol, statement) 拉; "
                    "⚠ 接口形参 symbol=报表类型，市场代码走 stock; "
                    "⚠ 3 表 × 4,900 只 ≈ 1,029 万行，按年分区落盘"),
+    # —— §166 R12-1：拆成三张物理表（原 us_report 单表在 list 引擎下**必错**：
+    #    fetch_one 会把 symbol_param 指向的参数覆盖掉，而报表述表类型只能走 `symbol`
+    #    形参 ⇒ 不拆则恒拉默认「资产负债表」= 只拉 1/3）——
+    #    关键：symbol_param="stock"（市场代码）与 params.symbol（报表类型）**分工**
+    TableSpec("us_report_balance", "stock_financial_us_report_em", "P1",
+              "by_year", "date", src_date_col="REPORT_DATE",
+              subset=["symbol", "date", "item_name"], mode="list",
+              symbol_param="stock",            # ← 关键：防覆盖 params 里的 symbol
+              symbol_col="SECURITY_CODE",
+              rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
+                      "AMOUNT": "amount"},
+              universe_from="us_fina_ind", universe_col="symbol",
+              params={"symbol": "资产负债表", "indicator": "年报"},
+              rotate_days=30, max_age_days=120,
+              coerce_float_cols=["amount"],
+              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+              note="§166 R12-1：三表拆分之一（资产负债表）；symbol_param='stock' 防覆盖报表类型；"
+                   "值列 AMOUNT→amount；清单来自 us_fina_ind 命中名单（非 universe 直取）"),
+    TableSpec("us_report_income", "stock_financial_us_report_em", "P1",
+              "by_year", "date", src_date_col="REPORT_DATE",
+              subset=["symbol", "date", "item_name"], mode="list",
+              symbol_param="stock",
+              symbol_col="SECURITY_CODE",
+              rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
+                      "AMOUNT": "amount"},
+              universe_from="us_fina_ind", universe_col="symbol",
+              params={"symbol": "综合损益表", "indicator": "年报"},
+              rotate_days=30, max_age_days=120,
+              coerce_float_cols=["amount"],
+              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+              note="§166 R12-1：三表拆分之一（综合损益表，**不是『利润表』**）；"
+                   "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount"),
+    TableSpec("us_report_cashflow", "stock_financial_us_report_em", "P1",
+              "by_year", "date", src_date_col="REPORT_DATE",
+              subset=["symbol", "date", "item_name"], mode="list",
+              symbol_param="stock",
+              symbol_col="SECURITY_CODE",
+              rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
+                      "AMOUNT": "amount"},
+              universe_from="us_fina_ind", universe_col="symbol",
+              params={"symbol": "现金流量表", "indicator": "年报"},
+              rotate_days=30, max_age_days=120,
+              coerce_float_cols=["amount"],
+              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+              note="§166 R12-1：三表拆分之一（现金流量表）；"
+                   "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount"),
 ]
 
 # ============================================================
