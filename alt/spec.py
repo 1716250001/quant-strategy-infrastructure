@@ -563,23 +563,28 @@ P4 = [
     #     · 排除 111 只从未有行情的空壳；幽灵码 0（已验证 B ⊂ C）
     #   ⚠ **冻结语义**：本清单不随日更/轮转自动变化；需更新须单独派单重生成并重新冻结，
     #     否则"清单漂移"会让已落盘分区不可复现。
-    #   ⚠ func 故意写成派生标记 `derived:us_daily_qfq`（不是 akshare 函数名）——
+    #   ⚠ func 故意写成派生标记 `derived:<源表>`（不是 akshare 函数名）——
     #     任何误对该表跑 list_backfill/oversize_fetch 都会在 `getattr(ak, func)` 处
     #     立即失败并**零写入**，避免把行情写进清单表污染 universe。
-    TableSpec("us_daily_universe", "derived:us_daily_qfq", "P4", "single", "first_date",
+    TableSpec("us_daily_universe", "derived:us_daily_raw", "P4", "single", "first_date",
               has_date=True, src_date_col="first_date", subset=["symbol"],
               mode="list", universe_from="", max_age_days=365,
               inject_const={"as_of": "__TODAY__"},
               note="美股日线衍生清单（§125 裁定 B 口径）：symbol/first_date/last_date/as_of; "
-                   "18,052 只 = us_daily_qfq 全历史唯一 symbol（含 5,523 已退市）; "
+                   "18,052 只 = us_daily_raw 全历史唯一 symbol（含 5,523 已退市）; "
+                   "§159 R10-C2 解耦：派生源由 us_daily_qfq 改为 us_daily_raw（前者已废弃）；"
                    "⚠ 冻结清单，禁自动刷新; ⚠ 派生表，禁对其取数"),
     # —— 美股日线（前复权）——
     TableSpec("us_daily_qfq", "stock_us_daily", "P4", "by_year", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              max_age_days=5, rotate_days=30,
+              max_age_days=5,
+              # §159 R10-C5 / §158 R9-1：30 → 0
+              # rotate_days=0：本表已废弃（源端 qfq 算法错误，§150）；置 0 使 update 走 skip，防每日误更新
+              rotate_days=0,
               params={"adjust": "qfq"},
               universe_from="us_universe",
-              note="美股日线【前复权 adjust=qfq】; 逐只拉; "
+              note="美股日线【前复权 adjust=qfq】; ⚠ 已废弃（§159 R10-C）：源端算法为「减绝对额 C」"
+                   "非标准前复权、本地无法清洗 ⇒ 只能重算；`alt_backfill` 已加废弃守卫、数据已归档; "
                    "⚠ 前复权基准随新拆股漂移 ⇒ 只可整表重建、不可增量追加; "
                    "⚠ 数据为美股 T-1（美股收盘=北京次日凌晨）"),
     # —— v1.4 外盘扩容 OS-R3（2026-10-23）：美股双表（移植港股双表策略）——
@@ -610,6 +615,38 @@ P4 = [
                    "⚠ layout=single（同港股 hk_qfq_factor；事件级因子按年分区会拆散同标的因子）; "
                    "⚠ strip_sentinel=False：保留 1970-01-01 哨兵行（真实基准因子）+ 所有公司行动； "
                    "⚠ 复权展开唯一入口 alt.reader.expand_us_qfq_factor()"),
+    # —— v1.5 R-4（§159 R10-A1，2026-10-27）：美股财报两表 ——
+    # 参数口径（实测 AAPL，勿改）：
+    #   us_fina_ind : stock_financial_us_analysis_indicator_em(symbol="AAPL", indicator="年报")
+    #                 返回 26 行 × 49 列（宽表，一行一个报告期）
+    #   us_report   : stock_financial_us_report_em(stock="AAPL", symbol="资产负债表", indicator="年报")
+    #                 ⚠ 形参 symbol 是【报表类型】不是市场代码；返回 735 行 × 9 列（长表）
+    # 报表类型枚举固定三种：「资产负债表」/「综合损益表」（**不是"利润表"**）/「现金流量表」
+    TableSpec("us_fina_ind", "stock_financial_us_analysis_indicator_em", "P4",
+              "by_year", "date", src_date_col="REPORT_DATE",
+              subset=["symbol", "date"], mode="list",
+              universe_from="us_universe", symbol_param="symbol", symbol_col="symbol",
+              params={"indicator": "年报"},
+              max_age_days=120, rotate_days=30,
+              coerce_float_cols=["OPERATE_INCOME", "GROSS_PROFIT",
+                                 "PARENT_HOLDER_NETPROFIT", "BASIC_EPS", "DILUTED_EPS",
+                                 "ROE_AVG", "ROA", "GROSS_PROFIT_RATIO", "NET_PROFIT_RATIO"],
+              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+              note="美股财务分析指标（年报，49 列宽表；逐只拉; "
+                   "⚠ 源端 REPORT_DATE 为报告期，非公告日; ⚠ 负值多为合理负（营收同比/净利/EPS/ROE）"),
+    TableSpec("us_report", "stock_financial_us_report_em", "P4",
+              "by_year", "date", src_date_col="REPORT_DATE",
+              subset=["symbol", "statement", "date", "item_name"], mode="list",
+              universe_from="us_universe", symbol_param="stock", symbol_col="symbol",
+              enum_param="symbol", enum_col="statement",
+              enum_values=["资产负债表", "综合损益表", "现金流量表"],
+              params={"indicator": "年报"},
+              max_age_days=120, rotate_days=30,
+              coerce_float_cols=["AMOUNT"],
+              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+              note="美股三表（长表 9 列，逐 (symbol, statement) 拉; "
+                   "⚠ 接口形参 symbol=报表类型，市场代码走 stock; "
+                   "⚠ 3 表 × 4,900 只 ≈ 1,029 万行，按年分区落盘"),
 ]
 
 # ============================================================
@@ -706,7 +743,11 @@ P0_EXT = [
     # 每标的 1 请求 × 2785 只 ≈ 2.95 h
     TableSpec("hk_fina_snap", "stock_hk_financial_indicator_em", "P0_EXT", "single",
               "date", src_date_col=None,
-              subset=["symbol", "date"], mode="list",
+              # §159 R10-D3（A 案）：主键由 [symbol, date] 改为 **[symbol]**
+              # 原因：源端返回的是"当前快照"，无数据日期列；date 只能注入拉取日
+              #       ⇒ 旧口径下每天重跑都算"新行"，表无限累积（实测 4,000 行 = 2,777 + 1,223 老批次）。
+              # 现口径：按 symbol 覆盖，重跑恒为 2,777 行，date 仅表示"最近一次拉取日"。
+              subset=["symbol"], mode="list",
               universe_from="master:hk_basic", universe_col="ts_code",
               universe_xform="strip_hk_suffix", symbol_param="symbol",
               symbol_col="symbol", rotate_days=30,

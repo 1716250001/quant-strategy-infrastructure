@@ -415,6 +415,11 @@ def show_status():
 
 
 def main(argv=None):
+    # §159 R10-C4（D4）：本模块**只服务 us_daily_qfq**，该表已废弃并归档。
+    # 归档后 list 引擎的 R6-2 保护会因"盘上无数据"而自动放行，故必须在此硬拦。
+    raise SystemExit(
+        "us_daily_qfq 已废弃（§159 R10-C）：源端复权算法错误、本地无法清洗。"
+        "需要美股复权价请走 wind，或用 us_daily_raw + us_qfq_factor")
     ap = argparse.ArgumentParser(description="美股建库（mode=list 专用）")
     ap.add_argument("--universe", action="store_true", help="只重建标的全市场清单")
     ap.add_argument("--universe-from-cache", default=None,

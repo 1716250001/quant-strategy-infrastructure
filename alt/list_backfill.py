@@ -648,9 +648,19 @@ def _check_rebuild_coverage(sp, universe, done_syms, verbose=True):
 # ============================================================
 # 六、主流程
 # ============================================================
+# §159 R10-C4′：已归档/废弃的 list 表（任何入口一律拒绝，含 --dry-run）
+DEPRECATED_TABLES = {"us_daily_qfq"}
+
+
 def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         batch=None, yes=False, verbose=True, until=None):
     sp = spec_mod.get(table)
+    # §159 R10-C4′（P0）：废弃表黑名单——归档后 R6-2 的"盘上无数据即放行"会自动失效，
+    # 任何手动跑 --table us_daily_qfq 都会重建一份脏表（源端算法错误，本地无法清洗）。
+    if sp.name in DEPRECATED_TABLES:
+        raise SystemExit(
+            f"[废弃] {sp.name} 已归档（§159）：源端复权算法错误、本地无法清洗。"
+            f"需要美股复权价请走 wind，或用 us_daily_raw + us_qfq_factor")
     if sp.mode != "list":
         raise SystemExit(f"{table}: mode={sp.mode!r} 不是 'list'（本引擎仅处理 list 表）")
     if rebuild and symbols:
