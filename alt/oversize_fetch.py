@@ -182,9 +182,10 @@ def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
 def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
     """对单只 × 3 indicator 的原始时序数据计算分位数。
 
-    CK-13 规则：
+    CK-13 规则（派单 R1-4：**分位算法必须剔除非正值**，原文未区分 PE / PB）：
       - PE 类：剔 value ≤ 0 的行后再算分位
-      - PB：不剔
+      - PB：同 PE 口径，剔 value ≤ 0（§155 R8-1 修正——原「PB 不剔」是
+        执行方自创豁免，与派单原文不符，224 行非正值曾被给出分位）
 
     CK-14 三道门禁（PE 类，派单硬性要求）：
       1. cur > 0（当前值须正）
@@ -212,7 +213,9 @@ def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
         if ind in ("市盈率(TTM)", "市盈率(静)"):
             valid = sub[sub["value"] > 0].copy()                  # 剔非正值
         else:
-            valid = sub.copy()                                    # PB 不剔
+            # §155 R8-1：PB 同 PE，剔 value ≤ 0（派单 R1-4 未区分 PE/PB；
+            # 原「PB 不剔」导致 224 行非正值被给出分位）
+            valid = sub[sub["value"] > 0].copy()
 
         n_pos = len(valid)
 
