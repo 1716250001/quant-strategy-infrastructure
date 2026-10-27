@@ -321,6 +321,16 @@ def expand_us_qfq_factor(symbol: str, *, with_price: bool = True,
     if len(fac) == 0:
         raise ValueError(f"us_qfq_factor '{symbol}' 因子列全为空或日期不可解析")
 
+    # ── §159 R10-E1：末事件因子归 1 ──────────────────────────────
+    # 前复权定义「最新 = raw」⇒ 末事件因子应为 1。实测 10 只（JZ=225 / PARA=10 /
+    # STKH=5 等）末值≠1：源端在反向拆股后**未回填「拆股后基准归 1」这条事件**，
+    # 直接展开会把最新价放大 N 倍。补丁：整列除以末值归一（只改展开结果，
+    # **不改表内原值**——E2）。⚠ 上游修复后可移除本段（E3）。
+    _last_fac = float(fac["qfq_factor"].iloc[-1])
+    if abs(_last_fac - 1.0) > 1e-9:
+        print(f"[R10-E] {symbol} 末事件因子={_last_fac:g}≠1，已归一")
+        fac["qfq_factor"] = fac["qfq_factor"] / _last_fac
+
     if not with_price:
         out = fac.copy()
         out["date"] = out["_dt"].dt.strftime("%Y%m%d")

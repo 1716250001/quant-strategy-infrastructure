@@ -237,9 +237,12 @@ def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
                 pct_value = float(np.sum(valid["value"].values <= cur_val)) / n_pos * 100.0
             # 任一门禁未过 → PE 分位置空（下游转 PB 分位）
         else:
-            # PB：CK-14 不适用于 PB（派单 CK-14 仅约束 PE 类）
-            # 但 n_pos 太少仍不可靠
-            if n_pos >= 30:
+            # PB：CK-14 不适用于 PB 的样本量门禁（PE 类专用），
+            # 但 §159 R10-B1：**cur>0 与 n_pos≥30 必须同时成立**才给分位——
+            # PB 为负 = 每股净资产为负（资不抵债，真实原始数据，221/224 已核），
+            # 此类"分位"无业务含义：cur 为负时公式恒给 0.00，会被下游误读成"全市场最便宜"。
+            gate1_pb = cur_val > 0
+            if gate1_pb and n_pos >= 30:
                 pct_value = float(np.sum(valid["value"].values <= cur_val)) / n_pos * 100.0
 
         # R1R-3: 只存当前值一行（消除 look-ahead）
