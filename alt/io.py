@@ -255,6 +255,49 @@ def table_path(spec: TableSpec, req_date: Optional[str] = None,
     return os.path.join(d, f"{spec.name}.parquet")
 
 
+# ============================================================
+# 落盘前 QC（§159 R10-D1/D2）：只告警、不阻断（老大 2026-10-27 批准）
+# ------------------------------------------------------------
+# D1：价格类列出现负值、或零值占比 >5% ⇒ 打 [QC] WARNING
+#     （来源：外盘排查中"入库无任何价格合理性校验"）
+# D2：added<=0 ⇒ 打 [QC] WARNING
+#     （来源：added<=0 时 merge_append 直接 return，长期为 0 即"静默冻结"）
+# ⚠ 两者都**不改变写入行为**——只为把静默问题变成日志里的可见行。
+# ============================================================
+QC_PRICE_COLS = ("open", "high", "low", "close", "price", "最新价")
+
+
+def qc_price_warnings(df: pd.DataFrame, spec) -> list:
+    """价格合理性检查（负值 / 零值占比），返回告警文本列表。"""
+    warns = []
+    for c in QC_PRICE_COLS:
+        if c not in df.columns:
+            continue
+        s = pd.to_numeric(df[c], errors="coerce").dropna()
+        if not len(s):
+            continue
+        n_neg = int((s < 0).sum())
+        zero_ratio = float((s == 0).mean())
+        if n_neg:
+            warns.append(f"[QC] {spec.name}.{c} 负值 {n_neg} 行（价格不应为负）")
+        if zero_ratio > 0.05:
+            warns.append(
+                f"[QC] {spec.name}.{c} 零值占比 {zero_ratio:.1%} > 5%"
+                f"（停牌占位或源端异常）")
+    return warns
+
+
+def qc_added_warning(result: dict, spec) -> None:
+    """D2：added<=0 留痕（不阻断）。"""
+    if result.get("dry_run"):
+        return
+    if result.get("added", 0) <= 0:
+        msg = (f"[QC] {spec.name} added={result.get('added', 0)} "
+               f"（本批无新增/无变更；若持续为 0 该表可能已静默冻结）")
+        result.setdefault("warnings", []).append(msg)
+        print(msg)
+
+
 def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
          dry_run: bool = False, dest_dir: Optional[str] = None):
     """按 spec 落盘。dry_run=True 时只做校验与预演，不写任何文件。
@@ -279,6 +322,11 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
         return result
 
     result["rows"] = len(df)
+
+    # ── D1：价格合理性（只告警，不阻断）────────────────────────
+    for _w in qc_price_warnings(df, spec):
+        result["warnings"].append(_w)
+        print(_w)
 
     # ── 硬校验：日期列必须存在（否则数据不可用）─────────────────
     # 例外：spec.has_date=False 的表本就没有日期列（如城市清单），跳过校验
@@ -308,6 +356,7 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
         ensure_dir(os.path.dirname(target))
         changed, added = merge_append(target, df, subset=subset)
         result.update(ok=True, added=added)
+        qc_added_warning(result, spec)
         return result
 
     if spec.layout == "by_year":
@@ -336,6 +385,7 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
                 f" → 数据未完整落盘，请检查列类型是否一致")
             return result
         result.update(ok=True, added=st.get("added", 0))
+        qc_added_warning(result, spec)
         return result
 
     # single 布局
@@ -354,6 +404,7 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
     sort_by = spec.date_col if spec.date_col in df.columns else None
     changed, added = merge_append(target, df, subset=subset, sort_by=sort_by)
     result.update(ok=True, added=added)
+    qc_added_warning(result, spec)
     return result
 
 
