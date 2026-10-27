@@ -634,19 +634,6 @@ P4 = [
               inject_const={"src": "datacenter", "as_of": "__TODAY__"},
               note="美股财务分析指标（年报，49 列宽表；逐只拉; "
                    "⚠ 源端 REPORT_DATE 为报告期，非公告日; ⚠ 负值多为合理负（营收同比/净利/EPS/ROE）"),
-    TableSpec("us_report", "stock_financial_us_report_em", "P4",
-              "by_year", "date", src_date_col="REPORT_DATE",
-              subset=["symbol", "statement", "date", "item_name"], mode="list",
-              universe_from="us_universe", symbol_param="stock", symbol_col="symbol",
-              enum_param="symbol", enum_col="statement",
-              enum_values=["资产负债表", "综合损益表", "现金流量表"],
-              params={"indicator": "年报"},
-              max_age_days=120, rotate_days=30,
-              coerce_float_cols=["AMOUNT"],
-              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
-              note="美股三表（长表 9 列，逐 (symbol, statement) 拉; "
-                   "⚠ 接口形参 symbol=报表类型，市场代码走 stock; "
-                   "⚠ 3 表 × 4,900 只 ≈ 1,029 万行，按年分区落盘"),
     # —— §166 R12-1：拆成三张物理表（原 us_report 单表在 list 引擎下**必错**：
     #    fetch_one 会把 symbol_param 指向的参数覆盖掉，而报表述表类型只能走 `symbol`
     #    形参 ⇒ 不拆则恒拉默认「资产负债表」= 只拉 1/3）——

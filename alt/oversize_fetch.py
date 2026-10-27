@@ -526,7 +526,7 @@ def main():
     parser = argparse.ArgumentParser(description="外盘扩容取数引擎（OS-R1~R5）")
     parser.add_argument("--table", required=True,
                         choices=["hk_val_pct", "us_qfq_factor", "us_daily_raw",
-                                 "hk_fina_snap", "us_fina_ind", "us_report",
+                                 "hk_fina_snap", "us_fina_ind",
                                  "hk_fina_ind", "hk_report"],
                         help="目标表")
     parser.add_argument("--symbols", default=None,
