@@ -770,7 +770,10 @@ P0_EXT = [
               subset=["symbol", "indicator", "date"], mode="list",
               universe_from="master:hk_basic", universe_col="ts_code",
               universe_xform="strip_hk_suffix", symbol_param="symbol",
-              symbol_col="symbol", rotate_days=30,
+              symbol_col="symbol",
+              # rotate_days=0：本表由 alt.oversize_fetch 专用（3 indicator），
+              # 走 list_backfill 会因 indicator 缺省='总市值' 而写错数据（§163）
+              rotate_days=0,
               max_age_days=45,
               params={"period": "近十年"},
               inject_const={"src": "baidu", "as_of": "__TODAY__"},

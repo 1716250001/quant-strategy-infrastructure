@@ -135,9 +135,14 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
         if (sp.rotate_days or 0) > 0:
             return {"action": "rotate", "dates": [], "lookback_dates": [],
                     "reason": f"轮转更新（{sp.rotate_days} 天/轮，最久未拉优先）"}
+        # §163 R11-2：skip 文案（通用 + us_daily_qfq 特化）
+        if sp.name == "us_daily_qfq":
+            reason = "us_daily_qfq 已废弃（§159），见 spec.note"
+        else:
+            reason = ('mode="list" 且 rotate_days=0 → 不走日更；'
+                      '请用该表专用入口（见 spec.note）')
         return {"action": "skip", "dates": [], "lookback_dates": [],
-                "reason": 'mode="list" 且 rotate_days=0 → 不走日更'
-                          '（前复权须整表重建）；请用 python -m alt.us_backfill'}
+                "reason": reason}
 
     # ── single 布局：按刷新间隔决定是否全量刷新 ──
     if sp.layout == "single":
