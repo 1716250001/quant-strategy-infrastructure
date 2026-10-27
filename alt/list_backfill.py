@@ -409,6 +409,13 @@ def _guard_schedule_state(sp, state, rebuild, dry_run, verbose=True):
 # ============================================================
 # 三、拉取（串行 + limiter）
 # ============================================================
+# §170 R14-1：R7-1 补丁白名单（只登记实测确认的接口，禁前缀/模糊匹配）
+_R71_FUNCS = frozenset({
+    "stock_hk_financial_indicator_em",            # §151 R7-1（hk_fina_snap，8 只）
+    "stock_financial_us_analysis_indicator_em",   # §170 R14-1（us_fina_ind，实测约 24%）
+})
+
+
 def fetch_one(sp, symbol, limiter, url):
     """拉单只（经 limiter；limiter 内已含 3 次重试与风控静默）。
     返回 (symbol, DataFrame|None, err)；成功时**注入标的列**（接口不返回）。
@@ -421,17 +428,19 @@ def fetch_one(sp, symbol, limiter, url):
     kw[sp.symbol_param or "symbol"] = symbol          # 接口参数名（akshare 惯例 symbol）
     df, ok, err = limiter.call(lambda: fn(**kw), url)
     if not ok:
-        # R7-1（§151）：绕 akshare stock_profile_em.py:183 的**临时补丁**；上游修复后移除。
-        # 背景（§150.9 勘误）：该接口对「源端无数据」的标的会抛
-        #   TypeError: 'NoneType' object is not subscriptable
-        # 且异常在 akshare 内部抛出 ⇒ 下方 `df is None` 防护**无机会生效**，
-        # 结果被误记为 fail（导致覆盖率低估 + 每轮反复重试浪费请求）。
-        # ⚠ 严格三条件命中才转 empty，**禁止泛化**（R7-1d）：不得写成"所有 TypeError 都 empty"。
-        if (sp.func == "stock_hk_financial_indicator_em"
+        # §151 R7-1 + §170 R14-1：源端对「无数据标的」返回 None ⇒ akshare 内部抛 TypeError。
+        # 命中条件**三者同时满足**（严禁泛化）：
+        #   ① sp.func 在白名单内（逐个登记，不按前缀/模糊匹配）
+        #   ② 异常是 TypeError
+        #   ③ 消息含 "'NoneType' object is not subscriptable"
+        # 白名单逐条登记依据：
+        #   · stock_hk_financial_indicator_em —— §151 R7-1（hk_fina_snap，8 只）
+        #   · stock_financial_us_analysis_indicator_em —— §170 R14-1（us_fina_ind，实测约 24%）
+        if (sp.func in _R71_FUNCS
                 and err
                 and err.startswith("TypeError")
                 and "'NoneType' object is not subscriptable" in err):
-            print(f"    [R7-1] {symbol} akshare 空响应异常已归类 empty")
+            print(f"    [R7-1] {symbol} akshare 空响应异常已归类 empty（{sp.name}）")
             return symbol, None, "empty"
         return symbol, None, err
     if df is None or len(df) == 0:
