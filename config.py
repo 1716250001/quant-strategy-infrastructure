@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 config.py — A股三层轮动金字塔策略 · 统一配置中心
 ====================================================
 所有路径、Token、标的清单、计算参数 集中管理于此。
@@ -1209,6 +1209,17 @@ BACKFILL_TARGETS = OrderedDict([
                 "南向 ggt_ss/ggt_sz/south_money 于 20231124 由净流入转存量。"
                 "南向列勿作日流量用，南向流量一律取 ggt_daily",
     }),
+    ("ggt_daily", {
+        "api": "ggt_daily", "desc": "港股通每日成交", "mode": "by_range",
+        "start_param": "start_date", "end_param": "end_date",
+        "start": "20141117", "max_rows": 1000, "tier": "B",
+        "subset": ["trade_date"],
+        "note": "不支持 trade_date 参数须用区间；单次上限 1000 行；"
+                "⚠ 禁 single_range（全历史约2900行 > 1000）；"
+                "源端已是 float64，无需 coerce_float_cols；"
+                "实测 2015-2026 净额连续全正、日环比中位 12~20%，"
+                "是唯一可信的南向日流量源",
+    }),
 ])
 
 # 指数清单: index_weight / index_dailybasic 用
@@ -1364,6 +1375,9 @@ TABLE_DATE_COL = {
     "top_list": "trade_date",
     "top_inst": "trade_date", "block_trade": "trade_date",
     "hsgt_top10": "trade_date", "ggt_top10": "trade_date",
+    # ---- 2026-10-28 DB-R2：沪深港通资金流向两表（by_range，单日一行）----
+    "moneyflow_hsgt": "trade_date",
+    "ggt_daily":      "trade_date",
     # 基金
     "fund_nav": "nav_date", "fund_adj": "trade_date",
     "fund_share": "trade_date", "fx_daily": "trade_date",
@@ -1523,6 +1537,9 @@ DB_AUDIT_PKEYS = {
     "block_trade":      None,
     "hsgt_top10":       ["trade_date", "ts_code"],
     "ggt_top10":        None,
+    # ---- 2026-10-28 DB-R2：沪深港通资金流向两表 ----
+    "moneyflow_hsgt":   ["trade_date"],
+    "ggt_daily":        ["trade_date"],
     "hk_hold":          ["trade_date", "code"],
     "suspend_d":        ["trade_date", "ts_code"],
     "fut_daily":        ["trade_date", "ts_code"],
@@ -1963,6 +1980,9 @@ DAILY_UPDATE_GROUPS = OrderedDict([
                 #   原代码 `if conf.get("mode") != "by_date": 跳过`，进了组也不会跑）。
                 "shibor", "us_tycr", "us_trycr",
                 "us_tbr", "us_tltr", "us_trltr",
+                # 2026-10-28 DB-R2：沪深港通资金流向（⚠ 须先建库，见 18 号 §176 O-1：
+                #   空库时 resolve_gaps 会返回 2014→今天的单区间，by_range 无截断检测 ⇒ 静默残缺）
+                "moneyflow_hsgt", "ggt_daily",
                 # 2026-09-22 新增: 原登记豁免的**日频**表（复核后纳入）
                 #   背景: 2026-09-22 复核发现这些表**全部是标准日频数据**
                 #   （实测每年 222~243 个日期，与 A 股交易日数一致），
