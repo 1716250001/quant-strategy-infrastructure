@@ -453,6 +453,9 @@ def _is_possibly_truncated(n_rows, max_rows):
     return n_rows in SUSPECT_CAPS
 
 
+is_possibly_truncated = _is_possibly_truncated   # DB-R3: 供 fetch/backfill.py 复用
+
+
 def _is_rate_limit_error(err_str):
     """判断是否为限频错误(429/频率超限)"""
     s = err_str.lower()

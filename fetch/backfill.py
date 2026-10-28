@@ -57,6 +57,7 @@ from common.parquet_store import (
 from fetch.base import (
     get_pro, RateLimiter, Checkpoint,
     fetch_codes_parallel, ts_call_with_retry, ts_fetch_by_date,
+    is_possibly_truncated,                      # DB-R3
 )
 
 # ── 从拆分后的兄弟模块 re-export，保持既有调用方（main.py / tools/db_audit.py /
@@ -540,11 +541,31 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     if conf["mode"] == "by_range":
         sp = conf.get("start_param", "start_date")
         ep = conf.get("end_param", "end_date")
+        cap = conf.get("max_rows", 0)               # DB-R3
+        _trunc_hard = []                            # 确凿触顶（未落盘）
+        _trunc_soft = []                            # 仅疑似（已落盘）
         for i, (s, e) in enumerate(pending, 1):
             # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
             df = ts_call_with_retry(pro, conf["api"], limiter,
                                     {sp: s, ep: e}, verbose=verbose)
             nrow = 0 if df is None else len(df)
+
+            # ---- DB-R3 截断检测 ----
+            # 为什么要"触顶不落盘"而不是"落盘+告警"：
+            #   by_range 接口（moneyflow_hsgt 等）返回**降序**，触顶拿到的是
+            #   「最近 N 行」。一旦落盘，latest 就变成目标日 ⇒ 后续日更认为
+            #   "已最新" ⇒ 永不再补历史段 ⇒ 永久残缺且零告警。
+            #   不落盘则 latest 停在旧值，缺口每天重新暴露，可被发现。
+            hard = cap > 0 and nrow == cap
+            soft = (not hard) and bool(nrow) and is_possibly_truncated(nrow, cap)
+            if hard:
+                _trunc_hard.append((s, e, nrow, cap))
+                print(f"    [警告] {name} {i}/{len(pending)} | {s}~{e} | {nrow}行 "
+                      f"触顶 max_rows={cap} ⇒ **未落盘、未记断点**（数据不完整）")
+                continue                            # 不落盘、不记断点
+            if soft:
+                _trunc_soft.append((s, e, nrow))
+
             if df is not None and not df.empty:
                 _save_df(target_dir, conf["api"], df, layout="single",
                          subset=conf.get("subset"))
@@ -555,7 +576,17 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 #   日更本身是幂等的（每天重算缺口、落盘按主键去重），不依赖断点。
                 if date_override is None:
                     cp.mark_done(name, f"{s}|{e}")
-            print(f"    {name} {i}/{len(pending)} | {s}~{e} | {nrow}行")
+            flag = "  [提示] 命中常见上限特征值, 疑似截断(已落盘)" if soft else ""
+            print(f"    {name} {i}/{len(pending)} | {s}~{e} | {nrow}行{flag}")
+        # ---- DB-R3 汇总（末尾一次性打，避免刷屏时被忽略）----
+        if _trunc_hard:
+            print(f"    [警告汇总] {name} 有 {len(_trunc_hard)} 段触顶且**未落盘**：")
+            for s, e, n, c in _trunc_hard:
+                print(f"        {s}~{e}  {n}行 (上限 {c}) ⇒ 需人工缩小区间后重跑")
+        if _trunc_soft:
+            print(f"    [提示汇总] {name} 有 {len(_trunc_soft)} 段疑似截断（已落盘，请核对）：")
+            for s, e, n in _trunc_soft:
+                print(f"        {s}~{e}  {n}行")
         cp.save()
         return {"name": name, "est": est, "done": len(pending)}
 
