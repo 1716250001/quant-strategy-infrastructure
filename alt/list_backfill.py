@@ -141,7 +141,18 @@ class RotateState:
         # 锁文件 = 独立文件（**不锁数据文件本身**，避免与 os.replace 冲突）；
         # ⚠ 永不删除锁文件——删掉会破坏互斥（§185 R15-1UP-e）
         lock_path = self.path + ".lock"
-        lf = open(lock_path, "a+b")
+        # §191 R17：锁文件**首次创建**时，两进程同时 open 会有一方拿到 PermissionError
+        # （Windows 语义，实测 3 次中 1 次）。加重试收敛——对齐 os.replace 的退避风格；
+        # 只重试 PermissionError，其他 OSError 直接抛；耗尽仍失败 ⇒ raise（不得无锁继续）。
+        lf = None
+        for _try in range(20):
+            try:
+                lf = open(lock_path, "a+b")
+                break
+            except PermissionError:
+                if _try == 19:
+                    raise
+                time.sleep(0.01)
         locked = False
         try:
             locked = _lock_acquire(lf)
