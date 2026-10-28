@@ -1195,6 +1195,20 @@ BACKFILL_TARGETS = OrderedDict([
         "max_rows": 0, "tier": "C",
         "note": "⚠ 已停更(止于2019-02-22), 192行; 仅作存档, 无日更价值",
     }),
+    ("moneyflow_hsgt", {
+        "api": "moneyflow_hsgt", "desc": "沪深港通资金流向", "mode": "by_range",
+        "start_param": "start_date", "end_param": "end_date",
+        "start": "20141117", "max_rows": 300, "tier": "B",
+        "subset": ["trade_date"],
+        # DB-R1：源端 6 个数值列返回 str，须落盘前转 float64（见 §0.2 不可逆性）
+        "coerce_float_cols": ["hgt", "sgt", "ggt_ss", "ggt_sz",
+                              "north_money", "south_money"],
+        "note": "不支持 trade_date 参数须用区间；单次上限 300 行；"
+                "⚠ 禁 single_range（全历史约2900行 > 300）；"
+                "⚠ 两条口径断层：北向 hgt/sgt/north_money 于 20240819 由净买额转成交额；"
+                "南向 ggt_ss/ggt_sz/south_money 于 20231124 由净流入转存量。"
+                "南向列勿作日流量用，南向流量一律取 ggt_daily",
+    }),
 ])
 
 # 指数清单: index_weight / index_dailybasic 用

@@ -20,6 +20,7 @@ from typing import Optional
 import pandas as pd
 
 from common.paths import ensure_dir
+from common.dtypes import coerce_float_cols   # DB-R1: 上移 common/，此处保留 re-export
 from common.parquet_store import merge_append, upsert_by_year
 from common.reader import detect_layout, read_range
 from config_alt import (
@@ -48,33 +49,6 @@ def resolve_subset(df: pd.DataFrame, spec: TableSpec):
         return "*", (f"去重键列缺失 {missing} → 回退全列判重（实际列: "
                      f"{list(df.columns)[:12]}）")
     return list(cols), None
-
-
-def coerce_float_cols(df: pd.DataFrame, cols) -> pd.DataFrame:
-    """把指定列强制转为 float（v1.2 外盘接入，2026-10-11）。
-
-    为什么需要（实测，18-审查记录 §4.3-④）:
-      港股 `stock_hk_daily(adjust="qfq-factor")` 返回的 `qfq_factor` 列 dtype
-      是 **str**（akshare 保留字符串形态）——
-        ① 不转 float ⇒ 下游 `close × factor` 直接抛类型错误；
-        ② 跨批 schema 不稳定（一批 str、一批 float）⇒ 按年分区写入类型冲突。
-      故在**落盘前**统一转数值（转不动置 NaN，由后续判空/告警兜底）。
-
-    参数:
-        df:   目标 DataFrame（不原地修改，返回新对象）
-        cols: 需转 float 的列名列表（None/空 = 原样返回）
-    返回:
-        转换后的 DataFrame
-    """
-    if df is None or len(df) == 0 or not cols:
-        return df
-    out = df
-    for c in cols:
-        if c in out.columns:
-            if out is df:
-                out = df.copy()
-            out[c] = pd.to_numeric(out[c], errors="coerce")
-    return out
 
 
 def normalize(df: pd.DataFrame, spec: TableSpec,

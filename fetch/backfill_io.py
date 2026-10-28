@@ -32,6 +32,7 @@ import pandas as pd
 from config import (META_DIR, BACKFILL_PAGE_CONF, TABLE_DATE_COL,
                     BACKFILL_TARGETS, DAILY_UPDATE_EXTRA)
 from common.paths import ensure_dir
+from common.dtypes import coerce_float_cols        # DB-R1
 from common.parquet_store import upsert_grouped, merge_append, upsert_by_year
 from fetch.base import ts_call_with_retry
 
@@ -74,6 +75,31 @@ def _table_mode(name):
         conf = src.get(name)
         if conf and conf.get("mode"):
             return conf["mode"]
+    return None
+
+
+def _table_coerce_cols(name_or_dir):
+    """按表名反查 coerce_float_cols 配置（DB-R1）。
+
+    ⚠ 两个设计点，改动前务必读完：
+
+    ① 为什么不给 save_df 加参数
+       save_df 有 **6 个实际调用点**（backfill.py L342/433/479/528/549/713），
+       逐个加 kwarg 既啰嗦又易漏。函数内反查 ⇒ 调用点零改动、新增表自动生效。
+
+    ② 为什么按 target_dir 的 basename 反查，而不是按 save_df 的 key
+       key 的语义在两类路径下**不一致**：
+         L433/479/528/549/713 传 conf["api"]  → 是表名 ✅
+         L342（by_code 批量落盘）传的是 **标的代码** ❌ 不是表名
+       若按 key 反查，by_code 类表会**全部漏转且不报错**（静默失效）。
+       而 target_dir 在全部调用点恒为 os.path.join(BACKFILL_DIR_ROOT, name)
+       （backfill.py L206 / L240），basename 后必然是表名，无死角。
+    """
+    name = os.path.basename(os.path.normpath(name_or_dir))
+    for src in (BACKFILL_TARGETS, DAILY_UPDATE_EXTRA):
+        conf = src.get(name)
+        if conf:
+            return conf.get("coerce_float_cols") or None
     return None
 
 
@@ -302,6 +328,9 @@ def save_df(target_dir, key, df, layout="single", subset=None, sort_by=None,
     """
     if df is None or df.empty:
         return 0
+    _cf = _table_coerce_cols(target_dir)
+    if _cf:
+        df = coerce_float_cols(df, _cf)
     ensure_dir(target_dir)
 
     srt_pref = sort_by or _pick_sort_col(df, date_col)
