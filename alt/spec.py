@@ -591,11 +591,13 @@ P4 = [
     # 关键设计（复用港股 ADR-13 结论）：
     #   ① 不复权价 us_daily_raw + 事件级因子 us_qfq_factor（拒绝存前复权价）
     #   ② 复权展开唯一入口 alt.reader.expand_qfq_factor()
-    #   ③ stock_us_daily 无日期增量参数 ⇒ 轮转重建（rotate_days=30/轮）
+    #   ③ stock_us_daily 无日期增量参数 ⇒ 只能整表重建；现移出日更、改月度全量（§182 P0-2 方案B）
     #   ④ 新浪域名（finance.sina.com.cn），已有 sina 档位 20/分
     TableSpec("us_daily_raw", "stock_us_daily", "P4", "by_year", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_daily_universe", max_age_days=5, rotate_days=30,
+              universe_from="us_daily_universe", max_age_days=5,
+              # rotate_days=0：移出日更（§182 P0-2 方案B），改由月度任务全量跑（--budget-syms 18052）
+              rotate_days=0,
               params={"adjust": ""},
               coerce_float_cols=["open", "high", "low", "close", "volume"],
               inject_const={"src": "sina", "as_of": "__TODAY__"},
@@ -604,7 +606,9 @@ P4 = [
                    "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
     TableSpec("us_qfq_factor", "stock_us_daily", "P4", "single", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_daily_universe", max_age_days=90, rotate_days=30,
+              universe_from="us_daily_universe", max_age_days=90,
+              # rotate_days=0：移出日更（§182 P0-2 方案B），改由月度任务全量跑（--budget-syms 18052）
+              rotate_days=0,
               params={"adjust": "qfq-factor"},
               coerce_float_cols=["qfq_factor", "adjust"],
               strip_sentinel=False,  # ⚠ §98 E-R3 改回 False（与 hk_qfq_factor 一致）
@@ -820,6 +824,21 @@ P0_EXT = [
 
 ALL_SPECS = P0 + P1 + P1_EX + P3 + P4 + P4_HK + P0_EXT
 BY_NAME = {s.name: s for s in ALL_SPECS}
+
+# §182 R15-4b（核实后选项①）：金十系 **14 张已登记停更**表，实测滞后 363~442 天
+#   （2026-10-28 盘上核对）——max_age_days=45 会让每轮体检都报「高度可疑」，
+#   淹没真问题（告警疲劳）。放宽到 **720 天（2 年）**；spec 定义与历史数据**均保留**。
+#   ⚠ 只改这一字段，不动 known_stale/note/取数参数。
+_RETIRED_AGE_720 = frozenset({
+    "macro_usa_cpi", "macro_usa_core_cpi", "macro_usa_gdp", "macro_usa_unemp",
+    "macro_usa_non_farm", "macro_usa_ppi", "macro_usa_adp",
+    "macro_bank_usa", "macro_bank_euro", "macro_bank_uk", "macro_bank_japan",
+    "macro_bank_australia", "macro_bank_swiss", "macro_euro_cpi",
+})
+for _sp in ALL_SPECS:
+    if _sp.name in _RETIRED_AGE_720:
+        _sp.max_age_days = 720
+
 BY_TIER: dict = {}
 for _s in ALL_SPECS:
     BY_TIER.setdefault(_s.tier, []).append(_s)

@@ -102,12 +102,32 @@ class RotateState:
         return self.data.get(table, {}).get(str(symbol), "")
 
     def mark_done(self, table, symbols, day=None):
-        """批量推进水位（symbols: list/str）。无变化不重写文件。"""
+        """批量推进水位（symbols: list/str）。无变化不重写文件。
+
+        §182 R15-1a：**写前重读 + 只合并本表本批**——本文件是多进程共享的，
+        若沿用"启动时读一份、之后长期持有"，后写者会用旧副本覆盖先写者的记录
+        （2026-10-28 实证：alt.update 的 602 只被 r4_runner 覆盖）。
+        重读后覆盖窗口从"数十分钟"缩到"毫秒级"。
+        ⚠ 仍非严格原子：真正并发正确解是文件锁（msvcrt.locking）或 SQLite，
+          列为后续可选（§182 R15-1c），本单不实施。
+        """
         if self.dry_run or not symbols:
             return
         if isinstance(symbols, str):
             symbols = [symbols]
         day = day or datetime.now().strftime("%Y-%m-%d")
+        # §182 R15-1a：写前重读最新文件（只合并本表本批）
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                latest = json.load(f)
+            if not isinstance(latest, dict):
+                raise ValueError("顶层不是 dict")
+            self.data = latest
+        except FileNotFoundError:
+            pass                      # 首次写：内存副本即可
+        except Exception as e:        # noqa: BLE001
+            # §182 R15-1b：重读失败不得静默 → 回退内存副本并告警
+            print(f"[WARN] rotate_state 重读失败，回退内存副本: {e}")
         rec = self.data.setdefault(table, {})
         changed = False
         for s in symbols:
@@ -118,10 +138,21 @@ class RotateState:
             return
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         assert_writable(self.path)
-        tmp = self.path + ".tmp"
+        # §182 R15-1f 实测：两进程若共用同一个 `{path}.tmp`，会互相撞 PermissionError
+        # （WinError 32）；改用**每进程独立 tmp 名**。另一个坑：目标文件正被对端
+        # `json.load` 打开时，`os.replace` 会报 WinError 5（open 不带 FILE_SHARE_DELETE）
+        # ⇒ 对 OSError 做**较长退避重试**（对端读窗口只有微秒级，40×15ms 足够收敛）。
+        tmp = f"{self.path}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, self.path)
+        for _try in range(40):
+            try:
+                os.replace(tmp, self.path)
+                break
+            except OSError:
+                if _try == 39:
+                    raise
+                time.sleep(0.015)
 
     def progress(self, table, symbols, rotate_days=None):
         """(fresh, stale, oldest, newest)：按 rotate_days 判 stale（零请求）。"""
@@ -311,7 +342,7 @@ def load_universe(sp, verbose=True):
             out.append(x)
     if verbose:
         print(f"[清单] {sp.name} ← {label}.{col}"
-              f"（变换 {sp.universe_xform or '原样'}）→ {len(out):,} 只")
+              f"（变换 {sp.universe_xform or '原样'}）→ {len(out):,} 只", flush=True)
     return out
 
 
@@ -322,9 +353,22 @@ def select_batch(symbols, sp, state, budget=None, verbose=True):
       （默认 7 天 => K≈398 只 => 796 请求/天，06 §10.9 速率核算）。
     """
     if sp.rotate_days <= 0:
+        # §182 R15-6a：rotate_days=0（移出日更/月度全量）时，**budget 有值 ⇒ 按
+        # "最久未拉"选 min(budget, N) 只**；无 budget 维持原行为（只选从未拉过的），
+        # 这样日更（不带 budget）仍会自然跳过、月度任务（带 18052）能跑全量。
+        if budget:
+            k = min(int(budget), len(symbols))
+            ordered = sorted(symbols,
+                             key=lambda s: (state.last_done(sp.name, s) or ""))
+            todo = ordered[:k]
+            if verbose:
+                print(f"[批次] rotate_days=0 + --budget-syms={int(budget):,}"
+                      f" → 全量模式，本轮 {len(todo):,} 只（最久未拉优先）", flush=True)
+            return todo
         todo = [s for s in symbols if not state.last_done(sp.name, s)]
         if verbose:
-            print(f"[批次] rotate_days=0（不轮转）→ 未拉过 {len(todo):,} 只")
+            print(f"[批次] rotate_days=0（不轮转）→ 未拉过 {len(todo):,} 只",
+                  flush=True)
         return todo
     k = budget or math.ceil(len(symbols) / sp.rotate_days)
     k = min(k, len(symbols))
@@ -334,7 +378,8 @@ def select_batch(symbols, sp, state, budget=None, verbose=True):
         oldest = state.last_done(sp.name, todo[0]) or "（从未拉）"
         print(f"[批次] K={k} 只（=ceil({len(symbols):,}/{sp.rotate_days})"
               f"{'；--budget-syms 覆盖' if budget else ''}）"
-              f" => 请求 ≈ {k * 2} 条（价格+因子两表合计）｜队首水位={oldest}")
+              f" => 请求 ≈ {k * 2} 条（价格+因子两表合计）｜队首水位={oldest}",
+              flush=True)
     return todo
 
 
@@ -414,6 +459,8 @@ _R71_FUNCS = frozenset({
     "stock_hk_financial_indicator_em",            # §151 R7-1（hk_fina_snap，8 只）
     "stock_financial_us_analysis_indicator_em",   # §170 R14-1（us_fina_ind，实测约 24%）
 })
+# §182 R15-5：本进程内 R7-1 归类次数（仅用于汇总行括注，不回滚 limiter 统计）
+_R71_HITS = 0
 
 
 def fetch_one(sp, symbol, limiter, url):
@@ -440,6 +487,8 @@ def fetch_one(sp, symbol, limiter, url):
                 and err
                 and err.startswith("TypeError")
                 and "'NoneType' object is not subscriptable" in err):
+            global _R71_HITS
+            _R71_HITS += 1
             print(f"    [R7-1] {symbol} akshare 空响应异常已归类 empty（{sp.name}）")
             return symbol, None, "empty"
         return symbol, None, err
@@ -663,6 +712,8 @@ DEPRECATED_TABLES = {"us_daily_qfq"}
 
 def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         batch=None, yes=False, verbose=True, until=None):
+    global _R71_HITS
+    _R71_HITS = 0                       # §182 R15-5：本表统计从 0 起
     sp = spec_mod.get(table)
     # §159 R10-C4′（P0）：废弃表黑名单——归档后 R6-2 的"盘上无数据即放行"会自动失效，
     # 任何手动跑 --table us_daily_qfq 都会重建一份脏表（源端算法错误，本地无法清洗）。
@@ -684,7 +735,8 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
     ensure_alt_dirs()
     url = guess_url(sp.func)
     if verbose:
-        print(f"[配置] {sp.name} | func={sp.func} params={sp.params} | 档位={url}")
+        print(f"[配置] {sp.name} | func={sp.func} params={sp.params} | 档位={url}",
+              flush=True)
 
     universe = ([s.strip() for s in symbols.split(",")] if symbols
                 else load_universe(sp, verbose=verbose))
@@ -708,13 +760,13 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
     # 轮转进度摘要（零请求）
     fresh, stale, oldest, newest = state.progress(sp.name, universe, sp.rotate_days)
     print(f"[轮转] 进度：新鲜 {fresh:,} / 陈旧或未拉 {stale:,}（共 {len(universe):,}）"
-          f"｜最旧水位 {oldest or '—'}｜最新 {newest or '—'}")
+          f"｜最旧水位 {oldest or '—'}｜最新 {newest or '—'}", flush=True)
     print(f"[计划] {mode_label}：本轮 {len(todo):,} 只 => 本表请求 ≈ {len(todo):,} 条"
           f"（单表口径；sina 20/分 => 约 {len(todo) / 20:.0f} 分钟）"
-          f"｜价格+因子两表合计 {len(todo) * 2:,} 条")
+          f"｜价格+因子两表合计 {len(todo) * 2:,} 条", flush=True)
 
     if dry_run:
-        print("\n[DRY-RUN] 未发请求、未写库。样例队首:", todo[:5])
+        print("\n[DRY-RUN] 未发请求、未写库。样例队首:", todo[:5], flush=True)
         return {"table": sp.name, "planned": len(todo), "dry_run": True}
 
     # §130 RE3-5（阻断项修复）：交互确认不得挂死无人值守作业
@@ -768,7 +820,7 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
             stat["added"] += r["added"]
             if buf:
                 print(f"    [落盘] {len(buf)} 只 → 新增 {r['added']:,} 行"
-                      f"（累计 {stat['added']:,}）")
+                      f"（累计 {stat['added']:,}）", flush=True)
             if not rebuild:
                 # 先落盘、后记（INV-3）：水位与一次性断点在此统一推进（含 empty）
                 state.mark_done(sp.name, batch_syms)
@@ -794,7 +846,7 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         if until_dt is not None and datetime.now() >= until_dt:
             stopped_by_until = True
             print(f"\n[until] 到达 {until}，停止发起新批次"
-                  f"（已处理 {len(batch_syms)} 只待落盘）")
+                  f"（已处理 {len(batch_syms)} 只待落盘）", flush=True)
             break
         s, d, err = fetch_one(sp, sym, limiter, url)
         batch_syms.append(s)
@@ -816,7 +868,7 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
             rate = i / max(el, 1)
             print(f"    {i:,}/{len(todo):,} | 成功 {stat['ok']:,} 空 {stat['empty']} "
                   f"失败 {stat['fail']} | {rate:.2f} 只/s | "
-                  f"剩余≈{(len(todo) - i) / max(rate, 0.01) / 60:.0f} 分钟")
+                  f"剩余≈{(len(todo) - i) / max(rate, 0.01) / 60:.0f} 分钟", flush=True)
     _flush()
 
     el = time.time() - t0
@@ -835,7 +887,8 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
     print(f"[完成] {sp.name} | {mode_label}")
     print(f"  成功 {stat['ok']:,} | 返空 {stat['empty']} | 失败 {stat['fail']} | "
           f"拉取 {stat['rows']:,} 行 | 落盘新增 {stat['added']:,} 行 | 耗时 {el / 60:.1f} 分钟")
-    print(f"  {limiter.status_str()}")
+    print(f"  {limiter.status_str()}"
+          + (f"（含已归类空响应 {_R71_HITS}）" if _R71_HITS else ""))
     if errs:
         print(f"  失败样例（前 5）: {errs[:5]}")
 

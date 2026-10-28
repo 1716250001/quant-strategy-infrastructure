@@ -470,6 +470,9 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
                 results.append({"table": sp.name, "action": "skip",
                                 "requests": 0, "rows": 0, "added": 0, "ok": True,
                                 "errors": [], "warnings": [], "reason": p["reason"]})
+                # §182 R15-2a：每张表处理完即落盘（含 skip）——防崩溃丢前面所有表的 last_update
+                if not dry_run:
+                    save_state(state)
                 continue
 
             print(f"{head} — {p['reason'][:70]}")
@@ -508,6 +511,9 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
                 state.setdefault(sp.name, {})
                 state[sp.name]["last_update"] = datetime.now().isoformat(timespec="seconds")
                 state[sp.name]["last_target_date"] = tdate
+            # §182 R15-2a：每张表处理完即落盘（含 skip；dry_run 不写）
+            if not dry_run:
+                save_state(state)
 
     dur = time.time() - t_start
 
