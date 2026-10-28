@@ -52,6 +52,12 @@ import sys
 import time
 from datetime import datetime, timedelta
 
+try:
+    import msvcrt                      # §185 R15-1UP：Windows 原生排他文件锁
+except ImportError:                    # 非 Windows ⇒ 降级（跳过加锁，首次告警）
+    msvcrt = None
+_MVSCRT_WARNED = False
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
@@ -80,6 +86,22 @@ from alt.us_backfill import SOCKET_TIMEOUT, _patch_requests_timeout
 # ============================================================
 # 一、轮转水位（rotate_state.json）
 # ============================================================
+def _lock_acquire(fh):
+    """§185 R15-1UP：对锁文件加**阻塞**排他锁。返回是否真的加上了。
+
+    Windows 用 msvcrt.locking(LK_LOCK)（阻塞等待，不自旋）；非 Windows 无 msvcrt，
+    跳过加锁并**只告警一次**（当前只在 Windows 运行）。
+    """
+    global _MVSCRT_WARNED
+    if msvcrt is None:
+        if not _MVSCRT_WARNED:
+            print("[WARN] 非 Windows 平台：RotateState 无文件锁，并发写可能丢记录")
+            _MVSCRT_WARNED = True
+        return False
+    msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+    return True
+
+
 class RotateState:
     """轮转水位：{table: {symbol: "YYYY-MM-DD"}}（04 §8.6，与三态断点分权责）。
 
@@ -102,57 +124,67 @@ class RotateState:
         return self.data.get(table, {}).get(str(symbol), "")
 
     def mark_done(self, table, symbols, day=None):
-        """批量推进水位（symbols: list/str）。无变化不重写文件。
+        """批量推进水位。§182 R15-1 + §185 R15-1UP：
 
-        §182 R15-1a：**写前重读 + 只合并本表本批**——本文件是多进程共享的，
-        若沿用"启动时读一份、之后长期持有"，后写者会用旧副本覆盖先写者的记录
-        （2026-10-28 实证：alt.update 的 602 只被 r4_runner 覆盖）。
-        重读后覆盖窗口从"数十分钟"缩到"毫秒级"。
-        ⚠ 仍非严格原子：真正并发正确解是文件锁（msvcrt.locking）或 SQLite，
-          列为后续可选（§182 R15-1c），本单不实施。
+        用 **msvcrt 排他文件锁**包住「读-合并-写」——`os.replace` 只保证文件不损坏，
+        不保证记录不丢（1.5 MB 的 json 单次写要几十毫秒，两进程必然交错；
+        §184.2 实测方案 A 在任何间隔都丢 31~50%）。
         """
         if self.dry_run or not symbols:
             return
         if isinstance(symbols, str):
             symbols = [symbols]
         day = day or datetime.now().strftime("%Y-%m-%d")
-        # §182 R15-1a：写前重读最新文件（只合并本表本批）
-        try:
-            with open(self.path, encoding="utf-8") as f:
-                latest = json.load(f)
-            if not isinstance(latest, dict):
-                raise ValueError("顶层不是 dict")
-            self.data = latest
-        except FileNotFoundError:
-            pass                      # 首次写：内存副本即可
-        except Exception as e:        # noqa: BLE001
-            # §182 R15-1b：重读失败不得静默 → 回退内存副本并告警
-            print(f"[WARN] rotate_state 重读失败，回退内存副本: {e}")
-        rec = self.data.setdefault(table, {})
-        changed = False
-        for s in symbols:
-            if rec.get(str(s)) != day:
-                rec[str(s)] = day
-                changed = True
-        if not changed:
-            return
+
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        assert_writable(self.path)
-        # §182 R15-1f 实测：两进程若共用同一个 `{path}.tmp`，会互相撞 PermissionError
-        # （WinError 32）；改用**每进程独立 tmp 名**。另一个坑：目标文件正被对端
-        # `json.load` 打开时，`os.replace` 会报 WinError 5（open 不带 FILE_SHARE_DELETE）
-        # ⇒ 对 OSError 做**较长退避重试**（对端读窗口只有微秒级，40×15ms 足够收敛）。
-        tmp = f"{self.path}.{os.getpid()}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=1)
-        for _try in range(40):
+        assert_writable(self.path)          # 锁前先过写入守卫（失败不入锁）
+        # 锁文件 = 独立文件（**不锁数据文件本身**，避免与 os.replace 冲突）；
+        # ⚠ 永不删除锁文件——删掉会破坏互斥（§185 R15-1UP-e）
+        lock_path = self.path + ".lock"
+        lf = open(lock_path, "a+b")
+        locked = False
+        try:
+            locked = _lock_acquire(lf)
+            # ── 锁内重读（保留 R15-1 的写前重读，双保险）──
             try:
-                os.replace(tmp, self.path)
-                break
-            except OSError:
-                if _try == 39:
-                    raise
-                time.sleep(0.015)
+                with open(self.path, encoding="utf-8") as f:
+                    latest = json.load(f)
+                if not isinstance(latest, dict):
+                    raise ValueError("顶层不是 dict")
+                self.data = latest
+            except FileNotFoundError:
+                pass                      # 首次写：内存副本即可
+            except Exception as e:        # noqa: BLE001
+                # §182 R15-1b：重读失败不得静默 → 回退内存副本并告警
+                print(f"[WARN] rotate_state 重读失败，回退内存副本: {e}")
+
+            rec = self.data.setdefault(table, {})
+            changed = False
+            for s in symbols:
+                if rec.get(str(s)) != day:
+                    rec[str(s)] = day
+                    changed = True
+            if not changed:
+                return
+
+            # §182 R15-1f：两进程若共用同一个 `{path}.tmp` 会互撞 PermissionError
+            # （WinError 32）；每进程独立 tmp 名。目标文件被对端 `json.load` 打开时
+            # `os.replace` 还会报 WinError 5 ⇒ 对 OSError 做 40×15ms 退避重试。
+            tmp = f"{self.path}.{os.getpid()}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, ensure_ascii=False, indent=1)
+            for _try in range(40):
+                try:
+                    os.replace(tmp, self.path)
+                    break
+                except OSError:
+                    if _try == 39:
+                        raise
+                    time.sleep(0.015)
+        finally:
+            if locked and msvcrt is not None:
+                msvcrt.locking(lf.fileno(), msvcrt.LK_UNLCK, 1)
+            lf.close()
 
     def progress(self, table, symbols, rotate_days=None):
         """(fresh, stale, oldest, newest)：按 rotate_days 判 stale（零请求）。"""
