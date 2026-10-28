@@ -591,24 +591,26 @@ P4 = [
     # 关键设计（复用港股 ADR-13 结论）：
     #   ① 不复权价 us_daily_raw + 事件级因子 us_qfq_factor（拒绝存前复权价）
     #   ② 复权展开唯一入口 alt.reader.expand_qfq_factor()
-    #   ③ stock_us_daily 无日期增量参数 ⇒ 只能整表重建；现移出日更、改月度全量（§182 P0-2 方案B）
+    #   ③ stock_us_daily 无日期增量参数 ⇒ 只能整表重建；§188 R16 缩宇宙后按 rotate_days=2 轮转（回到日更）
     #   ④ 新浪域名（finance.sina.com.cn），已有 sina 档位 20/分
     TableSpec("us_daily_raw", "stock_us_daily", "P4", "by_year", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_daily_universe", max_age_days=5,
-              # rotate_days=0：移出日更（§182 P0-2 方案B），改由月度任务全量跑（--budget-syms 18052）
-              rotate_days=0,
+              universe_from="us_large_cap", max_age_days=5,
+              # rotate_days=2：500 只 / 2 天轮一遍（250 只/天，两表合计 ≈37.5 分钟）
+              rotate_days=2,
               params={"adjust": ""},
               coerce_float_cols=["open", "high", "low", "close", "volume"],
               inject_const={"src": "sina", "as_of": "__TODAY__"},
               note="美股不复权日线 adjust=''; 逐只拉; "
+                   "§188 R16：universe 缩至 us_large_cap（500 只，从 us_fina_ind 按美元营收前 500 派生）；"
+                   "rotate_days=2（250 只/天，2 天轮一遍）; "
                    "⚠ 与 us_daily_qfq 并存：存不复权价 + 事件级因子（同港股双表策略）; "
                    "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
     TableSpec("us_qfq_factor", "stock_us_daily", "P4", "single", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_daily_universe", max_age_days=90,
-              # rotate_days=0：移出日更（§182 P0-2 方案B），改由月度任务全量跑（--budget-syms 18052）
-              rotate_days=0,
+              universe_from="us_large_cap", max_age_days=90,
+              # rotate_days=2：500 只 / 2 天轮一遍（250 只/天，两表合计 ≈37.5 分钟）
+              rotate_days=2,
               params={"adjust": "qfq-factor"},
               coerce_float_cols=["qfq_factor", "adjust"],
               strip_sentinel=False,  # ⚠ §98 E-R3 改回 False（与 hk_qfq_factor 一致）
@@ -616,6 +618,8 @@ P4 = [
               # 上轮错判：date < "19900101" 一刀切把 1 哨兵 + 12 真实公司行动全删 → close_qfq ≡ close
               inject_const={"src": "sina", "as_of": "__TODAY__"},
               note="美股事件级复权因子 adjust='qfq-factor'; 逐只拉; "
+                   "§188 R16：universe 缩至 us_large_cap（500 只，从 us_fina_ind 按美元营收前 500 派生）；"
+                   "rotate_days=2（250 只/天，2 天轮一遍）; "
                    "⚠ layout=single（同港股 hk_qfq_factor；事件级因子按年分区会拆散同标的因子）; "
                    "⚠ strip_sentinel=False：保留 1970-01-01 哨兵行（真实基准因子）+ 所有公司行动； "
                    "⚠ 复权展开唯一入口 alt.reader.expand_us_qfq_factor()"),
