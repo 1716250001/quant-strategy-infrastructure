@@ -50,7 +50,7 @@ btf/
 ├─ schemas/          配置 JSON Schema（backtest.v1.json，唯一一份）
 ├─ examples/         示例策略 rotation.py + 示例配置（不进 wheel）
 ├─ tools/            常驻工具 28 个（门禁脚本 / 对账 / 复跑 / 冷备 / 审计）
-├─ tests/            1249 项（l1–l5 + smoke 五层）
+├─ tests/            1273 项（l1–l5 + smoke 五层）
 ├─ benchmarks/       B1–B5 基准留档
 ├─ CHANGELOG.md      版本留痕（Keep a Changelog）
 └─ pyproject.toml    ruff + import-linter 十契约 + pytest 标记
