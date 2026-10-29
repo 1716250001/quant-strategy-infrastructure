@@ -31,7 +31,19 @@ import pyarrow.parquet as pq
 from btf.config.paths import MARKET_DATA_DIR
 from btf.data.tables_meta import TABLES
 
-__all__ = ["YearTableStore", "day_index"]
+__all__ = ["YearTableStore", "day_index", "sort_by_date_int32"]
+
+
+def sort_by_date_int32(table, date_col: str = "trade_date"):
+    """按日期升序排序（int32 键）——**三处唯一实现**在本模块转出（19 号 §181 D-3）。
+
+    实现在 `parquet_reader`（契约新 9：`data` 域只经 `core` 触磁盘模块；
+    反向依赖会成环），本函数仅转发，供 `state` 两处索引与
+    `parquet_reader.iter_day_slices` 快路径共用。
+    """
+    from btf.data import parquet_reader as pr
+
+    return pr.sort_by_date_int32(table, date_col)
 
 
 def day_index(dates: list[str]) -> dict[str, tuple[int, int]]:

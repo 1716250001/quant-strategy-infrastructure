@@ -276,6 +276,23 @@ def read_codes(
     return _concat_unified(parts)
 
 
+def sort_by_date_int32(table, date_col: str = "trade_date"):
+    """按日期升序排序（int32 键）——三处的**唯一排序实现**（19 号 §181 A-2/A-3, D-3）。
+
+    为什么：`trade_date` 物理类型是 `large_string`，Arrow 的 sort 对
+    large_string 走慢路径（十年实测 3.414 s vs int32 键 0.883 s）。本函数是
+    `iter_day_slices` 快路径 / `state._limit_date_index` / `state._close_date_index`
+    的唯一实现（避免三份走偏）。int32 上限 2,147,483,647，8 位 `YYYYMMDD`
+    （最大 20991231）安全；若未来出现 9 位日期须重新评估。
+    """
+    import pyarrow as pa
+
+    d = table.column(date_col).cast(pa.int32())
+    idx = pc.sort_indices(pa.table({date_col: d}),
+                          sort_keys=[(date_col, "ascending")])
+    return table.take(idx)
+
+
 def iter_day_slices(
     table: str,
     root: Path,
@@ -348,7 +365,18 @@ def iter_day_slices(
             if ts_sorted
             else [(date_col, "ascending"), ("ts_code", "ascending")]
         )
-        t = t.sort_by(keys)
+        if ts_sorted:
+            # A-2：int32 键排序（large_string 慢路径）；非 8 位 YYYYMMDD 即报错，
+            # 拒绝静默降级（int32 键仅对 8 位日期安全）
+            first = str(t.column(date_col)[0].as_py())
+            if not first.isdigit() or len(first) != 8:
+                raise ReaderError(
+                    f"{table}/{year}: {date_col} 非 8 位 YYYYMMDD（{first!r}），"
+                    "int32 排序键不安全")
+            t = sort_by_date_int32(t, date_col)
+        else:
+            # 非升序回退：**保持原双键语义**，不得走 int32 快路径（次键稳定性未证）
+            t = t.sort_by(keys)
         cols = {n: t.column(n).to_pylist() for n in t.column_names}
         dates = cols[date_col]
         # 分组（docstring 证据 ②）：dates 已升序 → bisect_right 找日界
@@ -495,5 +523,6 @@ __all__ = [
     "read_full",
     "read_range",
     "schema_names",
+    "sort_by_date_int32",
     "table_files",
 ]
