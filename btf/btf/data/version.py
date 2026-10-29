@@ -105,15 +105,25 @@ def _meta_fingerprint(table: str, metas: Sequence,
         sample_hash=_sample_hash(parts, stride=max(1, len(parts) // 64))[:32])
 
 
-def _sample_hash(values: list, stride: int = _SAMPLE_STRIDE) -> str:
-    """等距抽样哈希：首末 + 每 stride 行一行（确定性规则）。"""
+def _sample_hash(values, stride: int = _SAMPLE_STRIDE) -> str:
+    """等距抽样哈希：首末 + 每 stride 行一行（确定性规则）。
+
+    `values` 可为 Arrow Array/ChunkedArray（**只物化抽样行**；A-1 性能补丁：
+    130 万行只取 131 个值，原实现先 `to_pylist()` 全列 ⇒ 装配期 21.11→9.71 s）
+    或已物化的 list（元数据档 `_meta_fingerprint` 的字符串 parts 走逐值路径）。
+    两种输入对同一列必须产出**同一哈希**（A-1-T1 守卫；`content_hash` 逐字节不变）。
+    """
+    import pyarrow as pa
+
     h = hashlib.sha256()
     n = len(values)
     if n == 0:
-        return h.hexdigest()
+        return h.hexdigest()          # 与原实现一致：空列返回**未截断**哈希
     idx = sorted({0, n - 1, *range(0, n, stride)})
-    for i in idx:
-        h.update(repr(values[i]).encode("utf-8", errors="replace"))
+    vals = (values.take(pa.array(idx)).to_pylist()
+            if hasattr(values, "take") else [values[i] for i in idx])
+    for v in vals:
+        h.update(repr(v).encode("utf-8", errors="replace"))
         h.update(b"\x1f")
     return h.hexdigest()[:32]
 
@@ -177,9 +187,10 @@ def compute(
                 date_min = min(x for x in [date_min, dmin] if x is not None)
                 date_max = max(x for x in [date_max, dmax] if x is not None)
             # 键列抽样：跨文件累积行号等距（按文件顺序，确定性）
+            # A-1：传 Arrow 列，由 `_sample_hash` 只物化抽样行（不再整列 to_pylist）
             for c in cols:
                 sample_parts.append(
-                    f"{stem}:{c}:{_sample_hash(t.column(c).to_pylist())}"
+                    f"{stem}:{c}:{_sample_hash(t.column(c))}"
                 )
 
         sample_hash = _sample_hash(sample_parts, stride=max(1, len(sample_parts) // 64))
