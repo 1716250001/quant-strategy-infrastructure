@@ -267,11 +267,22 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
             key = f"enum:{val}"
             if ckpt.is_done(sp.name, key) and not force:
                 continue
+            # DB-R8 R8-1：枚举调用必须**合并 spec.params**（对齐 run_range_spec 的
+            #   既有正确写法）。原写法 `fn(**{sp.enum_param: v})` 丢掉了固定参数，
+            #   导致「固定参数 ＋ 枚举参数」的接口（如 rate_interbank 需
+            #   market/symbol/indicator 三参）根本无法用 enum 模式接入，
+            #   只能靠引擎外的独立脚本绕过（§198.2 的 HIBOR 就是这么来的）。
+            kw = dict(sp.params)
+            kw[sp.enum_param] = val
             if dry_run:
                 res["requests"] += 1
-                res["warnings"].append(f"[dry-run] 将调用 {sp.func}({sp.enum_param}={val!r})")
+                res["warnings"].append(
+                    f"[dry-run] 将调用 {sp.func}({sp.params}, {sp.enum_param}={val!r})")
                 continue
-            raw, ok, err = limiter.call(lambda v=val: fn(**{sp.enum_param: v}), url)
+            # ⚠ 必须用**默认参数绑定**（k=kw），不能写 `lambda: fn(**kw)`：
+            #   limiter.call 内部可能重试（延迟执行），裸闭包捕获的是 kw 变量本身，
+            #   下一轮迭代会把值改掉 ⇒ 实际请求到的枚举值与记录不符。
+            raw, ok, err = limiter.call(lambda k=kw: fn(**k), url)
             res["requests"] += 1
             if not ok:
                 res["errors"].append(f"{val}: {err}")

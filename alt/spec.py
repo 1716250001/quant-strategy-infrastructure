@@ -743,6 +743,19 @@ P1_EX = [
               max_age_days=15,
               note="中行人民币牌价（新浪中行源）17 币种；区间分段 ≤1 年（隐式分页 R-19）；"
                    "日更 = 最近 30 自然日 ≈18 请求/天"),
+    # —— HIBOR（DB-R8 接入；此前由引擎外独立脚本 refresh_hibor_alt.py 维护，已退休）——
+    # ⚠ 该接口是**三参**（market / symbol / indicator）⇒ 依赖 R8-1 的 params 合并，
+    #   否则只能绕过引擎（§198.2）。
+    # ⚠ 期限枚举值：akshare 没有「12月」，12 个月期限的名叫「1年」（实测传 12月 抛 KeyError）。
+    # ⚠ 源端每期限内部还有**隐式分页**（实测 隔夜 11 页 / 1年 15 页），limiter 只记 1 次请求。
+    TableSpec("hibor", "rate_interbank", "P1", "single", "date",
+              src_date_col="报告日", subset=["date", "tenor"], mode="enum",
+              enum_param="indicator", enum_col="tenor", max_age_days=15,
+              enum_values=["隔夜", "1周", "2周", "1月", "2月", "3月", "6月", "1年"],
+              params={"market": "香港银行同业拆借市场", "symbol": "Hibor港币"},
+              rename={"利率": "rate", "涨跌": "change"},
+              note="HIBOR 8 期限（东财源；tushare 侧限频1次/小时 ⇒ 主库该表已废弃）；"
+                   "长表口径（每期限一行，主键 [date,tenor]）；源端每期限有隐式分页"),
 ]
 
 P4_HK = [
