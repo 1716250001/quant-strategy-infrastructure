@@ -3646,8 +3646,9 @@
   "fund_share": {
     "A": 0,
     "B": 0,
-    "source_empty_count": 89,
+    "source_empty_count": 142,
     "source_empty": [
+      "1500011.SZ",
       "150116.SZ",
       "150119.SZ",
       "150159.SZ",
@@ -3673,34 +3674,59 @@
       "150354.SZ",
       "150357.SZ",
       "150358.SZ",
-      "158065.SZ",
-      "158078.SZ",
+      "158015.SZ",
+      "158016.SZ",
+      "158070.SZ",
+      "158076.SZ",
       "158081.SZ",
+      "158087.SZ",
+      "158088.SZ",
+      "158091.SZ",
+      "158900.SZ",
+      "158901.SZ",
+      "158902.SZ",
+      "158903.SZ",
+      "158905.SZ",
+      "158906.SZ",
+      "158907.SZ",
+      "158908.SZ",
+      "158909.SZ",
       "159319.SZ",
       "159585.SZ",
       "159756.SZ",
       "159799.SZ",
       "160123.SZ",
+      "1601231.SZ",
       "160422.SZ",
+      "1604221.SZ",
       "160423.SZ",
       "160524.SZ",
       "160525.SZ",
       "160814.SZ",
       "160923.SZ",
+      "1610221.SZ",
       "161211.SZ",
+      "1612111.SZ",
       "161230.SZ",
+      "1612301.SZ",
       "161629.SZ",
+      "1618111.SZ",
       "161836.SZ",
       "161910.SZ",
       "162714.SZ",
+      "1627171.SZ",
       "162907.SZ",
       "163827.SZ",
+      "1638271.SZ",
       "164205.SZ",
+      "1642051.SZ",
       "164811.SZ",
+      "1648141.SZ",
       "165530.SZ",
       "165532.SZ",
       "165806.SZ",
       "166007.SZ",
+      "1660071.SZ",
       "167004.SZ",
       "167701.SZ",
       "167705.SZ",
@@ -3710,11 +3736,12 @@
       "168501.SZ",
       "168601.SZ",
       "169109.SZ",
-      "181002.SZ",
       "501002.SH",
+      "5010021.SH",
       "501033.SH",
       "501041.SH",
       "501042.SH",
+      "5010491.SH",
       "501052.SH",
       "501055.SH",
       "501101.SH",
@@ -3723,24 +3750,60 @@
       "501105.SH",
       "501221.SH",
       "501223.SH",
+      "5020201.SH",
       "508038.SH",
       "508606.SH",
       "508610.SH",
+      "512490.SH",
       "512830.SH",
+      "513790.SH",
       "515443.SH",
       "516170.SH",
       "517980.SH",
+      "520800.SH",
       "526020.SH",
+      "526080.SH",
       "560430.SH",
       "561270.SH",
+      "561860.SH",
+      "561970.SH",
+      "562090.SH",
+      "562100.SH",
       "562210.SH",
       "562630.SH",
+      "562690.SH",
+      "562710.SH",
+      "562720.SH",
+      "563100.SH",
+      "581000.SH",
+      "581010.SH",
+      "581020.SH",
+      "581030.SH",
+      "581050.SH",
+      "581060.SH",
+      "581070.SH",
+      "581080.SH",
+      "581090.SH",
       "588490.SH",
-      "589450.SH"
+      "588560.SH",
+      "589370.SH",
+      "589450.SH",
+      "589590.SH",
+      "589610.SH"
     ],
     "source_late_start": [],
-    "note": "EE-FUND-6（2026-10-18）：逐码探针 118 只 A 类 → 29 只源端有数据回填 （fund_share by_code codes-file），89 只源端 tushare fund_share 全历史 0 行 登记 source_empty。其中 56 只 status=D 退市（分级/老 LOF/QDII）、33 只 status=L/nan 新 ETF/定开混合源端未收录。逐码证据见 source_empty_evidence（与 source_empty 平行，含 status/list_date/delist_date/probe_date）。",
+    "note": "EE-FUND-6（2026-10-18）首建 89 条；§211（2026-10-29）复探更新：移除 3 条已过期（158065.SZ/158078.SZ/181002.SZ 于 10-19~10-20 起源端有数据，属新发 ETF 从无到有 ⇒ 注册表会过期，须定期复探）、新增 56 条。现 142 条 = §203.1 的 152 缺口 − 10 只已补。构成：无上市日（分级 A/B、7 位派生码、已清盘 LOF、待上市 REIT/ETF）+ 已退市。",
     "source_empty_evidence": [
+      {
+        "ts_code": "1500011.SZ",
+        "name": "国投瑞银瑞福分级封闭-瑞福进取",
+        "status": "D",
+        "list_date": "20070921",
+        "delist_date": "20120717",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
       {
         "ts_code": "150116.SZ",
         "name": "银华永兴纯债分级债券-B",
@@ -3748,8 +3811,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150119.SZ",
@@ -3758,8 +3821,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150159.SZ",
@@ -3768,8 +3831,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150162.SZ",
@@ -3778,8 +3841,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150166.SZ",
@@ -3788,8 +3851,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150239.SZ",
@@ -3798,8 +3861,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150240.SZ",
@@ -3808,8 +3871,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150253.SZ",
@@ -3818,8 +3881,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150254.SZ",
@@ -3828,8 +3891,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150285.SZ",
@@ -3838,8 +3901,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150286.SZ",
@@ -3848,8 +3911,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150313.SZ",
@@ -3858,8 +3921,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150314.SZ",
@@ -3868,8 +3931,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150319.SZ",
@@ -3878,8 +3941,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150320.SZ",
@@ -3888,8 +3951,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150333.SZ",
@@ -3898,8 +3961,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150334.SZ",
@@ -3908,8 +3971,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150349.SZ",
@@ -3918,8 +3981,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150350.SZ",
@@ -3928,8 +3991,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150351.SZ",
@@ -3938,8 +4001,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150352.SZ",
@@ -3948,8 +4011,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150353.SZ",
@@ -3958,8 +4021,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150354.SZ",
@@ -3968,8 +4031,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150357.SZ",
@@ -3978,8 +4041,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "150358.SZ",
@@ -3988,28 +4051,48 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "158065.SZ",
-        "name": "招商国证粮食产业ETF",
+        "ts_code": "158015.SZ",
+        "name": "银华中证全指红利质量ETF",
         "status": "nan",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "158078.SZ",
-        "name": "华宝创业板电池ETF",
+        "ts_code": "158016.SZ",
+        "name": "嘉实中证工业有色金属主题ETF",
         "status": "nan",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158070.SZ",
+        "name": "招商中证港股通内地金融ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158076.SZ",
+        "name": "广发中证红利低波动ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "158081.SZ",
@@ -4018,8 +4101,128 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158087.SZ",
+        "name": "国联创业板电池ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158088.SZ",
+        "name": "博时创业板电池ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158091.SZ",
+        "name": "汇添富创业板电池ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158900.SZ",
+        "name": "南方均衡配置主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158901.SZ",
+        "name": "富国价值优选量化选股主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158902.SZ",
+        "name": "大成红利智选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158903.SZ",
+        "name": "鹏华价值臻选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158905.SZ",
+        "name": "工银瑞信红利主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158906.SZ",
+        "name": "华宝均衡精选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158907.SZ",
+        "name": "国泰鑫汇均衡收益主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158908.SZ",
+        "name": "天弘均衡量化选股主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158909.SZ",
+        "name": "建信均衡优选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "159319.SZ",
@@ -4028,8 +4231,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "159585.SZ",
@@ -4038,8 +4241,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "159756.SZ",
@@ -4048,8 +4251,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "159799.SZ",
@@ -4058,8 +4261,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "160123.SZ",
@@ -4068,8 +4271,18 @@
         "list_date": "20110725",
         "delist_date": "20160817",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1601231.SZ",
+        "name": "南方中证50债券指数(LOF)-A",
+        "status": "D",
+        "list_date": "20110725",
+        "delist_date": "20160817",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "160422.SZ",
@@ -4078,8 +4291,18 @@
         "list_date": "20170526",
         "delist_date": "20181108",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1604221.SZ",
+        "name": "华安中证定向增发事件指数(LOF)",
+        "status": "D",
+        "list_date": "20170526",
+        "delist_date": "20181108",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "160423.SZ",
@@ -4088,8 +4311,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "160524.SZ",
@@ -4098,8 +4321,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "160525.SZ",
@@ -4108,8 +4331,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "160814.SZ",
@@ -4118,8 +4341,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "160923.SZ",
@@ -4128,8 +4351,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1610221.SZ",
+        "name": "富国创业板指数-A",
+        "status": "D",
+        "list_date": "20210119",
+        "delist_date": "20240131",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "161211.SZ",
@@ -4138,8 +4371,18 @@
         "list_date": "20100608",
         "delist_date": "20131104",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1612111.SZ",
+        "name": "国投金融(退市)",
+        "status": "D",
+        "list_date": "20100608",
+        "delist_date": "20131105",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "161230.SZ",
@@ -4148,8 +4391,18 @@
         "list_date": "20160225",
         "delist_date": "20180918",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1612301.SZ",
+        "name": "国投瑞银双债丰利两年定开债券-A",
+        "status": "D",
+        "list_date": "20160225",
+        "delist_date": "20180918",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "161629.SZ",
@@ -4158,8 +4411,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1618111.SZ",
+        "name": "银华沪深300指数(LOF)",
+        "status": "D",
+        "list_date": "20091030",
+        "delist_date": "20140107",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "161836.SZ",
@@ -4168,8 +4431,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "161910.SZ",
@@ -4178,8 +4441,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "162714.SZ",
@@ -4188,8 +4451,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1627171.SZ",
+        "name": "广发再融资主题灵活配置混合(LOF)-A",
+        "status": "D",
+        "list_date": "20180329",
+        "delist_date": "20221125",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "162907.SZ",
@@ -4198,8 +4471,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "163827.SZ",
@@ -4208,8 +4481,18 @@
         "list_date": "20141218",
         "delist_date": "20200303",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1638271.SZ",
+        "name": "中银产业债一年定开债券(LOF)",
+        "status": "D",
+        "list_date": "20141218",
+        "delist_date": "20200303",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "164205.SZ",
@@ -4218,8 +4501,18 @@
         "list_date": "20100917",
         "delist_date": "20150507",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1642051.SZ",
+        "name": "天弘深证成份指数(LOF)",
+        "status": "D",
+        "list_date": "20100917",
+        "delist_date": "20150507",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "164811.SZ",
@@ -4228,8 +4521,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1648141.SZ",
+        "name": "工银瑞信双债增强债券",
+        "status": "D",
+        "list_date": "20131223",
+        "delist_date": "20160925",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "165530.SZ",
@@ -4238,8 +4541,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "165532.SZ",
@@ -4248,8 +4551,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "165806.SZ",
@@ -4258,18 +4561,28 @@
         "list_date": "20120427",
         "delist_date": "20180711",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "166007.SZ",
         "name": "中欧互通精选混合-A",
-        "status": "L",
+        "status": "D",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "1660071.SZ",
+        "name": "中欧沪深300指数增强(LOF)-A",
+        "status": "D",
+        "list_date": "20100816",
+        "delist_date": "20181008",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "167004.SZ",
@@ -4278,8 +4591,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "167701.SZ",
@@ -4288,8 +4601,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "167705.SZ",
@@ -4298,8 +4611,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "168109.SZ",
@@ -4308,8 +4621,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "168110.SZ",
@@ -4318,8 +4631,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "168205.SZ",
@@ -4328,8 +4641,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "168501.SZ",
@@ -4338,8 +4651,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "168601.SZ",
@@ -4348,8 +4661,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "169109.SZ",
@@ -4358,18 +4671,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
-      },
-      {
-        "ts_code": "181002.SZ",
-        "name": "华泰紫金华住安住REIT",
-        "status": "nan",
-        "list_date": "nan",
-        "delist_date": "nan",
-        "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501002.SH",
@@ -4378,8 +4681,18 @@
         "list_date": "20160201",
         "delist_date": "20190301",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "5010021.SH",
+        "name": "长信中证能源互联网主题指数(LOF)",
+        "status": "D",
+        "list_date": "20160201",
+        "delist_date": "20190301",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501033.SH",
@@ -4388,8 +4701,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501041.SH",
@@ -4398,8 +4711,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501042.SH",
@@ -4408,8 +4721,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "5010491.SH",
+        "name": "东方红睿玺三年定开灵活配置混合-A",
+        "status": "D",
+        "list_date": "20180601",
+        "delist_date": "20240618",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501052.SH",
@@ -4418,8 +4741,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501055.SH",
@@ -4428,8 +4751,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501101.SH",
@@ -4438,8 +4761,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501102.SH",
@@ -4448,8 +4771,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501103.SH",
@@ -4458,8 +4781,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501105.SH",
@@ -4468,8 +4791,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501221.SH",
@@ -4478,8 +4801,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "501223.SH",
@@ -4488,8 +4811,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "5020201.SH",
+        "name": "国金上证50指数分级",
+        "status": "D",
+        "list_date": "20150605",
+        "delist_date": "20191013",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "508038.SH",
@@ -4498,8 +4831,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "508606.SH",
@@ -4508,8 +4841,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "508610.SH",
@@ -4518,8 +4851,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "512490.SH",
+        "name": "华安中证红利低波动100ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "512830.SH",
@@ -4528,8 +4871,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "513790.SH",
+        "name": "博时恒生港股通红利低波动ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "515443.SH",
@@ -4538,8 +4891,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "516170.SH",
@@ -4548,8 +4901,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "517980.SH",
@@ -4558,8 +4911,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "520800.SH",
+        "name": "嘉实中证港股通汽车产业主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "526020.SH",
@@ -4568,8 +4931,18 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "526080.SH",
+        "name": "东财恒生生物科技ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "560430.SH",
@@ -4578,8 +4951,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "561270.SH",
@@ -4588,8 +4961,48 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "561860.SH",
+        "name": "大成中证银行ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "561970.SH",
+        "name": "博时中证稀有金属主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "562090.SH",
+        "name": "富国中证全指汽车ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "562100.SH",
+        "name": "永赢中证工程机械主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "562210.SH",
@@ -4598,8 +5011,8 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "562630.SH",
@@ -4608,8 +5021,138 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "562690.SH",
+        "name": "华夏中证畜牧养殖产业ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "562710.SH",
+        "name": "鹏华上证综合增强策略ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "562720.SH",
+        "name": "天弘中证电网设备主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "563100.SH",
+        "name": "易方达中证红利增长ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581000.SH",
+        "name": "摩根大盘成长主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581010.SH",
+        "name": "汇添富均衡策略智选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581020.SH",
+        "name": "华安均衡慧选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581030.SH",
+        "name": "华夏质量甄选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581050.SH",
+        "name": "易方达品质均衡主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581060.SH",
+        "name": "永赢景气均衡主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581070.SH",
+        "name": "平安红利景气主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581080.SH",
+        "name": "招商价值智选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "581090.SH",
+        "name": "华泰柏瑞价值精选主动管理ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "588490.SH",
@@ -4618,8 +5161,28 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "588560.SH",
+        "name": "华富中证科创创业人工智能ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "589370.SH",
+        "name": "华安上证科创板芯片设计主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
         "ts_code": "589450.SH",
@@ -4628,8 +5191,28 @@
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
-        "probe_date": "2026-10-18",
-        "probe_source": "tushare fund_share 全历史请求（EE-FUND-6 逐码探针）"
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "589590.SH",
+        "name": "华泰柏瑞上证科创板芯片设计主题ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "589610.SH",
+        "name": "华夏上证科创板芯片ETF",
+        "status": "nan",
+        "list_date": "nan",
+        "delist_date": "nan",
+        "probe_rows": 0,
+        "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       }
     ]
   },
