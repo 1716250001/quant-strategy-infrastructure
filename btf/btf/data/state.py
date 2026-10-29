@@ -216,7 +216,9 @@ class StateSynthesizer:
         t = self._limit_table(year)
         index: dict[str, tuple[int, int]] = {}
         if t is not None and t.num_rows:
-            t = t.take(pc.sort_indices(t, sort_keys=[("trade_date", "ascending")]))
+            from btf.data.core import sort_by_date_int32  # A-3（§181 D-3 唯一实现）
+
+            t = sort_by_date_int32(t)
             self._limit_tables[year] = t           # 排序后表替换缓存（同 year 键）
             grouped = t.group_by("trade_date").aggregate([("ts_code", "count")])
             ordered = grouped.sort_by("trade_date")
@@ -413,7 +415,9 @@ class StateSynthesizer:
         t = self._close_table(year)
         index: dict[str, tuple[int, int]] = {}
         if t is not None and t.num_rows:
-            t = t.take(pc.sort_indices(t, sort_keys=[("trade_date", "ascending")]))
+            from btf.data.core import sort_by_date_int32  # A-3（§181 D-3 唯一实现）
+
+            t = sort_by_date_int32(t)
             self._close_tables[year] = t        # 排序后表替换缓存（同 year 键）
             grouped = t.group_by("trade_date").aggregate([("ts_code", "count")])
             ordered = grouped.sort_by("trade_date")
