@@ -258,37 +258,47 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
         # （实证 dividend.stk_bo_rate `double`→`null`、namechange.end_date
         #  `string`→`large_string`，跨分区读在 `pa.concat_tables` 直接崩）。
         schema = _existing_schema(path)
+        # DB-R10b：既有文件的重复行**不应**稀释"新增"的判定基准。
+        # 原实现用 len(existing) 作基准 ⇒ 只要旧文件自带重复，
+        # added 就会被算成负数 ⇒ 命中最下方"行数减少→不写盘"守卫
+        # ⇒ 该分区永久无法插入新行（且 fail=0，上层无感）。
+        # 实证 fx_daily/2026.parquet：13,657 行含 1,543 重复，补 313 行时
+        # added 算成 −1,272，301 个日期一行未落（2026-10-29 §208 §4.2）。
+        existing_uniq = (len(existing.drop_duplicates(subset=keys)) if keys
+                         else len(existing.drop_duplicates()))
+        n_existing_dup = len(existing) - existing_uniq
+
         combined = pd.concat([existing, new_df], ignore_index=True)
         combined = combined.drop_duplicates(subset=keys, keep=keep)
         if sort_by and sort_by in combined.columns:
             combined = combined.sort_values(sort_by)
         combined = combined.reset_index(drop=True)
 
-        added = len(combined) - len(existing)
+        added = len(combined) - existing_uniq      # ← 改这一行（DB-R10b）
         if added <= 0:
-            # ── E-02（2026-10-11 三轮架构审查）：值级变更检测 ──
-            # added<=0 有两种含义，原实现一律短路 ⇒ 第二种永不落盘：
-            #   ① 新数据与既有行**逐值相同** ⇒ 确实无需写盘（原优化，保留）
-            #   ② 同键但**值被修正**（源端更正 / 复权因子刷新 / 口径重写）
-            #      ⇒ **必须落盘**，否则表内该键永久冻结在旧值（不报错）。
-            # ⚠ 与 upsert_by_year 的行为分裂由此消除（原：一有一无）。
             if keys is None:
                 # 全列判重：去重后行数不增 ⇒ 逐列必然相同（无需比较）
                 return False, 0
-            if len(combined) != len(existing):
-                # 行数减少 = 既有文件自带重复行被去重（如源端重复入库）。
-                # 此时**不写盘**（保持原行为：不做静默删行）——由调用方在
-                # 入库前自去重（见 alt/io.py 步骤 5 的同源处置）。
-                return False, 0
+            # 注：combined ⊇ dedup(existing) 恒成立 ⇒ added<=0 时必有
+            #     len(combined)==existing_uniq，原"行数减少"分支已成死代码，删除。
             if not _values_changed(existing, combined, keys):
                 return False, 0
             # 值修正：按既有列序落盘；added 如实为 0（行数未增，
             # 但 changed=True 让调用方的"已更新"计数如实反映）
+            if n_existing_dup:
+                # R10b-1c：既有重复被顺手折叠 ⇒ 必须显式告知，不许静默删行
+                print(f"  [去重] {os.path.basename(path)}: 既有 {n_existing_dup:,} 行"
+                      f"重复已按 {keys} 折叠（本次新增 0 行）")
             if set(combined.columns) == set(existing.columns):
                 combined = combined[list(existing.columns)]
             _atomic_write_parquet(combined, path, schema=schema)
             _invalidate_reader_cache(path)
             return True, 0
+
+        if n_existing_dup:
+            # 本次写入会把既有重复行一并折叠 —— 必须显式告知，不许静默
+            print(f"  [去重] {os.path.basename(path)}: 既有 {n_existing_dup:,} 行"
+                  f"重复已按 {keys} 折叠（本次新增 {added:,} 行）")
         # 列顺序与既有文件对齐，保持文件结构稳定
         if set(combined.columns) == set(existing.columns):
             combined = combined[list(existing.columns)]

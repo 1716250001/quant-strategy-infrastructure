@@ -471,6 +471,8 @@ BACKFILL_TARGETS = OrderedDict([
     ("index_dailybasic", {
         "api": "index_dailybasic", "desc": "指数每日指标(PE/PB/股息率)", "mode": "by_date",
         "start": "20040102", "max_rows": 0, "tier": "A",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["ts_code", "trade_date"],
         "note": "奇点估值锚点: 沪深300 10倍PE 可直接自算。"
                 "★2026-09-23 纳入日更(extend组): mode 由 by_code 改 by_date —— "
                 "实测接口支持 trade_date 按日拉全市场(单日约15只指数, 1请求/天)。"
@@ -495,22 +497,30 @@ BACKFILL_TARGETS = OrderedDict([
     ("margin_detail", {
         "api": "margin_detail", "desc": "融资融券明细", "mode": "by_date",
         "max_rows": 0, "tier": "A", "start": "20120101",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "ts_code"],
         "note": "单日约4400行",
     }),
     ("margin_secs", {
         "api": "margin_secs", "desc": "两融标的清单", "mode": "by_date",
         "max_rows": 0, "tier": "B", "start": "20120101",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "ts_code"],
         "note": "单日约4450行",
     }),
     ("moneyflow", {
         "api": "moneyflow", "desc": "个股资金流向", "mode": "by_date",
         "max_rows": 0, "tier": "A", "start": "20080101",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "ts_code"],
         "note": "单日约5540行; β四因子的资金流",
     }),
     ("fund_adj", {
         "api": "fund_adj", "desc": "基金复权因子", "mode": "by_date",
         "max_rows": 0, "tier": "A", "start": "19991022",
         "allow_codes_file": True,  # A 段 2026-10-17 特例：by_date 形态允许 codes-file 补历史
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["ts_code", "trade_date"],
         "note": "宽基ETF/LOF轮动**必须用复权价**（fund_daily 是未复权价，ETF 份额折算会"
                 "造成单日假暴涨，实证 159300.SZ 2024-06-25 +255.8%）。"
                 "★2026-10-01 纳入日更(extend组): mode 由 by_code 改 by_date —— "
@@ -612,6 +622,8 @@ BACKFILL_TARGETS = OrderedDict([
     ("hsgt_top10", {
         "api": "hsgt_top10", "desc": "陆股通十大成交股", "mode": "by_date",
         "max_rows": 0, "tier": "B", "start": "20170101", "note": "外资当日偏好",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "ts_code"],
     }),
     ("ggt_top10", {
         "api": "ggt_top10", "desc": "港股通十大成交股", "mode": "by_date",
@@ -621,6 +633,8 @@ BACKFILL_TARGETS = OrderedDict([
     ("hk_hold", {
         "api": "hk_hold", "desc": "沪深股通持股明细", "mode": "by_date",
         "max_rows": 0, "tier": "B", "start": "20170101", "note": "单日约960行",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "code"],
     }),
     ("stk_holdernumber", {
         "api": "stk_holdernumber", "desc": "股东户数", "mode": "by_code",
@@ -663,6 +677,8 @@ BACKFILL_TARGETS = OrderedDict([
     ("suspend_d", {
         "api": "suspend_d", "desc": "每日停复牌", "mode": "by_date",
         "max_rows": 0, "tier": "B", "start": "20000101", "note": "接口名是 suspend_d",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "ts_code"],
     }),
     ("namechange", {
         "api": "namechange", "desc": "股票曾用名", "mode": "by_code",
@@ -718,11 +734,15 @@ BACKFILL_TARGETS = OrderedDict([
     ("fut_mapping", {
         "api": "fut_mapping", "desc": "期货主力连续映射", "mode": "by_date",
         "max_rows": 0, "tier": "A", "start": "20000101",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "ts_code"],
         "note": "IF/IC/IM 基差与升贴水; 按trade_date拉, 每日约150-200行",
     }),
     ("fut_settle", {
         "api": "fut_settle", "desc": "期货结算参数", "mode": "by_date",
         "max_rows": 0, "tier": "B", "start": "20120101",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["ts_code", "trade_date"],
         "note": "保证金率/手续费/交割费; trade_date 有效(实测单日约870行); "
                 "⚠无参数会报'参数校验失败, trade_date,ts_code不能都为空'",
     }),
@@ -747,6 +767,8 @@ BACKFILL_TARGETS = OrderedDict([
     ("fut_daily", {
         "api": "fut_daily", "desc": "期货日线", "mode": "by_date",
         "max_rows": 0, "tier": "B", "start": "20000101", "note": "IF/IC/IM 基差",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "ts_code"],
     }),
     ("fut_holding", {
         "api": "fut_holding", "desc": "期货持仓排名", "mode": "by_date",
@@ -759,10 +781,14 @@ BACKFILL_TARGETS = OrderedDict([
     ("opt_daily", {
         "api": "opt_daily", "desc": "期权日线", "mode": "by_date",
         "max_rows": 0, "tier": "C", "start": "20160101", "note": "单日约1.5万行, 量大",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["ts_code", "trade_date"],
     }),
     ("repo_daily", {
         "api": "repo_daily", "desc": "债券回购日行情", "mode": "by_date",
         "max_rows": 0, "tier": "C", "start": "20000101", "note": "资金面利率",
+        # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
+        "subset": ["trade_date", "ts_code"],
     }),
     ("cb_issue", {
         "api": "cb_issue", "desc": "可转债发行", "mode": "by_code",
