@@ -593,7 +593,7 @@ P4 = [
     #   ② 复权展开唯一入口 alt.reader.expand_qfq_factor()
     #   ③ stock_us_daily 无日期增量参数 ⇒ 只能整表重建；§188 R16 缩宇宙后按 rotate_days=2 轮转（回到日更）
     #   ④ 新浪域名（finance.sina.com.cn），已有 sina 档位 20/分
-    TableSpec("us_daily_raw", "stock_us_daily", "P4", "by_year", "date",
+    TableSpec("us_daily_raw", "stock_us_daily", "P4_US_DAILY", "by_year", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
               universe_from="us_large_cap", max_age_days=5,
               # rotate_days=2：500 只 / 2 天轮一遍（250 只/天，两表合计 ≈37.5 分钟）
@@ -606,7 +606,7 @@ P4 = [
                    "rotate_days=2（250 只/天，2 天轮一遍）; "
                    "⚠ 与 us_daily_qfq 并存：存不复权价 + 事件级因子（同港股双表策略）; "
                    "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
-    TableSpec("us_qfq_factor", "stock_us_daily", "P4", "single", "date",
+    TableSpec("us_qfq_factor", "stock_us_daily", "P4_US_DAILY", "single", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
               universe_from="us_large_cap", max_age_days=90,
               # rotate_days=2：500 只 / 2 天轮一遍（250 只/天，两表合计 ≈37.5 分钟）
@@ -630,64 +630,70 @@ P4 = [
     #   us_report   : stock_financial_us_report_em(stock="AAPL", symbol="资产负债表", indicator="年报")
     #                 ⚠ 形参 symbol 是【报表类型】不是市场代码；返回 735 行 × 9 列（长表）
     # 报表类型枚举固定三种：「资产负债表」/「综合损益表」（**不是"利润表"**）/「现金流量表」
-    TableSpec("us_fina_ind", "stock_financial_us_analysis_indicator_em", "P4",
+    TableSpec("us_fina_ind", "stock_financial_us_analysis_indicator_em", "P4_US_FINA",
               "by_year", "date", src_date_col="REPORT_DATE",
               subset=["symbol", "date"], mode="list",
               universe_from="us_universe", symbol_param="symbol", symbol_col="symbol",
               params={"indicator": "年报"},
-              max_age_days=120, rotate_days=30,
+              max_age_days=120, rotate_days=90,
               coerce_float_cols=["OPERATE_INCOME", "GROSS_PROFIT",
                                  "PARENT_HOLDER_NETPROFIT", "BASIC_EPS", "DILUTED_EPS",
                                  "ROE_AVG", "ROA", "GROSS_PROFIT_RATIO", "NET_PROFIT_RATIO"],
               inject_const={"src": "datacenter", "as_of": "__TODAY__"},
               note="美股财务分析指标（年报，49 列宽表；逐只拉; "
-                   "⚠ 源端 REPORT_DATE 为报告期，非公告日; ⚠ 负值多为合理负（营收同比/净利/EPS/ROE）"),
+                   "⚠ 源端 REPORT_DATE 为报告期，非公告日; ⚠ 负值多为合理负（营收同比/净利/EPS/ROE）; "
+                   "§204 R10-6：rotate_days 30→90（97.7% 返空——606 只里 592 只空，"
+                   "40 分钟只拿 58 行）；max_age_days 保持 120 ≥ rotate_days（否则每轮自判 stale）"),
     # —— §166 R12-1：拆成三张物理表（原 us_report 单表在 list 引擎下**必错**：
     #    fetch_one 会把 symbol_param 指向的参数覆盖掉，而报表述表类型只能走 `symbol`
     #    形参 ⇒ 不拆则恒拉默认「资产负债表」= 只拉 1/3）——
     #    关键：symbol_param="stock"（市场代码）与 params.symbol（报表类型）**分工**
-    TableSpec("us_report_balance", "stock_financial_us_report_em", "P1",
+    TableSpec("us_report_balance", "stock_financial_us_report_em", "P4_US_REPORT",
               "by_year", "date", src_date_col="REPORT_DATE",
               subset=["symbol", "date", "item_name"], mode="list",
               symbol_param="stock",            # ← 关键：防覆盖 params 里的 symbol
               symbol_col="SECURITY_CODE",
               rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
                       "AMOUNT": "amount"},
-              universe_from="us_fina_ind", universe_col="symbol",
+              universe_from="us_large_cap", universe_col="symbol",
               params={"symbol": "资产负债表", "indicator": "年报"},
               rotate_days=30, max_age_days=120,
               coerce_float_cols=["amount"],
               inject_const={"src": "datacenter", "as_of": "__TODAY__"},
               note="§166 R12-1：三表拆分之一（资产负债表）；symbol_param='stock' 防覆盖报表类型；"
-                   "值列 AMOUNT→amount；清单来自 us_fina_ind 命中名单（非 universe 直取）"),
-    TableSpec("us_report_income", "stock_financial_us_report_em", "P1",
+                   "值列 AMOUNT→amount；清单来自 us_fina_ind 命中名单（非 universe 直取）; "
+                   "§204 R10-7：名单由 us_fina_ind（4,642 只，含大量无语料标的）收敛为 "
+                   "us_large_cap（500 只），生效日 2026-10-29（三表同改）"),
+    TableSpec("us_report_income", "stock_financial_us_report_em", "P4_US_REPORT",
               "by_year", "date", src_date_col="REPORT_DATE",
               subset=["symbol", "date", "item_name"], mode="list",
               symbol_param="stock",
               symbol_col="SECURITY_CODE",
               rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
                       "AMOUNT": "amount"},
-              universe_from="us_fina_ind", universe_col="symbol",
+              universe_from="us_large_cap", universe_col="symbol",
               params={"symbol": "综合损益表", "indicator": "年报"},
               rotate_days=30, max_age_days=120,
               coerce_float_cols=["amount"],
               inject_const={"src": "datacenter", "as_of": "__TODAY__"},
               note="§166 R12-1：三表拆分之一（综合损益表，**不是『利润表』**）；"
-                   "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount"),
-    TableSpec("us_report_cashflow", "stock_financial_us_report_em", "P1",
+                   "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount; "
+                   "§204 R10-7：名单收敛为 us_large_cap（500 只），2026-10-29 生效（三表同改）"),
+    TableSpec("us_report_cashflow", "stock_financial_us_report_em", "P4_US_REPORT",
               "by_year", "date", src_date_col="REPORT_DATE",
               subset=["symbol", "date", "item_name"], mode="list",
               symbol_param="stock",
               symbol_col="SECURITY_CODE",
               rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
                       "AMOUNT": "amount"},
-              universe_from="us_fina_ind", universe_col="symbol",
+              universe_from="us_large_cap", universe_col="symbol",
               params={"symbol": "现金流量表", "indicator": "年报"},
               rotate_days=30, max_age_days=120,
               coerce_float_cols=["amount"],
               inject_const={"src": "datacenter", "as_of": "__TODAY__"},
               note="§166 R12-1：三表拆分之一（现金流量表）；"
-                   "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount"),
+                   "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount; "
+                   "§204 R10-7：名单收敛为 us_large_cap（500 只），2026-10-29 生效（三表同改）"),
 ]
 
 # ============================================================
@@ -760,7 +766,7 @@ P1_EX = [
 
 P4_HK = [
     # —— 港股日线（未复权，1 请求/只；轮转重建）——
-    TableSpec("hk_daily", "stock_hk_daily", "P4", "by_year", "date",
+    TableSpec("hk_daily", "stock_hk_daily", "P4_HK", "by_year", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
               params={"adjust": ""},
               universe_from="master:hk_basic", universe_col="ts_code",
@@ -772,7 +778,7 @@ P4_HK = [
                    "⚠ 拆股期间源侧可能缺行(00700 实测 2014-05-15~05-28 共 10 个交易日)；"
                    "⚠ 复权展开唯一入口 alt.reader.expand_qfq_factor()"),
     # —— 港股前复权因子（**事件级**，1 请求/只；轮转重建）——
-    TableSpec("hk_qfq_factor", "stock_hk_daily", "P4", "single", "date",
+    TableSpec("hk_qfq_factor", "stock_hk_daily", "P4_HK", "single", "date",
               src_date_col="date", subset=["symbol", "date"], mode="list",
               params={"adjust": "qfq-factor"},
               universe_from="master:hk_basic", universe_col="ts_code",

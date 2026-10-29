@@ -247,13 +247,18 @@ class ByCodeBatchWriter:
 # 1. 分页拉取
 # ============================================================
 def fetch_paged_by_date(pro, api_name, limiter, trade_date, verbose=False,
-                        date_param="trade_date"):
+                        date_param="trade_date", fields=None):
     """按日期 + offset 分页拉全市场数据（防静默截断）。
 
     参数:
         date_param: **API 入参名**（默认 "trade_date"）。
                     部分接口用别的名字：fund_div→"ann_date"、eco_cal→"date"。
                     ⚠ 传错会导致参数被静默忽略、返回全表前 N 行（不报错）。
+        fields:     可选，逗号分隔的返回列（DB-R10 R10-1a）。
+                    ⚠ 源端对部分接口只返默认 2 列（bc_otcqt 实测），
+                      必须靠它显式要全列；且列名必须**全小写**，大写直接抛
+                      「指定了返回列，但是列名不匹配」。
+                    ⚠ 默认 None ⇒ **不写进 params**，未配 fields 的表请求参数逐字段不变。
 
     返回: (df, pages:int, truncated:bool)
       df = None          调用失败 → 调用方不应记断点
@@ -269,6 +274,8 @@ def fetch_paged_by_date(pro, api_name, limiter, trade_date, verbose=False,
 
     while pages < max_pages:
         params = {date_param: trade_date, "limit": page, "offset": offset}
+        if fields:                          # 仅在非空才写入，旧调用方零行为变化
+            params["fields"] = fields
         df = ts_call_with_retry(pro, api_name, limiter, params, verbose=verbose)
         pages += 1
         if pages == 1:

@@ -56,7 +56,7 @@ from common.parquet_store import (
 )
 from fetch.base import (
     get_pro, RateLimiter, Checkpoint,
-    fetch_codes_parallel, ts_call_with_retry, ts_fetch_by_date,
+    fetch_codes_parallel, ts_call_with_retry, ts_fetch_by_date, ts_fetch,   # ts_fetch: DB-R10 R10-1d
     is_possibly_truncated,                      # DB-R3
 )
 
@@ -380,7 +380,10 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
               f"失败={stat['fail']} | {r:.0f}/min | 剩余≈{eta:.0f}min")
 
     if conf["mode"] == "once":
-        df = ts_call_with_retry(pro, conf["api"], limiter, {}, verbose=verbose)
+        _once = {}
+        if conf.get("fields"):              # DB-R10 R10-1d：fields 透传
+            _once["fields"] = conf["fields"]
+        df = ts_call_with_retry(pro, conf["api"], limiter, _once, verbose=verbose)
         # ⚠ 2026-09-22 修复（P0）: 断点必须"先落盘、后记"。
         #   原实现无论 df 是否为 None 都 cp.mark_done —— 与模块 docstring
         #   「仅"调用成功"才记，失败留待续跑」直接矛盾。
@@ -413,8 +416,11 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             #   使实际速率恒为配置值的一半（实证补库 85天/min，配置 170/min）；
             #   低限频接口更会直接阻塞：shibor_lpr(0.02/min, interval=3000s)
             #   第二次 wait 会睡满 50 分钟。
+            _pp = {pm: per}
+            if conf.get("fields"):          # DB-R10 R10-1d：fields 透传
+                _pp["fields"] = conf["fields"]
             df = ts_call_with_retry(pro, conf["api"], limiter,
-                                    {pm: per}, verbose=verbose)
+                                    _pp, verbose=verbose)
             nrow = 0 if df is None else len(df)
             if df is not None and not df.empty:
                 if cap and nrow >= cap:
@@ -427,7 +433,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                         #   → 每页返回同样的数据（看起来"分页了"但全是重复）。
                         df2, _, _ = fetch_paged_by_date(pro, conf["api"], limiter,
                                                         per, verbose=verbose,
-                                                        date_param=pm)
+                                                        date_param=pm,
+                                                        fields=conf.get("fields"))
                         if df2 is not None and len(df2) > nrow:
                             df = df2
                             truncated[-1] = (per, f"{nrow}→{len(df2)}")
@@ -460,8 +467,11 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             truncated = False
             while pages < max_pages:
                 # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
+                _p = {pn: val, "limit": page, "offset": offset}
+                if conf.get("fields"):      # DB-R10 R10-1d：fields 透传
+                    _p["fields"] = conf["fields"]
                 df = ts_call_with_retry(pro, conf["api"], limiter,
-                                        {pn: val, "limit": page, "offset": offset},
+                                        _p,
                                         verbose=verbose)
                 pages += 1
                 if pages == 1:
@@ -503,7 +513,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         for i, pg in enumerate(pending, 1):
             # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
             df = ts_call_with_retry(pro, conf["api"], limiter,
-                                    {"limit": page, "offset": pg * page},
+                                    {"limit": page, "offset": pg * page,
+                                     **({"fields": conf["fields"]} if conf.get("fields") else {})},
                                     verbose=verbose)
             if df is None:                     # 调用失败: 不记断点
                 print(f"    {name} 第{pg}页 调用失败，留待续跑")
@@ -546,8 +557,11 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         _trunc_soft = []                            # 仅疑似（已落盘）
         for i, (s, e) in enumerate(pending, 1):
             # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
+            _r = {sp: s, ep: e}
+            if conf.get("fields"):          # DB-R10 R10-1d：fields 透传
+                _r["fields"] = conf["fields"]
             df = ts_call_with_retry(pro, conf["api"], limiter,
-                                    {sp: s, ep: e}, verbose=verbose)
+                                    _r, verbose=verbose)
             nrow = 0 if df is None else len(df)
 
             # ---- DB-R3 截断检测 ----
@@ -640,13 +654,17 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         def fetch_fn(_pro, _lim, dt):
             if paged:
                 df, pg, trunc = fetch_paged_by_date(_pro, conf["api"], _lim, dt,
-                                                    verbose=verbose, date_param=dp)
+                                                    verbose=verbose, date_param=dp,
+                                                    fields=conf.get("fields"))
                 with meta_lock:
                     meta[dt] = (pg, trunc)
                 return df
             # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
             params = {dp: dt}
             params.update(api_extra)
+            # DB-R10 R10-1b：fields 仅在配置了才写入（未配 ⇒ 参数逐字段不变）
+            if conf.get("fields"):
+                params["fields"] = conf["fields"]
             return ts_call_with_retry(_pro, conf["api"], _lim,
                                       params, verbose=verbose)
 
@@ -738,6 +756,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 params["month"] = dval[:6]
             else:
                 params["trade_date"] = dval
+            if conf.get("fields"):          # DB-R10 R10-1d：fields 透传
+                params["fields"] = conf["fields"]
             return ts_call_with_retry(_pro, conf["api"], _lim, params, verbose=verbose)
 
         def on_result_month(pair, df, ok):
@@ -756,7 +776,25 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         cp.save()
         return {"name": name, "est": est, "done": stat["ok"]}
 
+    # DB-R10 R10-1d：by_code 的默认拉取走 fetch.base.ts_fetch（其 extra_params 支持
+    #   透传 fields），而 fetch_codes_parallel 没有 extra_params 通道 ⇒ 仅在配置了
+    #   fields 时替换为等价包装；**未配 fields 的表仍走原路径，参数逐字段不变**。
+    _bc_fields = conf.get("fields")
+    _bc_fetch_fn = None
+    if _bc_fields:
+        def _bc_fetch_fn(_pro, _lim, code, _f=_bc_fields):
+            df, _ok = ts_fetch(_pro, conf["api"], _lim, code,
+                               max_rows=conf.get("max_rows", 0),
+                               extra_params={"fields": _f}, verbose=verbose)
+            # ⚠ 必须回 None：ts_fetch 失败时返回 (空 DataFrame, False)，
+            #   而 fetch_codes_parallel 的判据是 `df is not None`（base.py L707）。
+            #   若把空 df 直接 return，失败会被计成「空」→ on_result 的 `elif ok:`
+            #   会 cp.mark_done ⇒ 失败的标被永久跳过且不报错
+            #   （= 2026-09-21 修过的 P0「调用失败被统计成空」在 by_code+fields 上复发）。
+            return None if not _ok else df
+
     stat = fetch_codes_parallel(pro, conf["api"], pending, limiter,
+                                fetch_fn=_bc_fetch_fn,
                                 max_workers=workers, max_rows=conf.get("max_rows", 0),
                                 on_result=on_result, progress=progress,
                                 progress_every=100, verbose=verbose)

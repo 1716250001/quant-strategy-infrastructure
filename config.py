@@ -559,13 +559,21 @@ BACKFILL_TARGETS = OrderedDict([
     ("fx_daily", {
         "api": "fx_daily", "desc": "外汇日线", "mode": "by_date",
         "start": "20070521", "max_rows": 0, "tier": "A",
+        # DB-R10 R10-4：无 subset ⇒ 走 "*" 全列判重，而同日两次快照的值本来就不同
+        #   （AUDUSD.FXCM 20261027 的 bid_close 0.70289/0.70523、tick_qty 3,510/169,698）
+        #   ⇒ 被判成两行（20260923 起重复 1,402 行 / 全表 1,543 行）。
+        #   改按 (ts_code, trade_date) 判重：merge_append(keep="last") 让后到的
+        #   完整快照覆盖先到的残快照，正是所需语义。
+        "subset": ["ts_code", "trade_date"],
         "note": "巴西ETF证伪条件 BRLCNY 破1.25连5日。"
                 "★2026-09-23 纳入日更(extend组): mode 由 by_code 改 by_date —— "
                 "实测接口支持 trade_date 按日拉全市场(单日约101品种, 1请求/天)。"
                 "⚠库内 1938~2007 稀疏历史(XAUUSD伦敦金等)系当年 by_code 建库产物, "
                 "日更不受影响; 若整库重建需临时改回 by_code(69请求/标的拉全历史)。"
                 "⚠缺口按 SSE 日历计算: A股长假(国庆/春节)期间外汇照常交易但不会被自动补, "
-                "如需覆盖手动 --lookback 扩窗。start 与 SOURCE_START_BASELINE 一致(20070521)。",
+                "如需覆盖手动 --lookback 扩窗。start 与 SOURCE_START_BASELINE 一致(20070521)。"
+                "⚠同一交易日重复拉取会产出两份快照(bid_close/tick_qty 等值不同), "
+                "故 subset 已改为 (ts_code, trade_date) 按主键判重(2026-10-29, DB-R10 R10-4)。",
     }),
     ("forecast", {
         "api": "forecast", "desc": "业绩预告", "mode": "by_code",
@@ -930,9 +938,11 @@ BACKFILL_TARGETS = OrderedDict([
     ("hs_const", {
         "api": "hs_const", "desc": "沪深港通成分股", "mode": "by_param",
         "param_name": "hs_type", "param_values": ["SH", "SZ"],
-        "page_size": 2000, "max_rows": 0, "tier": "A",
+        "page_size": 2000, "max_rows": 0, "tier": "C",      # DB-R10 R10-5a：A→C
         "subset": ["ts_code", "hs_type"],
-        "note": "⚠必填 hs_type(不传直接报错); SH 581行 / SZ 242行; "
+        "note": "⚠ 源端冻结于 2019-12-27：传任意 trade_date 返回值完全相同（实测 2026-10-29 "
+                "四个日期），本表**不得用于「当前沪股通标的」判定**；库内 823 行＝源端全集，非缺口。"
+                "⚠必填 hs_type(不传直接报错); SH 581行 / SZ 242行; "
                 "注意 hs_type='SH_SZ' 返空表（非合法值）",
     }),
 
@@ -975,12 +985,26 @@ BACKFILL_TARGETS = OrderedDict([
     }),
     ("bc_otcqt", {
         "api": "bc_otcqt", "desc": "柜台债券报价", "mode": "by_date",
-        "start": "20240320", "date_col": "TRADE_DATE", "max_rows": 0, "tier": "C",
-        "subset": ["ID"],
-        "note": "⚠返回字段是**大写 TRADE_DATE**(非 trade_date), 故 date_col 须显式指定; "
-                "⚠单日约8160行需**5页分页**(见 BACKFILL_PAGE_CONF); "
+        "start": "20240320", "date_col": "trade_date", "max_rows": 0, "tier": "C",
+        # DB-R10 R10-2：源端已改版（2026-10-29 实测）
+        #   ① 字段名全部**小写**（原大写 TRADE_DATE/ID 等已不存在）
+        #   ② **默认只返 2 列**（trade_date, ts_code）⇒ 必须靠 fields 显式要全列
+        #   ③ fields 必须全小写：传大写直接抛「指定了返回列，但是列名不匹配」
+        #   ④ 单日 5,145 行 / 3 页（原"8,160 行 / 5 页"已过期）
+        # ⚠ subset 用 "*"（全列判重）：原 ["ID"] 的 ID 列源端已删；若改
+        #   (ts_code, trade_date) 会把同一债券的多笔报价判成重复而**静默丢数据**。
+        # ⚠ 库内旧分区仍是 18 列大写 schema；schema 迁移由审查方另做（§204 §12），
+        #   迁移前**不得触发本表任何写入**（否则新小写列会被旧大写 schema 对齐掉）。
+        "fields": ("trade_date,ts_code,maturity,buy_yield,sell_yield,name,"
+                   "coupon_rate,remain_maturity,buy_price,qt_time,bond_type,sell_price"),
+        "subset": "*",
+        "note": "⚠返回字段已全部**小写**(原大写 TRADE_DATE 已不存在, 故 date_col=trade_date); "
+                "⚠**默认只返 2 列**(trade_date/ts_code), 必须靠 fields 显式要 12 列, "
+                "且列名须全小写否则报「列名不匹配」; "
+                "⚠单日约5145行需**3页**(实测 20261028: 2000+2000+1145); "
                 "⚠数据起点实测为 2024-03-20(20240319返0/20240320返1985), "
-                "故 start 设 20240320 而非 20160101, 可省约 2400 请求",
+                "故 start 设 20240320 而非 20160101, 可省约 2400 请求; "
+                "⚠库内旧分区仍是 18 列大写 schema, 迁移由审查方另做",
     }),
     ("fund_div", {
         "api": "fund_div", "desc": "基金分红", "mode": "by_date",
@@ -1307,11 +1331,15 @@ BACKFILL_PAGE_CONF = {
     "margin_secs":  (5000,   5),
     "top_inst":     (5000,   5),
     "block_trade":  (5000,   5),
-    "hk_hold":      (5000,   5),
+    # ⚠ hk_hold 页大小必须 ≤ 服务端硬顶 4,200（DB-R10 R10-3）：
+    #   实测 limit 传 None/4200/5000/10000 一律只返 4,200 ⇒ 若 page=5000，
+    #   首页 4,200 就被判「不足一页=末页」，第 2 页永不发 → 静默丢数据。
+    #   真值：20260331=5,027 行 / 20260630=5,254 行（offset 分页才拿得全）。
+    "hk_hold":      (2000,  10),
     "suspend_d":    (5000,   5),
     "fut_daily":    (5000,   5),
-    # ⚠ bc_otcqt 单日约 8160 行，单次硬顶 2000 → 需 5 页（实测 offset 0/2000/4000/6000
-    #   各 2000 行、offset 8000 为 160 行、offset 10000 空，拼接后 8160 行零重复）
+    # ⚠ bc_otcqt 单日约 5,145 行（2026-10-29 实测 20261028 = 2000+2000+1145 三页），
+    #   单次硬顶 2000 ⇒ 保持 (2000, 10) 即可（原"8,160 行 / 5 页"为旧口径，已过期）
     "bc_otcqt":     (2000,  10),
     # ⚠ top10_holders / top10_floatholders（2026-09-19）:
     #   按报告期批量拉全市场，单页硬顶 6000（实测 offset 0/6000/12000 各返 6000 行）
@@ -1400,8 +1428,10 @@ TABLE_DATE_COL = {
     "new_share": "ipo_date", "shibor": "date", "us_tycr": "date",
     "us_trycr": "date", "us_tbr": "date", "us_tltr": "date", "us_trltr": "date",
     "eco_cal": "date",
-    # ⚠ bc_otcqt 返回的日期字段是**大写 TRADE_DATE**（tushare 里的异类）
-    "bc_otcqt": "TRADE_DATE",
+    # ⚠ bc_otcqt 源端已于 2026-10 改版：日期字段由大写 TRADE_DATE 改为小写 trade_date
+    #   （DB-R10 R10-2 / R10a-1）。此处为全库权威索引，必须与
+    #   BACKFILL_TARGETS["bc_otcqt"]["date_col"] 同值（config_check 判据 ⑤b）。
+    "bc_otcqt": "trade_date",
     # ---- 2026-09-19 接口审查补充 ----
     # ⚠ 仅列**按年分区**的表；once/by_range 类（index_classify/cn_schedule/
     #   stk_seasoned/stk_account/shibor_lpr）由 mode 决定落单文件，不列在此。
@@ -1576,7 +1606,8 @@ DB_AUDIT_PKEYS = {
     "fut_basic":        ["ts_code"],
     "opt_basic":        ["ts_code"],
     "stk_rewards":      ["ts_code", "ann_date", "name", "title", "end_date"],
-    "bc_otcqt":         ["ID"],
+    # bc_otcqt：源端已无 ID 列（R10-2），改全列判重，与 BACKFILL_TARGETS.subset="*" 对齐
+    "bc_otcqt":         None,
     "fund_div":         ["ts_code", "ann_date", "div_proc", "record_date"],
     "sge_daily":        ["ts_code", "trade_date"],
     "daily_info":       ["trade_date", "ts_code"],

@@ -419,7 +419,20 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
     if only:
         specs = [sp_mod.get(only)]
     elif tier:
-        specs = list(sp_mod.BY_TIER.get(tier, []))
+        # DB-R9（2026-10-29）：tier 支持**逗号分隔多组**，便于把慢表组从日更里排除。
+        #   背景：P4 组原含 us_daily_raw/us_qfq_factor/us_fina_ind/hk_daily/hk_qfq_factor
+        #   等轮转慢表，合计 117 分钟，日更跑到 77 分钟即被外部终止（18 号 §202）。
+        #   拆分后慢表各有独立 tier（P4_US_DAILY / P4_US_FINA / P4_US_REPORT / P4_HK），
+        #   日更只需 `--tier P0,P1,P3,P4,P0_EXT`（全部快表）。
+        #   单值调用行为不变（列表长度 1）。
+        _tiers = [t.strip() for t in str(tier).split(",") if t.strip()]
+        # 自校验：去掉 argparse choices 后必须自己拦，否则拼错的组名会静默
+        #   「无匹配表」而 automation 报成功 —— 正是本会话在查的那类静默失败。
+        _bad = [_t for _t in _tiers if _t not in sp_mod.BY_TIER]
+        if _bad:
+            raise SystemExit(f"[FATAL] 非法 tier: {_bad}"
+                             f"（合法值: {sp_mod.TIERS}）")
+        specs = [sp for _t in _tiers for sp in sp_mod.BY_TIER.get(_t, [])]
     else:
         specs = list(sp_mod.ALL_SPECS)
 
@@ -581,7 +594,11 @@ def status_only(tier=None, only=None):
 # ============================================================
 def main(argv=None):
     p = argparse.ArgumentParser(description="alt 库每日增量更新")
-    p.add_argument("--tier", choices=sp_mod.TIERS, help="按优先级执行（自动派生自 spec，勿硬编码）")
+    # DB-R9：--tier 支持逗号分隔多组（如 P0,P1,P3,P4,P0_EXT）。
+    #   故不能用 argparse 的 choices（它校验**整串**，逗号串必然失败）；
+    #   改为自校验，逐项比对 sp_mod.TIERS，非法值直接报错退出（不放行拼写错误）。
+    p.add_argument("--tier", help="按优先级执行，支持逗号分隔多组"
+                                 "（如 P0,P1,P3,P4,P0_EXT）；合法值见 --list")
     p.add_argument("--only")
     p.add_argument("--dry-run", action="store_true", help="只输出计划，不发请求")
     p.add_argument("--lookback", type=int, default=DEFAULT_LOOKBACK,
