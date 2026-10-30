@@ -912,14 +912,18 @@ P2 = [
                    "⚠ 与 cftc_fx_nc 列名相同、值不同，禁合并"),
     # —— C 块：债券 ——
     # bond_china_yield：跨度 >约 1 年 **静默返空**（实测 13 个月=0 行 / 10 个月=609 行）
-    #   ⇒ 引擎走 range_params（按年切段），enum_values 仅作占位（enum_param=None）。
+    #   ⇒ 引擎走 range_params（按年切段）；本表无枚举维度（enum_values 为空）
+    #     ⇒ run_range_spec 的内层循环会迭代一次 val=None（DB-R11b §225）。
     TableSpec("bond_yield_cn", "bond_china_yield", "P2", "by_year", "trade_date",
               src_date_col="日期", subset=["trade_date", "曲线名称"], mode="once",
-              range_params=("start_date", "end_date"), range_start="20200101",
+              range_params=("start_date", "end_date"),
+              range_start="20160101",          # DB-R11c：20200101 → 20160101
               max_age_days=15, max_backfill_days=240,
               note="中债收益率曲线（曲线名称 × 10 期限，实测 20260101~20261029=609 行）；"
                    "⚠ 单次跨度**不得超过约 1 年**，超了静默返回空表 ⇒ 引擎按年切段；"
-                   "max_backfill_days=240（交易日口径）；回补脚本按季度切片"),
+                   "max_backfill_days=240（交易日口径）；回补脚本按季度切片；"
+                   "起点 20160101（opt_daily 与中债曲线的最早可得年份）；"
+                   "2016–2019 实测逐年 750~756 行"),
     TableSpec("bond_yield_us", "bond_zh_us_rate", "P2", "by_year", "trade_date",
               src_date_col="日期", subset=["trade_date"], mode="once",
               params={"start_date": "20100101"}, max_age_days=15, max_backfill_days=0,
