@@ -24,7 +24,7 @@ STRATEGY_ROOT = Path(os.environ.get("BTF_STRATEGY_ROOT")
                      or CHICHAO_ROOT / "研究").resolve()
 #: 规则镜像（rules.path 用）
 RULES_MIRROR = Path(os.environ.get("BTF_RULES_MIRROR")
-                    or CHICHAO_ROOT / "rules_mirror_v77.json").resolve()
+                    or CHICHAO_ROOT / "docs" / "rules_mirror_v77.json").resolve()
 #: 备份根（冷备产物默认落点；BTF_BACKUP_ROOT 可覆盖）
 BACKUP_ROOT = Path(os.environ.get("BTF_BACKUP_ROOT")
                    or _WORKSPACE_ROOT / "备份").resolve()
