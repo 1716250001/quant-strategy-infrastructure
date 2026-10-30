@@ -168,17 +168,22 @@ def run_range_spec(sp, fn, url, limiter: AltRateLimiter, ckpt: AltCheckpoint,
         if ckpt.is_done(sp.name, key) and not force:
             continue
         if dry_run:
-            res["requests"] += len(sp.enum_values)
+            # DB-R11b：空枚举（只有区间、无枚举）也应有 1 次请求，与实跑同口径
+            res["requests"] += len(sp.enum_values or [None])
             continue
         seg_err = False
         seg_any = False                     # 本段是否有非空数据
-        for val in sp.enum_values:
+        # DB-R11b：`enum_values` 为空表示「只有区间、无枚举」（如 bond_yield_cn），
+        #   此时内层应**恰好迭代一次**且 val=None；原实现直接 0 次 ⇒ 0 请求 0 行，
+        #   且外层记 OK（§224 实证）。**不许**改成 `if not sp.enum_values: skip`，
+        #   那会让这类表永远拿不到数据。
+        for val in (sp.enum_values or [None]):
             kw = dict(sp.params)
             if sp.enum_param:
                 kw[sp.enum_param] = val
             kw[sp.range_params[0]] = s0
             kw[sp.range_params[1]] = s1
-            raw, ok, err = limiter.call(lambda: fn(**kw), url)
+            raw, ok, err = limiter.call(lambda k=kw: fn(**k), url)
             res["requests"] += 1
             if not ok:
                 res["errors"].append(f"{s0}~{s1}/{val}: {err}")
