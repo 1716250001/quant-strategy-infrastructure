@@ -91,16 +91,24 @@ def check_register_points() -> list[str]:
     return problems
 
 
+def _sha256_file(p: Path) -> str:
+    """文件内容哈希（**换行归一**：CRLF → LF）。
+
+    为什么归一：基线须跨机器/跨检出状态稳定。git 存 LF，Windows 检出为 CRLF；
+    若直接哈希工作区字节，同一提交在两台机器上得到两个哈希（§184 实测）。
+    """
+    return hashlib.sha256(p.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def _core_hashes() -> dict[str, str]:
     out: dict[str, str] = {}
     for d in CORE:
         for py in sorted((ROOT / d).rglob("*.py")):
-            out[py.relative_to(ROOT).as_posix()] = hashlib.sha256(
-                py.read_bytes()).hexdigest()
+            out[py.relative_to(ROOT).as_posix()] = _sha256_file(py)
     for f in CORE_FILES:
         p = ROOT / f
         if p.exists():
-            out[f] = hashlib.sha256(p.read_bytes()).hexdigest()
+            out[f] = _sha256_file(p)
     return out
 
 
