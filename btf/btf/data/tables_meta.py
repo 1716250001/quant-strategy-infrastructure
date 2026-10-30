@@ -193,6 +193,10 @@ STOCK_SHORT = frozenset({"00", "30", "20", "43", "83", "87", "92"})
 def daily_table_of(symbol: str) -> str:
     """标的路由：股票 `daily` / ETF·LOF `fund_daily` / 指数 `index_daily`。"""
     code, _, suffix = symbol.partition(".")
+    # 退市代码（tushare `T` + 原 6 位，如 T600018.SH = 原 600018 上港集箱）：
+    # 按剥离后判定，否则落到 fund_daily 兜底（19 号 §183 B-3）
+    if len(code) == 7 and code[0] == "T" and code[1:].isdigit():
+        code = code[1:]
     if suffix in INDEX_SUFFIXES or code.startswith(INDEX_PREFIXES):
         return "index_daily"
     if code.startswith("000") and suffix == "SH":
