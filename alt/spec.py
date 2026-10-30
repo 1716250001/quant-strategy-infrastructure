@@ -52,6 +52,12 @@ class TableSpec:
     # 接口的日期参数名（如涨停池的 "date"）。None = 接口不接受日期参数。
     # 与 src_date_col 的区别：date_param 管"怎么调接口"，src_date_col 管"怎么读结果"
     date_param: Optional[str] = None
+    # 日期参数的回溯天数（DB-R11a；2026-10-30）。
+    #   0（默认）= 把 target_date 原样传给 date_param（既有行为，zt_pool 族 6 张依赖）。
+    #   N > 0    = 传 (target_date − N 个交易日)，用于"当日数据次日才发布"的源
+    #              （实证 fund_etf_scale_sse：当日 KeyError、T-1 有 923 行）。
+    #   ⚠ 必须按**交易日**回溯（common.calendar.prev_trade_dates），不许用 Timedelta。
+    date_param_lag_days: int = 0
 
     mode: str = "once"                          # once=无参 | enum=按参数枚举多次
     params: dict = field(default_factory=dict)  # 固定参数
@@ -135,6 +141,11 @@ class TableSpec:
     symbol_param: str = "symbol"        # 逐只拉取的接口参数名（mode="list"）
     # 落盘时注入的**标的列名**（固定 "symbol"，与 subset 声明一致）
     symbol_col: str = "symbol"
+    # 参数是否为 **list 型**（DB-R11 §3；2026-10-30）。
+    #   False（默认）= 既有语义：每次调用传**单值**（us_daily_raw/hk_daily 等依赖）。
+    #   True = 该批标的**整体作为一个 list** 传给 symbol_param
+    #          （如 futures_foreign_commodity_realtime(symbol=['A','B'])）。
+    symbol_as_list: bool = False
 
     # 区间参数名（currency 类接口）：非空时由引擎按区间注入，
     #   例：("start_date", "end_date")；配合 mode="enum" 使用（R-19 隐式分页）。
@@ -845,7 +856,117 @@ P0_EXT = [
                    "⚠ 分位算法 CK-13 必须剔非正值，CK-14 三道门禁 cur>0 & n_pos>=100 & n_total>=520"),
 ]
 
-ALL_SPECS = P0 + P1 + P1_EX + P3 + P4 + P4_HK + P0_EXT
+# ============================================================
+# P2 · DB-R11 新增 14 张（2026-10-30；§220 派单）
+#   QDII 外盘 2 · CFTC 4 · 债券 4(+1 区间) · 外盘商品 1 · 上金所? 无
+#   ⚠ 全部为**实测字段**（2026-10-30 逐函数探针），不是猜测。
+#   ⚠ 快照表（qdii_spot_* / cb_redeem / commodity_foreign）不可回补，
+#      max_backfill_days=0，只能从接入日起向后累积。
+# ============================================================
+P2 = [
+    # —— A 块：QDII 场内快照（两张列不同，禁止合并）——
+    TableSpec("qdii_spot_asia", "qdii_a_index_jsl", "P2", "by_year", "trade_date",
+              src_date_col=None, subset=["trade_date", "代码"], mode="once",
+              max_age_days=15, max_backfill_days=0,
+              force_str_cols=["涨幅", "指数涨幅", "溢价率"],
+              note="QDII 亚太快照（20 行 × 17 列，实测 2026-10-30）；"
+                   "⚠ 源端无日期列 ⇒ 注入 trade_date；快照不可回补；"
+                   "⚠ qdii_e_comm_jsl 与 qdii_e_index_jsl 返回完全相同（§215），不接"),
+    TableSpec("qdii_spot_euro", "qdii_e_index_jsl", "P2", "by_year", "trade_date",
+              src_date_col=None, subset=["trade_date", "代码"], mode="once",
+              max_age_days=15, max_backfill_days=0,
+              force_str_cols=["涨幅", "T-1指数涨幅", "T-1溢价率"],
+              note="QDII 欧洲快照（20 行 × 18 列，含 T-2净值/T-1估值/T-1溢价率）；"
+                   "⚠ 与 asia 表**列不同**，故两张物理表；源端无日期列 ⇒ 注入 trade_date"),
+    # —— A2：交易所口径 ETF 份额（仅上交所；深交所源端坏）——
+    TableSpec("etf_scale_sse", "fund_etf_scale_sse", "P2", "by_year", "trade_date",
+              src_date_col="统计日期", date_param="date", date_param_lag_days=1,
+              subset=["trade_date", "基金代码"], mode="once",
+              max_age_days=15, max_backfill_days=0,
+              note="上交所官方 ETF 份额（593~923 行 × 6 列）；"
+                   "⚠ 源端**当日份额次日才发布**（20261030 KeyError / 20261029=923 行）"
+                   "⇒ date_param_lag_days=1 取 T-1；"
+                   "⚠ 深交所 fund_etf_scale_szse 实测 TypeError(bytes) ⇒ 本单不接，"
+                   "深市份额改用 tushare fund_share 兜底"),
+    # —— B 块：CFTC 四张（商品两张列名相同值不同、外汇两张同理 ⇒ 必须 4 张物理表）——
+    TableSpec("cftc_goods_nc", "macro_usa_cftc_c_holding", "P2", "single", "trade_date",
+              src_date_col="日期", subset=["trade_date"], mode="once",
+              update_every_days=7, max_age_days=15, max_backfill_days=0,
+              note="CFTC 商品**非商业**持仓（投机盘）1986 起 1,941 行 × 37 列；"
+                   "非商业 = 投机盘；商业 = 套保盘 —— 这是它们全部价值所在；"
+                   "⚠ 与 cftc_goods_merchant 列名完全相同但值不同，禁合并"),
+    TableSpec("cftc_goods_merchant", "macro_usa_cftc_merchant_goods_holding", "P2",
+              "single", "trade_date", src_date_col="日期", subset=["trade_date"],
+              mode="once", update_every_days=7, max_age_days=15, max_backfill_days=0,
+              note="CFTC 商品**商业**持仓（套保盘）1,941 行 × 37 列；"
+                   "⚠ 与 cftc_goods_nc 列名相同、值不同（a.equals(b)=False），禁合并"),
+    TableSpec("cftc_fx_nc", "macro_usa_cftc_nc_holding", "P2", "single", "trade_date",
+              src_date_col="日期", subset=["trade_date"], mode="once",
+              update_every_days=7, max_age_days=15, max_backfill_days=0,
+              note="CFTC 外汇**非商业**持仓（投机盘）1,941 行 × 28 列；"
+                   "⚠ 与 cftc_fx_merchant 列名相同但值不同，禁合并"),
+    TableSpec("cftc_fx_merchant", "macro_usa_cftc_merchant_currency_holding", "P2",
+              "single", "trade_date", src_date_col="日期", subset=["trade_date"],
+              mode="once", update_every_days=7, max_age_days=15, max_backfill_days=0,
+              note="CFTC 外汇**商业**持仓（套保盘）1,941 行 × 28 列；"
+                   "⚠ 与 cftc_fx_nc 列名相同、值不同，禁合并"),
+    # —— C 块：债券 ——
+    # bond_china_yield：跨度 >约 1 年 **静默返空**（实测 13 个月=0 行 / 10 个月=609 行）
+    #   ⇒ 引擎走 range_params（按年切段），enum_values 仅作占位（enum_param=None）。
+    TableSpec("bond_yield_cn", "bond_china_yield", "P2", "by_year", "trade_date",
+              src_date_col="日期", subset=["trade_date", "曲线名称"], mode="once",
+              range_params=("start_date", "end_date"), range_start="20200101",
+              max_age_days=15, max_backfill_days=240,
+              note="中债收益率曲线（曲线名称 × 10 期限，实测 20260101~20261029=609 行）；"
+                   "⚠ 单次跨度**不得超过约 1 年**，超了静默返回空表 ⇒ 引擎按年切段；"
+                   "max_backfill_days=240（交易日口径）；回补脚本按季度切片"),
+    TableSpec("bond_yield_us", "bond_zh_us_rate", "P2", "by_year", "trade_date",
+              src_date_col="日期", subset=["trade_date"], mode="once",
+              params={"start_date": "20100101"}, max_age_days=15, max_backfill_days=0,
+              note="中美国债收益率 + 10Y-2Y 利差 + GDP（9,377 行 × 13 列）；"
+                   "⚠ 函数内部**分页 19 次、约 8s**；"
+                   "⚠ 与派单差异：**不设 date_param**——引擎会把 target_date（当日）传给 "
+                   "start_date，实测当日单点常返 0 行；改为固定 params.start_date=20100101 "
+                   "全量重拉（落盘按 trade_date 去重，幂等）"),
+    TableSpec("cb_redeem", "bond_cb_redeem_jsl", "P2", "by_year", "trade_date",
+              src_date_col=None, subset=["trade_date", "代码"], mode="once",
+              max_age_days=15, max_backfill_days=0,
+              force_str_cols=["强赎天计数", "强赎条款", "强赎状态"],
+              note="可转债强赎（318 行 × 18 列，代码唯一 318/318）；"
+                   "⚠ 源端无日期列 ⇒ 注入 trade_date；快照表须日更累积；"
+                   "强赎天计数含 HTML，故强制转字符串"),
+    TableSpec("bond_index_composite", "bond_composite_index_cbond", "P2", "single",
+              "trade_date", src_date_col="date", subset=["trade_date"], mode="once",
+              params={"indicator": "财富", "period": "总值"},
+              update_every_days=7, max_age_days=45,
+              note="中债综合指数（6,207 行 × 2 列 date/value；源列小写 ⇒ src_date_col=date）"),
+    TableSpec("bond_index_new_composite", "bond_new_composite_index_cbond", "P2",
+              "single", "trade_date", src_date_col="date", subset=["trade_date"],
+              mode="once", params={"indicator": "财富", "period": "总值"},
+              update_every_days=7, max_age_days=45,
+              note="中债新综合指数（6,207 行；与综合指数同日不同值）"),
+    TableSpec("bond_index_treasury", "bond_treasury_index_cbond", "P2", "by_year",
+              "trade_date", src_date_col="date", subset=["trade_date", "period"],
+              mode="enum", enum_param="period", enum_col="period",
+              enum_values=["5Y", "10Y"],        # 实测 '1Y'/'3Y' 直接 KeyError
+              params={"indicator": "财富"}, update_every_days=7, max_age_days=45,
+              note="中债国债指数（5Y/10Y 各 4,704 行；⚠ '1Y'/'3Y' 实测 KeyError ⇒ 只登记 2 档）"),
+    # —— 外盘商品：**list 型参数**（首批 6 品种，符号取自 subscribe 清单实测：GC/CL/HG/S/SI/C）——
+    TableSpec("commodity_foreign", "futures_foreign_commodity_realtime", "P2",
+              "by_year", "trade_date", src_date_col="日期",
+              subset=["trade_date", "symbol"], mode="list",
+              symbol_param="symbol", symbol_col="symbol", symbol_as_list=True,
+              universe_from="commodity_foreign_universe", universe_col="symbol",
+              rotate_days=1,
+              max_age_days=1, max_backfill_days=0,
+              note="外盘商品实时（symbol 须传 **list**，引擎 symbol_as_list=True）；"
+                   "清单源 commodity_foreign_universe（6 品种 GC/CL/HG/S/SI/C），"
+                   "rotate_days=1 ⇒ 每日全量 6 只一次批拉；"
+                   "实测可订阅代码取自 subscribe_exchange_symbol（返回**代码**不是中文名）；"
+                   "⚠ 仅实时快照无历史 ⇒ 只能从接入日起累积"),
+]
+
+ALL_SPECS = P0 + P1 + P1_EX + P3 + P4 + P4_HK + P0_EXT + P2
 BY_NAME = {s.name: s for s in ALL_SPECS}
 
 # §182 R15-4b（核实后选项①）：金十系 **14 张已登记停更**表，实测滞后 363~442 天

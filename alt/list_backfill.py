@@ -542,6 +542,35 @@ def fetch_one(sp, symbol, limiter, url):
     return symbol, d, None
 
 
+def fetch_batch(sp, symbols, limiter, url):
+    """DB-R11 §3：symbol_as_list=True 的接口 —— 整批标的作为**一个 list** 传参。
+
+    与 fetch_one 的差别只有两点：
+      ① `kw[symbol_param] = list(symbols)`（一次传多个，省请求）
+      ② 标的列优先取源端「名称」列（外盘商品接口按品种返回中文名），
+         没有名称列才退化为逗号拼接的批次标识。
+    """
+    import akshare as ak
+    fn = getattr(ak, sp.func, None)
+    if fn is None:
+        return None, f"akshare 无此函数: {sp.func}"
+    kw = dict(sp.params)
+    kw[sp.symbol_param or "symbol"] = list(symbols)
+    df, ok, err = limiter.call(lambda k=kw: fn(**k), url)
+    if not ok:
+        return None, err
+    if df is None or len(df) == 0:
+        return None, "empty"
+    d = df.copy()
+    col = sp.symbol_col or "symbol"
+    if col not in d.columns:
+        if "名称" in d.columns:
+            d[col] = d["名称"].astype(str)
+        else:
+            d[col] = ",".join(symbols)
+    return d, None
+
+
 # ============================================================
 # 四、缓冲与落盘（先落盘、后记水位）
 # ============================================================
@@ -884,7 +913,27 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         buf = []
         batch_syms = []
 
-    for i, sym in enumerate(todo, 1):
+    # DB-R11 §3：list 型参数接口（commodity_foreign）—— 整批一次调用，不逐只
+    if sp.symbol_as_list:
+        syms = list(todo)
+        d, err = fetch_batch(sp, syms, limiter, url)
+        if err == "empty":
+            stat["empty"] += 1
+            batch_syms.extend(syms)        # 空响应按批入列（flush ok 后统一收编）
+        elif err:
+            stat["fail"] += 1
+            errs.append(f"batch({len(syms)}只): {err}")
+            print(f"    [批失败] {len(syms)} 只: {str(err)[:120]}")
+        else:
+            stat["ok"] += 1
+            stat["rows"] += len(d)
+            buf.append((",".join(syms), d))
+            batch_syms.extend(syms)
+        _flush()
+        print(f"    [批拉取] {sp.name} | {len(syms)} 只 → {len(d) if d is not None else 0} 行"
+              f" | 失败={stat['fail']}", flush=True)
+    else:
+      for i, sym in enumerate(todo, 1):
         # §128 T2：到点**不再发起新批次**（在标的边界停，绝不截断在途请求）
         if until_dt is not None and datetime.now() >= until_dt:
             stopped_by_until = True

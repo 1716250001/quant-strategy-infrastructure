@@ -221,6 +221,22 @@ def run_range_spec(sp, fn, url, limiter: AltRateLimiter, ckpt: AltCheckpoint,
     return res
 
 
+def _date_param_value(sp, target_date):
+    """DB-R11a R11a-1：`date_param` 的**实际传值**（按交易日回溯 `date_param_lag_days`）。
+
+    lag=0 ⇒ 原样返回 target_date（既有行为，zt_pool 族 6 张依赖）；
+    lag>0 ⇒ 回退 lag 个**交易日**（`fund_etf_scale_sse` 当日份额次日才发布）。
+    ⚠ 用 common.calendar.prev_trade_dates，**不用** Timedelta（周一会落到周日）。
+    """
+    dt = str(target_date) if target_date else None
+    lag = getattr(sp, "date_param_lag_days", 0) or 0
+    if lag <= 0 or not dt:
+        return dt
+    from common.calendar import prev_trade_dates
+    prev = prev_trade_dates(dt, n=lag)          # 倒序，最近在前
+    return prev[-1] if prev else dt             # 取最老的一只 = target − lag 交易日
+
+
 def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
              dry_run=False, force=False, verbose=True, target_date=None,
              range_window=None):
@@ -382,7 +398,8 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
     if dry_run:
         kw = dict(sp.params)
         if sp.date_param:
-            kw[sp.date_param] = "<date>"
+            _lag = getattr(sp, "date_param_lag_days", 0) or 0
+            kw[sp.date_param] = f"<date-lag{_lag}>" if _lag > 0 else "<date>"
         res["requests"] = 1
         res["ok"] = True
         res["warnings"].append(f"[dry-run] 将调用 {sp.func}({kw or ''})")
@@ -391,7 +408,7 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
     # 组装实参：接口认日期参数的才传
     kw = dict(sp.params)
     if sp.date_param and target_date:
-        kw[sp.date_param] = str(target_date)
+        kw[sp.date_param] = str(_date_param_value(sp, target_date))
 
     raw, ok, err = limiter.call(lambda: fn(**kw), url)
     res["requests"] += 1

@@ -259,7 +259,24 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
     url = guess_url(sp.func)
 
     # ── 取样本 ──
-    if sp.mode == "enum":
+    # R11a-2：range 型接口（range_params 非空）必须**先判**，与 alt/backfill.py 的
+    #   分支顺序一致——否则 range 表会被当 enum 跑 ⇒ fn(**{None: '__ALL__'})
+    #   ⇒ TypeError: keywords must be strings（审查方 §221 §4 独立复现）。
+    if sp.range_params:
+        end = _recent_trade_date(1)
+        from common.calendar import prev_trade_dates
+        prev = prev_trade_dates(end, n=200)          # ≤240 交易日跨度（实测 13 个月返空）
+        start = prev[-1] if prev else str(sp.range_start or "20200101")
+        raw, ok, err = limiter.call(
+            lambda: fn(**{sp.range_params[0]: start, sp.range_params[1]: end}), url)
+        rep["requests"] += 1
+        rep["observations"]["probe_range"] = f"{start}~{end}"
+        if not ok:
+            rep["ok"] = False
+            rep["problems"].append(f"调用失败（{start}~{end}）: {err}")
+            return rep
+        df = raw
+    elif sp.mode == "enum":
         vals = sp.enum_values if full_enum else sp.enum_values[:1]
         got = {}
         for v in vals:
@@ -286,7 +303,9 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         #   ⚠ 必须注入标的参数：stock_hk_daily 不传 symbol 会直接失败
         #     （或返回异常结构，如 KeyError('date')）。
         probe_sym = None
-        if (sp.universe_from or "").startswith("master:"):
+        # R11a-3：清单来源不止 master:——alt 库清单（如 commodity_foreign_universe）
+        #   同样能解析；只有**完全没有** universe_from 时才判"无法探测"。
+        if sp.universe_from:
             try:
                 from alt.list_backfill import load_universe
                 uni = load_universe(sp, verbose=False)
@@ -297,11 +316,12 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         if probe_sym is None:
             rep["ok"] = False
             rep["problems"].append(
-                "list 表无法确定探测标的（universe_from 非 'master:...'）——"
-                "该表走 us_backfill 专用入口，本工具暂不探测")
+                "list 表无法确定探测标的（universe_from 为空或读取失败）——"
+                "该表须用 --symbols 显式指定，本工具暂不探测")
             return rep
         kw = dict(sp.params)
-        kw[sp.symbol_param or "symbol"] = probe_sym
+        # R11a-3：symbol_as_list=True 的接口（commodity_foreign）必须传 list
+        kw[sp.symbol_param or "symbol"] = [probe_sym] if sp.symbol_as_list else probe_sym
         raw, ok, err = limiter.call(lambda: fn(**kw), url)
         rep["requests"] += 1
         rep["observations"]["probe_symbol"] = probe_sym
@@ -319,6 +339,12 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         probe_date = None
         if sp.date_param:
             probe_date = _recent_trade_date(sp.max_backfill_days or 10)
+            _lag = getattr(sp, "date_param_lag_days", 0) or 0
+            if _lag > 0:
+                # R11a-1：当日数据次日才发布的源（fund_etf_scale_sse）须按交易日回退
+                from common.calendar import prev_trade_dates
+                _prev = prev_trade_dates(probe_date, n=_lag)
+                probe_date = _prev[-1] if _prev else probe_date
             kw[sp.date_param] = probe_date
         raw, ok, err = limiter.call(lambda: fn(**kw), url)
         rep["requests"] += 1
