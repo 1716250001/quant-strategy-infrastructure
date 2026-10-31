@@ -757,7 +757,9 @@ def _args_optimize(p: argparse.ArgumentParser) -> None:
                    help="排名指标（默认 sharpe_ratio；配 report.benchmark 后"
                         "可选 information_ratio / annualized_excess，RC-08）")
     p.add_argument("--workers", type=int, default=8,
-                   help="进程数（默认 8；0=内联顺序执行——调试/注入型 feed）")
+                   help="进程数（默认 8；0=内联顺序执行——调试/注入型 feed）；"
+                        "大宇宙任务（股票全市场 10 年）建议降到 6——实测 N=6 "
+                        "峰值 16.5 GB、N=8 外推约 22 GB（19 号 §202）")
     p.add_argument("--top", type=int, default=10, help="打印前 N 名（默认 10）")
     p.add_argument("--n-trials", type=int, default=0, dest="n_trials",
                    help="历史累计试验数（RC-06：与本次组合数相加为 N，用于 DSR 校正）")

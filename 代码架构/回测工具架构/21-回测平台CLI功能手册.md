@@ -631,7 +631,7 @@ bt optimize --config <config.yaml> --grid "<spec>" [--objective X] [--workers N]
 | `--config` | ✅ | — | 回测配置 YAML（基准配置） |
 | `--grid` | ✅ | — | 网格 spec：`path=v1,v2;path2=v1,v2`（见下） |
 | `--objective` | | `sharpe_ratio` | 排名指标名（不做白名单：任何出现在指标集里的名字都接受；配 `report.benchmark` 后**相对指标** `information_ratio` / `annualized_excess` 可一起排序——**RC-08**，经 `extras`） |
-| `--workers` | | `8` | 进程数；`0` = 内联顺序执行（调试 / 注入型 feed 用） |
+| `--workers` | | `8` | 进程数；`0` = 内联顺序执行（调试 / 注入型 feed 用）。**大宇宙任务建议 `6`**（股票全市场 10 年实测 N=6 峰值 16.5 GB、N=8 外推约 22 GB——内存口径见 20 号「并发与内存」） |
 | `--top` | | `10` | 打印前 N 名 |
 | `--n-trials` | | `0` | 历史累计试验数（**RC-06**）：与本次组合数相加为 N，用于 DSR 多重检验校正 |
 | `--perturb` | | 不扫描 | 参数邻域扫描（**RC-07**）：对 top1 **数值型**参数做 `p×(1±δ)`；如 `0.1,0.2`（δ ∈ (0,1)，可多个）；相对退化 > 50% 打印"疑似过拟合"提示 |
