@@ -893,11 +893,18 @@ class MixedDailyFeed:
         wanted: dict[str, set[str]] = {"daily": set()}
         for sym in symbols:
             wanted.setdefault(daily_table_of(sym), set()).add(sym)
+        # 19 号 §192 Y（B 批）：①**跳过空组**（全 ETF 组合的 `daily` 组常为空，
+        # 原实现仍把整个 daily 年表读一遍）；②**传 symbols 谓词下推**（parquet
+        # 侧 `is_in` 过滤，原实现每张表都全市场读入再靠 `_LazyCrossSection` 的
+        # `wanted[table]` 过滤）。两处都不改变输出：`_LazyCrossSection` 本就按
+        # `wanted[table]` 取行，少读的行本来就会被丢弃。
         iterators = {
             table: self._store.iter_day_slices(
                 table, start.to_ymd(), end.to_ymd(),
-                columns=list(self.COLUMNS))
-            for table in sorted(wanted)
+                columns=list(self.COLUMNS),
+                symbols=sorted(wanted[table]),
+            )
+            for table in sorted(wanted) if wanted[table]
         }
         heads = {table: next(iterator, None)
                  for table, iterator in iterators.items()}
