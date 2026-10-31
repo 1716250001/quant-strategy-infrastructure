@@ -14,6 +14,7 @@ history() 调用纯内存切片——B2 月调仓 10 年 50 标的 ≈ 50 次单
 """
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Protocol
 
@@ -88,7 +89,11 @@ class StrategyContext:
         start: TradingDate,
         end: TradingDate,
         universe_loader: Callable[[TradingDate], Sequence[Instrument]] | None = None,
+        history_cache: BoundedDict[str, Any] | None = None,
     ):
+        """`history_cache`（**19 号 §194 Z 转正**）：引擎注入的**跨 bar 共享**
+        LRU（生命周期归引擎，`Engine.run()` 开头重建）；缺省 None ⇒ 本 ctx 自建
+        （直接构造 ctx 的测试/第三方调用方语义不变）。"""
         self._now = now
         self._portfolio = portfolio
         self._data = data
@@ -100,8 +105,13 @@ class StrategyContext:
         #: 不进策略公共 API——白名单守守卫见 `TestCtxApiBoundary`）。
         self._phase: str = "close"
         # PF-9/P2-5：原无界 dict → LRU 有界（策略可见标的上限远小于 8k）
-        self._cache: BoundedDict[str, Sequence[Bar]] = BoundedDict(
-            maxsize=8_000, name="ctx.history")
+        # **19 号 §194（Z 转正）**：`history_cache` 由引擎注入共享实例 ⇒ 缓存
+        # **跨 bar 生效**（原每 bar 重建 ctx，缓存从未命中，39,083 次全穿透）；
+        # 条目存 `(bars, dates)`，`history` 用 `bisect_right` 定位（O(log n)）。
+        #     生命周期归引擎（`Engine.run()` 开头重建），策略侧不得假设其存活期。
+        self._cache: BoundedDict[str, Any] = (
+            history_cache if history_cache is not None
+            else BoundedDict(maxsize=8_000, name="ctx.history"))
         self._submit_target = on_submit_target
         self._submit_order = on_submit_order
         self.start = start
@@ -158,9 +168,14 @@ class StrategyContext:
         bars = self._cache.get(symbol)
         if bars is None:
             bars = self._loader(symbol)
+            # 缓存 (bars, dates)（19 号 §194：bisect 恒开）
+            bars = (bars, [b.date for b in bars])
             self._cache[symbol] = bars
-        tail = [b for b in bars if b.date <= end][-n_bars:] if n_bars > 0 else []
-        return list(tail)
+        bars, dates = bars
+        if n_bars <= 0:
+            return []
+        hi = bisect_right(dates, end)          # 首个 > end 的位置 = 满足数量
+        return list(bars[max(0, hi - n_bars):hi])
 
     def state(self, symbol: str) -> TradingState | None:
         """当日状态面板行（停牌/涨跌停/ST）。"""

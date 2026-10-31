@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -301,6 +302,34 @@ class _AdjustedDataSource(Mapping[str, Bar]):
         return len(self._raw)
 
 
+#: ctx.history 共享缓存缺省容量（≈580 MB 上限；审查方实测 ≈396 KB/标的）
+_CTX_CACHE_MAX_DEFAULT = 1_500
+#: 每标的缓存开销估算（Bar 96 B ＋ 日期串 49 B ＋ list 指针；§194 A 段）
+_CTX_BYTES_PER_SYMBOL = 396 * 1024
+
+
+def _ctx_cache_maxsize() -> int:
+    """`ctx.history` 缓存容量：缺省 1,500；`CTX_CACHE_MAX` 可覆盖（正整数）。
+
+    变量名**不带 `BTF_` 前缀**——`ConfigResolver` 会把 `BTF_*` 注入配置顶层，
+    触发 schema `additionalProperties` 拒收（§194 实测；同 §192 原型的教训）。
+    非法值 ⇒ 回缺省（不阻断回测）。
+    """
+    raw = os.environ.get("CTX_CACHE_MAX", "").strip()
+    if raw:
+        try:
+            v = int(raw)
+        except ValueError:
+            logger.warning("CTX_CACHE_MAX=%r 非整数，回缺省 %d",
+                           raw, _CTX_CACHE_MAX_DEFAULT)
+            return _CTX_CACHE_MAX_DEFAULT
+        if v > 0:
+            return v
+        logger.warning("CTX_CACHE_MAX=%r 须为正整数，回缺省 %d",
+                       raw, _CTX_CACHE_MAX_DEFAULT)
+    return _CTX_CACHE_MAX_DEFAULT
+
+
 class Engine:
     """事件循环引擎（回测/实时同内核，06 §10.2——仅时钟与 Feed 不同）。"""
 
@@ -360,6 +389,15 @@ class Engine:
         self._risk = risk_manager
         self._event_log_path = Path(event_log_path) if event_log_path else None
         self._event_log_max = event_log_max_records
+        #: **Z 转正（19 号 §194）**：`ctx.history` 的跨 bar 共享缓存——**引擎成员**，
+        #: `run()` 开头重建（同一 Engine 多次 run 不得读走上轮缓存 = 脏读；Z-2）。
+        #: 容量缺省 1,500（≈580 MB 上限，审查方实测估算 396 KB/标的）；可用
+        #: `CTX_CACHE_MAX` 覆盖（**不带 `BTF_` 前缀**：`ConfigResolver` 会把
+        #: `BTF_*` 注入配置顶层，触发 schema `additionalProperties` 拒收——实测）。
+        self._ctx_cache_max = _ctx_cache_maxsize()
+        self._ctx_history_cache: BoundedDict[str, Any] = BoundedDict(
+            maxsize=self._ctx_cache_max, name="ctx.history")
+        self._ctx_cache_warned = False
 
     # ── 消费侧价格视图（R62′/N64）──
     def _build_price_adjuster(self) -> Any | None:
@@ -427,6 +465,13 @@ class Engine:
         # 全部标的 × 十年 Bar → 内存无上限）；今 LRU 有界（容量 ≫ 典型宇宙）。
         history_cache: BoundedDict[str, Sequence[Bar]] = BoundedDict(
             maxsize=8_000, name="engine.history")
+        # **Z 转正（19 号 §194）**：共享 ctx.history 缓存——**每 run 重建**
+        #   （同一 Engine 多次 run 不重置 ⇒ 上轮 bar 序列被下轮读走 = 脏读）；
+        #   容量护栏在 `__init__`（1,500 ≈580 MB）；80% 触顶告警只打一次。
+        self._ctx_history_cache = BoundedDict(maxsize=self._ctx_cache_max,
+                                             name="ctx.history")
+        self._ctx_cache_warned = False
+        proto_kw = {"history_cache": self._ctx_history_cache}
         target: TargetPortfolio | None = None
         explicit_orders: list[Order] = []
         warned_risk_chain = False
@@ -460,13 +505,24 @@ class Engine:
 
         # 循环前 init（空数据 ctx——预计算/缓存装载语义）
         ctx = self._make_ctx(clock, portfolio, {}, {}, _history_loader,
-                             _on_submit_target, _on_submit_order)
+                             _on_submit_target, _on_submit_order, **proto_kw)
         self._strategy.init(ctx)
 
         for date, data in self._feed.bars(self._cross_section,
                                           self._start, self._end):
             clock.advance(date)
             portfolio.advance_day()        # T+1 解冻（撮合前——昨日买入今日可卖）
+            # Z-3-b（§194）：缓存达 80% 容量时**只打一次** warning（不刷屏）
+            if (not self._ctx_cache_warned
+                    and len(self._ctx_history_cache) >= int(
+                        self._ctx_cache_max * 0.8)):
+                self._ctx_cache_warned = True
+                logger.warning(
+                    "ctx.history 缓存达 %.0f%% 容量（%d/%d 标的，估算 %.0f MB）"
+                    "——超限将按 LRU 淘汰；大宇宙可用 CTX_CACHE_MAX 调优",
+                    100.0 * len(self._ctx_history_cache) / self._ctx_cache_max,
+                    len(self._ctx_history_cache), self._ctx_cache_max,
+                    len(self._ctx_history_cache) * _CTX_BYTES_PER_SYMBOL / 1e6)
 
             # ① 公司行动（两时点；advance_day 解冻后——送转扩张发生在
             #    available_qty=qty 基础上，除权次日可卖不被低估，实现注意①）
@@ -555,7 +611,7 @@ class Engine:
                 clock, portfolio, ctx_data,
                 LazyStates(lambda d=_date, s=_symbols: self._feed.trading_states(
                     d, s, with_touch_flags=False)),
-                _history_loader, _on_submit_target, _on_submit_order)
+                _history_loader, _on_submit_target, _on_submit_order, **proto_kw)
             # RC-10：on_open 阶段——当日 bar 未收盘，ctx.bar() 拒访、
             # history(end ≥ 当日) 拒（前视封堵；状态面板/持仓仍可读）
             ctx._set_phase("open")
@@ -621,6 +677,14 @@ class Engine:
         # 循环后处理（退市残值披露 / 清算口径 / 公司行动审计转出 / 价格视图）
         #   **D-02**：细节下沉 `_post_process()`（行为零变更；口径注释随函数走）
         self._post_process(result, portfolio, last_seen, clock, writer)
+        # Z-3-d（§194）：结束统计（命中率 / hits / misses / evictions / 条目数）
+        cache = self._ctx_history_cache
+        total = cache.hits + cache.misses
+        rate = (cache.hits / total * 100.0) if total else 0.0
+        logger.warning("[ctx.history] 命中率 %.1f%%（hits=%d / misses=%d / "
+                       "evictions=%d / 条目=%d/%d）", rate, cache.hits,
+                       cache.misses, cache.evictions, len(cache),
+                       self._ctx_cache_max)
         return result
 
     # ── 循环后处理（**D-02** 从 run() 抽出；行为零变更）──
@@ -770,7 +834,8 @@ class Engine:
         return drafts, warned
 
     # ── ctx 工厂 ──
-    def _make_ctx(self, clock, portfolio, data, states, loader, on_target, on_order):
+    def _make_ctx(self, clock, portfolio, data, states, loader, on_target, on_order,
+                  *, history_cache: Any = None):
         return StrategyContext(
             now=lambda: clock.current,
             portfolio=portfolio,
@@ -782,6 +847,7 @@ class Engine:
             start=self._start,
             end=self._end,
             universe_loader=self._universe_loader,
+            history_cache=history_cache,
         )
 
 
