@@ -41,7 +41,9 @@ class _StubAdjust(TushareAdjustService):
         super().__init__()
         self._table = table
 
-    def _load(self, symbol: str) -> tuple[list[str], list[float]]:
+    def _load(self, symbol: str, lo_ymd: str = "19900101",
+              hi_ymd: str = "20991231") -> tuple[list[str], list[float]]:
+        """桩：忽略区间参数（§199 后 `_load` 增区间；桩返回**全量**语义等价）。"""
         rows = self._table.get(symbol)
         if not rows:
             self.missing_factor_symbols.add(symbol)
