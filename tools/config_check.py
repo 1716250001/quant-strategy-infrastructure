@@ -90,7 +90,9 @@ NON_BACKFILL_TABLES = {
     "fund_nav":       "fund_nav_update 每日更新（基金净值）",
     "custom_index":   "build_micro_index 产出（本地自建指数）",
     "fund":           "QDII 研究产物（2026-10-06；fund_basic_E 全字段 + qdii6/qdii7 分批行情/净值）",
-    "global_index":   "海外指数研究产物（2026-10-06；tushare index_global 按年落盘，FCHI/GDAXI 等 90 文件）",
+    # global_index 已于 2026-10-31 归档（§238）：与 index_global 完全重复
+    #   （后者 22 标的/252,291 行/1896 年起），且数据停在 20261005。
+    #   归档路径：备份/归档文件/market_data-global_index-20261031/
     # ⚠ EE-FUND-9B §42 first_trade_date 通道约定（文档级，零代码变更）:
     #   消费方需真实上市起点时，读 derived/fund_basic_patch.parquet.first_trade_date；
     #   fund_basic.list_date 对 92 只封转开基金失真（沿用原 code，list_date 是封转开日
