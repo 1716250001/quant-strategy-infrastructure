@@ -81,6 +81,11 @@ class TushareAdjustService:
         #: 缺表 WARN 的**实例级**去重（同一实例同一标的只告警一次，避免刷屏；
         #: 跨实例不去重——缺失披露按 run 独立，测试/报告口径不受进程历史影响）。
         self._warned: set[str] = set()
+        #: **第 4 批（19 号 §199）**：按区间预装载的当前窗口（`{symbol: (lo, hi)}`，
+        #: **只扩不缩**）；`qfq` 首次调用时 `_prime` 写入，`adj_factor` 依此取
+        #: **区间切片**而非全历史。越界回退告警按实例去重（`_warned_range`）。
+        self._primed: dict[str, tuple[str, str]] = {}
+        self._warned_range: set[str] = set()
 
     #: **R62′（N64，2026-10-10；19 号 §118.3-3）**：因子行**进程级共享缓存**
     #: （键 = `{root}|{symbol}` ⇒ 多库安全）。动机（自查实测）：引擎消费侧视图
@@ -101,21 +106,27 @@ class TushareAdjustService:
             self._tstore = YearTableStore(self.root, max_entries=8)
         return self._tstore
 
-    def _load(self, symbol: str) -> tuple[list[str], list[float]]:
+    def _load(self, symbol: str, lo_ymd: str = "19900101",
+              hi_ymd: str = "20991231") -> tuple[list[str], list[float]]:
+        """装载某标的因子行（**第 4 批**：`lo/hi` 区间，缺省＝全历史兜底）。
+
+        键**必须含区间**（`{root}|{symbol}|{lo}|{hi}`）——只按 symbol 缓存会让
+        两个不同区间的配置**串用彼此的因子切片**（复权错且不报错，§199 要点 2）。
+        """
         # ① 实例级覆盖点（测试/自定义注入——无 IO 纯数学路径，**不走缺失告警**）
         rows = self._cache.get(symbol)
         if rows is not None:
             return rows
         # ② **R62′**：进程级共享缓存（见 `_SHARED_ROWS` 注）；缺失登记与 WARN
         # 仍**逐实例**（披露不得因缓存命中而丢——RC-04 口径不变）。
-        key = f"{self.root}|{symbol}"
+        key = f"{self.root}|{symbol}|{lo_ymd}|{hi_ymd}"
         rows = self._SHARED_ROWS.get(key)
         if rows is None:
             table = factor_table_of(symbol)          # RC-04：股票/ETF 双表路由
             # KK-1：区间保留全历史（因子表实际覆盖 1991→）；无文件年由
             # YearTableStore.read_year_where 的 path.is_file() 早退，不读盘。
             t = self._store().symbol_range(
-                table, symbol, "19900101", "20991231",
+                table, symbol, lo_ymd, hi_ymd,
                 ["adj_factor"])
             if t.num_rows:
                 t = t.sort_by([("trade_date", "ascending")])
@@ -137,6 +148,25 @@ class TushareAdjustService:
                     symbol, factor_table_of(symbol))
         return rows
 
+    def _prime(self, symbol: str, lo_ymd: str, hi_ymd: str) -> None:
+        """按区间预装载（`qfq` 触发；**区间只扩不缩**，§199 要点 1）。
+
+        `lo/hi` 由 `qfq` 按**整年边界**算（前推/后延一年）。只扩不缩的原因：
+        `_AdjustedDataSource` 会逐日对**单 bar** 调 `qfq`（`[bar]`），若每次按当日
+        收窄，会把历史序列的装载窗口挤成 2 年并反复重装；新区间落在既有窗口内
+        ⇒ 跳过，超出则取**并集**重装（一次）。
+        """
+        if symbol in self._cache:             # 实例级覆盖（测试注入）优先
+            return
+        cur = self._primed.get(symbol)
+        if cur is not None:
+            if cur[0] <= lo_ymd and hi_ymd <= cur[1]:
+                return
+            lo_ymd = min(cur[0], lo_ymd)
+            hi_ymd = max(cur[1], hi_ymd)
+        self._load(symbol, lo_ymd, hi_ymd)
+        self._primed[symbol] = (lo_ymd, hi_ymd)
+
     # ── 协议实现 ──
     def adj_factor(self, symbol: str, date: TradingDate) -> float:
         """某日复权因子。缺失回退（因子=相对锚，比值自洽优先）：
@@ -144,8 +174,26 @@ class TushareAdjustService:
         - 早于表内首行（因子覆盖晚于价格表，如 600276 1997 上市
            而 adj_factor 自 1999 起）→ 表内最早因子——比值口径自洽；
         - 表内全无该标的 → 1.0 + 计数（研究层不中断；11 §21.1）。
+
+        **第 4 批要点 3**：查询日**落在装载窗口之外**才是「区间收窄截断」，须回退
+        全量并告警一次（不得静默返回边界值）；若查询日在窗口内但早于首行（如标的
+        上市晚于 `ref`），那是**确实无更早因子**的既有降级路径，不回退、不告警。
         """
-        ymds, factors = self._load(symbol)
+        rng = self._primed.get(symbol)
+        rows = self._load(symbol, rng[0], rng[1]) if rng else self._load(symbol)
+        if (rng and rows[0]
+                and not (rng[0] <= date.to_ymd() <= rng[1])):
+            old_start = rows[0][0]
+            self._primed.pop(symbol, None)
+            rows = self._load(symbol)          # 回退全量（缺省参数）
+            if (rows[0] and rows[0][0] <= date.to_ymd()
+                    and symbol not in self._warned_range):
+                self._warned_range.add(symbol)
+                logger.warning(
+                    "复权因子越界：%s @ %s 早于装载起点 %s → 已回退全量装载"
+                    "（区间收窄的兜底路径，19 号 §199）",
+                    symbol, date.to_ymd(), old_start)
+        ymds, factors = rows
         i = bisect_right(ymds, date.to_ymd()) - 1
         if i >= 0:
             if ymds[i] != date.to_ymd():
@@ -190,6 +238,11 @@ class TushareAdjustService:
         if not bars:
             return []
         sym = bars[0].symbol
+        # 装载窗口按**整年边界**取（lo 前推一年、hi 后延一年）：单 bar 逐日调
+        # `qfq` 时窗口只会随年份推进，避免每日重装（§199 要点 1＋实测）。
+        lo = f"{int(bars[0].date.to_ymd()[:4]) - 1}0101"
+        hi = f"{int(bars[-1].date.to_ymd()[:4]) + 1}1231"
+        self._prime(sym, lo, hi)
         base = self._af_ymd(sym, ref)
         out: list[Bar] = []
         for b in bars:
