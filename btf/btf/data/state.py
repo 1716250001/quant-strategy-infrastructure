@@ -33,9 +33,9 @@ _STK_LIMIT_START: str = _TABLES["stk_limit"].start or "20080102"
 
 __all__ = ["StateSynthesizer"]
 
-#: 小标的集阈值（`states()` 双路混合）：≤ 该值走「全年过滤 + (年, 集合) 缓存」
-#: （B2 逐日同集模式，重复查询免费）；> 该值走「按日切片」（B3 大集且逐日
-#: 变化模式，全年过滤每次未命中 ~100 万行 dict）。64 = 撮合/再平衡典型子集上限。
+#: 小标的集阈值（**已归一**，A-4 / 19 号 §210）：`states()` 三路分支现统一走
+#: `_limit_day(year, ymd, wanted)`（按日切片 + is_in 下推），本常量不再参与
+#: 路由；保留原名以免外部引用断裂。64 = 撮合/再平衡典型子集上限。
 _SMALL_SUBSET_MAX = 64
 
 
@@ -86,9 +86,11 @@ class StateSynthesizer:
         # ── B3 十年尺度第三刀（CP1）：stk_limit **按日切片索引** ──
         # year → 排序后年表已存 `_limit_tables`；year → {ymd: (lo, hi)} 行区间
         self._limit_date_idx: dict[int, dict[str, tuple[int, int]]] = {}
-        # (year, ymd) → 单日 limit 截面（月度重复查询命中：调仓日+撮合日）
+        # (year, ymd, wanted|None) → 单日 limit 截面（月度重复查询命中：调仓日+
+        # 撮合日）；wanted=None 为全量口径，子集只含命中行（A-4 / §210）
         self._limit_day_cache: dict[
-            tuple[int, str], dict[tuple[str, str], tuple[float | None, float | None]]
+            tuple[int, str, frozenset[str] | None],
+            dict[tuple[str, str], tuple[float | None, float | None]],
         ] = {}
         self._st_cache: list[tuple[str, _date, _date | None]] | None = None
         self._delist: dict[str, _date | None] | None = None
@@ -232,24 +234,40 @@ class StateSynthesizer:
         return t, index
 
     def _limit_day(
-        self, year: int, ymd: str,
+        self, year: int, ymd: str, wanted: Sequence[str] | None = None,
     ) -> dict[tuple[str, str], tuple[float | None, float | None]]:
-        """单日 limit 截面（(year, ymd) 缓存；语义与 `_limits` 全量口径一致）。"""
-        key = (year, ymd)
+        """单日 limit 截面（(year, ymd, wanted) 缓存；语义与 `_limits` 全量口径一致）。
+
+        A-4（19 号 §210）：`wanted` 下推——先 `is_in` 过滤当日切片（~7000 行上
+        亚毫秒），只物化命中行；小标的集逐日变化时不再走 `_limits` 全年表
+        （原路径每次未命中即全表过滤，a1 实测 17.6 s/12.5%）。
+        """
+        key = (year, ymd, None if wanted is None else frozenset(wanted))
         rows = self._limit_day_cache.get(key)
         if rows is None:
             rows: dict[tuple[str, str], tuple[float | None, float | None]] = {}
             t, index = self._limit_date_index(year)
             span = index.get(ymd) if t is not None else None
-            if span:
+            # 空集 → 空结果：沿用 `_limits` 的空集惯例，规避 `pa.array([])` 的
+            # null 类型与 large_string 列做 is_in 的类型冲突（M3 6.3）。
+            if span and (key[2] is None or key[2]):
                 lo, hi = span
                 day = t.slice(lo, hi - lo)
-                rows = dict(zip(
-                    zip(day.column("ts_code").to_pylist(),
-                        day.column("trade_date").to_pylist(), strict=True),
-                    zip(day.column("up_limit").to_pylist(),
-                        day.column("down_limit").to_pylist(), strict=True),
-                    strict=True))
+                if key[2] is not None:
+                    import pyarrow as pa
+
+                    mask = pc.is_in(day.column("ts_code"),
+                                    value_set=pa.array(
+                                        sorted(key[2]),
+                                        type=t.schema.field("ts_code").type))
+                    day = day.filter(mask)
+                if day.num_rows:
+                    rows = dict(zip(
+                        zip(day.column("ts_code").to_pylist(),
+                            day.column("trade_date").to_pylist(), strict=True),
+                        zip(day.column("up_limit").to_pylist(),
+                            day.column("down_limit").to_pylist(), strict=True),
+                        strict=True))
             self._limit_day_cache[key] = rows
         return rows
 
@@ -578,18 +596,11 @@ class StateSynthesizer:
         if symbols is None:
             # 全市场口径：当日全量切片（B3 十年第三刀；~10ms/日）
             limits = self._limit_day(year, ymd)
-        elif len(symbols) <= _SMALL_SUBSET_MAX:
-            # 小标的集（B2 单/少标的逐日同集）：全年过滤 + (年, 集合) 缓存——
-            # 首次 ~30ms/年，其后免费。按日切片在此模式是回归（逐日重建
-            # 7000 行切片，B2 实测 15.25s>15s 预算）→ 双路混合。
-            limits = self._limits(year, symbols)
         else:
-            # 大标的集且逐日变化（B3 月调仓 ~3000+）：按日切片（全年过滤
-            # 每次未命中即 ~100 万行 dict）
-            day_limits = self._limit_day(year, ymd)
-            wanted = set(symbols)
-            limits = {key: value for key, value in day_limits.items()
-                      if key[0] in wanted}
+            # A-4（§210）三路归一：子集一律走按日切片 + `is_in` 下推（只物化
+            # 命中行）。原「小集走 `_limits` 全年表」假设集合重复使用，但 a1
+            # 持仓集合逐日变化 ⇒ (年, 集合) 缓存天天失效（17.6 s/12.5%）。
+            limits = self._limit_day(year, ymd, wanted=symbols)
         suspended = self._suspensions(year)
         st_codes = self._st_codes_on(d)
         delist = self._delist_map()
