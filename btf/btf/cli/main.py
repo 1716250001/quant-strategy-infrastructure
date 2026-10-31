@@ -440,6 +440,29 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
         print(f"[error] 未知 dataset 动作：{args.action!r}"
               f"（可选 {_DATASET_ACTIONS}）", file=sys.stderr)
         return 2
+    if args.action == "refresh-hash":
+        from btf.app import refresh_dataset_hash
+
+        try:
+            result = refresh_dataset_hash(args.config, directory=args.dir,
+                                          dry_run=args.dry_run, mode=args.mode,
+                                          backup_dir=args.backup_dir)
+        except ValueError as exc:             # 参数用法
+            print(f"[error] {exc}", file=sys.stderr)
+            return 2
+        rows = result["rows"]
+        for r in rows:
+            tag = {"updated": "已写回", "current": "已最新",
+                   "dry-run": "将写回", "skipped": "跳过",
+                   "failed": "失败"}[r["status"]]
+            print(f"[{tag}] {Path(r['file']).name}  "
+                  f"{r['old'] or '—'} → {r['new'] or '—'}  "
+                  f"({r['mode'] or '?'})  {r['message']}")
+        c = result["counts"]
+        print(f"[summary] 写回 {c.get('updated', 0)} | 已最新 {c.get('current', 0)} "
+              f"| 跳过 {c.get('skipped', 0)} | dry-run {c.get('dry-run', 0)} "
+              f"| 失败 {c.get('failed', 0)}")
+        return 1 if result["failed"] else 0
     if args.action == "freeze":
         from btf.app import freeze_dataset
 
@@ -475,7 +498,8 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
 
 #: dataset 子动作（审查报告 P3；`build-golden` 为默认，向后兼容原调用；
 #: `freeze` = CL-4 数据冻结清单）
-_DATASET_ACTIONS = ("build-golden", "verify", "refcalc", "freeze")
+_DATASET_ACTIONS = ("build-golden", "verify", "refcalc", "freeze",
+                    "refresh-hash")
 
 
 def _cmd_data(args: argparse.Namespace) -> int:
@@ -560,6 +584,12 @@ def _args_dataset(p: argparse.ArgumentParser) -> None:
                    help="freeze：指纹档位（缺省随 data.fingerprint_mode=meta）")
     p.add_argument("--out",
                    help="输出目录（freeze：清单目录，缺省 BTFTOOL_FREEZE_DIR）")
+    p.add_argument("--dir",
+                   help="refresh-hash：配置目录（批量 *.yaml；与 --config 二选一）")
+    p.add_argument("--dry-run", action="store_true",
+                   help="refresh-hash：只列出将改什么，不写盘")
+    p.add_argument("--backup-dir",
+                   help="refresh-hash：备份目录（缺省与配置文件同目录）")
 
 
 # ─────────────────────────────────────────────────────────────
