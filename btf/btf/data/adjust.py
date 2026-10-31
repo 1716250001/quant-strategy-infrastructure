@@ -178,21 +178,31 @@ class TushareAdjustService:
 
         ref=回测起点 → 区间前复权（回测内一致性，规避基准漂移——
         对照 alt 库 us_daily_qfq 整表重建教训，04 §8.2.4）。
+
+        **第 3 批（19 号 §199）**：同一 bar 的 5 个字段本调 5 次 `_af`（实测
+        `adj_factor` 643,677 次 / 40.10 s）——改为每 bar **只调一次**并缓存
+        `f`；**运算顺序逐字保留 `(a × f) / base`**（改成 `a * (f/base)` 会因
+        浮点不结合翻转 9 笔边界成交：`n_fills` 8,574→8,565，不报错）。
+        **第 4 批**：按 bars 区间预装载（`lo` 前推一年，覆盖 `ref` 的 bisect 落点）。
         """
         from dataclasses import replace
 
-        base = self._af_ymd(bars[0].symbol, ref) if bars else 1.0
-        return [
-            replace(
+        if not bars:
+            return []
+        sym = bars[0].symbol
+        base = self._af_ymd(sym, ref)
+        out: list[Bar] = []
+        for b in bars:
+            f = self._af(b)               # 只调一次；**不预先除 base**（§199 红线）
+            out.append(replace(
                 b,
-                open=b.open * self._af(b) / base,
-                high=b.high * self._af(b) / base,
-                low=b.low * self._af(b) / base,
-                close=b.close * self._af(b) / base,
-                pre_close=b.pre_close * self._af(b) / base,
-            )
-            for b in bars
-        ]
+                open=b.open * f / base,        # 保持 (a × f) / base
+                high=b.high * f / base,
+                low=b.low * f / base,
+                close=b.close * f / base,
+                pre_close=b.pre_close * f / base,
+            ))
+        return out
 
     # ── 内部 ──
     def _af(self, bar: Bar) -> float:
@@ -200,6 +210,7 @@ class TushareAdjustService:
 
     def _af_ymd(self, symbol: str, date: TradingDate) -> float:
         return self.adj_factor(symbol, date)
+
 
     # ── 降级披露（RC-04；与 `StateSynthesizer.degraded_notes()` 同机制）──
     def degraded_notes(self) -> tuple[str, ...]:
