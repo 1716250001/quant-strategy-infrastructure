@@ -33,7 +33,7 @@
   "btf/data/memory.py": "7ac4fb8aff731020117d3eb55c5a651c2349e545246490b9fd8de16aaf3e89fe",
   "btf/data/parquet_reader.py": "13abb7807d32746c65e071033494be41f3efb98e0a82036373e450fd5f3701aa",
   "btf/data/quality.py": "7efd7547470ced129a2b59ba7f2020e25906d6651844b60d5df961302ba5cb0f",
-  "btf/data/state.py": "1cf8b4b2ac9a4695513913c3a11315b8898de452a79a064a29635ddbdf544102",
+  "btf/data/state.py": "b9b24fe16b6c9eaa4319595b4cbaa94070f7ccd4df9d2f69a5dc5eb3e36a042e",
   "btf/data/tables_meta.py": "18d685c1a14e078d29a0ae071261037c472b2acbe93515ed776edd75d659b172",
   "btf/data/version.py": "a9d8aa822c60e74805a48cf49709a26be28ca8ab18bd750ddf2d04a5b7bab43b",
   "btf/domain/__init__.py": "67cd9e9bed86ed15e9857953af7db10a1a09d86cc376244a644aaf25f3301b13",
