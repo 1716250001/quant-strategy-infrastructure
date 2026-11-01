@@ -20,6 +20,7 @@
 """
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from itertools import product
@@ -61,6 +62,10 @@ def _worker_warm(payload: tuple[str, str, str]) -> None:
     反而恶化），且会引入跨进程共享可变状态（与"只读纪律"冲突）。
     """
     root, start_ymd, end_ymd = payload
+    # P-1″（19 号 §216-C/§218-C）：读层年表缓存默认 1024 MB；**并行时每 worker
+    # 各持一份**（daily 11 年 ≈ 0.97 GB），N=6 会顶穿可用内存 ⇒ worker 内预算
+    # 降到 256 MB（≈3 年）。须在首次读盘前设置（`_read` 每次读 env）。
+    os.environ["READ_CACHE_MB"] = "256"
     from btf.data.feed import TushareParquetFeed
     from btf.domain.types import TradingDate
 

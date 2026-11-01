@@ -13,8 +13,10 @@
 """
 from __future__ import annotations
 
+import os
 import re
 from bisect import bisect_right
+from collections import OrderedDict
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +34,59 @@ class ReaderError(Exception):
     """读取层错误（布局违例/表未登记/文件缺失）。"""
 
 
+# ── P-1″（19 号 §216-C/§218-C）：**整年表只读缓存**（价值白名单 + LRU + 预算）──
+# 背景：`_read` 1,512 次仅 143 个不同文件，`daily/*` 每个年文件被打开 65 次
+# （11 年 = 715 次 / 20.3 s）；瓶颈是整表解码，谓词下推无解（§213-B 已排除）。
+# 键 = (真实路径, 列元组)；**不含 filters**——过滤在内存里做，缓存的是未过滤
+# 整年表。预算由 `READ_CACHE_MB`（**不带 BTF_ 前缀**，§202-H 教训）控制，
+# 默认 1024 MB；超预算按 LRU 淘汰（§213 内存红线）。
+#
+# 准入按**价值密度**（省时 ÷ 内存，§216-B 实测）：`fina_indicator` 92.9、
+# `daily` 20.9、`daily_basic` 4.4、`adj_factor`/`index_daily` **0.5 ms/MB**。
+# P-1 首版「来者不拒」时，`index_daily`(857 MB) + `adj_factor`(369 MB) 只省
+# 0.6 s，却把 `daily` 挤出预算 ⇒ 563 次淘汰 / 578 次读盘。故只放行
+# `{daily, fina_indicator}`（合计 983 MB，覆盖读盘时间 82%）。
+_CACHE_TABLES = frozenset({"daily", "fina_indicator"})
+_CACHE: OrderedDict[
+    tuple[str, tuple[str, ...] | None], tuple[object, int]] = OrderedDict()
+_CACHE_BYTES = 0
+_CACHE_HITS = 0
+_CACHE_MISSES = 0
+_CACHE_EVICTIONS = 0
+_CACHE_MB_DEFAULT = 1024.0
+_CACHE_REJECTED: dict[str, int] = {}
+
+
+def _cache_budget_bytes() -> int:
+    """`READ_CACHE_MB` → 字节预算（缺省/非法值回默认；≤0 关闭缓存）。"""
+    raw = os.environ.get("READ_CACHE_MB", "").strip()
+    try:
+        mb = float(raw) if raw else _CACHE_MB_DEFAULT
+    except ValueError:
+        mb = _CACHE_MB_DEFAULT
+    return max(0, int(mb * 1024 * 1024))
+
+
+def read_cache_stats() -> dict[str, object]:
+    """缓存自证（P1″-4）：命中/未命中/条目/字节/淘汰/被拒表计数。"""
+    return {"hits": _CACHE_HITS, "misses": _CACHE_MISSES,
+            "entries": len(_CACHE), "bytes": _CACHE_BYTES,
+            "evictions": _CACHE_EVICTIONS,
+            "rejected": sorted(_CACHE_REJECTED.items(), key=lambda kv: -kv[1])[:3]}
+
+
+def _cache_key(path: Path, kwargs: dict) -> tuple[str, tuple[str, ...] | None] | None:
+    """缓存键；非白名单表/含其它参数（filters 等）→ None（不入缓存也不命中）。"""
+    if set(kwargs) - {"columns", "memory_map"}:
+        return None
+    table_name = path.parent.name
+    if table_name not in _CACHE_TABLES:
+        _CACHE_REJECTED[table_name] = _CACHE_REJECTED.get(table_name, 0) + 1
+        return None
+    cols = kwargs.get("columns")
+    return (str(path), None if cols is None else tuple(cols))
+
+
 def _read(path: Path, /, **kwargs):
     """`pq.read_table` 统一入口（IO-9）：对**主库**启用 `memory_map`。
 
@@ -39,6 +94,11 @@ def _read(path: Path, /, **kwargs):
     的文件**不可删除/覆盖**。主库（`MARKET_DATA_DIR`）是只读原始数据，映射安全
     且省一次内核→用户态拷贝（大表收益随行数放大）；测试夹具写在 tmp 目录
     且会被删除，故按路径判定，非主库走普通读（行为与旧版逐字一致）。
+
+    P-1″：白名单表命中只读缓存（键 `(路径, 列)`）时直接返回 Arrow 表——调用方
+    **只读**（Arrow immutable；过滤/排序一律产生新表）。
+    **仅主库启用缓存**：测试夹具会重写同一路径（指纹变异性自检须看到新数据），
+    非主库一律直读（与 `memory_map` 同一判定）。
     """
     from btf.config.paths import MARKET_DATA_DIR
 
@@ -48,7 +108,27 @@ def _read(path: Path, /, **kwargs):
         in_master = False
     if in_master:
         kwargs.setdefault("memory_map", True)
-    return pq.read_table(path, **kwargs)
+    key = _cache_key(path.resolve(), kwargs) if in_master else None
+    if key is None:                                  # 非主库/白名单外/带 filters → 不缓存
+        return pq.read_table(path, **kwargs)
+    global _CACHE_HITS, _CACHE_MISSES, _CACHE_BYTES, _CACHE_EVICTIONS
+    hit = _CACHE.get(key)
+    if hit is not None:
+        _CACHE.move_to_end(key)
+        _CACHE_HITS += 1
+        return hit[0]
+    _CACHE_MISSES += 1
+    table = pq.read_table(path, **kwargs)
+    budget = _cache_budget_bytes()
+    size = int(getattr(table, "nbytes", 0) or 0)
+    if budget > 0 and size <= budget:
+        _CACHE[key] = (table, size)
+        _CACHE_BYTES += size
+        while _CACHE_BYTES > budget and _CACHE:
+            _old_key, (_old_table, old_size) = _CACHE.popitem(last=False)
+            _CACHE_BYTES -= old_size
+            _CACHE_EVICTIONS += 1
+    return table
 
 
 def _concat_unified(parts: list) -> object:
