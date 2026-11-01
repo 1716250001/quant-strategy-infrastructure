@@ -36,9 +36,23 @@ __all__ = ["GridSearchOptimizer", "deep_set"]
 
 logger = logging.getLogger(__name__)
 
-#: P-7：只共享 `daily` 的 9 列（与 feed.COLUMNS 逐字对齐；键含列序）
+#: P-7：`daily` 的 9 列（与 feed.COLUMNS 逐字同序；键含列序）
 _DAILY_COLS = ("ts_code", "trade_date", "open", "high", "low", "close",
                "pre_close", "vol", "amount")
+#: P-7b（19 号 §236）：shm 共享表规格（表 → 列集；**列序取主调用方口径**）。
+#: `daily` 9 列与 `feed.COLUMNS` 逐字同序；`adj_factor`/`fund_adj` 与质检
+#: `_table_slice`／`read_codes` 的请求同序。读层 `_read` 对"列集为规格子集"的
+#: 请求做 `select` 投影，故 `symbol_range` 的
+#: `("adj_factor","ts_code","trade_date")` 列序也能命中（不白建）。
+_SHM_TABLE_SPECS: dict[str, tuple[str, ...]] = {
+    "daily": _DAILY_COLS,
+    "adj_factor": ("ts_code", "trade_date", "adj_factor"),
+    "fund_adj": ("ts_code", "trade_date", "adj_factor"),
+}
+#: 估算字节/行（`num_rows × per_row`；parquet `total_byte_size` 是**压缩后**，
+#: 不可用于内存估算，§225-A）。`daily` 实测 ≈71 B/行；`adj_factor` 420 MB ÷
+#: 8.75 M 行 ≈ 48 B/行（`fund_adj` 同构）。
+_SHM_BYTES_PER_ROW: dict[str, int] = {"daily": 72, "adj_factor": 48, "fund_adj": 48}
 _SHM_MAX_TOTAL_YEARS = 15
 _SHM_MAX_TABLE_BYTES = 200 * 1024 * 1024
 _SHM_MIN_YEARS = 8
@@ -124,7 +138,7 @@ def _release_shm_tables() -> None:
 
 
 def _worker_attach_shm(spec: Mapping[str, Any]) -> None:
-    """worker：attach 父进程共享的 daily 年表（**零拷贝只读**）。
+    """worker：attach 父进程共享的年表（**零拷贝只读**；P-7b 多表）。
 
     释放顺序（§214 已复现 `BufferError`）：先清登记表 → `del` 表/缓冲 →
     `shm.close()`；本进程**不 unlink**（由父进程 `try/finally` 统一回收）。
@@ -139,12 +153,15 @@ def _worker_attach_shm(spec: Mapping[str, Any]) -> None:
     global _SHM_FINALIZER
     root = Path(spec["root"])
     try:
-        for year_s, (name, _size) in (spec.get("tables") or {}).items():
-            shm = shared_memory.SharedMemory(name=name)
+        for item in spec.get("tables") or ():
+            table_name = str(item["table"])
+            year = int(item["year"])
+            cols = tuple(item["cols"])
+            shm = shared_memory.SharedMemory(name=str(item["name"]))
             buf = pa.py_buffer(shm.buf)
             table = ipc.open_stream(buf).read_all()
-            pr.register_shm_table(root / "daily" / f"{year_s}.parquet",
-                                  _DAILY_COLS, table)
+            pr.register_shm_table(root / table_name / f"{year}.parquet",
+                                  cols, table)
             _SHM_KEPT.append((shm, buf, table))
         if _SHM_FINALIZER is None:
             _SHM_FINALIZER = weakref.finalize(_SHM_SENTINEL, _release_shm_tables)
@@ -214,7 +231,7 @@ def _warm_args(config: Mapping[str, Any]) -> tuple[str, str, str] | None:
 
 
 def _shm_plan(config: Mapping[str, Any]) -> tuple[Path, list[int]] | None:
-    """推导待共享的 `daily` 年文件集合（`run.period` 年范围 −1 缓冲年）。"""
+    """推导待共享的年文件集合（`run.period` 年范围 −1 缓冲年；P-7b 多表）。"""
     if os.environ.get("SHM_DISABLE", "").strip() not in ("", "0"):
         logger.warning("shm：SHM_DISABLE 已设置 → 降级为本地缓存")
         return None
@@ -240,21 +257,21 @@ def _shm_plan(config: Mapping[str, Any]) -> tuple[Path, list[int]] | None:
         return None
     # P-7″（19 号 §224-B）：小配置启用 shm 是**净损失**（父进程预读+序列化
     # 0.6 s > 省下的读盘；ETF 实测 +19%/+3.4 GB）。两道门槛同时满足才启用：
-    # 年份 ≥8，且 `pq.read_metadata` 估算的年表总字节 >800 MB（不真读表）。
+    # 年份 ≥8，且**各表合计**估算字节 >700 MB（只读元数据，不真读表）。
     if len(years) < _SHM_MIN_YEARS:
         logger.warning("shm：跳过（年份 %d < %d）", len(years), _SHM_MIN_YEARS)
         return None
     import pyarrow.parquet as pq
 
-    # 估算口径：parquet 元数据的 `total_byte_size` 是**压缩后**（a1 12 年只 368 MB，
-    # 实际内存 1,008.7 MB）；改用「行数 × 72 B/行」（实测 1.3 M 行 ≈ 92 MB/年，
-    # 即 ≈71 B/行），只读元数据、不读表。
+    # 估算口径：parquet 元数据的 `total_byte_size` 是**压缩后**（a1 12 年 daily
+    # 只 368 MB，实际内存 1,008.7 MB）；改用「行数 × 每行字节」（§225-A）。
     est = 0
-    for y in years:
-        p = root / "daily" / f"{y}.parquet"
-        if p.is_file():
-            md = pq.read_metadata(p)
-            est += int(md.num_rows) * 72
+    for table in _SHM_TABLE_SPECS:
+        per_row = _SHM_BYTES_PER_ROW[table]
+        for y in years:
+            p = root / table / f"{y}.parquet"
+            if p.is_file():
+                est += int(pq.read_metadata(p).num_rows) * per_row
     if est <= _SHM_MIN_BYTES:
         logger.warning("shm：跳过（年份 %d、预计 %.0f MB < %d MB）",
                        len(years), est / 1024**2, _SHM_MIN_BYTES // 1024**2)
@@ -263,7 +280,11 @@ def _shm_plan(config: Mapping[str, Any]) -> tuple[Path, list[int]] | None:
 
 
 def _shm_create(config: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[Any]]:
-    """父进程：序列化 `daily` 年表并直写 shm（`FixedSizeBufferWriter`，免二次拷贝）。"""
+    """父进程：按 `_SHM_TABLE_SPECS` 序列化各表年文件并直写 shm。
+
+    P-7b（19 号 §236）：单年预估 >200 MB ⇒ **该表整体跳过**（不拖累其它表，
+    红线 3）；该表创建异常 ⇒ 仅该表降级；全部失败 ⇒ 整体回退本地缓存。
+    """
     plan = _shm_plan(config)
     if plan is None:
         return None, []
@@ -274,38 +295,74 @@ def _shm_create(config: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[
     import pyarrow.ipc as ipc
     import pyarrow.parquet as pq
 
-    spec: dict[str, Any] = {"root": str(root.resolve()), "tables": {}}
+    spec: dict[str, Any] = {"root": str(root.resolve()), "tables": []}
     kept: list[Any] = []
-    try:
-        for year in years:
-            path = root / "daily" / f"{year}.parquet"
-            if not path.is_file():
+
+    def _drop(segs: list[Any]) -> None:
+        for shm in segs:
+            try:
+                kept.remove(shm)
+            except ValueError:
+                pass
+            _shm_destroy([shm])
+
+    for table, cols in _SHM_TABLE_SPECS.items():
+        per_row = _SHM_BYTES_PER_ROW[table]
+        rows: list[int] = []
+        too_big: int | None = None
+        for y in years:
+            p = root / table / f"{y}.parquet"
+            if not p.is_file():
                 continue
-            table = pq.read_table(path, columns=list(_DAILY_COLS))
-            if int(table.nbytes) > _SHM_MAX_TABLE_BYTES:
-                raise RuntimeError(f"daily/{year} 单年 {table.nbytes} > 200 MB")
-            # 先预演一次得到精确字节数（shm 段尺寸必须给定）；再原地直写
-            pre = pa.BufferOutputStream()
-            with ipc.new_stream(pre, table.schema) as w:
-                w.write_table(table)
-            size = int(pre.getvalue().size)
-            name = f"btf_daily_{year}_{os.getpid()}_{len(kept)}"
-            shm = shared_memory.SharedMemory(name=name, create=True, size=size)
-            kept.append(shm)
-            writer = pa.FixedSizeBufferWriter(pa.py_buffer(shm.buf))
-            with ipc.new_stream(writer, table.schema) as w:
-                w.write_table(table)
-            spec["tables"][str(year)] = [name, size]
-        if not spec["tables"]:
-            raise RuntimeError("无可用 daily 年文件")
-        logger.warning("shm：启用 —— 共享 daily %d 年 / %.1f MB（只读零拷贝）",
-                       len(spec["tables"]),
-                       sum(s for _n, s in spec["tables"].values()) / 1024**2)
-        return spec, kept
-    except Exception as exc:
-        logger.warning("shm 创建失败 → 降级为本地缓存：%s", exc)
+            if int(pq.read_metadata(p).num_rows) * per_row > _SHM_MAX_TABLE_BYTES:
+                too_big = y
+                break
+            rows.append(y)
+        if too_big is not None:
+            logger.warning("shm：%s/%d 预估 >200 MB → 该表跳过（其它表照常）",
+                           table, too_big)
+            continue
+        if not rows:
+            continue
+        segs: list[Any] = []
+        try:
+            for year in rows:
+                path = root / table / f"{year}.parquet"
+                table_obj = pq.read_table(path, columns=list(cols))
+                # 先预演一次得到精确字节数（shm 段尺寸必须给定）；再原地直写
+                #（预演与直写逐字节一致：同一 schema 与同一表）
+                pre = pa.BufferOutputStream()
+                with ipc.new_stream(pre, table_obj.schema) as w:
+                    w.write_table(table_obj)
+                size = int(pre.getvalue().size)
+                name = f"btf_{table}_{year}_{os.getpid()}_{len(kept)}"
+                shm = shared_memory.SharedMemory(name=name, create=True, size=size)
+                kept.append(shm)
+                writer = pa.FixedSizeBufferWriter(pa.py_buffer(shm.buf))
+                with ipc.new_stream(writer, table_obj.schema) as w:
+                    w.write_table(table_obj)
+                segs.append(shm)
+                spec["tables"].append({"table": table, "year": year,
+                                       "name": name, "size": size,
+                                       "cols": list(cols)})
+        except Exception as exc:
+            logger.warning("shm：%s 创建失败 → 该表降级：%s", table, exc)
+            _drop(segs)
+            spec["tables"] = [it for it in spec["tables"] if it["table"] != table]
+            continue
+    if not spec["tables"]:
+        logger.warning("shm 创建失败 → 降级为本地缓存（无可用年文件）")
         _shm_destroy(kept)
         return None, []
+    by_table: dict[str, int] = {}
+    for it in spec["tables"]:
+        by_table[it["table"]] = by_table.get(it["table"], 0) + 1
+    logger.warning(
+        "shm：启用 —— 共享 %d 表 / %d 段 / %.1f MB（%s；只读零拷贝）",
+        len(by_table), len(spec["tables"]),
+        sum(it["size"] for it in spec["tables"]) / 1024**2,
+        "、".join(f"{k} {v} 年" for k, v in by_table.items()))
+    return spec, kept
 
 
 def _shm_destroy(handles: Sequence[Any]) -> None:

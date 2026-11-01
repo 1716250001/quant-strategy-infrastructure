@@ -67,16 +67,22 @@ _CACHE_REJECTED: dict[str, int] = {}
 #: P-7（19 号 §215/§220）：worker 由父进程共享的**只读**年表（键 = 本地缓存键）。
 #: 命中直接返回（零拷贝）；`bt run` 单进程时永远为空（走 P-1″ 原路径）。
 _SHM_TABLES: dict[tuple[str, tuple[str, ...] | None], object] = {}
+#: P-7b（19 号 §236）：按路径的 shm 年表（规格列集, 表）——请求列集为其
+#: **子集**时用 `select` 投影命中（`symbol_range` 的列序与 `_table_slice` 不同，
+#: 否则不命中＝shm 白建）。
+_SHM_BY_PATH: dict[str, tuple[tuple[str, ...], object]] = {}
 
 
 def register_shm_table(path: Path, columns: Sequence[str], table: object) -> None:
     """登记一张 shm 只读年表（父进程 create → worker attach 后调用）。"""
     _SHM_TABLES[(str(Path(path).resolve()), tuple(columns))] = table
+    _SHM_BY_PATH[str(Path(path).resolve())] = (tuple(columns), table)
 
 
 def clear_shm_tables() -> None:
     """释放 worker 侧登记（atexit 顺序：先清表 → 再 release/close）。"""
     _SHM_TABLES.clear()
+    _SHM_BY_PATH.clear()
 
 
 def _cache_budget_bytes() -> int:
@@ -134,6 +140,13 @@ def _read(path: Path, /, **kwargs):
     if key is None:                                  # 非主库/白名单外/带 filters → 不缓存
         return pq.read_table(path, **kwargs)
     shm = _SHM_TABLES.get(key)                       # P-7：shm 命中优先（零拷贝）
+    if shm is None:                                  # P-7b：列集子集 → select 投影
+        entry = _SHM_BY_PATH.get(key[0])
+        cols = kwargs.get("columns")
+        if entry is not None and cols is not None:
+            spec_cols, spec_table = entry
+            if set(cols) <= set(spec_cols):
+                shm = spec_table.select(list(cols))
     if shm is not None:
         return shm
     global _CACHE_HITS, _CACHE_MISSES, _CACHE_BYTES, _CACHE_EVICTIONS
