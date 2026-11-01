@@ -61,8 +61,19 @@ def roe_pit_of(date_ymd: str, root: Path | None = None, *,
 
     fina_indicator 按 end_date 分年存储；PIT 需按 **ann_date** 过滤，故读取
     [date-lookback_years, date] 的年文件后在内存过滤（年报公告最迟次年 4-5 月）。
+
+    **P-2（19 号 §217-B）**：原实现在 `for row in table.to_pylist()` 里逐行比较
+    （tt 9.62 s / 十几万行物化）——现改为 Arrow 向量化：`pc.filter` 掉未公告/
+    非年报/空值行 → `group_by(ts_code).max(end_date)` → 只物化「每 code 最新
+    年报」行（~5,700 行）。**口径逐条保持**（ann≤date、end 尾 1231、roe/code
+    非空、roe 转 float、同 end 重复行保留首行）。
+    方案 B（ann_date 水位记忆化）实测**净负收益**（a1 的调仓日都跨公告期，
+    水位几乎每次变化 ⇒ 只多付一次轻量读），故不入库。
     """
     import datetime as dt
+
+    import pyarrow as pa
+    import pyarrow.compute as pc
 
     root = Path(root or MARKET_DATA_DIR)
     day = dt.date(int(date_ymd[:4]), int(date_ymd[4:6]), int(date_ymd[6:8]))
@@ -70,16 +81,37 @@ def roe_pit_of(date_ymd: str, root: Path | None = None, *,
     table = _store(root).read_range(
         "fina_indicator", start, date_ymd,
         columns=["ts_code", "ann_date", "end_date", "roe_waa"])
+    if table.num_rows == 0:
+        return {}
+    ts = pc.cast(table.column("ts_code"), pa.string())
+    ann = pc.cast(table.column("ann_date"), pa.string())
+    end = pc.cast(table.column("end_date"), pa.string())
+    # 语义与逐行版一致：null 一律跳过（原 `str(row.get(...) or "")` → 空串跳过）
+    cond = pc.and_(
+        pc.and_(pc.is_valid(ts), pc.is_valid(ann)),
+        pc.and_(pc.is_valid(end), pc.and_(
+            pc.is_valid(table.column("roe_waa")),
+            pc.and_(pc.less_equal(ann, pa.scalar(date_ymd, pa.string())),
+                    pc.ends_with(end, pattern="1231")))))   # 年报识别（_is_annual）
+    f = table.filter(cond)
+    if f.num_rows == 0:
+        return {}
+    f_ts = pc.cast(f.column("ts_code"), pa.string())
+    f_end = pc.cast(f.column("end_date"), pa.string())
+    keys = pc.binary_join_element_wise(f_ts, f_end, "|")
+    latest = f.group_by("ts_code").aggregate([("end_date", "max")])
+    latest_keys = pc.binary_join_element_wise(
+        pc.cast(latest.column("ts_code"), pa.string()),
+        pc.cast(latest.column("end_date_max"), pa.string()), "|")
+    hit = f.filter(pc.is_in(keys, value_set=latest_keys))
     best: dict[str, tuple[float, str]] = {}
-    for row in table.to_pylist():
+    for row in hit.to_pylist():              # 只物化「每 code 最新年报」行
         code, roe = row.get("ts_code"), row.get("roe_waa")
-        ann, end = str(row.get("ann_date") or ""), str(row.get("end_date") or "")
-        if not code or roe is None or not ann or not end:
+        end_s = str(row.get("end_date") or "")
+        if code is None or roe is None or not end_s:
             continue
-        if ann > date_ymd or not _is_annual(end):       # 未公告 / 非年报 → 跳过
-            continue
-        if code not in best or end > best[code][1]:
-            best[code] = (float(roe), end)
+        if code not in best:                 # 同 (code, end) 重复行：原实现保留首行
+            best[code] = (float(roe), end_s)
     return best
 
 
