@@ -888,6 +888,13 @@ P2 = [
                    "⇒ date_param_lag_days=1 取 T-1；"
                    "⚠ 深交所 fund_etf_scale_szse 实测 TypeError(bytes) ⇒ 本单不接，"
                    "深市份额改用 tushare fund_share 兜底"),
+    TableSpec("etf_scale_szse", "fund_etf_scale_szse", "P2", "by_year", "trade_date",
+              src_date_col=None, subset=["trade_date", "基金代码"], mode="once",
+              max_age_days=15, max_backfill_days=0,
+              note="深交所官方 ETF 份额（实测 1,083 行 × 10 列）；"
+                   "⚠ 源端无日期列 ⇒ 注入 trade_date；纯快照表须日更累积；"
+                   "⚠ akshare 原函数在 pandas>=2.0 下 read_excel(bytes) 报 TypeError，"
+                   "已由 alt/compat.patch_akshare() 修（同一端点重实现，仅加 BytesIO）"),
     # —— B 块：CFTC 四张（商品两张列名相同值不同、外汇两张同理 ⇒ 必须 4 张物理表）——
     TableSpec("cftc_goods_nc", "macro_usa_cftc_c_holding", "P2", "single", "trade_date",
               src_date_col="日期", subset=["trade_date"], mode="once",
@@ -1027,3 +1034,13 @@ def summary():
             "names": [s.name for s in specs],
         })
     return out
+
+
+# ============================================================
+# akshare 兼容补丁（DB-R12，2026-11-01）
+#   ⚠ 仅修 ak.fund_etf_scale_szse 在 pandas>=2.0 下的 read_excel(bytes) TypeError。
+#     其余 akshare 函数一律不动。补丁幂等，重复 import 无副作用。
+# ============================================================
+from alt.compat import patch_akshare as _patch_akshare  # noqa: E402
+
+_patch_akshare()

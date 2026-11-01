@@ -2074,7 +2074,12 @@ DAILY_UPDATE_GROUPS = OrderedDict([
                 #   ⚠ 关键副作用修复: 它是 7 个漏网接口之一（官方 5000 分/本档 2000），
                 #   LEAKY_PERMISSIONS 登记 monitor=True，但告警依赖"接口被调用过"——
                 #   不进日更 ⇒ 无人调用 ⇒ **漏网告警空转**。纳入本组后失效才可被日发现。
-                "fund_adj"]),
+                "fund_adj",
+                # 2026-11-01 DB-R12：南华指数日线（by_code，5 个指数 .NH）
+                #   背景: 配置有定义但**不在任何日更组** ⇒ gap-update --group all 从不碰它，
+                #   库内停在 20260918（缺 20260919~20261030 共 24 交易日 ≈120 行）。
+                #   先例: core 的 fund_daily / extend 的 index_global 同为 by_code 模式。
+                "fut_index_daily"]),
 ])
 
 # 每日更新默认只跑 core（main.py gap-update）；--group all 时加上 extend
