@@ -41,6 +41,8 @@ _DAILY_COLS = ("ts_code", "trade_date", "open", "high", "low", "close",
                "pre_close", "vol", "amount")
 _SHM_MAX_TOTAL_YEARS = 15
 _SHM_MAX_TABLE_BYTES = 200 * 1024 * 1024
+_SHM_MIN_YEARS = 8
+_SHM_MIN_BYTES = 800 * 1024 * 1024
 
 
 def deep_set(config: dict[str, Any], path: Sequence[str],
@@ -235,6 +237,27 @@ def _shm_plan(config: Mapping[str, Any]) -> tuple[Path, list[int]] | None:
     if len(years) > _SHM_MAX_TOTAL_YEARS:
         logger.warning("shm：年份数 %d > %d → 降级", len(years),
                        _SHM_MAX_TOTAL_YEARS)
+        return None
+    # P-7″（19 号 §224-B）：小配置启用 shm 是**净损失**（父进程预读+序列化
+    # 0.6 s > 省下的读盘；ETF 实测 +19%/+3.4 GB）。两道门槛同时满足才启用：
+    # 年份 ≥8，且 `pq.read_metadata` 估算的年表总字节 >800 MB（不真读表）。
+    if len(years) < _SHM_MIN_YEARS:
+        logger.warning("shm：跳过（年份 %d < %d）", len(years), _SHM_MIN_YEARS)
+        return None
+    import pyarrow.parquet as pq
+
+    # 估算口径：parquet 元数据的 `total_byte_size` 是**压缩后**（a1 12 年只 368 MB，
+    # 实际内存 1,008.7 MB）；改用「行数 × 72 B/行」（实测 1.3 M 行 ≈ 92 MB/年，
+    # 即 ≈71 B/行），只读元数据、不读表。
+    est = 0
+    for y in years:
+        p = root / "daily" / f"{y}.parquet"
+        if p.is_file():
+            md = pq.read_metadata(p)
+            est += int(md.num_rows) * 72
+    if est <= _SHM_MIN_BYTES:
+        logger.warning("shm：跳过（年份 %d、预计 %.0f MB < %d MB）",
+                       len(years), est / 1024**2, _SHM_MIN_BYTES // 1024**2)
         return None
     return root, years
 

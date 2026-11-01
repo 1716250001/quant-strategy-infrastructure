@@ -55,7 +55,7 @@
   "btf/experiment/manifest.py": "685beea9eac0681d483f6ebb82e9f4c999c768e481141d5a43f0c9e471fcfe48",
   "btf/experiment/store.py": "4fd2a2a1cfdeb88f0c429f55d857d3489cdd19898b993666046682ba1fcaa3a4",
   "btf/optimize/__init__.py": "a65a11a106505a649e6565249c23cd3218a463ed443677d1908c4fd64160aab5",
-  "btf/optimize/grid.py": "2fec59029e981cdb5f078e59b180ab0f4065658851baf216cc60f3c7e306771d",
+  "btf/optimize/grid.py": "fd026a23a1fd7e8ee435c5459b1f23e4d92229ae7e4a178c25536874759b09af",
   "btf/optimize/walkforward.py": "1ccae435e9fab3fe9beb59395fb6869dc066773a5346dcb3d2decc746d0fa714",
   "btf/portfolio/__init__.py": "450edbdbc82e79256110a07e91adef7360fbfde6d9e79ae031dda3a86970b474",
   "btf/portfolio/portfolio.py": "1691237442352a381f35e7f926a5a0a5f6dd329059fa789b1138837f936c5790",
