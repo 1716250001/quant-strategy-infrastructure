@@ -55,6 +55,19 @@ _CACHE_MISSES = 0
 _CACHE_EVICTIONS = 0
 _CACHE_MB_DEFAULT = 1024.0
 _CACHE_REJECTED: dict[str, int] = {}
+#: P-7（19 号 §215/§220）：worker 由父进程共享的**只读**年表（键 = 本地缓存键）。
+#: 命中直接返回（零拷贝）；`bt run` 单进程时永远为空（走 P-1″ 原路径）。
+_SHM_TABLES: dict[tuple[str, tuple[str, ...] | None], object] = {}
+
+
+def register_shm_table(path: Path, columns: Sequence[str], table: object) -> None:
+    """登记一张 shm 只读年表（父进程 create → worker attach 后调用）。"""
+    _SHM_TABLES[(str(Path(path).resolve()), tuple(columns))] = table
+
+
+def clear_shm_tables() -> None:
+    """释放 worker 侧登记（atexit 顺序：先清表 → 再 release/close）。"""
+    _SHM_TABLES.clear()
 
 
 def _cache_budget_bytes() -> int:
@@ -68,10 +81,10 @@ def _cache_budget_bytes() -> int:
 
 
 def read_cache_stats() -> dict[str, object]:
-    """缓存自证（P1″-4）：命中/未命中/条目/字节/淘汰/被拒表计数。"""
+    """缓存自证（P1″-4）：命中/未命中/条目/字节/淘汰/被拒表计数/ shm 条目。"""
     return {"hits": _CACHE_HITS, "misses": _CACHE_MISSES,
             "entries": len(_CACHE), "bytes": _CACHE_BYTES,
-            "evictions": _CACHE_EVICTIONS,
+            "evictions": _CACHE_EVICTIONS, "shm_entries": len(_SHM_TABLES),
             "rejected": sorted(_CACHE_REJECTED.items(), key=lambda kv: -kv[1])[:3]}
 
 
@@ -111,6 +124,9 @@ def _read(path: Path, /, **kwargs):
     key = _cache_key(path.resolve(), kwargs) if in_master else None
     if key is None:                                  # 非主库/白名单外/带 filters → 不缓存
         return pq.read_table(path, **kwargs)
+    shm = _SHM_TABLES.get(key)                       # P-7：shm 命中优先（零拷贝）
+    if shm is not None:
+        return shm
     global _CACHE_HITS, _CACHE_MISSES, _CACHE_BYTES, _CACHE_EVICTIONS
     hit = _CACHE.get(key)
     if hit is not None:

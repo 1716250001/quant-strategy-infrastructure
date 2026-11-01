@@ -20,16 +20,27 @@
 """
 from __future__ import annotations
 
+import logging
 import os
+import weakref
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from itertools import product
 from math import isnan
+from pathlib import Path
 from typing import Any
 
 from btf.domain.contracts import CONTRACT_VERSION
 
 __all__ = ["GridSearchOptimizer", "deep_set"]
+
+logger = logging.getLogger(__name__)
+
+#: P-7：只共享 `daily` 的 9 列（与 feed.COLUMNS 逐字对齐；键含列序）
+_DAILY_COLS = ("ts_code", "trade_date", "open", "high", "low", "close",
+               "pre_close", "vol", "amount")
+_SHM_MAX_TOTAL_YEARS = 15
+_SHM_MAX_TABLE_BYTES = 200 * 1024 * 1024
 
 
 def deep_set(config: dict[str, Any], path: Sequence[str],
@@ -62,16 +73,82 @@ def _worker_warm(payload: tuple[str, str, str]) -> None:
     反而恶化），且会引入跨进程共享可变状态（与"只读纪律"冲突）。
     """
     root, start_ymd, end_ymd = payload
-    # P-1″（19 号 §216-C/§218-C）：读层年表缓存默认 1024 MB；**并行时每 worker
-    # 各持一份**（daily 11 年 ≈ 0.97 GB），N=6 会顶穿可用内存 ⇒ worker 内预算
-    # 降到 256 MB（≈3 年）。须在首次读盘前设置（`_read` 每次读 env）。
-    os.environ["READ_CACHE_MB"] = "256"
     from btf.data.feed import TushareParquetFeed
     from btf.domain.types import TradingDate
 
     feed = TushareParquetFeed(root)
     feed.corporate_actions(TradingDate.from_ymd(start_ymd),
                            TradingDate.from_ymd(end_ymd))
+
+
+def _worker_setup(warm: tuple[str, str, str] | None,
+                  shm_spec: Mapping[str, Any] | None = None) -> None:
+    """worker initializer（**无条件执行**）：预算 + 可选预热 +（P-7）shm attach。
+
+    P1″-7（19 号 §219-C/§220-B）：`READ_CACHE_MB=256` 必须在这里无条件设置。
+    原实现写在 `_worker_warm` 内，而挂载是 `initializer=_worker_warm if warm
+    else None`；实测 `_warm_args(a1 配置) = None`（无 `data.feed_params.root`）
+    ⇒ initializer 从不挂载 ⇒ 256 从不设置 ⇒ N=6 每 worker 各持 1024 MB
+    （额外 ≈6.4 GB，超可用内存）。
+    """
+    os.environ["READ_CACHE_MB"] = "256"
+    if warm:
+        _worker_warm(warm)                        # 原预热逻辑一字不动
+    if shm_spec:
+        _worker_attach_shm(shm_spec)               # P-7：失败即降级（不抛出）
+
+
+class _ShmSentinel:
+    """weakref-able 哨兵（`object()` 不支持弱引用，`weakref.finalize` 会 TypeError）。"""
+
+
+_SHM_KEPT: list[tuple[Any, Any, Any]] = []
+_SHM_SENTINEL = _ShmSentinel()
+_SHM_FINALIZER: Any = None
+
+
+def _release_shm_tables() -> None:
+    """worker 退出：先清登记表 → `del` 表/缓冲 → `shm.close()`（§214 BufferError）。"""
+    from btf.data import parquet_reader as pr
+
+    pr.clear_shm_tables()
+    while _SHM_KEPT:
+        shm, buf, table = _SHM_KEPT.pop()
+        del table, buf
+        try:
+            shm.close()
+        except Exception:
+            pass
+
+
+def _worker_attach_shm(spec: Mapping[str, Any]) -> None:
+    """worker：attach 父进程共享的 daily 年表（**零拷贝只读**）。
+
+    释放顺序（§214 已复现 `BufferError`）：先清登记表 → `del` 表/缓冲 →
+    `shm.close()`；本进程**不 unlink**（由父进程 `try/finally` 统一回收）。
+    """
+    from multiprocessing import shared_memory
+
+    import pyarrow as pa
+    import pyarrow.ipc as ipc
+
+    from btf.data import parquet_reader as pr
+
+    global _SHM_FINALIZER
+    root = Path(spec["root"])
+    try:
+        for year_s, (name, _size) in (spec.get("tables") or {}).items():
+            shm = shared_memory.SharedMemory(name=name)
+            buf = pa.py_buffer(shm.buf)
+            table = ipc.open_stream(buf).read_all()
+            pr.register_shm_table(root / "daily" / f"{year_s}.parquet",
+                                  _DAILY_COLS, table)
+            _SHM_KEPT.append((shm, buf, table))
+        if _SHM_FINALIZER is None:
+            _SHM_FINALIZER = weakref.finalize(_SHM_SENTINEL, _release_shm_tables)
+    except Exception as exc:                      # 整体降级：清掉半成品
+        _release_shm_tables()
+        logger.warning("shm attach 失败 → 降级本地缓存：%s", exc)
 
 
 def _run_single(payload: tuple[dict[str, Any], dict[str, Any]]
@@ -134,6 +211,93 @@ def _warm_args(config: Mapping[str, Any]) -> tuple[str, str, str] | None:
     return str(root), str(start).replace("-", ""), str(end).replace("-", "")
 
 
+def _shm_plan(config: Mapping[str, Any]) -> tuple[Path, list[int]] | None:
+    """推导待共享的 `daily` 年文件集合（`run.period` 年范围 −1 缓冲年）。"""
+    if os.environ.get("SHM_DISABLE", "").strip() not in ("", "0"):
+        logger.warning("shm：SHM_DISABLE 已设置 → 降级为本地缓存")
+        return None
+    data = config.get("data") or {}
+    if str(data.get("feed", "")) not in ("tushare_parquet", "mixed"):
+        return None
+    root = (data.get("feed_params") or {}).get("root")
+    if root:
+        root = Path(root)
+    else:
+        from btf.config.paths import MARKET_DATA_DIR
+
+        root = Path(MARKET_DATA_DIR)
+    period = (config.get("run") or {}).get("period") or {}
+    start, end = period.get("start"), period.get("end")
+    if not start or not end:
+        return None
+    y0, y1 = int(str(start)[:4]) - 1, int(str(end)[:4])
+    years = list(range(y0, y1 + 1))
+    if len(years) > _SHM_MAX_TOTAL_YEARS:
+        logger.warning("shm：年份数 %d > %d → 降级", len(years),
+                       _SHM_MAX_TOTAL_YEARS)
+        return None
+    return root, years
+
+
+def _shm_create(config: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[Any]]:
+    """父进程：序列化 `daily` 年表并直写 shm（`FixedSizeBufferWriter`，免二次拷贝）。"""
+    plan = _shm_plan(config)
+    if plan is None:
+        return None, []
+    root, years = plan
+    from multiprocessing import shared_memory
+
+    import pyarrow as pa
+    import pyarrow.ipc as ipc
+    import pyarrow.parquet as pq
+
+    spec: dict[str, Any] = {"root": str(root.resolve()), "tables": {}}
+    kept: list[Any] = []
+    try:
+        for year in years:
+            path = root / "daily" / f"{year}.parquet"
+            if not path.is_file():
+                continue
+            table = pq.read_table(path, columns=list(_DAILY_COLS))
+            if int(table.nbytes) > _SHM_MAX_TABLE_BYTES:
+                raise RuntimeError(f"daily/{year} 单年 {table.nbytes} > 200 MB")
+            # 先预演一次得到精确字节数（shm 段尺寸必须给定）；再原地直写
+            pre = pa.BufferOutputStream()
+            with ipc.new_stream(pre, table.schema) as w:
+                w.write_table(table)
+            size = int(pre.getvalue().size)
+            name = f"btf_daily_{year}_{os.getpid()}_{len(kept)}"
+            shm = shared_memory.SharedMemory(name=name, create=True, size=size)
+            kept.append(shm)
+            writer = pa.FixedSizeBufferWriter(pa.py_buffer(shm.buf))
+            with ipc.new_stream(writer, table.schema) as w:
+                w.write_table(table)
+            spec["tables"][str(year)] = [name, size]
+        if not spec["tables"]:
+            raise RuntimeError("无可用 daily 年文件")
+        logger.warning("shm：启用 —— 共享 daily %d 年 / %.1f MB（只读零拷贝）",
+                       len(spec["tables"]),
+                       sum(s for _n, s in spec["tables"].values()) / 1024**2)
+        return spec, kept
+    except Exception as exc:
+        logger.warning("shm 创建失败 → 降级为本地缓存：%s", exc)
+        _shm_destroy(kept)
+        return None, []
+
+
+def _shm_destroy(handles: Sequence[Any]) -> None:
+    """父进程：`close + unlink`（`try/finally` 保证；异常退出才可能残留）。"""
+    for shm in handles:
+        try:
+            shm.close()
+        except Exception:
+            pass
+        try:
+            shm.unlink()
+        except Exception:
+            pass
+
+
 def _execute_payloads(
     payloads: Sequence[tuple[dict[str, Any], dict[str, Any]]],
     n_workers: int,
@@ -147,12 +311,16 @@ def _execute_payloads(
     if n_workers <= 0:
         return [_run_single(p) for p in payloads]
     warm = _warm_args(config)
-    with ProcessPoolExecutor(
-        max_workers=n_workers,
-        initializer=_worker_warm if warm else None,
-        initargs=(warm,) if warm else (),
-    ) as pool:
-        return list(pool.map(_run_single, payloads))
+    shm_spec, shm_handles = _shm_create(config)
+    try:
+        with ProcessPoolExecutor(
+            max_workers=n_workers,
+            initializer=_worker_setup,
+            initargs=(warm, shm_spec),
+        ) as pool:
+            return list(pool.map(_run_single, payloads))
+    finally:
+        _shm_destroy(shm_handles)
 
 
 def _perturb_points(
