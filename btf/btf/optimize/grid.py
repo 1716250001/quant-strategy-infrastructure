@@ -42,7 +42,7 @@ _DAILY_COLS = ("ts_code", "trade_date", "open", "high", "low", "close",
 _SHM_MAX_TOTAL_YEARS = 15
 _SHM_MAX_TABLE_BYTES = 200 * 1024 * 1024
 _SHM_MIN_YEARS = 8
-_SHM_MIN_BYTES = 800 * 1024 * 1024
+_SHM_MIN_BYTES = 700 * 1024 * 1024
 
 
 def deep_set(config: dict[str, Any], path: Sequence[str],
