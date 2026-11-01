@@ -39,21 +39,30 @@ class ReaderError(Exception):
 # （11 年 = 715 次 / 20.3 s）；瓶颈是整表解码，谓词下推无解（§213-B 已排除）。
 # 键 = (真实路径, 列元组)；**不含 filters**——过滤在内存里做，缓存的是未过滤
 # 整年表。预算由 `READ_CACHE_MB`（**不带 BTF_ 前缀**，§202-H 教训）控制，
-# 默认 1024 MB；超预算按 LRU 淘汰（§213 内存红线）。
+# 默认 1536 MB；超预算按 LRU 淘汰（§213 内存红线）。
 #
 # 准入按**价值密度**（省时 ÷ 内存，§216-B 实测）：`fina_indicator` 92.9、
-# `daily` 20.9、`daily_basic` 4.4、`adj_factor`/`index_daily` **0.5 ms/MB**。
-# P-1 首版「来者不拒」时，`index_daily`(857 MB) + `adj_factor`(369 MB) 只省
-# 0.6 s，却把 `daily` 挤出预算 ⇒ 563 次淘汰 / 578 次读盘。故只放行
-# `{daily, fina_indicator}`（合计 983 MB，覆盖读盘时间 82%）。
-_CACHE_TABLES = frozenset({"daily", "fina_indicator"})
+# `daily` 20.9、`adj_factor` **46**（T-1 重测：原 0.5 ms/MB 是探针漏掉
+# filters 路径的**低估 92 倍**，§232-B）、`fund_adj` 同量级。故放行
+# `{daily, fina_indicator, adj_factor, fund_adj}`；`daily_basic`(4.4) 与
+# `index_daily`(0.5) 仍排除（前者由 S-2 日切片解决，后者本就低频）。
+_CACHE_TABLES = frozenset({"daily", "fina_indicator", "adj_factor", "fund_adj"})
+#: T-1（19 号 §232-A／§234）：`read_year_where` **整表缓存＋内存过滤**的表。
+#: `adj_factor`/`fund_adj` 是 `symbol_range` 的读盘热点（804 次 / 23.9 s，
+#: 30 ms/次里 84% 是"打开+解码"固定成本，filters 下推只快 16%）⇒ 整表缓存后
+#: 只剩年文件首读。`daily` 不在此列：质量检查有多种列投影（6 组），逐组缓存
+#: 整年表会放大内存；它改为"**仅当列组合命中既有整表键**（9 列＝引擎/shm 口径）
+#: 才走缓存"，否则保持 filters 直读（行为与旧版逐位一致）。
+_READ_WHERE_CACHE_TABLES = frozenset({"adj_factor", "fund_adj"})
 _CACHE: OrderedDict[
     tuple[str, tuple[str, ...] | None], tuple[object, int]] = OrderedDict()
 _CACHE_BYTES = 0
 _CACHE_HITS = 0
 _CACHE_MISSES = 0
 _CACHE_EVICTIONS = 0
-_CACHE_MB_DEFAULT = 1024.0
+#: T-1 预算 1024→1536 MB：`daily` 969 ＋ `adj_factor` ~420 ＋ `fina` 14 ≈ 1.4 GB
+#: （实测 §回执）；不提高会把 `daily` 挤出预算（P-1 首版 578 次读盘的教训）。
+_CACHE_MB_DEFAULT = 1536.0
 _CACHE_REJECTED: dict[str, int] = {}
 #: P-7（19 号 §215/§220）：worker 由父进程共享的**只读**年表（键 = 本地缓存键）。
 #: 命中直接返回（零拷贝）；`bt run` 单进程时永远为空（走 P-1″ 原路径）。
@@ -676,6 +685,46 @@ def column_bounds(table: str, root: Path, *, year: int | None,
     return (lo, hi)
 
 
+def read_year_where(
+    table: str, root: Path, *, year: int,
+    columns: Sequence[str] | None, key_values: Sequence[str],
+):
+    """小标的集整年读取（T-1／19 号 §232-A）：**白名单表走整表缓存＋内存过滤**。
+
+    背景：`symbol_range`（`adj_factor`/`fund_adj`）每标的一次 filters 读
+    **30 ms**，其中 **84% 是"打开文件+解码"固定成本**（filters 下推只快 16%）
+    ⇒ 谓词下推几乎白买；缓存整年表后只剩年文件首读（12 次），其余内存过滤。
+
+    语义（红线）：`filters` 结果与"整表 + `is_in`"**集合逐字节相同**（行序不
+    承诺——`symbol_range` 已声明）；命中缓存后 `filter` 出新表，**不写回缓存**。
+
+    非白名单表（`daily` 除 9 列引擎口径外、`stk_limit` 等）仍走 parquet 原生
+    `filters=`（行为与旧版逐位一致，含行序）。
+    """
+    import pyarrow as pa
+
+    meta = TABLES.get(table)
+    if meta is None:
+        raise ReaderError(f"表未登记: {table}")
+    if meta.layout is not Layout.BY_YEAR:
+        raise ReaderError(f"表 {table} 为 {meta.layout} 布局，不支持按年过滤")
+    path = _resolve_root(meta, root) / f"{int(year)}.parquet"
+    if not path.is_file():
+        return None
+    cols = list(columns) if columns else None
+    key = (str(path.resolve()), None if cols is None else tuple(cols))
+    if (table in _READ_WHERE_CACHE_TABLES
+            or key in _SHM_TABLES or key in _CACHE):
+        t = _read(path, columns=cols)
+        if t is not None and "ts_code" in t.column_names:
+            return t.filter(pc.is_in(
+                t.column("ts_code"),
+                value_set=pa.array(sorted(key_values),
+                                   type=t.schema.field("ts_code").type)))
+    return pq.read_table(path, columns=cols,
+                         filters=[("ts_code", "in", list(key_values))])
+
+
 __all__ = [
     "FileMeta",
     "ReaderError",
@@ -688,6 +737,7 @@ __all__ = [
     "read_file",
     "read_full",
     "read_range",
+    "read_year_where",
     "schema_names",
     "sort_by_date_int32",
     "table_files",

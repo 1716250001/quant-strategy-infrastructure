@@ -143,23 +143,23 @@ class YearTableStore:
         self, table: str, year: int, columns: Sequence[str],
         key_values: Sequence[str],
     ) -> pa.Table | None:
-        """**谓词下推**装载（parquet 原生 `filters=`，报告 §11 IO-8 的最小落地）。
+        """小标的集整年读取（报告 §11 IO-8 的最小落地；T-1 改走整表缓存）。
 
-        用于「小标的集整年查询」——主库年文件按 `ts_code` 聚集，row-group 级
-        过滤可跳过绝大多数数据块（`index_daily` 2.53M 行/年 → 两只指数行）。
+        实现委托 `parquet_reader.read_year_where`：白名单表（`adj_factor`/
+        `fund_adj`，以及列组合已命中的 `daily` 9 列等）**整表缓存＋内存
+        `is_in` 过滤**；其余表仍走 parquet 原生 `filters=`（19 号 §232-A）。
+        本层保留 `_cache`（淘汰后结果表）——键含标的集，命中即免过滤。
         """
+        from btf.data import parquet_reader as pr
+
         key = (table, year, tuple(columns), ("where", tuple(sorted(key_values))))
         with self._lock:
             cached = self._cache.get(key)
             if cached is not None:
                 self.hit_count += 1
                 return cached[0]
-        path = self.root / table / f"{year}.parquet"
-        out: pa.Table | None = None
-        if path.is_file():
-            out = pq.read_table(
-                path, columns=list(columns),
-                filters=[("ts_code", "in", list(key_values))])
+        out = pr.read_year_where(table, self.root, year=year,
+                                 columns=columns, key_values=key_values)
         with self._lock:
             cached = self._cache.get(key)      # 双检（同 `_load`）
             if cached is not None:
