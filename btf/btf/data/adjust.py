@@ -240,8 +240,12 @@ class TushareAdjustService:
         sym = bars[0].symbol
         # 装载窗口按**整年边界**取（lo 前推一年、hi 后延一年）：单 bar 逐日调
         # `qfq` 时窗口只会随年份推进，避免每日重装（§199 要点 1＋实测）。
-        lo = f"{int(bars[0].date.to_ymd()[:4]) - 1}0101"
-        hi = f"{int(bars[-1].date.to_ymd()[:4]) + 1}1231"
+        # S-3（19 号 §226）：首次即把 **ref 所在年**并入窗口——原实现先用
+        # bars 区间装载、再由 `_af_ymd(ref)` 触发第二次扩窗（17 次额外
+        # `symbol_range` / 28.53 s）；并入后第二次直接命中（键仍含区间）。
+        ref_year = int(ref.to_ymd()[:4])
+        lo = f"{min(int(bars[0].date.to_ymd()[:4]) - 1, ref_year - 1)}0101"
+        hi = f"{max(int(bars[-1].date.to_ymd()[:4]) + 1, ref_year + 1)}1231"
         self._prime(sym, lo, hi)
         base = self._af_ymd(sym, ref)
         out: list[Bar] = []
