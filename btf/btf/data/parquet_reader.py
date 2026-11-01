@@ -342,6 +342,20 @@ def peek_columns(table: str, root: Path) -> list[str]:
     return []
 
 
+def _code_mask(column, symbol_set: list[str], pa):
+    """标的谓词掩码（P1／19 号 §241）：**单标的用 `equal`，多标的仍 `is_in`**。
+
+    `is_in` 对 1 元素集合要建哈希集再逐行查表；单元素时 `equal` 的向量化
+    比较约快 2.5×（微基准 11.89 → 4.75 ms／129 万行）。
+    **`len > 1` 必须回 `is_in`**——`equal` 只取首元素会静默漏标的（红线 1）。
+    语义等价：值与 null 三态下 `is_in(col,[x])` ≡ `equal(col,x)`（null 均为
+    null，`filter` 均视为 false）。
+    """
+    if len(symbol_set) == 1:
+        return pc.equal(column, symbol_set[0])
+    return pc.is_in(column, value_set=pa.array(symbol_set))
+
+
 def read_codes(
     table: str,
     root: Path,
@@ -368,7 +382,7 @@ def read_codes(
             if year < y0 or year > y1:
                 continue
             t = _read(path, columns=wanted)
-            mask = pc.is_in(t.column("ts_code"), value_set=pa.array(symbol_set))
+            mask = _code_mask(t.column("ts_code"), symbol_set, pa)
             if year == y0 or year == y1:
                 date_mask = pc.and_(
                     pc.greater_equal(t.column(date_col), start_ymd),
@@ -380,7 +394,7 @@ def read_codes(
                 parts.append(t)
     else:
         t = read_full(table, root, columns=wanted)
-        mask = pc.is_in(t.column("ts_code"), value_set=pa.array(symbol_set))
+        mask = _code_mask(t.column("ts_code"), symbol_set, pa)
         date_mask = pc.and_(
             pc.greater_equal(t.column(date_col), start_ymd),
             pc.less_equal(t.column(date_col), end_ymd),
@@ -730,10 +744,10 @@ def read_year_where(
             or key in _SHM_TABLES or key in _CACHE):
         t = _read(path, columns=cols)
         if t is not None and "ts_code" in t.column_names:
-            return t.filter(pc.is_in(
-                t.column("ts_code"),
-                value_set=pa.array(sorted(key_values),
-                                   type=t.schema.field("ts_code").type)))
+            # P1（§241）：单标的走 `equal`（symbol_range 逐标的一次）；
+            # 多标的仍 `is_in`（红线 1：不得只取首元素）
+            return t.filter(_code_mask(t.column("ts_code"),
+                                       sorted(key_values), pa))
     return pq.read_table(path, columns=cols,
                          filters=[("ts_code", "in", list(key_values))])
 

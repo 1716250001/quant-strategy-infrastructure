@@ -31,7 +31,7 @@
   "btf/data/index_universe.py": "cd89b20e747febfcb649b36afb55e0390dbdf84e8419da82289e96213199847a",
   "btf/data/liq.py": "e9e01aea0781c1b267c31ddf52aac0fd83036a79a7a2fb7912e0fbfa0098e023",
   "btf/data/memory.py": "7ac4fb8aff731020117d3eb55c5a651c2349e545246490b9fd8de16aaf3e89fe",
-  "btf/data/parquet_reader.py": "c915fbbc9e91fc9878c44ef2c580389369e6ac1a2000f708a86dbfe7aa3dbdb1",
+  "btf/data/parquet_reader.py": "b1e051e6ed43a5f1e8f21eb1ef34655f8607a5571e8fd6628b618043082b064f",
   "btf/data/quality.py": "7efd7547470ced129a2b59ba7f2020e25906d6651844b60d5df961302ba5cb0f",
   "btf/data/state.py": "b9b24fe16b6c9eaa4319595b4cbaa94070f7ccd4df9d2f69a5dc5eb3e36a042e",
   "btf/data/tables_meta.py": "18d685c1a14e078d29a0ae071261037c472b2acbe93515ed776edd75d659b172",
