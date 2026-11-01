@@ -943,6 +943,43 @@ P2 = [
                    "⚠ 与派单差异：**不设 date_param**——引擎会把 target_date（当日）传给 "
                    "start_date，实测当日单点常返 0 行；改为固定 params.start_date=20100101 "
                    "全量重拉（落盘按 trade_date 去重，幂等）"),
+    # —— DB-R14（§257）：股东户数 / 基金公司规模 / 上交所期权官方统计 ——
+    TableSpec("stock_gdhs", "stock_zh_a_gdhs", "P2", "single", "trade_date",
+              src_date_col="公告日期", subset=["trade_date", "代码", "报告期"],
+              mode="enum", enum_param="symbol", enum_col="报告期",
+              enum_values=([f"2014{md}" for md in ("0630", "0930", "1231")]
+                           + [f"{y}{md}" for y in range(2015, 2026)
+                              for md in ("0331", "0630", "0930", "1231")]
+                           + [f"2026{md}" for md in ("0331", "0630", "0930")]),
+              update_every_days=90, max_age_days=95,
+              note="股东户数（筹码集中度，20140630 起每季全市场，20250930 期实测 5,272 行）；"
+                   "enum=报告期（季末），**共 50 期已确认有数据**——未来期会 TypeError"
+                   "且单值失败会毒整表，故**绝不追加未来期**；"
+                   "⚠ 维护动作：每年 4 月底（年报/一季报披露完）在 enum_values 追加当年 0331 与上年 1231；"
+                   "subset 的 trade_date=公告日期；报告期本身存于「报告期」列；"
+                   "每期内部 5~11 个分页请求（随上市公司数增长）"),
+    TableSpec("fund_aum_em", "fund_aum_hist_em", "P2", "single", "trade_date",
+              has_date=False, subset=["基金公司", "年份"],
+              mode="enum", enum_param="year", enum_col="年份",
+              enum_values=[str(y) for y in range(2019, 2027)],
+              update_every_days=30,
+              inject_const={"fetch_date": "__TODAY__"},
+              note="基金公司管理规模（东财，2019~2026 每年一份快照，实测 147~205 行 × 9 列："
+                   "总规模/股票型/混合型/债券型/指数型/QDII）；"
+                   "⚠ 源端无日期列 ⇒ **has_date=False**（无日期表，io 强制 single 布局合并写回），"
+                   "年份存「年份」列（enum_col），拉取时间存 fetch_date（inject_const=__TODAY__）；"
+                   "⚠ enum 只列 2019~2026（已实测年份），未来年会失败毒整表；"
+                   "⚠ 维护动作：**每年 1 月在 enum_values 追加新年份**；"
+                   "「汇金 ETF 化」的公司维度，与 etf_scale_sse/szse（标的维度）互补"),
+    TableSpec("option_sse_stats", "option_daily_stats_sse", "P2", "by_year", "trade_date",
+              src_date_col=None, subset=["trade_date", "合约标的代码"], mode="once",
+              date_param="date", date_param_lag_days=0,
+              max_age_days=15, max_backfill_days=0,
+              note="上交所期权每日统计（每日 5 行 × 12 列：5 个标的的 总成交量/认购成交量/"
+                   "认沽成交量/官方认沽认购比/总持仓 等）；2018-01-10 起有（1→2→5 行随标的扩容）；"
+                   "⚠ 源端无日期列 ⇒ 注入 trade_date；dates 策略 1 请求/天；"
+                   "⚠ 仅上交所 5 标的——深交所/中金所期权不在内；"
+                   "官方认沽认购比可与派生 opt_pcr **交叉验证**（独立源互核）"),
     TableSpec("cb_redeem", "bond_cb_redeem_jsl", "P2", "by_year", "trade_date",
               src_date_col=None, subset=["trade_date", "代码"], mode="once",
               max_age_days=15, max_backfill_days=0,

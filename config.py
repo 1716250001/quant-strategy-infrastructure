@@ -915,6 +915,11 @@ BACKFILL_TARGETS = OrderedDict([
     }),
     ("index_weekly", {
         "api": "index_weekly", "desc": "指数周线(验算用)", "mode": "by_code",
+        # ⚠ 2026-11-01 DB-R15：标记为「每日全量重拉」类（daily_update 专用）。
+        #   同 index_global / fut_index_daily 先例：mode=by_code 且无日期入参
+        #   ⇒ 只加进 DAILY_UPDATE_GROUPS 会被静默跳过（"假纳入"，R10 判据⑤）；
+        #   全量重拉落盘按 (ts_code, trade_date) 去重，天然幂等；12 个指数 = 12 请求/天。
+        "daily_full_refresh": True,
         "codes": "index", "max_rows": 1000, "tier": "B",
         "subset": ["ts_code", "trade_date"],
         "note": "⚠单次上限1000行, 靠 ts_fetch 的 end_date 续拉(已验证 end_date 有效); "
@@ -2089,7 +2094,14 @@ DAILY_UPDATE_GROUPS = OrderedDict([
                 #   背景: 配置有定义但**不在任何日更组** ⇒ gap-update --group all 从不碰它，
                 #   库内停在 20260918（缺 20260919~20261030 共 24 交易日 ≈120 行）。
                 #   先例: core 的 fund_daily / extend 的 index_global 同为 by_code 模式。
-                "fut_index_daily"]),
+                "fut_index_daily",
+                # 2026-11-01 DB-R15: 六张低频表接入日更（陈旧 41~60 天，体检见 18 号 §261）
+                #   5 张 by_date：周线/周月复权/月度宏观，按 trade_date 拉全市场，各 1 请求/缺口日
+                "weekly", "stk_weekly_monthly", "stk_week_month_adj",
+                "fut_weekly_monthly", "monthly",
+                #   index_weekly：by_code → 必须带 daily_full_refresh 标记（同 index_global 先例），
+                #   12 个指数全量重拉 = 12 请求/天
+                "index_weekly"]),
 ])
 
 # 每日更新默认只跑 core（main.py gap-update）；--group all 时加上 extend
