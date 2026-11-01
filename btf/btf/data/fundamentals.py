@@ -39,20 +39,72 @@ def _is_annual(end_date: str) -> bool:
     return str(end_date).endswith("1231")
 
 
-def daily_basic_of(date_ymd: str, root: Path | None = None,
-                   columns: tuple[str, ...] = ("ts_code", "trade_date", "close",
-                                               "pe_ttm", "pb", "dv_ttm",
-                                               "total_mv")) -> dict[str, dict]:
-    """某交易日全市场估值 → {ts_code: {field: value}}（NaN/None 保留为 None）。"""
-    table = _store(root).read_range(
-        "daily_basic", date_ymd, date_ymd, columns=list(columns))
+#: R-2（19 号 §224-C/§226 S-2）：`daily_basic` **年表 + 日边界索引**缓存。
+#: 键 `(root, year, columns)`；每 root 只留最近 `_DB_YEAR_CACHE` 年（≈182 MB）。
+_DB_CACHE: dict[
+    tuple[str, int, tuple[str, ...]], tuple[object, dict[str, tuple[int, int]]]
+] = {}
+_DB_YEAR_CACHE = 2
+
+
+def _db_year_slice(
+    root: Path, date_ymd: str, columns: tuple[str, ...],
+) -> dict[str, dict]:
+    """年表排序一次 + `{ymd: (lo, hi)}` 索引 → 只物化当日 ~5,000 行。"""
+    year = int(date_ymd[:4])
+    resolved = str(root.resolve())
+    key = (resolved, year, tuple(columns))
+    cached = _DB_CACHE.get(key)
+    if cached is None:
+        table = _store(root).read_file(
+            "daily_basic", year=year, columns=list(columns))
+        index: dict[str, tuple[int, int]] = {}
+        if table is not None and table.num_rows:
+            from btf.data.core import sort_by_date_int32  # 唯一实现（§181 D-3）
+
+            table = sort_by_date_int32(table)
+            grouped = table.group_by("trade_date").aggregate([("ts_code", "count")])
+            ordered = grouped.sort_by("trade_date")
+            start = 0
+            for day, count in zip(ordered.column("trade_date").to_pylist(),
+                                  ordered.column("ts_code_count").to_pylist(),
+                                  strict=True):
+                index[day] = (start, start + count)
+                start += count
+        cached = (table, index)
+        _DB_CACHE[key] = cached
+        floor = year - _DB_YEAR_CACHE + 1
+        for old in [k for k in _DB_CACHE if k[0] == resolved and k[1] < floor]:
+            del _DB_CACHE[old]
+    table, index = cached
+    if table is None:
+        return {}
+    span = index.get(date_ymd)
+    if not span:
+        return {}
+    lo, hi = span
     out: dict[str, dict] = {}
-    for row in table.to_pylist():
-        if str(row.get("trade_date")) != date_ymd:
+    for row in table.slice(lo, hi - lo).to_pylist():
+        if str(row.get("trade_date")) != date_ymd:       # 切片等价性自检
             continue
         out[row["ts_code"]] = {k: row.get(k) for k in columns
                                if k not in ("ts_code", "trade_date")}
     return out
+
+
+def daily_basic_of(date_ymd: str, root: Path | None = None,
+                   columns: tuple[str, ...] = ("ts_code", "trade_date", "close",
+                                               "pe_ttm", "pb", "dv_ttm",
+                                               "total_mv")) -> dict[str, dict]:
+    """某交易日全市场估值 → {ts_code: {field: value}}（NaN/None 保留为 None）。
+
+    **S-2（19 号 §226）**：原实现 `read_range(date, date)` 每次读**整年文件**
+    （~91 MB / 129 万行）再过滤当日（124 次 ≈ 8.18 s）；现改为「年表读一次
+    → 排序 → 日边界索引 → 当日 slice」（与 `state._limit_date_index` 同构），
+    缓存只留最近 2 年。返回值语义**逐字段不变**（不含 ts_code/trade_date）。
+    """
+    root = Path(root or MARKET_DATA_DIR)
+    return _db_year_slice(root, date_ymd, tuple(columns))
 
 
 def roe_pit_of(date_ymd: str, root: Path | None = None, *,
