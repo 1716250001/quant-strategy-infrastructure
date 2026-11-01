@@ -365,3 +365,14 @@ class YearTableStore:
         from btf.data import parquet_reader as pr
 
         return pr.file_stems(table, self.root, years=years)
+
+    def date_bounds(self, table: str, column: str, *,
+                    year: int | None = None) -> tuple[str, str] | None:
+        """单列极值（footer 行组统计聚合，不读数据页）；不可用 → None。
+
+        T-2（19 号 §233-B／§234）：调用方（`version.compute`）据此免去整列
+        `pc.min_max`（12.1 ms/次）；返回 None 时须**逐字回退**原实现。
+        """
+        from btf.data import parquet_reader as pr
+
+        return pr.column_bounds(table, self.root, year=year, column=column)

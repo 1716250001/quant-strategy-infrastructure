@@ -182,8 +182,15 @@ def compute(
                 continue
             row_count += t.num_rows
             if date_col is not None and date_col in t.column_names and t.num_rows:
-                dmin = pc.min_max(t.column(date_col))["min"].as_py()
-                dmax = pc.min_max(t.column(date_col))["max"].as_py()
+                # T-2（19 号 §233-B/§234）：footer 统计优先（`pc.min_max` 12.1 ms/次，
+                # footer 聚合 0.03–0.09 ms，94–538×）；statistics 缺失/类型非字符串/
+                # 非 8 位日期 → **逐字回退**原实现（指纹字段不得静默变化）。
+                bounds = store.date_bounds(table, date_col, year=year)
+                if bounds is None:
+                    dmin = pc.min_max(t.column(date_col))["min"].as_py()
+                    dmax = pc.min_max(t.column(date_col))["max"].as_py()
+                else:
+                    dmin, dmax = bounds
                 date_min = min(x for x in [date_min, dmin] if x is not None)
                 date_max = max(x for x in [date_max, dmax] if x is not None)
             # 键列抽样：跨文件累积行号等距（按文件顺序，确定性）

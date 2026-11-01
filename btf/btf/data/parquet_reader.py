@@ -607,9 +607,79 @@ def file_metas(table: str, root: Path, *,
     return out
 
 
+def _stat_text(value: Any) -> str | None:
+    """footer 统计值 → 8 位数字串（不满足即 None；**字节序≠日期序不得用**）。"""
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            value = bytes(value).decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    if not isinstance(value, str) or len(value) != 8 or not value.isdigit():
+        return None
+    return value
+
+
+def column_bounds(table: str, root: Path, *, year: int | None,
+                  column: str) -> tuple[str, str] | None:
+    """单列极值：**footer 行组统计聚合**（不读数据页）；不可用 → None。
+
+    T-2（19 号 §233-B／§234）：`version.compute` 的 fast 档只需 `date_min`/
+    `date_max` 两个标量，却对整列做 `pc.min_max`（实测 12.1 ms/次）；parquet
+    footer 每个行组已写 `statistics.min/max`，聚合约 0.03–0.09 ms（94–538×）。
+
+    四条守卫（§233-C；任一不满足即返回 None，由调用方**逐字回退** `pc.min_max`）：
+    ① 任一行组无 `statistics` ⇒ None（该行组极值未知，**不得跳过**）；
+    ② 列类型非 string/large_string ⇒ None；
+    ③ 统计值须为 **8 位数字串**（`YYYYMMDD` 字节序＝日期序的前提，不假设）；
+    ④ 零行组/空文件 ⇒ None。
+    """
+    import pyarrow as pa
+
+    meta = TABLES.get(table)
+    if meta is None:
+        raise ReaderError(f"表未登记: {table}")
+    if meta.layout is Layout.BY_YEAR:
+        if year is None:
+            raise ReaderError(f"表 {table} 为 by_year 布局，须给 year")
+        path = _resolve_root(meta, root) / f"{int(year)}.parquet"
+    else:
+        path = _resolve_root(meta, root) / f"{table}.parquet"
+    if not path.is_file():
+        return None
+    pf = pq.ParquetFile(path)
+    schema = pf.schema_arrow
+    if column not in schema.names:
+        return None
+    dtype = schema.field(column).type
+    if not (pa.types.is_string(dtype) or pa.types.is_large_string(dtype)):
+        return None
+    idx = schema.names.index(column)
+    md = pf.metadata
+    if md.num_columns != len(schema.names):
+        return None                      # 嵌套 schema：列序不保证与 arrow 字段一致
+    lo: str | None = None
+    hi: str | None = None
+    for gi in range(md.num_row_groups or 0):
+        rg = md.row_group(gi)
+        if rg.num_rows == 0:
+            continue
+        st = rg.column(idx).statistics
+        if st is None or not st.has_min_max:
+            return None
+        vmin, vmax = _stat_text(st.min), _stat_text(st.max)
+        if vmin is None or vmax is None:
+            return None
+        lo = vmin if lo is None or vmin < lo else lo
+        hi = vmax if hi is None or vmax > hi else hi
+    if lo is None or hi is None:
+        return None
+    return (lo, hi)
+
+
 __all__ = [
     "FileMeta",
     "ReaderError",
+    "column_bounds",
     "file_metas",
     "file_stems",
     "iter_day_slices",
