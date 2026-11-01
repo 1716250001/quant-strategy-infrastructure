@@ -1146,6 +1146,14 @@ BACKFILL_TARGETS = OrderedDict([
     # 详见 文档/数据与工程/接口审查报告复核意见_20260919.md
     ("fut_index_daily", {
         "api": "fut_index_daily", "desc": "南华期货指数日线", "mode": "by_code",
+        # ⚠ 2026-11-01 DB-R12b: 标记为「每日全量重拉」类（daily_update 专用）。
+        #   为什么必须标记: 本表 mode=by_code，而 daily_update 只执行 by_date/by_range
+        #   或带本标记的 by_code ⇒ 只加进 DAILY_UPDATE_GROUPS 会被**静默跳过**
+        #   （"假纳入"，R10 判据⑤）。同 index_global 的处理。
+        #   为什么全量重拉: 该接口必填 ts_code、只能一次拉该指数全历史（2006 起约 5,033 行），
+        #   无"某一天"入参 ⇒ 全量重拉即正确形态；落盘按 (ts_code, trade_date) 去重，天然幂等。
+        #   成本: 5 个指数 = **5 请求/天**，可忽略。
+        "daily_full_refresh": True,
         "codes": "fut_index", "max_rows": 5000, "tier": "B",
         "subset": ["ts_code", "trade_date"],
         "note": "南华商品/农产品/金属/能化/工业品指数(2006起, 单指数约5000行); "
