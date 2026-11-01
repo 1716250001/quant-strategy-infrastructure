@@ -1156,7 +1156,9 @@ BACKFILL_TARGETS = OrderedDict([
         "daily_full_refresh": True,
         "codes": "fut_index", "max_rows": 5000, "tier": "B",
         "subset": ["ts_code", "trade_date"],
-        "note": "南华商品/农产品/金属/能化/工业品指数(2006起, 单指数约5000行); "
+        "note": "南华商品/农产品/金属/能化/工业品指数(2006起, 20261030 实测单指数 5,057 行); "
+                "⚠ 行数已超 max_rows=5000 —— 全量重拉时若源端按 max_rows 截断，"
+                "只会丢最早的行、已落盘分区不受影响（merge 只增不删）; "
                 "⚠必填 ts_code(不传报错); 传不同 code 返回不同数据(已实测)",
     }),
     ("etf_limit", {

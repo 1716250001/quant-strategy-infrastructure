@@ -886,8 +886,10 @@ P2 = [
               note="上交所官方 ETF 份额（593~923 行 × 6 列）；"
                    "⚠ 源端**当日份额次日才发布**（20261030 KeyError / 20261029=923 行）"
                    "⇒ date_param_lag_days=1 取 T-1；"
-                   "⚠ 深交所 fund_etf_scale_szse 实测 TypeError(bytes) ⇒ 本单不接，"
-                   "深市份额改用 tushare fund_share 兜底"),
+                   "⚠ 深市对应表为 etf_scale_szse（R12 已接入）——"
+                   "akshare 原函数在 pandas>=2.0 下 read_excel(bytes) 报 TypeError，"
+                   "已由 alt/compat.patch_akshare() 修复；注意两所口径不同："
+                   "本表为 T-1，SZSE 为 T 日实时快照，跨所汇总须先对齐日期"),
     TableSpec("etf_scale_szse", "fund_etf_scale_szse", "P2", "by_year", "trade_date",
               src_date_col=None, subset=["trade_date", "基金代码"], mode="once",
               max_age_days=15, max_backfill_days=0,
@@ -927,6 +929,8 @@ P2 = [
               range_start="20160101",          # DB-R11c：20200101 → 20160101
               max_age_days=15, max_backfill_days=240,
               note="中债收益率曲线（曲线名称 × 10 期限，实测 20260101~20261029=609 行）；"
+                   "⚠ 源端**仅返回 3 种曲线**：中债国债 / 中债中短期票据(AAA) / 中债商业银行普通债(AAA)"
+                   "（**不是**国债/地方债/金融债/信用债全套，§226 P3-3 更正 §219 的设计假设）；"
                    "⚠ 单次跨度**不得超过约 1 年**，超了静默返回空表 ⇒ 引擎按年切段；"
                    "max_backfill_days=240（交易日口径）；回补脚本按季度切片；"
                    "起点 20160101（opt_daily 与中债曲线的最早可得年份）；"
