@@ -244,7 +244,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
             print(f"     [verbose] 数据质检: "
                   f"{rt.data_quality.get('note') or rt.data_quality.get('ok')}"
                   f"（标的 {rt.data_quality.get('checked_symbols')}，"
-                  f"抽样={rt.data_quality.get('sampled_symbols')}）")
+                  f"抽样={rt.data_quality.get('sampled_symbols')}"
+                  # **P3（19 号 §242）**：红线段 4——`--verbose` 必须能看出
+                  # 质检是「命中进程内缓存」还是「重算」（不进产物，只此一行）
+                  + (f"，缓存={rt.data_quality_cache}"
+                     if getattr(rt, "data_quality_cache", "") else "")
+                  + "）")
         if rt.data_version_info:
             print(f"     [verbose] 数据指纹: "
                   f"{rt.data_version_info.get('content_hash')}"

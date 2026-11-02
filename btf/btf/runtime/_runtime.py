@@ -187,6 +187,10 @@ class BTFRuntime:
         self.benchmark_details: tuple[dict[str, Any], ...] = ()
         #: 数据指纹真值（BB-1 重路：装配期实算；落 manifest.data_version）
         self.data_version_info: dict[str, Any] = {}
+        #: **P3（19 号 §242）**：质检结果的来源——`"命中"`／`"重算"`／空串
+        #: （未走质检）。只用于 `bt run --verbose` 观测，**不进产物**（产物字段
+        #: 与 P3 前逐位一致）。
+        self.data_quality_cache: str = ""
         #: 数据版本门禁的跳过声明（**T-18 / 19 号 §149 D-1**）：默认 `None`＝正常
         #: 门禁；`run_walk_forward` 在每折装配前置 `"skipped_walk_forward"` ⇒
         #: 只跳**哈希**门禁（水位门禁照旧）。是否**实际**跳过由

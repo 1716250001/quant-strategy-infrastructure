@@ -16,7 +16,10 @@
 """
 from __future__ import annotations
 
+import copy
+import hashlib
 import logging
+from collections import OrderedDict
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -45,6 +48,17 @@ def _ymd(s: str) -> TradingDate:
 #: 键 = (root, tables, years, mode)。同一进程内重复 build/run（网格/批量 `--set`）
 #: 不应重复付算力；跨进程的 `bt run` 仍会重新实算 ⇒ 数据重写可检出。
 _FINGERPRINT_MEMO: dict[tuple, Any] = {}
+
+#: **P3（19 号 §242）**：装配结果**进程内** memo（甲档）——只缓存两份纯数据
+#: （`data_quality` 载荷 + `data_version` 字典），**不缓存 runtime 对象**。
+#: 键含 `expected_hash`（数据契约变了必须失效）；LRU 上限 8 条。
+#: 收益：网格/多组同进程内，质检（≈8 s/组）与指纹只算一次。
+_QUALITY_MEMO: OrderedDict[tuple, tuple[dict[str, Any], tuple[str, ...], str, str | None]] = OrderedDict()
+_QUALITY_MEMO_MAX = 8
+#: 两份纯数据的另一份：`compute_data_version` 的**返回字典**（同样 LRU 8 条）。
+#: 键另含 `end_ymd`（`anchor_date` 夹取区间末）与 `expected_hash`（契约变更即失效）。
+_VERSION_INFO_MEMO: OrderedDict[tuple, dict[str, Any]] = OrderedDict()
+_VERSION_INFO_MEMO_MAX = 8
 
 #: **P16 ①（19 号 §165）**：数据水位**只取行情表**。`stock_basic.date_max` 是
 #: 「最新一只股票的上市日」（实测 20260930），与数据水位语义无关——混进来会把
@@ -184,19 +198,51 @@ class ComponentAssembler:
             logger.info("数据不变量校验：内存 Feed（无文件可校验，标注 skipped）")
             return {"enabled": False, "mode": "in-memory",
                     "note": "内存 Feed：无文件级数据可校验（非静默跳过）"}
-        symbols = sorted(self.rt.instruments)      # dict[symbol, Instrument] 的键
+        universe = sorted(self.rt.instruments)     # dict[symbol, Instrument] 的键
         cap = int(qcfg.get("max_symbols", 200) or 0)
-        sampled = bool(cap) and len(symbols) > cap
-        if sampled:
-            symbols = symbols[:cap]
+        sampled = bool(cap) and len(universe) > cap
+        symbols = universe[:cap] if sampled else universe
         classes = {i.asset_class.value for i in self.rt.instruments.values()}
         price_tables = ("daily",) + (("fund_daily",) if "etf" in classes else ())
         limit_tables = ("stk_limit",) + (("etf_limit",) if "etf" in classes else ())
+        start_ymd = _ymd(period["start"]).to_ymd()
+        end_ymd = _ymd(period["end"]).to_ymd()
+        # ── P3（19 号 §242）：进程内装配结果 memo（甲档）──────────────────
+        # 键含 `expected_hash` ⇒ 数据契约一变即失效（P3-5）；宇宙哈希覆盖
+        # 「同进程内 `--set` 改 universe」；配置指纹覆盖 quality/strict 与基准。
+        ds_cfg = (self.rt.config.get("data") or {}).get("dataset") or {}
+        memo_key = (
+            str(root), start_ymd, end_ymd,
+            str(ds_cfg.get("expected_hash") or ""),
+            tuple(sorted((k, repr(v)) for k, v in qcfg.items())),
+            repr((self.rt.config.get("report") or {}).get("benchmark")),
+            hashlib.sha1("\n".join(universe).encode("utf-8")).hexdigest(),
+            price_tables, limit_tables,
+        )
+        t_hit = perf_counter()
+        hit = _QUALITY_MEMO.get(memo_key)
+        if hit is not None:
+            _QUALITY_MEMO.move_to_end(memo_key)
+            self.rt.data_quality_cache = "命中"
+            payload, notes, summary, warn = copy.deepcopy(hit[0]), hit[1], hit[2], hit[3]
+            self.rt.assembly_notes.extend(notes)
+            logger.info("数据不变量校验：**命中进程内缓存**（%s~%s）｜%s",
+                        start_ymd, end_ymd, summary)
+            if warn:
+                logger.warning("%s", warn)
+            if qcfg.get("strict", False) and not payload.get("ok", True):
+                raise DataQualityError(
+                    "数据不变量校验未通过（strict=true，fail-closed）：" + summary)
+            payload["seconds_assembly"] = round(perf_counter() - t_hit, 4)
+            return payload
+        logger.info("数据不变量校验：**重算**（未命中进程内缓存）")
+        self.rt.data_quality_cache = "重算"
         t0 = perf_counter()
         from btf.data.quality import NON_BLOCKING_RULES, calendar_days, run_checks
 
-        start_ymd = _ymd(period["start"]).to_ymd()
-        end_ymd = _ymd(period["end"]).to_ymd()
+        notes_start = len(self.rt.assembly_notes)
+        warns: list[str] = []
+
         # ── ST 名单（批 9 / DD-1；P2-NEW-8）───────────────────────────────
         # 此前 `run_checks` **未传** `st_symbols` ⇒ CC-2 恒按板块上限（主板
         # 10%）⇒ ST 股 5%~10% 的越界**漏检**（功能未接线 + 零覆盖）。
@@ -216,10 +262,12 @@ class ComponentAssembler:
                 logger.warning("数据不变量校验：ST 名单获取失败（%s: %s）——"
                                "CC-2 将只按板块上限判定", type(exc).__name__, exc)
         if st_source == "unavailable":
-            logger.warning(
+            st_warn = (
                 "数据不变量校验：ST 名单不可用（namechange 缺失/取不到）→ CC-2 "
                 "按板块上限判定，**会漏检 ST 股 5%~10% 的越界**（披露而非静默；"
                 "铁律新 16）")
+            logger.warning("%s", st_warn)
+            warns.append(st_warn)
             self.rt.assembly_notes.append(
                 "CC-2 ST 上限：ST 名单不可用 → 只按板块上限判定，"
                 "**可能漏检 ST 越界**（非静默）")
@@ -236,12 +284,14 @@ class ComponentAssembler:
         payload["st_pairs_count"] = len(st_pairs)
         logger.info("%s", report.summary_line())
         if not report.ok:
-            logger.warning(
-                "数据不变量校验发现 %d 行异常（%s）——详见 run 目录 "
-                "data_quality_report.json / 报告「数据质量」章节",
-                report.n_findings,
-                "、".join(f"{r.rule}:{r.n_findings}"
-                          for r in report.rules if not r.ok))
+            dq_warn = (
+                f"数据不变量校验发现 {report.n_findings} 行异常（"
+                + "、".join(f"{r.rule}:{r.n_findings}"
+                            for r in report.rules if not r.ok)
+                + "）——详见 run 目录 data_quality_report.json / "
+                  "报告「数据质量」章节")
+            logger.warning("%s", dq_warn)
+            warns.append(dq_warn)
         # 报告披露（CC-6）：走既有**强制章节**「假设与披露」通道（assembly_notes
         # → manifest → 报告），不新增模板章节（避免动渲染器）
         self.rt.assembly_notes.append(
@@ -268,10 +318,23 @@ class ComponentAssembler:
                     f"CC-7 送转一致性（只报不阻断）：{cc7.checked_rows} "
                     "个送转事件均检出因子跳变")
         payload["seconds_assembly"] = round(perf_counter() - t0, 4)
+        # ── P3（19 号 §242）：写进程内 memo（LRU 8 条）──────────────────
+        # 只缓存**两份纯数据＋披露文本**（红线 1：不缓存 runtime 对象）；
+        # `seconds_*` 属计时字段，命中时按当次耗时重算，不复用旧值。
+        summary = report.summary_line()
+        _QUALITY_MEMO[memo_key] = (
+            copy.deepcopy(payload),
+            tuple(self.rt.assembly_notes[notes_start:]),
+            summary,
+            "\n".join(warns) or None,
+        )
+        _QUALITY_MEMO.move_to_end(memo_key)
+        while len(_QUALITY_MEMO) > _QUALITY_MEMO_MAX:
+            _QUALITY_MEMO.popitem(last=False)
         if qcfg.get("strict", False) and not report.ok:
             raise DataQualityError(
                 f"数据不变量校验未通过（strict=true，fail-closed）："
-                f"{report.summary_line()}")
+                f"{summary}")
         return payload
 
     def compute_data_version(self, period: Mapping[str, Any]) -> dict[str, Any]:
@@ -308,6 +371,20 @@ class ComponentAssembler:
                 f"data.fingerprint_mode={mode!r} 非法"
                 f"（可选 meta（缺省）| fast | full）"])
         t0 = perf_counter()
+        # ── P3（19 号 §242）：指纹结果进程内 memo（LRU 8 条）───────────────
+        # 键含 `end_ymd`（水位夹取依赖它）与 `expected_hash`（契约变更即失效）。
+        ds_cfg = (self.rt.config.get("data") or {}).get("dataset") or {}
+        vkey = (str(root), tuple(tables), tuple(years), end_ymd, mode,
+                str(ds_cfg.get("expected_hash") or ""))
+        cached = _VERSION_INFO_MEMO.get(vkey)
+        if cached is not None:
+            _VERSION_INFO_MEMO.move_to_end(vkey)
+            self.rt.data_fingerprint_seconds = perf_counter() - t0
+            logger.info("数据指纹（%s 档，%d 表 × %d 年，%.2fs）：%s | 数据水位 %s"
+                        "（**命中进程内缓存**）", mode, len(tables), len(years),
+                        self.rt.data_fingerprint_seconds, cached["content_hash"],
+                        cached["anchor_date"])
+            return copy.deepcopy(cached)
         key = (str(root), tuple(tables), tuple(years), mode)
         fp = _FINGERPRINT_MEMO.get(key)
         if fp is None:                       # 进程内 memo：同输入只算一次
@@ -320,17 +397,22 @@ class ComponentAssembler:
         # （部分表非年分片——如静态/单文件表——日期会延伸到未来，与本次回测
         # 无关；不裁剪会把锚点写成未来日期，误导"数据水位"语义）。
         anchor = _price_anchor(detail, end_ymd) or end_ymd
-        logger.info(
-            "数据指纹（%s 档，%d 表 × %d 年，%.2fs）：%s | 数据水位 %s",
-            mode, len(tables), len(years), self.rt.data_fingerprint_seconds,
-            fp.digest, anchor)
-        return {
+        info = {
             "content_hash": fp.digest,
             "tables": tables,
             "anchor_date": anchor,
             "tables_detail": detail,
             "mode": mode,
         }
+        _VERSION_INFO_MEMO[vkey] = copy.deepcopy(info)
+        _VERSION_INFO_MEMO.move_to_end(vkey)
+        while len(_VERSION_INFO_MEMO) > _VERSION_INFO_MEMO_MAX:
+            _VERSION_INFO_MEMO.popitem(last=False)
+        logger.info(
+            "数据指纹（%s 档，%d 表 × %d 年，%.2fs）：%s | 数据水位 %s",
+            mode, len(tables), len(years), self.rt.data_fingerprint_seconds,
+            fp.digest, anchor)
+        return info
 
     def guard_dataset_version(self, period: Mapping[str, Any]) -> None:
         """数据版本门禁（**RC-14**，2026-10-05）：声明版本 → 运行前校验哈希一致。

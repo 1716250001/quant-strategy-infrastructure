@@ -54,12 +54,18 @@ def _cfg(*, anchor: str | None = None, end: str = "2024-01-05") -> dict:
 
 @pytest.fixture(autouse=True)
 def _clear_fingerprint_memo():
-    """指纹 memo 是**进程级**：每个用例前清掉，避免真实指纹串味到替身。"""
+    """指纹 memo 是**进程级**：每个用例前清掉，避免真实指纹串味到替身。
+
+    **P3（19 号 §242）**：`compute_data_version` 的返回字典亦进进程内 memo
+    （`_VERSION_INFO_MEMO`），同一份替身/真库同键 ⇒ 必须一并清掉。
+    """
     from btf.runtime import component_assembler as ca
 
     ca._FINGERPRINT_MEMO.clear()
+    ca._VERSION_INFO_MEMO.clear()
     yield
     ca._FINGERPRINT_MEMO.clear()
+    ca._VERSION_INFO_MEMO.clear()
 
 
 def _install_fake(monkeypatch, detail: dict) -> None:
