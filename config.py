@@ -586,9 +586,15 @@ BACKFILL_TARGETS = OrderedDict([
                 "故 subset 已改为 (ts_code, trade_date) 按主键判重(2026-10-29, DB-R10 R10-4)。",
     }),
     ("forecast", {
-        "api": "forecast", "desc": "业绩预告", "mode": "by_code",
-        "codes": "stock_all", "max_rows": 5000, "tier": "A",
-        "note": "涛涛战法业绩雷规避",
+        "api": "forecast", "desc": "业绩预告", "mode": "by_date",
+        "start": "20060101", "date_param": "ann_date", "date_col": "ann_date",
+        "max_rows": 0, "tier": "A",
+        "subset": ["ts_code", "ann_date", "end_date"],
+        "note": "业绩预告（涛涛战法业绩雷规避）；"
+                "⚠ 参数名是 **ann_date**（非 trade_date），同 fund_div；"
+                "⚠ 不支持只传 period（实测报『ann_date和ts_code至少输入一个』）；"
+                "按公告日横截面拉全市场，**每日约 1~2 行**（稀疏事件）；"
+                "存量 20240808 前为 by_code 逐只回补、2024 分区仅 1 行 ⇒ 需按日回补 20240809 起",
     }),
     ("disclosure_date", {
         "api": "disclosure_date", "desc": "财报披露日期表", "mode": "by_period",
@@ -2101,7 +2107,11 @@ DAILY_UPDATE_GROUPS = OrderedDict([
                 "fut_weekly_monthly", "monthly",
                 #   index_weekly：by_code → 必须带 daily_full_refresh 标记（同 index_global 先例），
                 #   12 个指数全量重拉 = 12 请求/天
-                "index_weekly"]),
+                "index_weekly",
+                # 2026-11-02 DB-R16: forecast（业绩预告）接入日更
+                #   原 mode=by_code 且不在任何日更组 ⇒ 从未被调度、2024 分区仅 1 行；
+                #   改 by_date + date_param=ann_date（同 fund_div），每日 1 请求、约 1~2 行。
+                "forecast"]),
 ])
 
 # 每日更新默认只跑 core（main.py gap-update）；--group all 时加上 extend

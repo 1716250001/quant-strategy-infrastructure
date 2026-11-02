@@ -971,6 +971,20 @@ P2 = [
                    "⚠ enum 只列 2019~2026（已实测年份），未来年会失败毒整表；"
                    "⚠ 维护动作：**每年 1 月在 enum_values 追加新年份**；"
                    "「汇金 ETF 化」的公司维度，与 etf_scale_sse/szse（标的维度）互补"),
+    TableSpec("fund_stock_position_lg", "fund_stock_position_lg", "P2", "single", "trade_date",
+              src_date_col="date", subset=["trade_date"], mode="once",
+              update_every_days=7, max_age_days=10,
+              note="股票型基金仓位（乐咕乐股，实测 459 行 2017-12-04~2026-10-30，"
+                   "周频每周五更新，非零率 100%，最新 96.70→96.95→97.29）；"
+                   "⚠ 同族 fund_balance_position_lg（平衡混合型）已停更 2025-12-12 后恒 0，"
+                   "故改用本表 + fund_linghuo_position_lg 两个活品类；"
+                   "股票型含指数基金 ⇒ 常年 95%+ 属正常口径"),
+    TableSpec("fund_linghuo_position_lg", "fund_linghuo_position_lg", "P2", "single", "trade_date",
+              src_date_col="date", subset=["trade_date"], mode="once",
+              update_every_days=7, max_age_days=10,
+              note="灵活配置型基金仓位（乐咕乐股，实测 459 行 2017-12-04~2026-10-30，"
+                   "周频每周五更新，非零率 100%，最新 87.33→86.86→87.79）；"
+                   "⚠ 与 fund_stock_position_lg 的仓位差本身有信息量（主动权益实际仓位）"),
     TableSpec("option_sse_stats", "option_daily_stats_sse", "P2", "by_year", "trade_date",
               src_date_col=None, subset=["trade_date", "合约标的代码"], mode="once",
               date_param="date", date_param_lag_days=0,
