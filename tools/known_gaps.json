@@ -4522,6 +4522,11 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
+      "160425.SZ": {
+        "probe_rows": 0,
+        "probe_date": "2026-11-02",
+        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
+      },
       "160516.SZ": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
@@ -4985,6 +4990,11 @@
       "512830.SH": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
+        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
+      },
+      "515443.SH": {
+        "probe_rows": 0,
+        "probe_date": "2026-11-02",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
       "516170.SH": {
