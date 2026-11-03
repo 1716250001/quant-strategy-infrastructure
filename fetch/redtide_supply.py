@@ -30,7 +30,7 @@ from config import (
 )
 from common.calendar import open_dates
 from common import reader
-from common.parquet_store import upsert_grouped
+from common.parquet_store import upsert_by_year, list_parquet_files
 from fetch.base import (
     get_pro, RateLimiter, Checkpoint,
     ts_fetch_by_date,
@@ -279,14 +279,13 @@ def _load_year_data_from_dir(directory, start_date, end_date, cols=None):
 # ============================================================
 
 def update_stk_limit_one_date(pro, limiter, trade_date, dry_run=False):
-    """按 trade_date 批量拉全市场 stk_limit，按 ts_code 分组写入。
+    """按 trade_date 批量拉全市场 stk_limit，按**年份分区**写入。
 
-    ⚠ 已废弃（2026-09-18 补注）: 本函数走 upsert_grouped 写 {code}.parquet，
-      而 stk_limit 磁盘已是按年分区。虽当前无调用方（run_stk_limit 已改道
-      每日增量引擎），但保留它就是一颗地雷——一旦被调用会在年度目录里
-      生成数千小文件并打乱布局探测。
-      现已由 common.parquet_store._assert_by_code_target 硬拦（会抛
-      LayoutGuardError），双重保险。新代码请走 fetch/daily_update。
+    ⚠ 历史（2026-09-18）: 本函数曾走 upsert_grouped 写 {code}.parquet，
+      而 stk_limit 磁盘已是按年分区 ⇒ 会生成数千小文件并打乱布局探测。
+      2026-11-03 按审查单整改：改走 upsert_by_year，与 run_stk_limit 实际
+      使用的每日增量引擎（fetch/daily_update → upsert_by_year）同一写入口。
+      当前仍无调用方，保留它只为消除"可被误调用的 by_code 地雷"。
     """
     ensure_dir(STK_LIMIT_DIR)
     df = ts_fetch_by_date(pro, "stk_limit", limiter, trade_date)
@@ -299,15 +298,21 @@ def update_stk_limit_one_date(pro, limiter, trade_date, dry_run=False):
     if dry_run:
         return (len(df), 0)
 
-    success = 0
-    fail = 0
-    new_files = 0
-    stat = upsert_grouped(
-        df, STK_LIMIT_DIR, key_col="ts_code",
-        subset="trade_date", sort_by="trade_date",
-        on_error=lambda code, e: print(f"  [ERROR] {code}: {e}"),
+    before_files = set(list_parquet_files(STK_LIMIT_DIR))
+    stat = upsert_by_year(
+        df, STK_LIMIT_DIR, date_col="trade_date",
+        subset=["ts_code", "trade_date"], sort_by="trade_date",
+        on_error=lambda year, e: print(f"  [ERROR] {year}: {e}"),
     )
-    success, fail, new_files = stat["processed"], stat["fail"], stat["new"]
+    # 返回值换算口径（upsert_by_year 无 processed/new 字段）:
+    #   success := stat["rows"]（本次写入/合并涉及的行数；旧口径为"按标的处理数"，
+    #              by_year 下标的维度不存在，故以行数为等价"已处理量"）
+    #   fail    := stat["fail"]（失败分区数）
+    #   新建文件 := 写前/写后年份文件差集（仅用于日志，不进返回值）
+    #   对外契约仍为 (success, fail)，不新增/不改返回结构。
+    success = stat["rows"]
+    fail = stat["fail"]
+    new_files = len(set(list_parquet_files(STK_LIMIT_DIR)) - before_files)
 
     print(f"  完成: 更新={success} (新建={new_files}) 失败={fail}")
     return (success, fail)
