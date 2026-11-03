@@ -95,31 +95,55 @@ def dir_size_bytes(dir_path, pattern=".parquet"):
     return total
 
 
+_FSYNC_WRITE_FLAGS = os.O_RDWR | getattr(os, "O_BINARY", 0)
+_FSYNC_WARNED = False
+
+
+def _fsync_warn_once(path, err):
+    """降级告警每进程只打印一次（避免逐文件刷屏）。"""
+    global _FSYNC_WARNED
+    if _FSYNC_WARNED:
+        return
+    _FSYNC_WARNED = True
+    print("[WARN] fsync 降级: %s errno=%s（本进程仅提示一次）"
+          % (os.path.basename(str(path)), getattr(err, "errno", "?")))
+
+
 def _fsync_file(path):
-    """把文件内容刷到物理介质（best-effort；平台不支持时静默跳过）。
+    """把文件内容刷到物理介质。返回 True=已执行且成功；False=降级（未生效）。
 
     E-05（2026-10-11 三轮架构审查）: 原子写的 `os.replace` 只保证**目录项**
     换名原子，不保证**数据**已落盘 —— 断电时可能出现"新文件名 + 空/半内容"。
     与 btf `events.jsonl` 的 fsync 纪律相比，主库侧此前投入不对等（同为
     数据可靠性关键路径）。此处补齐：写后 fsync 再 replace。
 
+    2026-11-03 修复（CC-FSYNC-1）: 原实现用 os.O_RDONLY 打开后 fsync ——
+    Windows 的 FlushFileBuffers 要求句柄带 GENERIC_WRITE，O_RDONLY 必然
+    errno 9(EBADF)，且被 except 静默吞掉 ⇒ 自 2026-10-11 起从未生效。
+    改用写句柄；打不开时回落 O_RDONLY（POSIX 只读挂载下仍有效）。
+
     ⚠ 目录级 fsync（POSIX 才需要，用于持久化 rename 本身）在 Windows 不可用
       —— 故整个函数 best-effort：失败只降级（不阻断写入）。
     """
     try:
-        fd = os.open(path, os.O_RDONLY)
+        fd = os.open(path, _FSYNC_WRITE_FLAGS)
     except OSError:
-        return
+        try:
+            fd = os.open(path, os.O_RDONLY)   # POSIX 只读挂载兜底
+        except OSError:
+            return False
     try:
         os.fsync(fd)
-    except OSError:
-        pass
+    except OSError as e:
+        _fsync_warn_once(path, e)
+        return False
     finally:
         os.close(fd)
+    return True
 
 
 def _fsync_dir(path):
-    """目录项持久化（best-effort；Windows 打开目录句柄会失败 ⇒ 跳过）。"""
+    """目录项持久化（POSIX only；Windows 打开目录句柄会失败 ⇒ 跳过）。"""
     try:
         fd = os.open(path, os.O_RDONLY)
     except OSError:
