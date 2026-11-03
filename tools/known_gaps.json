@@ -32,17 +32,24 @@
       "150354.SZ",
       "150357.SZ",
       "150358.SZ",
-      "158036.SZ",
-      "158051.SZ",
-      "158062.SZ",
-      "158065.SZ",
-      "158066.SZ",
-      "158067.SZ",
-      "158072.SZ",
-      "158078.SZ",
+      "158015.SZ",
+      "158016.SZ",
+      "158060.SZ",
+      "158070.SZ",
+      "158076.SZ",
       "158081.SZ",
-      "159047.SZ",
-      "159089.SZ",
+      "158087.SZ",
+      "158088.SZ",
+      "158091.SZ",
+      "158900.SZ",
+      "158901.SZ",
+      "158902.SZ",
+      "158903.SZ",
+      "158905.SZ",
+      "158906.SZ",
+      "158907.SZ",
+      "158908.SZ",
+      "158909.SZ",
       "159319.SZ",
       "159585.SZ",
       "159756.SZ",
@@ -112,9 +119,7 @@
       "168601.SZ",
       "169108.SZ",
       "169109.SZ",
-      "180307.SZ",
-      "180505.SZ",
-      "180702.SZ",
+      "180107.SZ",
       "181002.SZ",
       "501033.SH",
       "501041.SH",
@@ -133,23 +138,49 @@
       "506009.SH",
       "508038.SH",
       "508047.SH",
-      "508095.SH",
+      "508081.SH",
       "508605.SH",
       "508606.SH",
       "508607.SH",
-      "508609.SH",
       "508610.SH",
+      "512490.SH",
       "512830.SH",
+      "513790.SH",
       "515443.SH",
       "516170.SH",
+      "517250.SH",
       "517980.SH",
+      "520800.SH",
       "526020.SH",
+      "526080.SH",
       "560430.SH",
       "561270.SH",
+      "561860.SH",
+      "561970.SH",
+      "562090.SH",
+      "562100.SH",
       "562210.SH",
       "562630.SH",
+      "562690.SH",
+      "562710.SH",
+      "562720.SH",
+      "563100.SH",
+      "581000.SH",
+      "581010.SH",
+      "581020.SH",
+      "581030.SH",
+      "581050.SH",
+      "581060.SH",
+      "581070.SH",
+      "581080.SH",
+      "581090.SH",
       "588490.SH",
-      "589450.SH"
+      "588560.SH",
+      "589370.SH",
+      "589450.SH",
+      "589590.SH",
+      "589610.SH",
+      "589670.SH"
     ],
     "source_empty_evidence": {
       "150087.SZ": {
@@ -438,121 +469,11 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
       },
-      "158036.SZ": {
-        "name": "华夏中证卫星产业ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 2,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "158051.SZ": {
-        "name": "国联安中证金融科技主题ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 3,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "158062.SZ": {
-        "name": "建信创业板金融科技ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 4,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "158065.SZ": {
-        "name": "招商国证粮食产业ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 0,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "158066.SZ": {
-        "name": "前海开源中证大数据产业ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 4,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "158067.SZ": {
-        "name": "万家创业板金融科技ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 3,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "158072.SZ": {
-        "name": "南方创业板软件ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 2,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "158078.SZ": {
-        "name": "华宝创业板电池ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 0,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
       "158081.SZ": {
         "name": "永赢创业板电池ETF",
         "list_date": "",
         "delist_date": "",
         "nav_rows": 0,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "159047.SZ": {
-        "name": "银华中证港股通信息技术综合ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 2,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "159089.SZ": {
-        "name": "国联国证港股通互联网ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 3,
         "daily_attempts": 3,
         "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
         "probe_rows": 0,
@@ -1318,39 +1239,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
       },
-      "180307.SZ": {
-        "name": "中金菜鸟仓储物流REIT",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 1,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "180505.SZ": {
-        "name": "中金杭州安居保障性租赁住房REIT",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 1,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "180702.SZ": {
-        "name": "银华粤海水务水利REIT",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 1,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
       "181002.SZ": {
         "name": "华泰紫金华住安住REIT",
         "list_date": "",
@@ -1549,17 +1437,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
       },
-      "508095.SH": {
-        "name": "国泰海通中国建筑租赁住房REIT",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 1,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
       "508605.SH": {
         "name": "华夏保利发展REIT",
         "list_date": "",
@@ -1584,17 +1461,6 @@
       },
       "508607.SH": {
         "name": "华安陆家嘴REIT",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 1,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "508609.SH": {
-        "name": "华安锦江REIT",
         "list_date": "",
         "delist_date": "",
         "nav_rows": 1,
@@ -1735,6 +1601,236 @@
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
+      },
+      "158902.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158900.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581030.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581070.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581090.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158076.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158901.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581000.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581050.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "180107.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "508081.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562690.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158015.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158016.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158060.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158070.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158087.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158088.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158091.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158903.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158905.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158906.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158907.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158908.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158909.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "512490.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "513790.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "517250.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "520800.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "526080.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "561860.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "561970.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562090.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562100.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562710.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562720.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "563100.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581010.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581020.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581060.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581080.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "588560.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589370.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589590.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589610.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589670.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
       }
     },
     "source_empty_summary": {
@@ -1763,9 +1859,18 @@
     "note": "全表缺口另立项；派单 173 只 A2 已补（成功 127/空 46），不参与 R17 断言",
     "source_empty": [
       "150159.SZ",
-      "158065.SZ",
-      "158078.SZ",
-      "158081.SZ",
+      "158015.SZ",
+      "158016.SZ",
+      "158060.SZ",
+      "158070.SZ",
+      "158087.SZ",
+      "158088.SZ",
+      "158091.SZ",
+      "158903.SZ",
+      "158905.SZ",
+      "158906.SZ",
+      "158907.SZ",
+      "158909.SZ",
       "159319.SZ",
       "159585.SZ",
       "159756.SZ",
@@ -1786,24 +1891,41 @@
       "168205.SZ",
       "168501.SZ",
       "169109.SZ",
-      "181002.SZ",
       "501052.SH",
       "501221.SH",
       "501223.SH",
       "508038.SH",
       "508606.SH",
       "508610.SH",
+      "512490.SH",
       "512830.SH",
+      "513790.SH",
       "515443.SH",
       "516170.SH",
+      "517250.SH",
       "517980.SH",
+      "520800.SH",
       "526020.SH",
+      "526080.SH",
       "560430.SH",
       "561270.SH",
+      "561860.SH",
+      "562090.SH",
+      "562100.SH",
       "562210.SH",
       "562630.SH",
+      "562690.SH",
+      "562710.SH",
+      "562720.SH",
+      "563100.SH",
+      "581060.SH",
       "588490.SH",
-      "589450.SH"
+      "588560.SH",
+      "589370.SH",
+      "589450.SH",
+      "589590.SH",
+      "589610.SH",
+      "589670.SH"
     ],
     "source_late_start": [
       "150020.SZ",
@@ -1876,21 +1998,6 @@
     "ee_fund4_note": "EE-FUND-4（2026-10-17）全表回填：fund_nav 三轮核验后 source_empty=47 / source_late_start=12，未登记 A/B 归零",
     "source_empty_evidence": {
       "150159.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
-      "158065.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
-      "158078.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
-      "158081.SZ": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
@@ -1995,11 +2102,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
       },
-      "181002.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
       "501052.SH": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
@@ -2084,6 +2186,156 @@
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
+      },
+      "562690.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158015.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158016.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158060.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158070.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158087.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158088.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158091.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158903.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158905.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158906.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158907.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158909.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "512490.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "513790.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "517250.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "520800.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "526080.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "561860.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562090.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562100.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562710.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562720.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "563100.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581060.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "588560.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589370.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589590.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589610.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589670.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
       }
     }
   },
@@ -2117,17 +2369,24 @@
       "150354.SZ",
       "150357.SZ",
       "150358.SZ",
-      "158036.SZ",
-      "158051.SZ",
-      "158062.SZ",
-      "158065.SZ",
-      "158066.SZ",
-      "158067.SZ",
-      "158072.SZ",
-      "158078.SZ",
+      "158015.SZ",
+      "158016.SZ",
+      "158060.SZ",
+      "158070.SZ",
+      "158076.SZ",
       "158081.SZ",
-      "159047.SZ",
-      "159089.SZ",
+      "158087.SZ",
+      "158088.SZ",
+      "158091.SZ",
+      "158900.SZ",
+      "158901.SZ",
+      "158902.SZ",
+      "158903.SZ",
+      "158905.SZ",
+      "158906.SZ",
+      "158907.SZ",
+      "158908.SZ",
+      "158909.SZ",
       "159319.SZ",
       "159585.SZ",
       "159756.SZ",
@@ -2202,9 +2461,7 @@
       "168601.SZ",
       "169108.SZ",
       "169109.SZ",
-      "180307.SZ",
-      "180505.SZ",
-      "180702.SZ",
+      "180107.SZ",
       "181002.SZ",
       "501002.SH",
       "501033.SH",
@@ -2226,25 +2483,51 @@
       "506009.SH",
       "508038.SH",
       "508047.SH",
-      "508095.SH",
+      "508081.SH",
       "508605.SH",
       "508606.SH",
       "508607.SH",
-      "508609.SH",
       "508610.SH",
+      "512490.SH",
       "512830.SH",
+      "513790.SH",
       "515443.SH",
       "516170.SH",
+      "517250.SH",
       "517980.SH",
+      "520800.SH",
       "526020.SH",
+      "526080.SH",
       "560430.SH",
       "561270.SH",
+      "561860.SH",
+      "561970.SH",
+      "562090.SH",
+      "562100.SH",
       "562210.SH",
       "562630.SH",
+      "562690.SH",
+      "562710.SH",
+      "562720.SH",
+      "563100.SH",
+      "581000.SH",
+      "581010.SH",
+      "581020.SH",
+      "581030.SH",
+      "581050.SH",
+      "581060.SH",
+      "581070.SH",
+      "581080.SH",
+      "581090.SH",
       "588490.SH",
-      "589450.SH"
+      "588560.SH",
+      "589370.SH",
+      "589450.SH",
+      "589590.SH",
+      "589610.SH",
+      "589670.SH"
     ],
-    "source_empty_count": 151,
+    "source_empty_count": 182,
     "source_empty_evidence_new": {
       "161022.SZ": {
         "name": "富国创业板指数-A",
@@ -4412,57 +4695,7 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
-      "158036.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "158051.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "158062.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "158065.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "158066.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "158067.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "158072.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "158078.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
       "158081.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "159047.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "159089.SZ": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
@@ -4837,21 +5070,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
-      "180307.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "180505.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "180702.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
       "181002.SZ": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
@@ -4957,11 +5175,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
-      "508095.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
       "508605.SH": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
@@ -4973,11 +5186,6 @@
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
       "508607.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "508609.SH": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
@@ -5041,13 +5249,243 @@
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
+      },
+      "158902.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158900.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581030.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581070.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581090.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158076.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158901.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581000.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581050.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "180107.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "508081.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562690.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158015.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158016.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158060.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158070.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158087.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158088.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158091.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158903.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158905.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158906.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158907.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158908.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "158909.SZ": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "512490.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "513790.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "517250.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "520800.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "526080.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "561860.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "561970.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562090.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562100.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562710.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "562720.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "563100.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581010.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581020.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581060.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "581080.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "588560.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589370.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589590.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589610.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      "589670.SH": {
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
       }
     }
   },
   "fund_share": {
     "A": 0,
     "B": 0,
-    "source_empty_count": 127,
+    "source_empty_count": 130,
     "source_empty": [
       "150116.SZ",
       "150119.SZ",
@@ -5076,6 +5514,7 @@
       "150358.SZ",
       "158015.SZ",
       "158016.SZ",
+      "158060.SZ",
       "158070.SZ",
       "158076.SZ",
       "158081.SZ",
@@ -5145,6 +5584,7 @@
       "513790.SH",
       "515443.SH",
       "516170.SH",
+      "517250.SH",
       "517980.SH",
       "520800.SH",
       "526020.SH",
@@ -5175,7 +5615,8 @@
       "589370.SH",
       "589450.SH",
       "589590.SH",
-      "589610.SH"
+      "589610.SH",
+      "589670.SH"
     ],
     "source_late_start": [],
     "note": "EE-FUND-6（2026-10-18）首建 89 条；§211（2026-10-29）复探更新：移除 3 条已过期（158065.SZ/158078.SZ/181002.SZ 于 10-19~10-20 起源端有数据，属新发 ETF 从无到有 ⇒ 注册表会过期，须定期复探）、新增 56 条。现 142 条 = §203.1 的 152 缺口 − 10 只已补。构成：无上市日（分级 A/B、7 位派生码、已清盘 LOF、待上市 REIT/ETF）+ 已退市。｜§289（2026-11-03 F2b）清理 15 个 7 位幽灵码后 127 条。",
@@ -6449,6 +6890,36 @@
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
+      },
+      {
+        "ts_code": "158060.SZ",
+        "name": "长城创业板金融科技ETF",
+        "status": "nan",
+        "list_date": "",
+        "delist_date": "",
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_share(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      {
+        "ts_code": "517250.SH",
+        "name": "易方达中证沪深港智能驾驶主题ETF",
+        "status": "nan",
+        "list_date": "",
+        "delist_date": "",
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_share(ts_code=X)（F5 逐对探针 20261104）"
+      },
+      {
+        "ts_code": "589670.SH",
+        "name": "华夏上证科创板新材料ETF",
+        "status": "nan",
+        "list_date": "",
+        "delist_date": "",
+        "probe_rows": 0,
+        "probe_date": "20261104",
+        "probe_source": "tushare fund_share(ts_code=X)（F5 逐对探针 20261104）"
       }
     ]
   },
