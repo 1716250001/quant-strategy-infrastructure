@@ -1791,12 +1791,15 @@ def _run_all():
 
     def r22():
         """derived/fund_basic_patch.parquet ↔ fund_basic market=E 强一致：
-        行数=2945、early 计数=92 稳定、status NaN 集合=源端实证为空者(28只)。
+        行数=E 行数、early 计数=92 稳定、status NaN **集合**=登记表逐码相等。
 
         背景：§30 构建补表时未过滤 7 位幽灵码，派单声称 2963 行实为 2945+18。
         执行方清 18 幽灵码修正后，补表应与 fund_basic market=E 严格对齐。
-        status NaN=28 只 tushare 源端也返回 None，属诚实残留（§42 G-9B1 判据订正）。
+        status NaN 的语义（2026-11-03 §291 F3-b 升级）：不是"计数 ≤28"，
+        而是与 `known_gaps.fund_basic_status_nan` **集合相等** —— 多一个/少一个都红。
+        该登记表 = 源端实证为空者（旧 24 ＋ 新 32；其中 3 个源端有值的已回填为 L）。
         """
+        import json as _json
         import os as _os
         import pandas as _pd
         from common.paths import META_DIR as _MD
@@ -1823,21 +1826,23 @@ def _run_all():
         assert _early_ct == 92, (
             f"early_days>0 = {_early_ct} ≠ 92（可能封转开样本变了）")
 
-        # ④ status NaN：28 只源端实证为空者（§42 G-9B1）
-        #    留空 = tushare fund_basic 源端 status=None（真·无法补）
+        # ④ status NaN：**集合**必须等于 known_gaps.fund_basic_status_nan（逐码对账）
+        #    原判据"计数 ≤ 28"会被任一新增/漏登记糊弄；集合相等多一个少一个都红。
         if "status" in _patch.columns:
             _na_mask = (_patch["status"].isna() |
                         (_patch["status"].astype(str).isin(
                             ["", "nan", "<NA>", "None"])))
-            _na_ct = int(_na_mask.sum())
-            # 28 只是 §42 审查方独立探针确认的源端 NaN 集合大小
-            # 允许 0 误差；若源端后续补上则 NaN 应更少（断言仍过）
-            # 这里只做「≤28 或 ==28」语义——实际跑期望 ==28
-            assert _na_ct <= 28, (
-                f"补表 status NaN={_na_ct} > 源端实证 28（可能补表被改坏）")
+            _na_set = {str(c) for c in _patch.loc[_na_mask, "ts_code"]}
+            _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
+            with open(_kg_path, encoding="utf-8") as _f:
+                _kg = _json.load(_f)
+            _exp = {str(c) for c in _kg.get("fund_basic_status_nan", [])}
+            assert _na_set == _exp, (
+                f"补表 status NaN 集合 ≠ known_gaps.fund_basic_status_nan: "
+                f"多={sorted(_na_set - _exp)[:5]} 少={sorted(_exp - _na_set)[:5]}")
 
         return (f"补表 {len(_patch)} 行↔E universe 对齐；early=92 稳定；"
-                f"status NaN ≤ 28 源端诚实残留")
+                f"status NaN 集合={len(_na_set)} 与登记表逐码相等")
 
     check("派生补表一致性", r22)
 
