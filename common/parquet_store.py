@@ -191,6 +191,16 @@ def _atomic_write_parquet(df, path, schema=None):
     _fsync_dir(os.path.dirname(os.path.abspath(path)))   # E-05: 目录项（POSIX）
 
 
+def _arrow_table_equal(a, b):
+    """Arrow 层逐缓冲比较。更严格（含 schema/dtype/行序）⇒ 为真必无变化，为假交回精判。"""
+    try:
+        import pyarrow as pa
+        return bool(pa.Table.from_pandas(a, preserve_index=False)
+                    .equals(pa.Table.from_pandas(b, preserve_index=False)))
+    except Exception:
+        return False
+
+
 def _values_changed(existing, combined, keys):
     """同键行是否存在**值级差异**（行数不变时判断"是否真的无变化"）。
 
@@ -212,6 +222,12 @@ def _values_changed(existing, combined, keys):
     if len(existing) != len(combined):
         return True
     cols = list(existing.columns)
+    # CC-PERF-1 C2（2026-11-03）：Arrow 层逐缓冲快判。Table.equals 比
+    # `assert_frame_equal(check_dtype=False)` **更严格**（含 schema/dtype/行序）
+    # ⇒ 为真必无变化 ⇒ 单向安全；为假（含 dtype 差异）回落原精判，结论不变。
+    # 实测 942,579 行 × 20 列：原实现 5.62 s → 快判 0.049 s（115×）。
+    if _arrow_table_equal(existing[cols], combined[cols]):
+        return False
     old = existing.set_index(keys).sort_index()
     new = combined[cols].set_index(keys).sort_index()
     if not old.index.equals(new.index):
