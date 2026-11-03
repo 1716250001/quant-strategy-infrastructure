@@ -20,6 +20,7 @@ fetch/full_download.py — 全市场数据下载器（并发版）
 """
 
 import pandas as pd
+import re
 import os
 import time
 import argparse
@@ -29,13 +30,17 @@ from datetime import datetime
 from config import (
     MARKET_DATA_DIR, META_DIR, DOWNLOAD_PHASES,
     TS_RATE_LIMIT_PER_MIN, TS_DAILY_LIMIT, FETCH_MAX_WORKERS,
-    TABLE_DATE_COL,
+    TABLE_DATE_COL, FUND_CODE_PATTERN,
 )
 from fetch.base import (
     get_pro, RateLimiter, Checkpoint, ensure_dir,
     ts_fetch, fetch_codes_parallel,
 )
 from common.parquet_store import upsert_by_year
+
+# EE-FUND-5 白名单：单一真源 = config.FUND_CODE_PATTERN（与 refresh_meta_basic.py 共用）。
+# 模块级编译，便于单测直接复用「消费方自己的那个正则对象」。
+_VALID_FUND_CODE = re.compile(FUND_CODE_PATTERN)
 
 
 # ============================================================
@@ -207,8 +212,6 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
         # 本体系场内 universe 只认 6 位码；不拦截则 17:30 日更次日复活污染
         # （codes-file→parquet→注册表，实证 fund_share 幽灵 B=3）。
         # 白名单：6 位数字 + .SZ/.SH/.OF；剔除必须打印（fail-loud，不静默）。
-        import re as _re
-        _VALID_FUND_CODE = _re.compile(r"^\d{6}\.(SZ|SH|OF)$")
         _code_s = fund_df["ts_code"].astype(str)
         _bad = fund_df.loc[~_code_s.str.match(_VALID_FUND_CODE)]
         if len(_bad):
