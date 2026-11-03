@@ -1,6 +1,6 @@
 {
   "_comment": "EE-FUND 缺口基线（2026-10-17 §25 复审后诚实口径，禁归零绕过门禁）。fund_daily.A/B = 【未登记】可执行缺口，R17 精确对账；source_empty = 逐只三轮核验（2 轮批量含 --force + 1 轮单线程 ts_code 全历史空；REIT/LOF 另经 trade_date 全市场反查 0 命中；nav 为全市场净值口径、其存在不代表有交易所成交）确认 tushare fund_daily 无源端行情的 150 只，进 S 桶；source_late_start = 6 只分级/稀疏成交基金，源端历史本身残缺/晚起点，进 SB 桶。注册表与实测逐码强一致（库内补到数据而注册表未清 → R17 红）。",
-  "market_e_count": 2945,
+  "market_e_count": 2993,
   "fund_daily": {
     "A": 0,
     "B": 0,
@@ -5047,9 +5047,8 @@
   "fund_share": {
     "A": 0,
     "B": 0,
-    "source_empty_count": 142,
+    "source_empty_count": 127,
     "source_empty": [
-      "1500011.SZ",
       "150116.SZ",
       "150119.SZ",
       "150159.SZ",
@@ -5097,37 +5096,26 @@
       "159756.SZ",
       "159799.SZ",
       "160123.SZ",
-      "1601231.SZ",
       "160422.SZ",
-      "1604221.SZ",
       "160423.SZ",
       "160524.SZ",
       "160525.SZ",
       "160814.SZ",
       "160923.SZ",
-      "1610221.SZ",
       "161211.SZ",
-      "1612111.SZ",
       "161230.SZ",
-      "1612301.SZ",
       "161629.SZ",
-      "1618111.SZ",
       "161836.SZ",
       "161910.SZ",
       "162714.SZ",
-      "1627171.SZ",
       "162907.SZ",
       "163827.SZ",
-      "1638271.SZ",
       "164205.SZ",
-      "1642051.SZ",
       "164811.SZ",
-      "1648141.SZ",
       "165530.SZ",
       "165532.SZ",
       "165806.SZ",
       "166007.SZ",
-      "1660071.SZ",
       "167004.SZ",
       "167701.SZ",
       "167705.SZ",
@@ -5138,11 +5126,9 @@
       "168601.SZ",
       "169109.SZ",
       "501002.SH",
-      "5010021.SH",
       "501033.SH",
       "501041.SH",
       "501042.SH",
-      "5010491.SH",
       "501052.SH",
       "501055.SH",
       "501101.SH",
@@ -5151,7 +5137,6 @@
       "501105.SH",
       "501221.SH",
       "501223.SH",
-      "5020201.SH",
       "508038.SH",
       "508606.SH",
       "508610.SH",
@@ -5193,18 +5178,8 @@
       "589610.SH"
     ],
     "source_late_start": [],
-    "note": "EE-FUND-6（2026-10-18）首建 89 条；§211（2026-10-29）复探更新：移除 3 条已过期（158065.SZ/158078.SZ/181002.SZ 于 10-19~10-20 起源端有数据，属新发 ETF 从无到有 ⇒ 注册表会过期，须定期复探）、新增 56 条。现 142 条 = §203.1 的 152 缺口 − 10 只已补。构成：无上市日（分级 A/B、7 位派生码、已清盘 LOF、待上市 REIT/ETF）+ 已退市。",
+    "note": "EE-FUND-6（2026-10-18）首建 89 条；§211（2026-10-29）复探更新：移除 3 条已过期（158065.SZ/158078.SZ/181002.SZ 于 10-19~10-20 起源端有数据，属新发 ETF 从无到有 ⇒ 注册表会过期，须定期复探）、新增 56 条。现 142 条 = §203.1 的 152 缺口 − 10 只已补。构成：无上市日（分级 A/B、7 位派生码、已清盘 LOF、待上市 REIT/ETF）+ 已退市。｜§289（2026-11-03 F2b）清理 15 个 7 位幽灵码后 127 条。",
     "source_empty_evidence": [
-      {
-        "ts_code": "1500011.SZ",
-        "name": "国投瑞银瑞福分级封闭-瑞福进取",
-        "status": "D",
-        "list_date": "20070921",
-        "delist_date": "20120717",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
       {
         "ts_code": "150116.SZ",
         "name": "银华永兴纯债分级债券-B",
@@ -5488,7 +5463,7 @@
       {
         "ts_code": "158076.SZ",
         "name": "广发中证红利低波动ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -5498,7 +5473,7 @@
       {
         "ts_code": "158081.SZ",
         "name": "永赢创业板电池ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -5538,7 +5513,7 @@
       {
         "ts_code": "158900.SZ",
         "name": "南方均衡配置主动管理ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -5548,7 +5523,7 @@
       {
         "ts_code": "158901.SZ",
         "name": "富国价值优选量化选股主动管理ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -5558,7 +5533,7 @@
       {
         "ts_code": "158902.SZ",
         "name": "大成红利智选主动管理ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -5676,27 +5651,7 @@
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "1601231.SZ",
-        "name": "南方中证50债券指数(LOF)-A",
-        "status": "D",
-        "list_date": "20110725",
-        "delist_date": "20160817",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
         "ts_code": "160422.SZ",
-        "name": "华安中证定向增发事件指数(LOF)",
-        "status": "D",
-        "list_date": "20170526",
-        "delist_date": "20181108",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "1604221.SZ",
         "name": "华安中证定向增发事件指数(LOF)",
         "status": "D",
         "list_date": "20170526",
@@ -5756,31 +5711,11 @@
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "1610221.SZ",
-        "name": "富国创业板指数-A",
-        "status": "D",
-        "list_date": "20210119",
-        "delist_date": "20240131",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
         "ts_code": "161211.SZ",
         "name": "国投瑞银沪深300金融地产ETF联接",
         "status": "L",
         "list_date": "20100608",
         "delist_date": "20131104",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "1612111.SZ",
-        "name": "国投金融(退市)",
-        "status": "D",
-        "list_date": "20100608",
-        "delist_date": "20131105",
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
@@ -5796,31 +5731,11 @@
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "1612301.SZ",
-        "name": "国投瑞银双债丰利两年定开债券-A",
-        "status": "D",
-        "list_date": "20160225",
-        "delist_date": "20180918",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
         "ts_code": "161629.SZ",
         "name": "融通中证精准医疗主题指数(LOF)",
         "status": "D",
         "list_date": "nan",
         "delist_date": "nan",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "1618111.SZ",
-        "name": "银华沪深300指数(LOF)",
-        "status": "D",
-        "list_date": "20091030",
-        "delist_date": "20140107",
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
@@ -5856,16 +5771,6 @@
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "1627171.SZ",
-        "name": "广发再融资主题灵活配置混合(LOF)-A",
-        "status": "D",
-        "list_date": "20180329",
-        "delist_date": "20221125",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
         "ts_code": "162907.SZ",
         "name": "泰信中证锐联基本面400指数(LOF)",
         "status": "D",
@@ -5886,27 +5791,7 @@
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "1638271.SZ",
-        "name": "中银产业债一年定开债券(LOF)",
-        "status": "D",
-        "list_date": "20141218",
-        "delist_date": "20200303",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
         "ts_code": "164205.SZ",
-        "name": "天弘深证成份指数(LOF)",
-        "status": "D",
-        "list_date": "20100917",
-        "delist_date": "20150507",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "1642051.SZ",
         "name": "天弘深证成份指数(LOF)",
         "status": "D",
         "list_date": "20100917",
@@ -5921,16 +5806,6 @@
         "status": "D",
         "list_date": "nan",
         "delist_date": "nan",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "1648141.SZ",
-        "name": "工银瑞信双债增强债券",
-        "status": "D",
-        "list_date": "20131223",
-        "delist_date": "20160925",
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
@@ -5971,16 +5846,6 @@
         "status": "D",
         "list_date": "nan",
         "delist_date": "nan",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "1660071.SZ",
-        "name": "中欧沪深300指数增强(LOF)-A",
-        "status": "D",
-        "list_date": "20100816",
-        "delist_date": "20181008",
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
@@ -6086,16 +5951,6 @@
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "5010021.SH",
-        "name": "长信中证能源互联网主题指数(LOF)",
-        "status": "D",
-        "list_date": "20160201",
-        "delist_date": "20190301",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
         "ts_code": "501033.SH",
         "name": "银华惠安定开混合",
         "status": "D",
@@ -6121,16 +5976,6 @@
         "status": "D",
         "list_date": "nan",
         "delist_date": "nan",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "5010491.SH",
-        "name": "东方红睿玺三年定开灵活配置混合-A",
-        "status": "D",
-        "list_date": "20180601",
-        "delist_date": "20240618",
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
@@ -6211,16 +6056,6 @@
         "status": "nan",
         "list_date": "nan",
         "delist_date": "nan",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "5020201.SH",
-        "name": "国金上证50指数分级",
-        "status": "D",
-        "list_date": "20150605",
-        "delist_date": "20191013",
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
@@ -6468,7 +6303,7 @@
       {
         "ts_code": "581000.SH",
         "name": "摩根大盘成长主动管理ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -6498,7 +6333,7 @@
       {
         "ts_code": "581030.SH",
         "name": "华夏质量甄选主动管理ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -6508,7 +6343,7 @@
       {
         "ts_code": "581050.SH",
         "name": "易方达品质均衡主动管理ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -6528,7 +6363,7 @@
       {
         "ts_code": "581070.SH",
         "name": "平安红利景气主动管理ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
@@ -6548,7 +6383,7 @@
       {
         "ts_code": "581090.SH",
         "name": "华泰柏瑞价值精选主动管理ETF",
-        "status": "nan",
+        "status": "L",
         "list_date": "nan",
         "delist_date": "nan",
         "probe_rows": 0,
