@@ -20,6 +20,7 @@ from config_wind import (
     WIND_CALL_INTERVAL, WIND_QPS_LIMIT, WIND_MAX_RETRY, WIND_RPC_TIMEOUT,
     WIND_DAILY_CALL_SOFT_LIMIT, WIND_DAILY_POINT_SOFT_LIMIT,
     WIND_API_KEY, violation_count, normalize_date_iso8601,
+    WIND_TMP_DIR, FORBIDDEN_WRITE_ROOTS, WindPathViolation,
 )
 from common.parquet_store import _atomic_write_parquet
 
@@ -189,58 +190,139 @@ def write_snap(topic, as_of, data, force=False):
     return snap_path
 
 
-def selfcheck():
-    """W-3 自验：缓存命中计数 + 快照覆盖拒绝 + violation_count 一致性"""
-    print("=== wind_gate 自验 ===")
+def _selfcheck_probe_path():
+    """自检用的越界探针路径（仅在自检内引用，生产逻辑不调用）。
 
-    # 测试 1：连续两次同 params → 第二次 cache_hit
+    S2 负控通过替换本函数返回「合法路径」来验证断言真的会失败。
+    """
+    return os.path.join(
+        FORBIDDEN_WRITE_ROOTS[0], "selfcheck_never_written.parquet"
+    )
+
+
+def _sc_file_snapshot(root):
+    """目录快照（path → mtime_ns），用于断言「未被改动」。"""
+    snap = {}
+    if not os.path.isdir(root):
+        return snap
+    for cur, _dirs, files in os.walk(root):
+        for fn in files:
+            p = os.path.join(cur, fn)
+            snap[p] = os.stat(p).st_mtime_ns
+    return snap
+
+
+def _selfcheck_cache(failures):
+    """[1] 二次同参调用 → 命中缓存：r1==r2，且 raw 目录零新增/零改写。"""
     print("\n[1] 缓存命中测试:")
-    r1 = call("test", "probe", {"a": 1, "b": 2}, cache_ttl=3600)
-    r2 = call("test", "probe", {"a": 1, "b": 2}, cache_ttl=3600)
-    print(f"  两次调用均已记账")
+    os.makedirs(WIND_RAW_DIR, exist_ok=True)
+    # 带 nonce：保证本次首调必为冷路径（不受跨次运行残留缓存影响）
+    params = {"a": 1, "b": 2, "run": _dt.datetime.now().isoformat(timespec="microseconds")}
+    snap0 = _sc_file_snapshot(WIND_RAW_DIR)
+    r1 = call("test", "probe", params, cache_ttl=3600)
+    snap1 = _sc_file_snapshot(WIND_RAW_DIR)
+    r2 = call("test", "probe", dict(params), cache_ttl=3600)
+    snap2 = _sc_file_snapshot(WIND_RAW_DIR)
 
-    # 测试 2：快照覆盖被拒
+    if r1 != r2:
+        failures.append("[1] 两次同参调用返回值不一致（缓存未命中或返回被改写）")
+    if len(snap1) - len(snap0) != 1:
+        failures.append(f"[1] 首次调用应新增 1 个 raw 文件，实际新增 {len(snap1) - len(snap0)} 个")
+    if snap1 != snap2:
+        failures.append(
+            f"[1] 第二次调用改动了 raw 目录：{len(snap1)} → {len(snap2)} 个文件（或 mtime 变化）"
+        )
+    print(f"  r1==r2: {r1 == r2}；raw 新增 {len(snap1) - len(snap0)} 个；"
+          f"二次调用零改动: {snap1 == snap2}")
+
+
+def _selfcheck_snap(failures):
+    """[2] 快照覆盖必须抛 WindGateError（未抛即记 failure）。"""
     print("\n[2] 快照覆盖拒绝:")
-    test_snap_dir = os.path.join(os.path.dirname(WIND_RAW_DIR), "norm", "snap", "_gate_test")
-    os.makedirs(test_snap_dir, exist_ok=True)
-    test_path = os.path.join(test_snap_dir, "20261022.parquet")
-    # 先写一个空的
-    import pandas as pd
-    pd.DataFrame({"x": [1, 2]}).to_parquet(test_path, index=False)
+    as_of = "20261022"
+    snap_dir = os.path.join(os.path.dirname(WIND_RAW_DIR), "norm", "snap", "_gate_test")
+    os.makedirs(snap_dir, exist_ok=True)
     try:
-        write_snap("_gate_test", "20261022", {"x": [3, 4]}, force=False)
-        print("  ❌ 快照覆盖未被拒绝")
-    except WindGateError as e:
-        print(f"  ✅ 快照覆盖已拒绝")
-    # 清理
-    os.remove(test_path)
-    os.rmdir(test_snap_dir)
-    # 再清理空 norm/snap 目录
-    for _ in range(2):
-        try:
-            os.rmdir(os.path.dirname(test_snap_dir))
-        except OSError:
-            break
+        write_snap("_gate_test", as_of, {"x": [1, 2]})
+    except Exception as e:
+        failures.append(f"[2] 首写快照意外失败：{type(e).__name__}: {e}")
+        return
+    try:
+        write_snap("_gate_test", as_of, {"x": [3, 4]}, force=False)
+    except WindGateError:
+        print("  ✅ 覆盖被 WindGateError 拒绝")
+    else:
+        failures.append("[2] 快照覆盖未被拒绝（应抛 WindGateError）")
+    finally:
+        p = os.path.join(snap_dir, f"{as_of}.parquet")
+        if os.path.exists(p):
+            os.remove(p)
+        for d in (snap_dir, os.path.dirname(snap_dir), os.path.dirname(os.path.dirname(snap_dir))):
+            try:
+                os.rmdir(d)
+            except OSError:
+                pass
 
-    # 测试 3：越界拦截
+
+def _selfcheck_violation(failures):
+    """[3] 真正走禁区路径：必须抛 WindPathViolation 且 violation_count 恰好 +1。"""
     print("\n[3] assert_writable 越界:")
+    path = _selfcheck_probe_path()
     before = violation_count()
     try:
-        call("test", "probe_out", {"a": 1})  # 正常路径
-    except Exception:
-        pass
-    after = violation_count()
-    print(f"  violation_count 正常流程: {before} → {after} (预期不变)")
-
-    print(f"\n=== wind_gate 自验完成 ===")
-    print(f"  cache 键数: {len(_CACHE)}")
-    print(f"  violation_count: {violation_count()}")
-    print(f"  budget_ledger 行数: ", end="")
-    if os.path.exists(WIND_BUDGET_FILE):
-        with open(WIND_BUDGET_FILE, "r") as f:
-            print(f"{sum(1 for _ in f)}")
+        assert_writable(path)
+    except WindPathViolation:
+        print(f"  ✅ 越界被 WindPathViolation 拒绝：{path}")
+    except Exception as e:
+        failures.append(f"[3] 越界抛错类型不符：{type(e).__name__}: {e}")
     else:
-        print("0")
+        failures.append(f"[3] 越界路径未被拦截（仍返回成功）：{path}")
+    after = violation_count()
+    if after != before + 1:
+        failures.append(f"[3] violation_count 应 {before} → {before + 1}，实际 {after}")
+    if os.path.exists(path):
+        failures.append(f"[3] 越界探针路径竟存在文件：{path}")
+    print(f"  violation_count: {before} → {after}（预期 +1）")
+
+
+def selfcheck():
+    """W-3 自验：三项硬断言 → 返回 failures（空列表=全过；非空 ⇒ SystemExit(1)）。
+
+    约束（CC-SELFCHECK-1 / §277）：
+      * 全程零写入生产库：call/write_snap 的目录在 WIND_TMP_DIR 沙箱内临时重定向；
+      * 不改变 call / write_snap / assert_writable 的签名与行为；
+      * 0 次 Wind API 调用（call 仍为 mock 骨架，无网络）。
+    """
+    global WIND_RAW_DIR, WIND_META_DIR, WIND_BUDGET_FILE
+    print("=== wind_gate 自验 ===")
+    failures = []
+
+    prod_raw = WIND_RAW_DIR
+    prod_before = _sc_file_snapshot(prod_raw)
+
+    saved = (WIND_RAW_DIR, WIND_META_DIR, WIND_BUDGET_FILE)
+    sandbox = os.path.join(WIND_TMP_DIR, "selfcheck")
+    WIND_RAW_DIR = os.path.join(sandbox, "raw")
+    WIND_META_DIR = os.path.join(sandbox, "_meta")
+    WIND_BUDGET_FILE = os.path.join(WIND_META_DIR, "budget_ledger.jsonl")
+    try:
+        _selfcheck_cache(failures)
+        _selfcheck_snap(failures)
+        _selfcheck_violation(failures)
+    finally:
+        WIND_RAW_DIR, WIND_META_DIR, WIND_BUDGET_FILE = saved
+
+    prod_after = _sc_file_snapshot(prod_raw)
+    if prod_before != prod_after:
+        failures.append(f"[S3] 自检期间生产 raw 目录发生变化：{prod_raw}")
+
+    print(f"\n=== wind_gate 自验完成：{len(failures)} 项失败 ===")
+    for f in failures:
+        print(f"  ❌ {f}")
+    if failures:
+        raise SystemExit(1)
+    print("  ✅ 三项断言全过")
+    return failures
 
 
 if __name__ == "__main__":
