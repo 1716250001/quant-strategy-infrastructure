@@ -715,6 +715,14 @@ class YearBatchWriter:
         if not frames:
             return
         merged = pd.concat(frames, ignore_index=True)
+        # CC-PERF-1 C3（2026-11-03）· 有条件保留，**默认不改**：
+        #   此处批内全列去重与下游 `merge_append` 的去重重复。实测评测
+        #   100 ms / 11 万行、去重后行数不变（111,503 → 111,503），
+        #   相对单次 flush 3.16 s 仅 **3.2%**。
+        #   ⚠ 但 `self.flushed_rows += len(merged)` 用的是**去重后**行数；
+        #   删掉此段会让 `stat()["rows"]` 从"去重后"变"去重前"，属返回值
+        #   语义变更（消费方 fetch/backfill.py:740/803 仅打印，但仍是契约）。
+        #   收益太小、口径风险不小 ⇒ 本轮只登记，不改逻辑。
         if len(frames) > 1:
             merged = merged.drop_duplicates().reset_index(drop=True)
         try:
