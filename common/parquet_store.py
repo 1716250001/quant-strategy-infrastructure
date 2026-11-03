@@ -264,12 +264,39 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
         # ⇒ 该分区永久无法插入新行（且 fail=0，上层无感）。
         # 实证 fx_daily/2026.parquet：13,657 行含 1,543 重复，补 313 行时
         # added 算成 −1,272，301 个日期一行未落（2026-10-29 §208 §4.2）。
-        existing_uniq = (len(existing.drop_duplicates(subset=keys)) if keys
-                         else len(existing.drop_duplicates()))
+        # CC-PERF-1 C1（2026-11-03）：分离去重。判据 `sort_by ∈ keys` 且两侧
+        # 该列值域**不相交** ⇒ 键空间真不相交 ⇒ dedup(E∪N)=dedup(E)∪dedup(N)，
+        # 省掉第二次全列去重为**恒等变形**（实测 moneyflow −31.8% / daily −29.1%）。
+        # 判据不成立（含 dtype 不一致导致比较不可执行）⇒ 走原路径，行为零变化。
+        _sep = False
+        if (keys is not None and sort_by is not None
+                and sort_by in keys
+                and sort_by in existing.columns and sort_by in new_df.columns):
+            try:
+                e_hi = existing[sort_by].max()
+                e_lo = existing[sort_by].min()
+                n_lo = new_df[sort_by].min()
+                n_hi = new_df[sort_by].max()
+                if not (pd.isna(e_hi) or pd.isna(n_lo)
+                        or pd.isna(e_lo) or pd.isna(n_hi)):
+                    _sep = bool(n_lo > e_hi) or bool(n_hi < e_lo)  # 追加 / 补历史
+            except Exception:
+                _sep = False           # 比较不可执行 ⇒ 不启用快路径
+        # 既有去重基准（keep=keep 与合并路径的保留方向一致；行数两种 keep 相同）
+        if keys is None:
+            existing_uniq_df = existing.drop_duplicates()
+        else:
+            existing_uniq_df = existing.drop_duplicates(subset=keys, keep=keep)
+        existing_uniq = len(existing_uniq_df)
         n_existing_dup = len(existing) - existing_uniq
 
-        combined = pd.concat([existing, new_df], ignore_index=True)
-        combined = combined.drop_duplicates(subset=keys, keep=keep)
+        if _sep:
+            # 值域不相交：两侧各自去重后直接拼接，不再做第二次全列去重
+            new_uniq_df = new_df.drop_duplicates(subset=keys, keep=keep)
+            combined = pd.concat([existing_uniq_df, new_uniq_df], ignore_index=True)
+        else:
+            combined = pd.concat([existing, new_df], ignore_index=True)
+            combined = combined.drop_duplicates(subset=keys, keep=keep)
         if sort_by and sort_by in combined.columns:
             combined = combined.sort_values(sort_by)
         combined = combined.reset_index(drop=True)
