@@ -286,7 +286,10 @@ def _selfcheck_violation(failures):
 
 
 def selfcheck():
-    """W-3 自验：三项硬断言 → 返回 failures（空列表=全过；非空 ⇒ SystemExit(1)）。
+    """W-3 自验：三项硬断言 → 返回 failures（空列表=全过）。
+
+    失败转退出码 1 的责任在 `__main__`，本函数始终返回 `list[str]`
+    （便于 regress 等调用方复用，而不必捕获 SystemExit）。
 
     约束（CC-SELFCHECK-1 / §277）：
       * 全程零写入生产库：call/write_snap 的目录在 WIND_TMP_DIR 沙箱内临时重定向；
@@ -319,11 +322,11 @@ def selfcheck():
     print(f"\n=== wind_gate 自验完成：{len(failures)} 项失败 ===")
     for f in failures:
         print(f"  ❌ {f}")
-    if failures:
-        raise SystemExit(1)
-    print("  ✅ 三项断言全过")
+    if not failures:
+        print("  ✅ 三项断言全过")
     return failures
 
 
 if __name__ == "__main__":
-    selfcheck()
+    if selfcheck():
+        raise SystemExit(1)
