@@ -27,6 +27,7 @@ from config_wind import (
     assert_writable, WIND_CATALOG_FILE, WIND_RAW_DIR, WIND_SERIES_DIR,
     violation_count,
 )
+from common.parquet_store import _atomic_write_parquet
 
 # ── 源目录（W-2a 迁移后已就位） ──────────────────────────────
 SERIES_DIR = r"D:\全量数据\wind_data\norm\series\wind_index_daily"   # 已迁移（W-2a）
@@ -350,7 +351,9 @@ def main():
     from config_wind import WIND_CATALOG_DIR
     os.makedirs(WIND_CATALOG_DIR, exist_ok=True)
     assert_writable(WIND_CATALOG_FILE)
-    df.to_parquet(WIND_CATALOG_FILE, index=False)
+    # CC-WIND-1（2026-11-03）：原子写（tmp → fsync → os.replace → 目录 fsync），
+    # 避免直写最终路径时崩溃留下半截目录表。
+    _atomic_write_parquet(df, WIND_CATALOG_FILE)
     print(f"\n✅ catalog 写盘: {WIND_CATALOG_FILE} ({os.path.getsize(WIND_CATALOG_FILE):,} B)")
     print(f"  violation_count = {violation_count()}")
 

@@ -21,6 +21,7 @@ from config_wind import (
     WIND_DAILY_CALL_SOFT_LIMIT, WIND_DAILY_POINT_SOFT_LIMIT,
     WIND_API_KEY, violation_count, normalize_date_iso8601,
 )
+from common.parquet_store import _atomic_write_parquet
 
 
 class WindGateError(RuntimeError):
@@ -180,7 +181,10 @@ def write_snap(topic, as_of, data, force=False):
         )
     assert_writable(snap_path)
     df = pd.DataFrame(data)
-    df.to_parquet(snap_path, index=False)
+    # CC-WIND-1（2026-11-03）：改走原子写（tmp → fsync → os.replace → 目录 fsync）。
+    # 原来直写最终路径，写一半崩溃＝快照损坏且旧副本已丢；红线 3 的「不可覆盖」
+    # 让重跑也救不回来（目标文件已存在 ⇒ 直接拒绝）。
+    _atomic_write_parquet(df, snap_path)
     print(f"[snap] 写入 {topic}/{as_of} ({len(df)} 行)")
     return snap_path
 
