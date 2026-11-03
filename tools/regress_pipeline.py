@@ -971,7 +971,8 @@ def _run_all():
         """
         from fetch.base import (_is_possibly_truncated, SUSPECT_CAPS,
                                 TRUNC_MAX_ROUNDS)
-        from config import SOURCE_START_BASELINE, TABLE_DATE_COL, MARKET_DATA_DIR
+        from config import (SOURCE_START_BASELINE, SOURCE_START_BASELINE_COL,
+                            TABLE_DATE_COL, MARKET_DATA_DIR)
 
         # ① 引擎判据（关键：3000 < 5000 也必须识别）
         assert _is_possibly_truncated(3000, 5000), (
@@ -994,7 +995,9 @@ def _run_all():
             files = sorted(f for f in os.listdir(d) if f.endswith(".parquet"))
             if not files:
                 continue
-            dc = TABLE_DATE_COL.get(name)
+            # T1b（§283）：基线值可能是在**另一列**上测的 → 取列优先绑基线测量列，
+            # 否则退回 partition 列（TABLE_DATE_COL）。否则换列会假红（forecast 实证）。
+            dc = SOURCE_START_BASELINE_COL.get(name) or TABLE_DATE_COL.get(name)
             if not dc:
                 continue
             # ⚠ 遍历全部文件取"日期列的最小非空值"，不能只读 files[0]：
@@ -1014,6 +1017,8 @@ def _run_all():
             if mn is None:
                 continue
             checked += 1
+            # 自证（§283）：逐表打印 表名/取列/基线/库内最小值 —— 防"取错列"再静默
+            _say(f"    [R13] {name}: dc={dc} floor={floor} db_min={mn}")
             if mn > floor:
                 bad.append(f"{name}(库内{mn} > 基线{floor})")
 
