@@ -65,6 +65,10 @@ def _gap_category(name, conf):
 # 日期列候选（按优先级）；仅用于 config.TABLE_DATE_COL 未覆盖时的兜底探测
 _DATE_COL_CANDIDATES = ("trade_date", "cal_date", "ann_date", "date", "end_date")
 
+# 取"库内实际最新日期"时，从文件名（年份）最大的 N 个分区里取 max。
+# 见 _get_data_latest_date 的 2026-11-03 注释（§294 F4d）。
+_LATEST_PARTITION_COUNT = 3
+
 
 def _parquet_column_names(path):
     """只读 parquet **元数据**拿列名（不读数据本体，约 1ms）"""
@@ -89,6 +93,15 @@ def _get_data_latest_date(name):
         stk_limit      32ms → 20ms  (省 37%)
       日期列优先取 config.TABLE_DATE_COL 的权威定义（如 bc_otcqt 是 TRADE_DATE），
       未登记时才按候选列表探测。
+
+    2026-11-03（§294 F4d）:
+      原实现只读 `files[-1]`。forecast 目录里 `2027.parquet`（旧 end_date 分区
+      遗留，仅 1 行 ann_date=20240808）排在最后 → 读到 2024-08-08，于是
+      (2024-08-08, today) 之间的 538 个交易日被 R12 误判为"断点虚记"。
+      现改为取文件名（年份）最大的 N 个分区（N=_LATEST_PARTITION_COUNT）再取 max：
+      成本只多两列日期，但不再被单个异常分区带偏。
+      ⚠ 判据强度不变 —— 仍是"数据最新 vs 应有最新"，只是取样面从 1 个分区扩到 N 个。
+      （根治仍是 forecast 分区按 ann_date 重排，另立项。）
     """
     d = os.path.join(MARKET_DATA_DIR, name)
     if not os.path.isdir(d):
@@ -96,18 +109,23 @@ def _get_data_latest_date(name):
     files = sorted(glob.glob(os.path.join(d, "*.parquet")))
     if not files:
         return None
-    path = files[-1]
     try:
         date_col = TABLE_DATE_COL.get(name)
         if not date_col:
-            names = _parquet_column_names(path)
+            names = _parquet_column_names(files[-1])
             date_col = next((c for c in _DATE_COL_CANDIDATES if c in names), None)
         if not date_col:
             return None
-        s = pd.read_parquet(path, columns=[date_col])[date_col]
-        if not len(s):
-            return None
-        return str(s.max())
+        latest, seen = None, False
+        for path in files[-_LATEST_PARTITION_COUNT:]:
+            s = pd.read_parquet(path, columns=[date_col])[date_col]
+            if not len(s):
+                continue
+            seen = True
+            v = str(s.max())
+            if latest is None or v > latest:
+                latest = v
+        return latest if seen else None
     except Exception:
         return None
 
