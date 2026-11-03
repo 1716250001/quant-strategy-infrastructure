@@ -1461,7 +1461,7 @@ TABLE_DATE_COL = {
     "cashflow": "end_date", "fina_indicator": "end_date",
     "fina_audit": "end_date", "fina_mainbz": "end_date",
     # 事件面
-    "dividend": "end_date", "forecast": "end_date",
+    "dividend": "end_date", "forecast": "ann_date",
     "stk_holdernumber": "end_date", "stk_holdertrade": "ann_date",
     "pledge_stat": "end_date", "share_float": "ann_date",
     "repurchase": "ann_date", "namechange": "start_date",

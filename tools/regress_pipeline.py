@@ -1653,6 +1653,9 @@ def _run_all():
         from common.paths import META_DIR as _MD
         from common.paths import MARKET_DATA_DIR as _ROOT
 
+        # [A4] 本正则只管**场内** 7 位畸形码。fund_basic 另有 240 个 7 位 `.OF`
+        #  （market='O'，全 status='D'），其中 74,883 行已在 fund_nav，
+        #  属真实历史基金、**设计内保留**，不在本护栏范围。
         _ghost = _re.compile(r"^\d{7}\.(SZ|SH)$")
 
         # ① fund_basic 0 残留 + market=E 复算 + status 索引（evidence 断言用）
