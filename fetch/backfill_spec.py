@@ -434,7 +434,8 @@ def expected_task_count(name, conf, today=None):
         y0, yt = int(start[:4]), int(today[:4])
         out = []
         for y in range(y0, yt + 1):
-            s = f"{y}0101"
+            # ⚠ 首年起点必须用 start（与 build_tasks/year_ranges 同口径）
+            s = str(max(int(start), y * 10000 + 101))
             e = today if y == yt else f"{y}1231"
             out.append(f"{s}|{e}")
         return out, "range"

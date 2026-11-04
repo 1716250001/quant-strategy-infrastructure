@@ -257,13 +257,16 @@ def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
         if execute:
             cp.setdefault(name, {})["completed"] = sorted(done | disk)
 
+    # ⚠ 落盘不依赖 verbose（--json 也必须真正写入），只由 execute 决定
+    if execute and total:
+        bak = _backup_and_save(cp)
+
     if verbose:
         print()
         if not total:
             print("  ✓ 无需回填（断点已与磁盘一致）")
             return 0
         if execute:
-            bak = _backup_and_save(cp)
             print(f"  已回填 {total:,} 项")
             print(f"  备份: {os.path.basename(bak)}")
         else:
