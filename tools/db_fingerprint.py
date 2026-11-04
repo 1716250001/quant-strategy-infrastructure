@@ -5,7 +5,8 @@ tools/db_fingerprint.py — L1 库指纹门禁（全文件类型）
 背景（§297 G1 / §301 CC-LEGACY-A）:
   旧 L1 门禁只扫 `*.parquet`，于是 2026-11-03 F4 改断点、日更改 meta 时
   门禁**完全没看见** —— `json`/`checkpoint`/`.bak` 全是盲区。
-  本工具把 `market_data/` 下**所有文件**纳入指纹，按三类分账:
+  本工具把**全库树**（`D:\全量数据`，含 market_data / alt_data / derived_data /
+  wind_data 等）下**所有文件**纳入指纹，按三类分账:
 
     parquet  : 数据分区（*.parquet）
     state    : 状态/清单（隐藏文件 + *.json/*.jsonl/*.csv/*.txt）
@@ -32,8 +33,9 @@ import sys
 import time
 from datetime import datetime
 
-DEFAULT_ROOT = r"D:\全量数据\market_data"
-DEFAULT_BASELINE = r"D:\全量数据\db_fingerprint_baseline.json"
+# 2026-11-04 §303 G1b：范围从 market_data 扩到**全库树**；基线移出 root（防自指）
+DEFAULT_ROOT = r"D:\全量数据"
+DEFAULT_BASELINE = r"D:\量化策略\备份\l1_full_baseline.json"
 STATE_EXTS = {".json", ".jsonl", ".csv", ".txt"}
 
 
@@ -59,12 +61,19 @@ def _sha256(path, blocksize=1 << 20):
     return h.hexdigest()
 
 
-def _walk(root):
-    """按相对路径排序返回 [(rel, abs)]，保证基线可复现"""
+def _walk(root, skip=None):
+    """按相对路径排序返回 [(rel, abs)]，保证基线可复现。
+
+    skip: 需排除的绝对路径（基线自身）。基线若落在 root 内，不能把上次
+    基线算进本次指纹 —— 否则每次重建都自我引用、永远报"变更"（§303 3.2）。
+    """
+    skip_n = os.path.normcase(os.path.abspath(skip)) if skip else None
     out = []
     for dp, _dn, fn in os.walk(root):
         for f in fn:
             p = os.path.join(dp, f)
+            if skip_n and os.path.normcase(os.path.abspath(p)) == skip_n:
+                continue
             rel = os.path.relpath(p, root).replace(os.sep, "/")
             out.append((rel, p))
     out.sort()
@@ -80,10 +89,10 @@ def _atomic_write_json(obj, path):
     os.replace(tmp, path)
 
 
-def _scan(root, deep):
+def _scan(root, deep, skip=None):
     """扫描一遍，返回 {rel: 记录} 与三分类计数、两档耗时"""
     t0 = time.time()
-    files = _walk(root)
+    files = _walk(root, skip=skip)
     t_walk = time.time() - t0
     recs, counts = {}, {"parquet": 0, "state": 0, "other": 0}
     t_hash = 0.0
@@ -107,7 +116,7 @@ def cmd_build(args):
         print(f"[门禁] ⛔ 根目录不存在: {root}")
         return 2
     print(f"[门禁] 建基线 root={root} deep=True")
-    recs, counts, t = _scan(root, deep=True)
+    recs, counts, t = _scan(root, deep=True, skip=args.baseline)
     base = {"root": root, "created_at": datetime.now().isoformat(timespec="seconds"),
             "deep": True, "counts": counts, "files": recs}
     _atomic_write_json(base, args.baseline)
@@ -129,7 +138,7 @@ def cmd_verify(args):
     deep = args.deep
     print(f"[门禁] 校验 root={args.root} 档位={'深度(sha256)' if deep else '快速(size+mtime)'} "
           f"基线={base.get('created_at')}")
-    cur, counts, t = _scan(args.root, deep=deep)
+    cur, counts, t = _scan(args.root, deep=deep, skip=args.baseline)
 
     added = sorted(set(cur) - set(old))
     removed = sorted(set(old) - set(cur))
@@ -159,7 +168,11 @@ def cmd_verify(args):
     if bad:
         print("[门禁] ⛔ 有差异（退出码 1）")
         return 1
-    print("[门禁] ✓ 零差异（退出码 0）")
+    if added:
+        # §303 3.3：数与话必须一致 —— 容忍新增时不说"零差异"
+        print(f"[门禁] ✓ 无删除/变更（新增 {len(added)} 已容忍）")
+    else:
+        print("[门禁] ✓ 零差异（退出码 0）")
     return 0
 
 
