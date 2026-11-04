@@ -117,6 +117,9 @@ def dedupe_of_fund_codes(df, code_col="ts_code", date_col=None,
       2. 同胞   = 同一前 6 位数字、码长 == 6 的任意后缀（`.OF/.SH/.SZ`）
       3. 同一 `date_col` 下 `value_cols` 全部相等 ⇒ 判双计，删除**畸形码行**
          （保留 6 位码；畸形码在同胞无数据日期的独有历史**原样保留**）
+         ⚠ **NaN 视为相等**（实现用 `fillna("__NA__")` 统一键）：401 行
+         "双方 `accum_nav` 皆空"的重复全靠此语义才删得掉；若改成严格 `==`，
+         会静默少删 401 行且总量仍"看起来正常"（§305 G2c）。
 
     参数:
       date_col : 日期列；None 时按 nav_date → trade_date → end_date 探测
