@@ -717,6 +717,37 @@ def cmd_db_group(args):
         print("  旧平铺名（db-audit / db-schema / db-report / db-clean / db-migrate）仍可用，等价。")
 
 
+def cmd_db_stale_fix(args):
+    """基金 source_empty 注册表对账（判定与 R17/R18 同源：check_fund_history）"""
+    import json as _json
+    from tools.fund_stale import detect, apply_fix
+    as_json = getattr(args, "json", False)
+    det = detect()
+    total = sum(len(x["stale"]) for x in det)
+
+    receipt = {"dry_run": not args.apply, "total_stale": total, "detected": det}
+    if args.apply:
+        if total:
+            receipt.update(apply_fix(det, verbose=not as_json))
+        else:
+            receipt.update({"changed": False, "backup": None, "tables": {}})
+
+    if as_json:
+        print(_json.dumps(receipt, ensure_ascii=False, indent=1))
+    else:
+        print(f"  {'表':12s} {'stale':>6s} {'stale_late':>10s}")
+        for x in det:
+            print(f"  {x['table']:12s} {len(x['stale']):6d} {len(x['stale_late']):10d}")
+        print(f"  合计 stale={total}")
+        if args.apply and total:
+            print("  ✓ 已清理（evidence/count 已同步）")
+        elif args.apply:
+            print("  ✓ 无 stale，未写入")
+        elif total:
+            print("  [DRY-RUN] 加 --apply 清理")
+    return 0
+
+
 def _add_db_clean_args(p):
     p.add_argument("--only", default=None, help="只清理指定目标, 逗号分隔")
     p.add_argument("--apply", action="store_true",
@@ -925,6 +956,12 @@ def build_parser():
         #   help=SUPPRESS 的隐藏由 _NoSuppressSubcommands 格式化器处理
         #   （命令仍注册在 choices 中，可正常调用，regress R1 契约依赖）。
         _add_args(sub.add_parser(_flat, help=argparse.SUPPRESS))
+
+    p = db_sub.add_parser("stale-fix", help="基金 source_empty 注册表对账（干跑/--apply）")
+    p.add_argument("--apply", action="store_true",
+                   help="清理 stale 并同步 evidence/count（先自备份）")
+    _add_json(p, help_text="输出对账回执 JSON")
+    p.set_defaults(func=cmd_db_stale_fix)
 
     p = sub.add_parser("regress", help="回归测试（盘后流水线 + 存储布局约束）")
     _add_json(p, help_text="输出回归结果 JSON（逐项日志静音，退出码语义不变）")

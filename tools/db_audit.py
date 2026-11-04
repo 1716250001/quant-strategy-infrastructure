@@ -568,7 +568,7 @@ def audit_gaps(verbose=True):
         # 断点会把"调用成功但返空"也记为完成，导致缺口被隐瞒。
         # 读 parquet 实际最大日期，如果落后于应有日期，说明断点虚记。
         data_stale = []
-        if mode == "by_date" and not miss:
+        if mode == "by_date" and not miss and not conf.get("audit_no_stale"):
             data_latest = _get_data_latest_date(name)
             expect_latest = expect[-1] if expect else None
             # ⚠ 排除"所属周期仍在进行中"的末尾任务（周/月线专用）：

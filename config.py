@@ -604,6 +604,7 @@ BACKFILL_TARGETS = OrderedDict([
         "start": "20060101", "date_param": "ann_date", "date_col": "ann_date",
         "max_rows": 0, "tier": "A",
         "subset": ["ts_code", "ann_date", "end_date"],
+        "audit_no_stale": True,   # 事件表：公告并非每个交易日都有，空日≠缺日（§320 F3）
         "note": "业绩预告（涛涛战法业绩雷规避）；"
                 "⚠ 参数名是 **ann_date**（非 trade_date），同 fund_div；"
                 "⚠ 不支持只传 period（实测报『ann_date和ts_code至少输入一个』）；"

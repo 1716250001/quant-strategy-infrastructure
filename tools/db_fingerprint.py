@@ -166,6 +166,9 @@ def cmd_verify(args):
 
     bad = bool(removed or changed or (added and not args.allow_added))
     if bad:
+        if getattr(args, "report", False):
+            print("[门禁] ⚠ 有差异（--report 模式：退出码恒 0，供每日任务接线）")
+            return 0
         print("[门禁] ⛔ 有差异（退出码 1）")
         return 1
     if added:
@@ -180,12 +183,16 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="L1 库指纹门禁（全文件类型）")
     ap.add_argument("--build", action="store_true", help="生成/覆盖基线")
     ap.add_argument("--verify", action="store_true", help="校验当前库")
+    ap.add_argument("--report", action="store_true",
+                    help="报告模式：等价 --verify，但退出码恒 0（差异仍打印，供每日任务接线）")
     ap.add_argument("--deep", action="store_true", help="深度档：重算 sha256")
     ap.add_argument("--allow-added", action="store_true", help="--verify 时容忍新增文件")
     ap.add_argument("--root", default=DEFAULT_ROOT, help=f"库根目录（默认 {DEFAULT_ROOT}）")
     ap.add_argument("--baseline", default=DEFAULT_BASELINE,
                     help=f"基线路径（默认 {DEFAULT_BASELINE}）")
     args = ap.parse_args(argv)
+    if args.report:
+        args.verify = True
     if args.build and args.verify:
         print("[门禁] ⛔ --build 与 --verify 不能同时使用")
         return 2
