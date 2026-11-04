@@ -95,6 +95,94 @@ VENUE_SUFFIX = {
 
 
 # ============================================================
+# 消费侧防护：畸形 .OF 码双计（默认不启用）
+# ============================================================
+# 背景（§286 / §297 G2 / §303）:
+#   fund_nav 里有 75 个**码长 >6** 的畸形 `.OF` 码（如 `0055301.OF`），
+#   它们是同一基金的旧码格式，与 6 位同胞（`005530.OF` / `005530.SH`）
+#   在重叠期**逐日同值**。按 `ts_code` 聚合净值会把同一只基金算两遍。
+#   这些畸形码另有 70.9% 的行是**独有历史**（同胞那时还没数据）——
+#   所以只能删"同日同值"的重复行，绝不能整码删除。
+# ⚠ 本函数**没有任何调用方**（§297 要求"默认不启用、现有调用方零改动"）。
+_DEDUPE_NA = "__NA__"
+
+
+def dedupe_of_fund_codes(df, code_col="ts_code", date_col=None,
+                         value_cols=("unit_nav", "accum_nav"),
+                         return_dropped=False):
+    """剔除"畸形 `.OF` 码 ↔ 6 位同胞"的**同日同值**重复行。
+
+    规则（保守口径，只删证据确凿的重复）:
+      1. 畸形码 = 后缀 `.OF` 且数字码长 > 6（如 `0055301.OF`）
+      2. 同胞   = 同一前 6 位数字、码长 == 6 的任意后缀（`.OF/.SH/.SZ`）
+      3. 同一 `date_col` 下 `value_cols` 全部相等 ⇒ 判双计，删除**畸形码行**
+         （保留 6 位码；畸形码在同胞无数据日期的独有历史**原样保留**）
+
+    参数:
+      date_col : 日期列；None 时按 nav_date → trade_date → end_date 探测
+      value_cols: 判同值的列，默认 unit_nav + accum_nav（adj_nav 两侧重算时点
+                  不同、本来就会不等，不能纳入）
+      return_dropped: True 时返回 (去重后 df, 删除行数)
+
+    实测（2026-11-04，fund_nav 29 分区 24,860,315 行，逐分区调用）:
+      删除 **22,084 行 / 16 个畸形码** = 15 个 `.OF` 同胞对 **20,812 行**
+      ＋ `1611211.OF ↔ 161121.SZ/.OF` **1,272 行**（同为同日同值）。
+      其余 **48,650 行**（同胞当日无数据）为独有历史，全部原样保留。
+      ⚠ 与 §297 票据"应剔 21,765 行"的口径差（两处；未为凑数放宽规则）:
+        ① 21,765 是 §286 A 类 15 对的**畸形码总行数**，不是可删重复行数：
+           这 15 对真正同日同值可删 **20,812 行**；余约 953 行为同胞无数据的
+           独有历史（`0900201.OF` 322 行、`5197141.OF` 622 行、其余 13 对 8~9 行）。
+        ② 本函数同胞不限后缀，另识别 `1611211.OF ↔ 161121.SZ` **1,272 行**
+           （逐日同值；§286 按 .SZ 单对比较记 68.5%，未计入 A 类 15 对）。
+        合计实删 20,812＋1,272 = **22,084 行 / 16 码**；口径差请审查方裁定。
+
+    用法（人工按需）:
+      >>> from common.reader import dedupe_of_fund_codes
+      >>> nav = dedupe_of_fund_codes(pd.read_parquet(...))   # 默认不接线
+    """
+    if not len(df):
+        return (df, 0) if return_dropped else df
+
+    if date_col is None:
+        date_col = next((c for c in ("nav_date", "trade_date", "end_date")
+                         if c in df.columns), None)
+    if date_col is None:
+        raise ValueError(f"dedupe_of_fund_codes: 找不到日期列（{list(df.columns)}）")
+    miss = [c for c in value_cols if c not in df.columns]
+    if miss:
+        raise ValueError(f"dedupe_of_fund_codes: 缺少判值列 {miss}")
+
+    codes = df[code_col].astype(str)
+    parts = codes.str.rsplit(".", n=1, expand=True)
+    stem, suf = parts[0], parts[1]
+    malformed = suf.eq("OF") & stem.str.len().gt(6)
+    if not bool(malformed.any()):
+        return (df, 0) if return_dropped else df
+
+    prefixes = set(stem[malformed].str[:6])
+    sib = (~malformed) & stem.str.len().eq(6) & stem.str[:6].isin(prefixes)
+    if not bool(sib.any()):
+        return (df, 0) if return_dropped else df
+
+    def _keys(frame, prefix_col):
+        cols = [prefix_col, date_col] + list(value_cols)
+        return list(frame[cols].fillna(_DEDUPE_NA).itertuples(index=False, name=None))
+
+    sib_set = set(_keys(df[sib].assign(_p=stem[sib].str[:6]), "_p"))
+    drop_mask = [k in sib_set for k in
+                 _keys(df[malformed].assign(_p=stem[malformed].str[:6]), "_p")]
+
+    # 保持原行序（只做过滤，不重排）
+    keep_mask = ~malformed
+    keep_mask.loc[malformed] = [not x for x in drop_mask]
+    keep = df.loc[keep_mask]
+    dropped = int(sum(drop_mask))
+    if return_dropped:
+        return keep, dropped
+    return keep
+
+
+# ============================================================
 # 布局探测
 # ============================================================
 def table_dir(table, root=None):
