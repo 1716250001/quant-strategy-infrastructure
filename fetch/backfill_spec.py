@@ -52,7 +52,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from config import BACKFILL_INDEX_CODES, BACKFILL_PAGE_CONF, META_DIR
+from config import (BACKFILL_INDEX_CODES, BACKFILL_INDEX_MONTHLY_CODES,
+                    BACKFILL_PAGE_CONF, META_DIR)
 from common.calendar import open_dates, open_dates_by_market
 
 
@@ -100,6 +101,10 @@ def resolve_codes(kind):
             _suffix = df["ts_code"].astype(str).str.split(".").str[-1]
             df = df[_suffix.isin(["SH", "SZ"])]
         return df["ts_code"].dropna().tolist()
+
+    if kind == "index_monthly":
+        # §306 G4b：index_monthly 只服务 13 个实测有月线的指数，其余 CSI 日线有、月线无
+        return list(BACKFILL_INDEX_MONTHLY_CODES)
 
     if kind in ("index", "index_major"):
         return list(BACKFILL_INDEX_CODES)

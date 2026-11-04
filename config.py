@@ -947,7 +947,9 @@ BACKFILL_TARGETS = OrderedDict([
     }),
     ("index_monthly", {
         "api": "index_monthly", "desc": "指数月线(验算用)", "mode": "by_code",
-        "codes": "index", "max_rows": 1000, "tier": "B",
+        # §306 G4b：本表接口不服务 CSI 批量（58 个 CSI 返回 0 行，日线齐全），
+        # 码清单改为 13 个实测有月线的（见 BACKFILL_INDEX_MONTHLY_CODES）。
+        "codes": "index_monthly", "max_rows": 1000, "tier": "B",
         "subset": ["ts_code", "trade_date"],
         "note": "仅拉13个关注指数; 实测单指数296行不截断",
     }),
@@ -1341,6 +1343,16 @@ BACKFILL_INDEX_CODES = [
     "930901.CSI", "930902.CSI", "930910.CSI", "930914.CSI", "930917.CSI",
     "930927.CSI", "930928.CSI", "930939.CSI", "930955.CSI", "930965.CSI",
     "930967.CSI", "930986.CSI", "930997.CSI",
+]
+
+# index_monthly 专用码清单（2026-11-04 §306 G4b）:
+# index_monthly 只服务交易所指数 + 少量 CSI，实测 71 个码里仅这 13 个有月线
+# （58 个 CSI 调用返回 0 行，但其 index_daily 日线齐全 ⇒ 属接口不覆盖，非源端为空）。
+# ⚠ 不要用 BACKFILL_INDEX_CODES 直接喂 index_monthly —— 那会制造 58 个假缺口。
+BACKFILL_INDEX_MONTHLY_CODES = [
+    "000016.SH", "000300.SH", "000905.SH", "000852.SH", "932000.CSI",
+    "000688.SH", "399006.SZ", "000001.SH", "899050.BJ",
+    "399300.SZ", "000010.SH", "000009.SH", "000011.SH",
 ]
 
 # 国际指数清单: index_global 用 — 2026-09-19 新增
