@@ -141,7 +141,6 @@
       "508081.SH",
       "508605.SH",
       "508606.SH",
-      "508607.SH",
       "508610.SH",
       "512490.SH",
       "512830.SH",
@@ -1459,17 +1458,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
       },
-      "508607.SH": {
-        "name": "华安陆家嘴REIT",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 1,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
       "508610.SH": {
         "name": "广发新城吾悦REIT",
         "list_date": "",
@@ -2486,7 +2474,6 @@
       "508081.SH",
       "508605.SH",
       "508606.SH",
-      "508607.SH",
       "508610.SH",
       "512490.SH",
       "512830.SH",
@@ -2527,7 +2514,7 @@
       "589610.SH",
       "589670.SH"
     ],
-    "source_empty_count": 182,
+    "source_empty_count": 181,
     "source_empty_evidence_new": {
       "161022.SZ": {
         "name": "富国创业板指数-A",
@@ -5181,11 +5168,6 @@
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
       "508606.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "508607.SH": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
