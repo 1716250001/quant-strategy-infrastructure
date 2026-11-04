@@ -5485,7 +5485,7 @@
   "fund_share": {
     "A": 0,
     "B": 0,
-    "source_empty_count": 130,
+    "source_empty_count": 128,
     "source_empty": [
       "150116.SZ",
       "150119.SZ",
@@ -5576,9 +5576,7 @@
       "501105.SH",
       "501221.SH",
       "501223.SH",
-      "508038.SH",
       "508606.SH",
-      "508610.SH",
       "512490.SH",
       "512830.SH",
       "513790.SH",
@@ -6502,28 +6500,8 @@
         "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
       },
       {
-        "ts_code": "508038.SH",
-        "name": "国金嘉泽新能源REIT",
-        "status": "nan",
-        "list_date": "nan",
-        "delist_date": "nan",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
         "ts_code": "508606.SH",
         "name": "华夏凯德REIT",
-        "status": "nan",
-        "list_date": "nan",
-        "delist_date": "nan",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_share(ts_code=X) 全历史请求（§203.1 逐码探针 152 只）"
-      },
-      {
-        "ts_code": "508610.SH",
-        "name": "广发新城吾悦REIT",
         "status": "nan",
         "list_date": "nan",
         "delist_date": "nan",
