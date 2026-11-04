@@ -707,8 +707,77 @@ def audit_scale(top_n=12, verbose=True):
 # ============================================================
 # 主流程
 # ============================================================
+def _read_code_set(name):
+    """读某表 parquet 现存的代码集合（只看代码列，不读全表）。"""
+    d = os.path.join(MARKET_DATA_DIR, name)
+    if not os.path.isdir(d):
+        return None
+    cols = ("ts_code", "symbol", "code")
+    out = set()
+    try:
+        import pyarrow.parquet as pq
+    except Exception:
+        return None
+    for f in os.listdir(d):
+        if not f.endswith(".parquet"):
+            continue
+        try:
+            names = pq.read_schema(os.path.join(d, f)).names
+            col = next((c for c in cols if c in names), None)
+            if not col:
+                return None
+            t = pq.read_table(os.path.join(d, f), columns=[col])
+            out |= {str(x) for x in t.column(col).to_pylist() if x is not None}
+        except Exception:
+            return None
+    return out
+
+
+def audit_data_check(only=None, verbose=True):
+    """by_code 表**观测**：断点已完成、但库内零行的代码数。
+
+    ⚠ 仅观测：不参与 n_issue / 退出码 / regress 判据（§314 C1）。
+    合法返空很多（握手型接口、新上市标的），故先看量级，不立判据。
+    """
+    from config import BACKFILL_TARGETS, MARKET_DATA_DIR as _MD
+    cp_path = os.path.join(_MD, ".backfill_checkpoint.json")
+    if not os.path.exists(cp_path):
+        return []
+    cp = json.load(open(cp_path, encoding="utf-8"))
+
+    rows = []
+    for name, conf in BACKFILL_TARGETS.items():
+        if conf.get("mode") != "by_code" or conf.get("audit_skip"):
+            continue
+        if only and name not in only:
+            continue
+        done = set(str(x) for x in (cp.get(name, {}).get("completed") or []))
+        if not done:
+            continue
+        data = _read_code_set(name)
+        if data is None:
+            continue
+        nodata = done - data
+        rows.append({"table": name, "done": len(done), "with_data": len(done & data),
+                     "done_no_data": len(nodata),
+                     "sample": sorted(nodata)[:5]})
+    rows.sort(key=lambda r: -r["done_no_data"])
+    if verbose:
+        print()
+        print(SEP)
+        print("  D. by_code 观测（断点已完成 / 库内零行；不进判据）")
+        print(SEP)
+        print(f"  {'接口':20s} {'断点完成':>8s} {'有数据':>8s} {'零行':>8s}  样例")
+        print("  " + "-" * 76)
+        for r in rows:
+            print(f"  {r['table']:20s} {r['done']:8d} {r['with_data']:8d} "
+                  f"{r['done_no_data']:8d}  {','.join(r['sample'])}")
+        print(f"  合计: {len(rows)} 表 / 零行码 {sum(r['done_no_data'] for r in rows):,}")
+    return rows
+
+
 def run_audit(sections=("checkpoint", "dup", "gap", "scale"), only=None,
-              verbose=True, exact=False, as_json=False):
+              verbose=True, exact=False, as_json=False, data_check=False):
     """执行体检。exact=True 时无主键目录做全量整行判重(慢, 约18分钟)。
 
     as_json: stdout 输出结果 JSON（CLI --json；2026-09-30 P3 统一）
@@ -741,6 +810,8 @@ def run_audit(sections=("checkpoint", "dup", "gap", "scale"), only=None,
         result["gap"] = audit_gaps(v)
     if "scale" in sections:
         result["scale"] = audit_scale(verbose=v)
+    if data_check:
+        result["data_check"] = audit_data_check(only=only, verbose=v)
 
     if as_json:
         from common.jsonio import print_json

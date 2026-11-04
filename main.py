@@ -232,7 +232,7 @@ def cmd_db_audit(args):
     else:
         sections = tuple(x.strip() for x in args.section.split(",") if x.strip())
     run_audit(sections=sections, only=only, exact=getattr(args, "exact", False),
-              as_json=as_json)
+              as_json=as_json, data_check=getattr(args, "data_check", False))
 
 
 def cmd_db_schema(args):
@@ -735,6 +735,8 @@ def _add_db_audit_args(p):
     p.add_argument("--exact", action="store_true",
                    help="无主键目录做全量整行判重(慢, 约18分钟; 默认抽样)")
     p.add_argument("--list", action="store_true", help="列出主键配置后退出")
+    p.add_argument("--data-check", action="store_true", dest="data_check",
+                   help="附加 by_code 观测：断点已完成但库内零行的代码数（不进判据/退出码）")
     _add_json(p, help_text="输出体检结果 JSON（不打印横幅/明细）")
     p.set_defaults(func=cmd_db_audit)
 
