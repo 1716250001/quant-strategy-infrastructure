@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-  # noqa: A005 —— alt.io 为包内模块（alt/io.py），包限定引用，不与标准库冲突
 """
 alt/io.py — alt 库落盘层（日期归一化 + 复用主库存储设施）
 ==========================================================
@@ -15,21 +15,20 @@ alt/io.py — alt 库落盘层（日期归一化 + 复用主库存储设施）
 """
 import os
 from datetime import datetime
-from typing import Optional
 
 import pandas as pd
 
-from common.paths import ensure_dir
-from common.dtypes import coerce_float_cols   # DB-R1: 上移 common/，此处保留 re-export
-from common.parquet_store import merge_append, upsert_by_year
-from common.reader import detect_layout, read_range
-from config_alt import (
+from alt.config import (
     ALT_DATA_DIR,
     alt_table_dir,
     assert_writable,
     normalize_date_series,
 )
 from alt.spec import TableSpec
+from common.dtypes import coerce_float_cols  # DB-R1: 上移 common/，此处保留 re-export
+from common.parquet_store import merge_append, upsert_by_year
+from common.paths import ensure_dir
+from common.reader import detect_layout
 
 
 # ============================================================
@@ -52,8 +51,8 @@ def resolve_subset(df: pd.DataFrame, spec: TableSpec):
 
 
 def normalize(df: pd.DataFrame, spec: TableSpec,
-              req_date: Optional[str] = None,
-              enum_value: Optional[str] = None):
+              req_date: str | None = None,
+              enum_value: str | None = None):
     """把原始返回归一化为落盘形态。
 
     返回: (df_normalized, warnings: list[str])
@@ -213,8 +212,8 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
 # ============================================================
 # 二、落盘
 # ============================================================
-def table_path(spec: TableSpec, req_date: Optional[str] = None,
-               year: Optional[str] = None, dest_dir: Optional[str] = None):
+def table_path(spec: TableSpec, req_date: str | None = None,
+               year: str | None = None, dest_dir: str | None = None):
     """目标文件路径（single → {table}/{table}.parquet；by_year → {table}/{YYYY}.parquet）。
 
     dest_dir（v1.2 新增）：目标根目录覆盖——供 list 引擎 `--rebuild`
@@ -272,8 +271,8 @@ def qc_added_warning(result: dict, spec) -> None:
         print(msg)
 
 
-def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
-         dry_run: bool = False, dest_dir: Optional[str] = None):
+def save(df: pd.DataFrame, spec: TableSpec, req_date: str | None = None,
+         dry_run: bool = False, dest_dir: str | None = None):
     """按 spec 落盘。dry_run=True 时只做校验与预演，不写任何文件。
 
     返回: dict(ok, rows, added, path, errors, warnings, dry_run)
@@ -328,7 +327,7 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
             return result
         assert_writable(target)
         ensure_dir(os.path.dirname(target))
-        changed, added = merge_append(target, df, subset=subset)
+        _changed, added = merge_append(target, df, subset=subset)
         result.update(ok=True, added=added)
         qc_added_warning(result, spec)
         return result
@@ -376,7 +375,7 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: Optional[str] = None,
     assert_writable(target)
     ensure_dir(os.path.dirname(target))
     sort_by = spec.date_col if spec.date_col in df.columns else None
-    changed, added = merge_append(target, df, subset=subset, sort_by=sort_by)
+    _changed, added = merge_append(target, df, subset=subset, sort_by=sort_by)
     result.update(ok=True, added=added)
     qc_added_warning(result, spec)
     return result

@@ -24,17 +24,14 @@ tools/ckpt_tool.py — 断点管理
   python main.py ckpt --fix --table eco_cal --execute       # 执行
   python main.py ckpt --clear --table dividend --dry-run
 """
-import glob
 import json
 import os
 import shutil
-import sys
 from datetime import datetime
 
 import pandas as pd
 
-from config import (MARKET_DATA_DIR, BACKFILL_TARGETS, DAILY_UPDATE_EXTRA,
-                    TABLE_DATE_COL)
+from config import BACKFILL_TARGETS, DAILY_UPDATE_EXTRA, MARKET_DATA_DIR, TABLE_DATE_COL
 
 CKPT = os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
 
@@ -110,7 +107,7 @@ def _recent_trade_dates(n=1):
 def _tasks_of(name, conf):
     """应有的任务集合（复用 backfill 的构建逻辑，保证口径一致）"""
     try:
-        from fetch.backfill_spec import build_tasks, expected_task_count
+        from fetch.backfill_spec import expected_task_count
     except Exception:
         return None, None
     try:
@@ -154,7 +151,7 @@ def _do_show(tables=None, verbose=True):
             disk = None      # 其余模式无对应口径（见 COVERED_MODES 说明）
 
         # 应有任务
-        exp, kind = _tasks_of(name, conf)
+        exp, _kind = _tasks_of(name, conf)
 
         fake = stale = None
         note = ""
@@ -183,7 +180,7 @@ def _do_show(tables=None, verbose=True):
         if verbose:
             f_show = f"{fake:,}" if fake is not None else "-"
             s_show = f"{stale:,}" if stale is not None else "-"
-            print(f"  {name:18s} {str(mode):9s} {len(done):8,d} "
+            print(f"  {name:18s} {mode!s:9s} {len(done):8,d} "
                   f"{n_disk if n_disk >= 0 else '—':>8} {f_show:>7s} {s_show:>7s}  {note}")
         rows.append({"name": name, "mode": mode, "done": len(done),
                      "disk": n_disk, "fake": fake, "stale": stale})
@@ -203,10 +200,10 @@ def _do_show(tables=None, verbose=True):
             n_t = sum(len(v) for v in unc.values())
             print()
             print(f"  ⚠ 以下 {len(unc)} 种取数模式（共 {n_t} 张表）**本工具不做交叉核对**，")
-            print(f"     其\"—\"不代表正常，仅表示缺少比对口径（任务数少、代价低）：")
+            print("     其\"—\"不代表正常，仅表示缺少比对口径（任务数少、代价低）：")
             for m in sorted(unc, key=lambda x: str(x)):
                 names = unc[m]
-                print(f"       {str(m):10s} {len(names):3d} 张  {names[:4]}"
+                print(f"       {m!s:10s} {len(names):3d} 张  {names[:4]}"
                       + (" ..." if len(names) > 4 else ""))
 
         print()
@@ -271,7 +268,7 @@ def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
             print(f"  备份: {os.path.basename(bak)}")
         else:
             print(f"  [DRY-RUN] 将回填 {total:,} 项，未写入")
-            print(f"  执行: python main.py ckpt --fix --execute"
+            print("  执行: python main.py ckpt --fix --execute"
                   + (f" --table {','.join(tables)}" if tables else ""))
     return total
 
@@ -301,7 +298,7 @@ def _do_clear(tables=None, execute=False, verbose=True, details_out=None):
         done = set(str(x) for x in cp.get(name, {}).get("completed", []))
         if not done:
             continue
-        exp, kind = _tasks_of(name, conf)
+        exp, _kind = _tasks_of(name, conf)
 
         if mode == "by_code":
             disk = _disk_codes(name)
@@ -342,7 +339,7 @@ def _do_clear(tables=None, execute=False, verbose=True, details_out=None):
             print(f"  备份: {os.path.basename(bak)}")
         else:
             print(f"  [DRY-RUN] 将清除 {total:,} 项，未写入")
-            print(f"  执行: python main.py ckpt --clear --execute"
+            print("  执行: python main.py ckpt --clear --execute"
                   + (f" --table {','.join(tables)}" if tables else ""))
     return total
 

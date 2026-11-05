@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 alt/update.py — alt 库每日增量更新
 ====================================
@@ -44,13 +44,12 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from config_alt import ALT_DATA_DIR, ALT_META_DIR, assert_writable, ensure_alt_dirs
+from alt import spec as sp_mod
+from alt.backfill import AltCheckpoint, latest_trade_date, run_spec
+from alt.config import ALT_DATA_DIR, ALT_META_DIR, assert_writable, ensure_alt_dirs
+from alt.rate import AltRateLimiter
 from common.calendar import recent_trade_dates, trade_dates_between
 from common.reader import latest_date
-from alt import spec as sp_mod
-from alt.io import alt_tables
-from alt.rate import AltRateLimiter
-from alt.backfill import AltCheckpoint, latest_trade_date, run_spec
 
 STATE_FILE = os.path.join(ALT_META_DIR, "update_state.json")
 DEFAULT_LOOKBACK = 3
@@ -158,8 +157,8 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
     # ── by_year 布局：算缺口 ∪ 复核窗口 ──
     dc = sp.date_col
     # 清布局缓存后再算缺口，避免用到上次运行遗留的 layout 探测结果
-    from common import reader as _reader
     from alt.backfill import is_snapshot_safe_now
+    from common import reader as _reader
 
     _reader.clear_cache(sp.name, root=ALT_DATA_DIR)
     latest = latest_date(sp.name, date_col=dc, root=ALT_DATA_DIR)
@@ -340,7 +339,7 @@ def freshness_report(specs, verbose=True):
             continue
         try:
             df = _read_all(sp)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             rows.append({"table": sp.name, "state": f"读取失败:{type(e).__name__}",
                          "latest": "", "age": None})
             continue
@@ -366,10 +365,10 @@ def freshness_report(specs, verbose=True):
         print("更新后新鲜度自检")
         print("=" * 92)
         # 「不报警」类：结构性事实或已登记项，与「新出现的问题」分开
-        INFO_STATES = {"无日期维度", "已登记停更"}
-        bad = [r for r in rows if r["state"] != "OK" and r["state"] not in INFO_STATES]
+        info_states = {"无日期维度", "已登记停更"}
+        bad = [r for r in rows if r["state"] != "OK" and r["state"] not in info_states]
         ok = [r for r in rows if r["state"] == "OK"]
-        info = [r for r in rows if r["state"] in INFO_STATES]
+        info = [r for r in rows if r["state"] in info_states]
         print(f"  正常 {len(ok)} 张 | 异常 {len(bad)} 张")
         if info:
             by_i = {}
@@ -386,7 +385,7 @@ def freshness_report(specs, verbose=True):
                         extra = f"  ← {sp.known_stale[:62]}"
                 print(f"    {r['table']:<26}{r['state']:<10}最新 {r['latest'] or '—':<10}{age}{extra}")
         if bad:
-            print(f"\n  需关注:")
+            print("\n  需关注:")
             for r in sorted(bad, key=lambda x: -(x.get("age") or 0)):
                 age = f"{r['age']} 天" if r.get("age") is not None else "—"
                 print(f"    {r['table']:<26}{r['state']:<10}最新 {r['latest'] or '—':<10}{age}")
@@ -403,8 +402,8 @@ def _read_all(sp):
 
     清缓存后再读：避免"落盘后仍读到旧的 layout=none 缓存"。
     """
-    from common import reader as _reader
     from alt.reader import read_alt
+    from common import reader as _reader
     _reader.clear_cache(sp.name, root=ALT_DATA_DIR)
     return read_alt(sp.name)
 
@@ -470,6 +469,7 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
     #   （实测差 +124），造成"狼来了"效应；夹逼把时间窗压缩到本次操作内，
     #   差异可直接归因。dry-run 不发请求不写盘，无需校验。
     from contextlib import nullcontext
+
     from alt.audit import isolation_guard
 
     guard = (nullcontext() if dry_run
@@ -500,7 +500,7 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
                                        p["lookback_dates"], dry_run=dry_run)
                 r["action"] = p["action"]
                 r["reason"] = p["reason"]
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 r = {"table": sp.name, "action": p["action"], "requests": 0, "rows": 0,
                      "added": 0, "ok": False, "errors": [f"{type(e).__name__}: {e}"],
                      "warnings": [], "reason": p["reason"]}
@@ -584,7 +584,7 @@ def status_only(tier=None, only=None):
         from alt.list_backfill import show_status as _rotate_status
         print()
         _rotate_status()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"  [warn] 轮转进度不可用: {type(e).__name__}: {str(e)[:80]}")
     return rows
 

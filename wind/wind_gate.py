@@ -12,17 +12,26 @@ wind_gate.py — Wind 唯一调用入口（WIND-LIB W-3）
 
 注：本 W-3 为轻量骨架，完整调用链需接 Wind API 密钥（已在 config_wind）。
 """
-import os, sys, json, datetime as _dt, hashlib, time
+import datetime as _dt
+import hashlib
+import json
+import os
+import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config_wind import (
-    assert_writable, WIND_RAW_DIR, WIND_BUDGET_FILE, WIND_META_DIR,
-    WIND_CALL_INTERVAL, WIND_QPS_LIMIT, WIND_MAX_RETRY, WIND_RPC_TIMEOUT,
-    WIND_DAILY_CALL_SOFT_LIMIT, WIND_DAILY_POINT_SOFT_LIMIT,
-    WIND_API_KEY, violation_count, normalize_date_iso8601,
-    WIND_TMP_DIR, FORBIDDEN_WRITE_ROOTS, WindPathViolation,
-)
 from common.parquet_store import _atomic_write_parquet
+from wind.config import (
+    FORBIDDEN_WRITE_ROOTS,
+    WIND_BUDGET_FILE,
+    WIND_CALL_INTERVAL,
+    WIND_META_DIR,
+    WIND_RAW_DIR,
+    WIND_TMP_DIR,
+    WindPathViolationError,
+    assert_writable,
+    violation_count,
+)
 
 
 class WindGateError(RuntimeError):
@@ -265,14 +274,14 @@ def _selfcheck_snap(failures):
 
 
 def _selfcheck_violation(failures):
-    """[3] 真正走禁区路径：必须抛 WindPathViolation 且 violation_count 恰好 +1。"""
+    """[3] 真正走禁区路径：必须抛 WindPathViolationError 且 violation_count 恰好 +1。"""
     print("\n[3] assert_writable 越界:")
     path = _selfcheck_probe_path()
     before = violation_count()
     try:
         assert_writable(path)
-    except WindPathViolation:
-        print(f"  ✅ 越界被 WindPathViolation 拒绝：{path}")
+    except WindPathViolationError:
+        print(f"  ✅ 越界被 WindPathViolationError 拒绝：{path}")
     except Exception as e:
         failures.append(f"[3] 越界抛错类型不符：{type(e).__name__}: {e}")
     else:

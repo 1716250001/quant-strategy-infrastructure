@@ -30,15 +30,16 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
-DEFAULT_ROOT = Path(r"D:\全量数据")
-DEFAULT_OUT = Path(r"D:\量化策略\备份\data-backup")
+import config
+
+DEFAULT_ROOT = Path(config.DATA_ROOT)
+DEFAULT_OUT = Path(config.PROJECT_DIR) / "备份" / "data-backup"
 
 EXCLUDE_DIRS = {"__pycache__", ".git"}
 EXCLUDE_SUFFIX = {".tmp", ".pyc", ".lock"}
@@ -107,16 +108,16 @@ def make_manifest(root: Path, out_dir: Path, reason: str) -> int:
         "files": entries,
     }
     mpath = out_dir / f"MANIFEST-{stamp}.json"
-    with io.open(mpath, "w", encoding="utf-8", newline="\n") as f:
+    with open(mpath, "w", encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)
 
     spath = out_dir / f"SHA256SUMS-{stamp}.txt"
-    with io.open(spath, "w", encoding="utf-8", newline="\n") as f:
+    with open(spath, "w", encoding="utf-8", newline="\n") as f:
         for e in entries:
             f.write(f"{e['sha256']}  {e['path']}\n")
 
     rpath = out_dir / f"README-{stamp}.md"
-    with io.open(rpath, "w", encoding="utf-8", newline="\n") as f:
+    with open(rpath, "w", encoding="utf-8", newline="\n") as f:
         f.write(
             f"# 全量数据冷备清单（{stamp}）\n\n"
             f"- 数据根：`{root}`\n"
@@ -149,7 +150,7 @@ def verify(manifest_path: Path, root_override: Path | None) -> int:
     if not manifest_path.is_file():
         print(f"[FAIL] MANIFEST 不存在: {manifest_path}")
         return 1
-    with io.open(manifest_path, encoding="utf-8") as f:
+    with open(manifest_path, encoding="utf-8") as f:
         manifest = json.load(f)
     root = root_override or Path(manifest["root"])
     print(f"[i] 校验: {manifest_path.name} | 根: {root} | 文件数: {manifest['total_files']}")

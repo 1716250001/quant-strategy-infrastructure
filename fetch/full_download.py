@@ -19,24 +19,33 @@ fetch/full_download.py — 全市场数据下载器（并发版）
   python -m fetch.full_download --dry-run     # 空跑, 只统计不下载
 """
 
-import pandas as pd
-import re
-import os
-import time
 import argparse
+import os
+import re
+import time
 from datetime import datetime
+
+import pandas as pd
+
+from common.parquet_store import upsert_by_year
 
 # 确保能 import config 和 fetch.base
 from config import (
-    MARKET_DATA_DIR, META_DIR, DOWNLOAD_PHASES,
-    TS_RATE_LIMIT_PER_MIN, TS_DAILY_LIMIT, FETCH_MAX_WORKERS,
-    TABLE_DATE_COL, FUND_CODE_PATTERN,
+    DOWNLOAD_PHASES,
+    FETCH_MAX_WORKERS,
+    FUND_CODE_PATTERN,
+    MARKET_DATA_DIR,
+    META_DIR,
+    TABLE_DATE_COL,
+    TS_DAILY_LIMIT,
 )
 from fetch.base import (
-    get_pro, RateLimiter, Checkpoint, ensure_dir,
-    ts_fetch, fetch_codes_parallel,
+    Checkpoint,
+    RateLimiter,
+    ensure_dir,
+    fetch_codes_parallel,
+    get_pro,
 )
-from common.parquet_store import upsert_by_year
 
 # EE-FUND-5 白名单：单一真源 = config.FUND_CODE_PATTERN（与 refresh_meta_basic.py 共用）。
 # 模块级编译，便于单测直接复用「消费方自己的那个正则对象」。
@@ -413,16 +422,14 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None):
     #   download_one_api 的 dry_run 拦住，元数据段却真请求 + 真写，
     #   覆盖写坏了 fund_basic.parquet（15,000 行残缺表）。
     if phase in ("all", "meta"):
-        stock_df, fund_df, trade_dates = fetch_metadata(
+        stock_df, fund_df, _trade_dates = fetch_metadata(
             pro, limiter, MARKET_DATA_DIR, dry_run=dry_run)
     else:
         # 非meta阶段, 从本地读取元数据
         stock_df, fund_df = _load_local_metadata()
-        trade_dates = []
 
     # ── 构建代码列表 ──
     stock_codes = stock_df["ts_code"].tolist() if not stock_df.empty else []
-    fund_codes = fund_df["ts_code"].tolist() if not fund_df.empty else []
 
     # 只保留【场内】基金 (SH/SZ) —— 场外 .OF 没有 fund_daily 行情
     #

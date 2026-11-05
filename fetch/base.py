@@ -18,26 +18,31 @@ fetch/base.py — 拉取类任务 · 共享基建
 改造后: 按接口独立限频 + 线程池并发 + 限频短退避
 """
 
-import os
 import json
-import time
+import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
 import pandas as pd
 import tushare as ts
 
-from config import (
-    TS_TOKEN, TS_RATE_LIMIT_PER_MIN,
-    TS_DAILY_LIMIT, TS_MAX_RETRIES, TS_RETRY_DELAYS,
-    API_RATE_LIMIT, API_RATE_LIMIT_DEFAULT,
-    TS_RATE_BACKOFF, TS_RATE_MAX_RETRIES, FETCH_MAX_WORKERS,
-    MARKET_DATA_DIR,
-)
-from common.paths import ensure_dir
 from common.codes import etf_to_ts_code, stock_to_ts_code
-
+from common.paths import ensure_dir
+from config import (
+    API_RATE_LIMIT,
+    API_RATE_LIMIT_DEFAULT,
+    FETCH_MAX_WORKERS,
+    MARKET_DATA_DIR,
+    TS_DAILY_LIMIT,
+    TS_MAX_RETRIES,
+    TS_RATE_BACKOFF,
+    TS_RATE_LIMIT_PER_MIN,
+    TS_RATE_MAX_RETRIES,
+    TS_RETRY_DELAYS,
+    TS_TOKEN,
+)
 
 # ============================================================
 # 权限错误识别与记录（2026-09-20 新增）
@@ -188,11 +193,18 @@ def safe_fetch(func, name, **kwargs):
 # etf_to_ts_code / stock_to_ts_code 统一由 common.codes 提供，
 # 此处 re-export 以保持历史 import 路径（from fetch.base import ...）可用。
 __all__ = [
-    "get_pro", "get_latest_trade_date", "ensure_dir", "safe_fetch",
-    "etf_to_ts_code", "stock_to_ts_code",
-    "RateLimiter", "Checkpoint",
-    "ts_call_with_retry", "ts_fetch", "ts_fetch_by_date",
+    "Checkpoint",
+    "RateLimiter",
+    "ensure_dir",
+    "etf_to_ts_code",
     "fetch_codes_parallel",
+    "get_latest_trade_date",
+    "get_pro",
+    "safe_fetch",
+    "stock_to_ts_code",
+    "ts_call_with_retry",
+    "ts_fetch",
+    "ts_fetch_by_date",
 ]
 
 
@@ -305,7 +317,7 @@ class Checkpoint:
         self._lock = threading.Lock()
         if os.path.exists(self.path):
             try:
-                with open(self.path, "r", encoding="utf-8") as f:
+                with open(self.path, encoding="utf-8") as f:
                     self.data = json.load(f)
                 print(f"[断点] 已加载: {self.path}")
             except Exception as e:

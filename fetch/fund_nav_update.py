@@ -21,22 +21,29 @@ fetch/fund_nav_update.py — 基金净值增量更新 (fund_nav)
   python -m fetch.fund_nav_update --dry-run       # 空跑，只统计不写入
 """
 
+import argparse
 import os
 import time
-import argparse
 from datetime import datetime
 
 import pandas as pd
 
-from config import (
-    FUND_NAV_DIR, FUND_NAV_LOOKBACK_DAYS, FUND_NAV_PAGE_SIZE,
-    META_DIR, INTRADAY_RATE_INTERVAL,
-)
-from common.calendar import recent_trade_dates
 from common import reader
-from common.parquet_store import merge_append, upsert_by_year, list_parquet_files
+from common.calendar import recent_trade_dates
+from common.parquet_store import list_parquet_files, upsert_by_year
+from config import (
+    FUND_NAV_DIR,
+    FUND_NAV_LOOKBACK_DAYS,
+    FUND_NAV_PAGE_SIZE,
+    INTRADAY_RATE_INTERVAL,
+    META_DIR,
+)
 from fetch.base import (
-    get_pro, RateLimiter, ensure_dir, ts_call_with_retry, ts_fetch,
+    RateLimiter,
+    ensure_dir,
+    get_pro,
+    ts_call_with_retry,
+    ts_fetch,
 )
 
 
@@ -239,7 +246,7 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
             if hist is not None and not hist.empty:
                 hist_frames.append(hist)
         if hist_frames:
-            alldf = pd.concat([alldf] + hist_frames, ignore_index=True)
+            alldf = pd.concat([alldf, *hist_frames], ignore_index=True)
             alldf = alldf.drop_duplicates(subset=["ts_code", "nav_date"], keep="last")
 
     stat = upsert_by_year(alldf, FUND_NAV_DIR, date_col="nav_date",
@@ -249,7 +256,6 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
     new_rows = stat["added"]
     updated = stat["partitions"]
     new_files = len(new_codes)
-    unchanged = max(0, stat["partitions"] - updated)
     fail = stat["fail"]
     print(f"\n{'=' * 60}")
     print("  基金净值更新完成 — 统计报告")

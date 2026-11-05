@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 alt/audit.py — alt 库数据体检
 ==============================
@@ -49,13 +49,12 @@ from datetime import datetime
 
 import pandas as pd
 
-from config_alt import (ALT_DATA_DIR, ALT_META_DIR, TS_DATA_DIR,
-                        assert_writable, ensure_alt_dirs)
-from common import reader as _reader
-from common.calendar import open_dates, recent_trade_dates, trade_dates_between
 from alt import spec as sp_mod
 from alt.backfill import AltCheckpoint, latest_trade_date
+from alt.config import ALT_DATA_DIR, ALT_META_DIR, TS_DATA_DIR, assert_writable, ensure_alt_dirs
 from alt.reader import read_alt
+from common import reader as _reader
+from common.calendar import recent_trade_dates, trade_dates_between
 
 SNAPSHOT_FILE = os.path.join(ALT_META_DIR, "main_db_snapshot.json")
 ISO_LOG_FILE = os.path.join(ALT_META_DIR, "isolation_log.json")
@@ -196,7 +195,7 @@ def _load_known_gaps():
     try:
         v = json.load(open(KNOWN_GAPS_FILE, encoding="utf-8"))
         return v.get("confirmed", {}) if isinstance(v, dict) else {}
-    except Exception:  # noqa: BLE001
+    except Exception:
         return {}
 
 
@@ -302,7 +301,7 @@ def check_date_sets(only=None, verbose=True):
             continue
         try:
             df = _load(sp.name, sp)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             rows.append({"table": sp.name, "state": f"读取失败:{type(e).__name__}",
                          "disk": 0, "ckpt": 0, "ckpt_only": [], "disk_only": []})
             continue
@@ -348,8 +347,8 @@ def check_date_sets(only=None, verbose=True):
         if skipped_list:
             print(f"  ⓘ 另有 {len(skipped_list)} 张 list 模式表**未纳入本校验**"
                   f"（其断点按标的记、无日期维度）: {', '.join(skipped_list)}")
-            print(f"     这些表的覆盖情况请用各自专用入口查看"
-                  f"（如 `python -m alt.us_backfill --status`）")
+            print("     这些表的覆盖情况请用各自专用入口查看"
+                  "（如 `python -m alt.us_backfill --status`）")
 
         # ① 需排查：快照表**新出现**的独有日期（只能是数据被删/污染）
         if suspect:
@@ -381,8 +380,8 @@ def check_date_sets(only=None, verbose=True):
             n_days = sum(len(r["fresh_only"]) for r in empty)
             print(f"\n  [正常] 传参型表 {len(empty)} 张 / 共 {n_days} 天无落盘 —— "
                   f"源端返空（业务事实），非故障")
-            print(f"         注：'窗口内/外'无法进一步分层——能进断点的日期必然在窗口内，")
-            print(f"             窗口外日期从未被尝试、不会进断点（实测窗口外均为 0 天）")
+            print("         注：'窗口内/外'无法进一步分层——能进断点的日期必然在窗口内，")
+            print("             窗口外日期从未被尝试、不会进断点（实测窗口外均为 0 天）")
             for r in sorted(empty, key=lambda x: -len(x["fresh_only"]))[:6]:
                 n = len(r["fresh_only"])
                 # M3（2026-09-19 四轮审查）：原按升序取前 6 天 → 展示的是**最旧**的，
@@ -417,7 +416,7 @@ def check_dupes(only=None, verbose=True):
             continue
         try:
             df = _load(sp.name, sp)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             rows.append({"table": sp.name, "state": f"读取失败:{type(e).__name__}",
                          "n": 0, "pk_dup": 0, "exact_dup": 0, "note": ""})
             continue
@@ -573,12 +572,12 @@ def check_rotate(verbose=True):
             continue
         try:
             uni = load_universe(sp, verbose=False)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             rows.append({"table": sp.name, "state": f"清单读取失败:{type(e).__name__}",
                          "total": None, "stale": None, "stalled": None,
                          "oldest": "", "rotate_days": sp.rotate_days or 0})
             continue
-        fresh, stale, oldest, newest = state.progress(sp.name, uni, sp.rotate_days)
+        _fresh, stale, oldest, newest = state.progress(sp.name, uni, sp.rotate_days)
         limit = (sp.rotate_days or 7) * 2
         rec = state.data.get(sp.name, {})
         uncovered = stalled = 0
@@ -590,7 +589,7 @@ def check_rotate(verbose=True):
             try:
                 if (today - datetime.strptime(d, "%Y-%m-%d")).days > limit:
                     stalled += 1        # 有水位但超期 → 真停滞
-            except Exception:  # noqa: BLE001
+            except Exception:
                 stalled += 1
         if stalled > 0:
             st = "轮转停滞"
@@ -640,7 +639,8 @@ def fix_dupes(only=None, dry_run=True, verbose=True):
           _meta/dupes_backup/{时间戳}/。
     """
     import shutil
-    from config_alt import assert_writable
+
+    from alt.config import assert_writable
 
     specs = [sp_mod.get(only)] if only else list(sp_mod.ALL_SPECS)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -661,7 +661,7 @@ def fix_dupes(only=None, dry_run=True, verbose=True):
             p = os.path.join(ALT_DATA_DIR, sp.name, f)
             try:
                 df = pd.read_parquet(p)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 print(f"  [跳过] {sp.name}/{f}: 读取失败 {type(e).__name__}")
                 continue
             before = len(df)
@@ -779,7 +779,7 @@ def _scan_full_fingerprint():
       前者多为主库自身的盘后流水线。故夹逼校验需要逐文件指纹。
     """
     fp = {}
-    for dp, dn, fns in os.walk(TS_DATA_DIR):
+    for dp, _dn, fns in os.walk(TS_DATA_DIR):
         for f in fns:
             if not f.endswith(".parquet"):
                 continue
@@ -864,7 +864,7 @@ def _load_iso_log():
     try:
         v = json.load(open(ISO_LOG_FILE, encoding="utf-8"))
         return v if isinstance(v, list) else []
-    except Exception:  # noqa: BLE001
+    except Exception:
         return []
 
 
@@ -878,7 +878,7 @@ def _append_iso_log(rec):
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(logs[-ISO_LOG_KEEP:], f, ensure_ascii=False, indent=1)
         os.replace(tmp, ISO_LOG_FILE)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 
@@ -905,7 +905,7 @@ def isolation_guard(verbose=True, record=True, label="alt 写操作"):
     这样静态基线不会永远红灯。
     """
     before = _scan_full_fingerprint()
-    from config_alt import violation_count as _vc
+    from alt.config import violation_count as _vc
     v_before = _vc()
     if verbose:
         s = _fingerprint_summary(before)
@@ -923,7 +923,7 @@ def isolation_guard(verbose=True, record=True, label="alt 写操作"):
         #   计数器会 >0 —— 那是"试图越界"的铁证，即使被拦下也必须报警。
         v_after = _vc()
         attempted = v_after - v_before
-        from config_alt import violation_records as _vr
+        from alt.config import violation_records as _vr
         attempted_detail = _vr()[v_before:] if attempted else []
         verdict = ("clean" if not (added or removed or touched)
                    else ("suspicious" if (suspicious or attempted) else "external"))
@@ -950,7 +950,7 @@ def isolation_guard(verbose=True, record=True, label="alt 写操作"):
             elif verdict == "external":
                 print(f"  [隔离] [提示] 操作期间主库有 {len(external)} 个文件变动，"
                       f"**全部落在 alt 只读范围之外**（alt 只读 metadata/）")
-                print(f"         → 推定（**推断，非证明**）为并行的主库盘后流水线")
+                print("         → 推定（**推断，非证明**）为并行的主库盘后流水线")
                 print(f"         {vtxt} —— 未见越界尝试，故倾向支持该推定。样例：")
                 for k in external[:5]:
                     print(f"           {k}")
@@ -971,7 +971,7 @@ def isolation_guard(verbose=True, record=True, label="alt 写操作"):
         if verdict in ("clean", "external"):
             try:
                 _write_snapshot(_fingerprint_summary(after))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
 
@@ -993,7 +993,7 @@ def check_isolation(verbose=True):
     if os.path.exists(SNAPSHOT_FILE):
         try:
             base = json.load(open(SNAPSHOT_FILE, encoding="utf-8"))
-        except Exception:  # noqa: BLE001
+        except Exception:
             base = None
     res = {"now": now, "base": base}
     if verbose:
@@ -1060,59 +1060,59 @@ def gen_report(path=None, verbose=True):
     ensure_alt_dirs()
     today = pd.Timestamp.now().normalize()
     lines = []
-    A = lines.append
+    a = lines.append
 
-    A("# alt 库结构报告（akshare 备用数据源）")
-    A("")
-    A(f"> 生成时间：{datetime.now():%Y-%m-%d %H:%M:%S}  ")
-    A(f"> 库根：`{ALT_DATA_DIR}`  ")
-    A("> 说明：本库与 tushare 主库物理分离，只读主库、绝不写入。")
-    A("")
-    A("## 一、概览")
-    A("")
+    a("# alt 库结构报告（akshare 备用数据源）")
+    a("")
+    a(f"> 生成时间：{datetime.now():%Y-%m-%d %H:%M:%S}  ")
+    a(f"> 库根：`{ALT_DATA_DIR}`  ")
+    a("> 说明：本库与 tushare 主库物理分离，只读主库、绝不写入。")
+    a("")
+    a("## 一、概览")
+    a("")
     scale = check_scale(verbose=False)
-    A("| 层级 | 表数 | 文件 | 行数 | 体积 |")
-    A("|---|---:|---:|---:|---:|")
+    a("| 层级 | 表数 | 文件 | 行数 | 体积 |")
+    a("|---|---:|---:|---:|---:|")
     for t in sp_mod.TIERS:      # P1-4: 动态派生（原硬编码漏 P4）
         v = scale["by_tier"].get(t)
         if not v:
             continue
-        A(f"| {t} | {v['tables']} | {v['files']} | {v['rows']:,} | "
+        a(f"| {t} | {v['tables']} | {v['files']} | {v['rows']:,} | "
           f"{v['bytes']/1048576:.2f} MB |")
-    A(f"| **合计** | **{sum(v['tables'] for v in scale['by_tier'].values())}** | "
+    a(f"| **合计** | **{sum(v['tables'] for v in scale['by_tier'].values())}** | "
       f"**{scale['total_files']}** | **{scale['total_rows']:,}** | "
       f"**{scale['total_bytes']/1048576:.2f} MB** |")
-    A("")
+    a("")
 
     if sp_mod.DROPPED:
-        A("### 已弃用表（登记留痕）")
-        A("")
-        A("| 表 | 接口 | 原因 |")
-        A("|---|---|---|")
+        a("### 已弃用表（登记留痕）")
+        a("")
+        a("| 表 | 接口 | 原因 |")
+        a("|---|---|---|")
         for d in sp_mod.DROPPED:
-            A(f"| `{d['name']}` | `{d['func']}` | {d['reason'][:80]} |")
-        A("")
+            a(f"| `{d['name']}` | `{d['func']}` | {d['reason'][:80]} |")
+        a("")
 
     if sp_mod.KNOWN_ISSUES:
-        A("### 已知数据质量问题")
-        A("")
+        a("### 已知数据质量问题")
+        a("")
         for k in sp_mod.KNOWN_ISSUES:
-            A(f"- **[{k['kind']}] {k['name']}**  ")
-            A(f"  现象：{k['detail'][:100]}  ")
-            A(f"  影响：{k['impact'][:100]}  ")
-            A(f"  检测：{k['detect'][:100]}")
-        A("")
+            a(f"- **[{k['kind']}] {k['name']}**  ")
+            a(f"  现象：{k['detail'][:100]}  ")
+            a(f"  影响：{k['impact'][:100]}  ")
+            a(f"  检测：{k['detect'][:100]}")
+        a("")
 
-    A("## 二、逐表明细")
-    A("")
+    a("## 二、逐表明细")
+    a("")
     for tier in sp_mod.TIERS:   # P1-4: 动态派生（原硬编码漏 P4）
         specs = sp_mod.BY_TIER.get(tier, [])
         if not specs:
             continue
-        A(f"### {tier}（{len(specs)} 张）")
-        A("")
-        A("| 表名 | 接口 | 布局 | 分区列 | 去重键 | 行数 | 日期范围 | 新鲜度 | 说明 |")
-        A("|---|---|---|---|---|---:|---|---|---|")
+        a(f"### {tier}（{len(specs)} 张）")
+        a("")
+        a("| 表名 | 接口 | 布局 | 分区列 | 去重键 | 行数 | 日期范围 | 新鲜度 | 说明 |")
+        a("|---|---|---|---|---|---:|---|---|---|")
         for sp in specs:
             n = _count_rows(sp.name)
             rng, fresh = "—", "—"
@@ -1134,49 +1134,49 @@ def gen_report(path=None, verbose=True):
             sub = sp.subset if isinstance(sp.subset, str) else (
                 "+".join(map(str, sp.subset)) if sp.subset else "—")
             note = sp.note[:44]
-            A(f"| `{sp.name}` | `{sp.func}` | {sp.layout} | `{sp.date_col}` | "
+            a(f"| `{sp.name}` | `{sp.func}` | {sp.layout} | `{sp.date_col}` | "
               f"`{sub}` | {n:,} | {rng} | {fresh} | {note} |")
-        A("")
+        a("")
 
-    A("## 三、用法速查")
-    A("")
-    A("```bash")
-    A("python -m alt.backfill --list           # 看表规格")
-    A("python -m alt.backfill --dry-run        # 回补预演")
-    A("python -m alt.backfill --tier P0        # 回补某层级")
-    A("python -m alt.verify_spec --tier P1     # 建库前校验规格（七项）")
-    A("python -m alt.update                    # 每日增量")
-    A("python -m alt.update --status           # 新鲜度体检")
-    A("python -m alt.audit                     # 数据体检（五項）")
-    A("python -m alt.audit --fix-dupes         # 清理重复（预演）")
-    A("python -m alt.audit --confirm-gaps      # 登记已确认不可回补的缺口")
-    A("python -m alt.reader status             # 库现状")
-    A("```")
-    A("")
+    a("## 三、用法速查")
+    a("")
+    a("```bash")
+    a("python -m alt.backfill --list           # 看表规格")
+    a("python -m alt.backfill --dry-run        # 回补预演")
+    a("python -m alt.backfill --tier P0        # 回补某层级")
+    a("python -m alt.verify_spec --tier P1     # 建库前校验规格（七项）")
+    a("python -m alt.update                    # 每日增量")
+    a("python -m alt.update --status           # 新鲜度体检")
+    a("python -m alt.audit                     # 数据体检（五項）")
+    a("python -m alt.audit --fix-dupes         # 清理重复（预演）")
+    a("python -m alt.audit --confirm-gaps      # 登记已确认不可回补的缺口")
+    a("python -m alt.reader status             # 库现状")
+    a("```")
+    a("")
 
     # M2（2026-09-19 四轮审查）：补"断点缺口登记"一节。
     #   原报告不含此信息 → 留档时看不出"哪些日期已确认不可回补"，
     #   事后翻报告无法解释"为什么库内少几天而审计说 0 项待处理"。
     known = _load_known_gaps()
     if known:
-        A("## 四、断点缺口登记（已确认不可回补）")
-        A("")
-        A(f"> 登记文件：`{KNOWN_GAPS_FILE}`  ")
-        A("> 含义：这些日期曾成功采集（断点在案），但磁盘无数据，且**源端已不再提供**，")
-        A(">       属永久缺口。已在审计中排除出『需排查』，避免长期红灯。")
-        A("")
-        A("| 表 | 已确认不可回补日期 |")
-        A("|---|---|")
+        a("## 四、断点缺口登记（已确认不可回补）")
+        a("")
+        a(f"> 登记文件：`{KNOWN_GAPS_FILE}`  ")
+        a("> 含义：这些日期曾成功采集（断点在案），但磁盘无数据，且**源端已不再提供**，")
+        a(">       属永久缺口。已在审计中排除出『需排查』，避免长期红灯。")
+        a("")
+        a("| 表 | 已确认不可回补日期 |")
+        a("|---|---|")
         for k in sorted(known):
             ds = known[k]
-            A(f"| `{k}` | {', '.join(ds)}（{len(ds)} 天） |")
-        A("")
-        A(f"合计 **{len(known)} 张表 / "
+            a(f"| `{k}` | {', '.join(ds)}（{len(ds)} 天） |")
+        a("")
+        a(f"合计 **{len(known)} 张表 / "
           f"{sum(len(v) for v in known.values())} 天**。")
-        A("")
-        A("> 判据：快照表只采当日、已禁用复核窗口，其断点里的历史日期不可能来自"
+        a("")
+        a("> 判据：快照表只采当日、已禁用复核窗口，其断点里的历史日期不可能来自"
           "业务性空数据，只能是被删或修复前的污染遗留。")
-        A("")
+        a("")
 
     text = "\n".join(lines)
     if path is None:
@@ -1256,7 +1256,7 @@ def run(which=None, only=None, as_json=False):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="alt 库数据体检（只读，零请求）")
-    for flag, key, help_ in (
+    for flag, _key, help_ in (
         ("--checkpoint", "checkpoint", "断点×落盘交叉校验"),
         ("--date-sets", "date_sets", "断点日期×落盘日期（集合级交叉校验）"),
         ("--dupes", "dupes", "重复检测"),

@@ -116,7 +116,7 @@ def guess_url(func_name: str) -> str:
 
 def describe(func_name: str) -> dict:
     """返回某接口的域名判定明细（供 --check 打印）"""
-    from config_alt import host_tier, rate_for_url
+    from alt.config import host_tier, rate_for_url
 
     u = guess_url(func_name)
     return {"func": func_name, "url": u,
@@ -141,7 +141,6 @@ def _main(argv=None):
     import argparse
     import inspect
     import re
-    import sys
 
     p = argparse.ArgumentParser(description="alt 上游域名判定核对（零请求）")
     p.add_argument("--check", action="store_true",
@@ -150,7 +149,7 @@ def _main(argv=None):
 
     try:
         from alt.spec import ALL_SPECS
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"无法导入 spec: {e}")
         return 1
 
@@ -167,7 +166,7 @@ def _main(argv=None):
 
     try:
         import akshare as ak
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"akshare 不可用，跳过核对: {e}")
         return 0
 
@@ -183,7 +182,7 @@ def _main(argv=None):
         try:
             src = inspect.getsource(fn)
             whole = open(inspect.getsourcefile(fn), encoding="utf-8").read()
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
         urls = set(url_pat.findall(src)) or set(url_pat.findall(whole))
         hosts = sorted({re.sub(r"^https?://", "", u).split("/")[0] for u in urls})

@@ -37,9 +37,10 @@ from datetime import datetime
 
 import pandas as pd
 
-from config_alt import (ALT_META_DIR, assert_writable, ensure_alt_dirs, ALT_TMP_DIR)
+from alt.config import ALT_META_DIR, assert_writable, ensure_alt_dirs
 from alt.rate import AltRateLimiter
-from alt.spec import ALL_SPECS, BY_TIER, TIERS, get as spec_get
+from alt.spec import ALL_SPECS, BY_TIER, TIERS
+from alt.spec import get as spec_get
 
 REPORT_FILE = os.path.join(ALT_META_DIR, "spec_verify_report.json")
 
@@ -67,7 +68,7 @@ def _recent_trade_date(max_days_back: int = 10) -> str:
     若窗口很短则回退到更早的交易日。
     """
     from alt.backfill import latest_trade_date
-    from common.calendar import open_dates, recent_trade_dates
+    from common.calendar import recent_trade_dates
 
     t = latest_trade_date()
     if max_days_back <= 0:
@@ -206,7 +207,7 @@ def check_value_sanity(df: pd.DataFrame, skip_cols=None, core_cols=None,
                 work = (df.assign(**{"__ord__": _ord})
                           .sort_values("__ord__")
                           .drop(columns=["__ord__"]))
-        except Exception:  # noqa: BLE001
+        except Exception:
             work = df
 
     for c in work.columns:
@@ -291,11 +292,11 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         if not got:
             rep["ok"] = False
             return rep
-        first_v = list(got.keys())[0]
+        first_v = next(iter(got))
         df = got[first_v]
         rep["observations"]["enum_probe"] = {
             "probed": list(got.keys()),
-            "rows_by_value": {k: int(len(v)) for k, v in got.items()},
+            "rows_by_value": {k: len(v) for k, v in got.items()},
             "all_same_cols": len({tuple(map(str, v.columns)) for v in got.values()}) == 1,
         }
     elif sp.mode == "list":
@@ -310,7 +311,7 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
                 from alt.list_backfill import load_universe
                 uni = load_universe(sp, verbose=False)
                 probe_sym = uni[0] if uni else None
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 rep["warnings"].append(
                     f"清单读取失败（无法确定探测标的）: {type(e).__name__}: {str(e)[:80]}")
         if probe_sym is None:
@@ -371,7 +372,7 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         return rep
 
     cols = [str(c) for c in df.columns]
-    rep["observations"]["rows"] = int(len(df))
+    rep["observations"]["rows"] = len(df)
     rep["observations"]["columns"] = cols
     rep["observations"]["dtypes"] = {str(c): str(df[c].dtype) for c in df.columns}
 
@@ -453,7 +454,6 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
     # 而「科创版」为日频（总市值+市盈率）—— 混在一张表里会造成
     # "同表不同频率、不同列"的下游陷阱，且**不报错**。
     if sp.mode == "enum" and len(got) >= 2:
-        from collections import Counter
         freq_map = {}
         cols_map = {}
         for v, frame in got.items():
@@ -555,7 +555,7 @@ def run(tier=None, only=None, full_enum=False, json_out=True):
         print(f"\n[{i}/{len(seps)}] {sp.name:<22} {sp.func}")
         try:
             r = verify_one(sp, limiter, full_enum=full_enum)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             r = {"table": sp.name, "func": sp.func, "tier": sp.tier, "mode": sp.mode,
                  "layout": sp.layout, "requests": 0, "ok": False,
                  "problems": [f"校验异常: {type(e).__name__}: {e}"],

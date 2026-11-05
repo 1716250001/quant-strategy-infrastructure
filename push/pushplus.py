@@ -21,12 +21,12 @@ import logging
 import os
 import time
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
 from common.jsonio import load_json, save_json
-from config import PUSHPLUS_TOKEN, PUSHPLUS_CHANNEL, PUSHPLUS_TEMPLATE, TEMP_DIR
+from config import PUSHPLUS_CHANNEL, PUSHPLUS_TEMPLATE, PUSHPLUS_TOKEN, TEMP_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class PushPlusError(Exception):
     pass
 
 
-class DailyLimitExceeded(PushPlusError):
+class DailyLimitExceededError(PushPlusError):
     """当日额度用完"""
     pass
 
@@ -75,11 +75,11 @@ class PushPlus:
 
     def __init__(
         self,
-        token: str = None,
-        channel: str = None,
-        template: str = None,
+        token: str | None = None,
+        channel: str | None = None,
+        template: str | None = None,
         cooldown_minutes: int = 15,
-        state_file: Optional[str] = None,
+        state_file: str | None = None,
     ):
         self.token = token or PUSHPLUS_TOKEN
         self.channel = channel or PUSHPLUS_CHANNEL
@@ -93,8 +93,8 @@ class PushPlus:
         self._state = self._load_state()
 
         # 请求历史（用于分钟级频率控制）
-        self._recent_sends: List[float] = []  # 最近发送的时间戳列表
-        self._content_hashes: Dict[str, List[float]] = {}  # content_hash -> [timestamps]
+        self._recent_sends: list[float] = []  # 最近发送的时间戳列表
+        self._content_hashes: dict[str, list[float]] = {}  # content_hash -> [timestamps]
 
         # 当日是否已被限制
         self._blocked_today = self._state.get("blocked_date") == date.today().isoformat()
@@ -106,7 +106,7 @@ class PushPlus:
     # 状态持久化
     # ============================================================
 
-    def _load_state(self) -> Dict:
+    def _load_state(self) -> dict:
         """加载持久化状态（委托 common.jsonio，失败时返回空 dict）"""
         data = load_json(self.state_file, default=None)
         return data if isinstance(data, dict) else {}
@@ -188,11 +188,11 @@ class PushPlus:
         self,
         title: str,
         content: str,
-        template: Optional[str] = None,
-        channel: Optional[str] = None,
-        topic: Optional[str] = None,
+        template: str | None = None,
+        channel: str | None = None,
+        topic: str | None = None,
         **kwargs
-    ) -> Dict:
+    ) -> dict:
         """
         原始发送方法
 
@@ -279,9 +279,9 @@ class PushPlus:
         self,
         title: str,
         content: str,
-        template: Optional[str] = None,
-        channel: Optional[str] = None,
-    ) -> Dict:
+        template: str | None = None,
+        channel: str | None = None,
+    ) -> dict:
         """
         发送消息（使用默认渠道和模板）
 
@@ -296,15 +296,15 @@ class PushPlus:
         """
         return self._send_raw(title, content, template, channel)
 
-    def send_text(self, content: str, title: str = "通知") -> Dict:
+    def send_text(self, content: str, title: str = "通知") -> dict:
         """发送纯文本消息"""
         return self._send_raw(title, content, template="txt")
 
-    def send_markdown(self, content: str, title: str = "通知") -> Dict:
+    def send_markdown(self, content: str, title: str = "通知") -> dict:
         """发送markdown消息"""
         return self._send_raw(title, content, template="markdown")
 
-    def send_html(self, content: str, title: str = "通知") -> Dict:
+    def send_html(self, content: str, title: str = "通知") -> dict:
         """发送html消息"""
         return self._send_raw(title, content, template="html")
 
@@ -314,9 +314,9 @@ class PushPlus:
 
     def send_signals(
         self,
-        signals: List[Dict[str, Any]],
+        signals: list[dict[str, Any]],
         title_prefix: str = "交易信号",
-    ) -> Dict:
+    ) -> dict:
         """
         聚合多条信号为一条推送（省额度）
 
@@ -357,7 +357,7 @@ class PushPlus:
 
         return result
 
-    def _make_signal_key(self, signals: List[Dict]) -> str:
+    def _make_signal_key(self, signals: list[dict]) -> str:
         """生成信号唯一标识（用于冷却去重）"""
         parts = []
         for s in signals:
@@ -387,12 +387,12 @@ class PushPlus:
         self._save_state()
 
     @staticmethod
-    def _format_signals_markdown(signals: List[Dict]) -> str:
+    def _format_signals_markdown(signals: list[dict]) -> str:
         """将信号列表格式化为markdown内容"""
         lines = []
         lines.append(f"**共{len(signals)}条信号**\n")
 
-        by_type: Dict[str, List[Dict]] = {}
+        by_type: dict[str, list[dict]] = {}
         for s in signals:
             t = s.get("type", "其他")
             by_type.setdefault(t, []).append(s)
@@ -416,7 +416,7 @@ class PushPlus:
     # 工具方法
     # ============================================================
 
-    def get_status(self) -> Dict:
+    def get_status(self) -> dict:
         """获取当前状态"""
         return {
             "daily_count": self._get_daily_count(),
@@ -426,7 +426,7 @@ class PushPlus:
             "cooldowns": len(self._state.get("cooldowns", {})),
         }
 
-    def test(self) -> Dict:
+    def test(self) -> dict:
         """发送测试消息"""
         content = f"PushPlus测试消息\n\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n渠道: {self.channel}\n模板: {self.template}"
         return self._send_raw("PushPlus测试", content, template="markdown")

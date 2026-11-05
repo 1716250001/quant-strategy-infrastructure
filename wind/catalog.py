@@ -3,8 +3,8 @@
 wind/catalog.py — Wind 第三库目录索引（WIND-LIB W-1）
 ====================================================
 职责：
-  1. 扫描 wind_data\norm\series\wind_index_daily\ 的 4,142 parquet（只读 date 列取起止，禁全量读）
-  2. 扫描 wind_data\raw\ 的 3,440 JSON 原始响应
+  1. 扫描 wind_data\norm\\series\\wind_index_daily\\ 的 4,142 parquet（只读 date 列取起止，禁全量读）
+  2. 扫描 wind_data\raw\\ 的 3,440 JSON 原始响应
   3. 生成 wind_catalog.parquet（主键 windcode，行数 = 4,157 = 4,142 + 15 raw_only）
   4. 记录 schema 变体（§70.2.1 的 5 种）+ valid 字段 + raw_present 状态
 
@@ -17,17 +17,23 @@ wind/catalog.py — Wind 第三库目录索引（WIND-LIB W-1）
   总行数 = 4,157 / series_only = 717 / raw_only = 15 / both = 3,425
   valid = 3,430 / 无效 = 10 / schema 变体 = 5 / 变体可归因 = 0
 """
-import os, sys, json, glob, hashlib, argparse, traceback
-from collections import defaultdict, Counter
+import argparse
+import glob
+import hashlib
+import json
+import os
+import sys
+from collections import Counter
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config_wind import (
-    assert_writable, WIND_CATALOG_FILE, WIND_RAW_DIR, WIND_SERIES_DIR,
+from common.parquet_store import _atomic_write_parquet
+from wind.config import (
+    WIND_CATALOG_FILE,
+    assert_writable,
     violation_count,
 )
-from common.parquet_store import _atomic_write_parquet
 
 # ── 源目录（W-2a 迁移后已就位） ──────────────────────────────
 SERIES_DIR = r"D:\全量数据\wind_data\norm\series\wind_index_daily"   # 已迁移（W-2a）
@@ -92,7 +98,7 @@ def _probe_raw():
             "raw_error": None,
         }
         try:
-            with open(fp, "r", encoding="utf-8") as f:
+            with open(fp, encoding="utf-8") as f:
                 data = json.load(f)
             # Wind MCP 双层嵌套：result.content[0].text 才是真正数据 JSON 字符串
             text = None
@@ -165,7 +171,7 @@ def _probe_raw():
         cols = next((set(r["raw_cols"]) for r in results if r["schema_hash"] == h), set())
         print(f"  {h}: {c} 文件 / {len(cols)} 列 / cols={sorted(cols)}")
     if raw_errors:
-        print(f"[probe_raw] 异常 raw（前 15）:")
+        print("[probe_raw] 异常 raw（前 15）:")
         for wc, err in raw_errors[:15]:
             print(f"  {wc}: {err}")
     return results, schema_counter, raw_errors
@@ -267,7 +273,7 @@ def _build(raw_results, series_results):
 def _verify(df):
     """门槛验证（§70.4）"""
     print(f"\n{'='*60}")
-    print(f"[verify] 门槛验证")
+    print("[verify] 门槛验证")
     print(f"{'='*60}")
 
     checks = [
@@ -302,7 +308,6 @@ def _verify(df):
     valid_df = df[df["valid"]]
     # 注：core_cols_ok 在 valid 子集上统计（§70.2.2 口径）
     ok_core = valid_df["core_cols_ok"].sum()
-    extra_unknown = valid_df[valid_df["schema_extra_unknown"] != ""]["schema_extra_unknown"].sum()
     print(f"  有效 raw core_cols_ok (§70.2.2 修正后口径): {ok_core} / valid={len(valid_df)} {'✅' if ok_core == len(valid_df) else '❌'}")
     if ok_core != len(valid_df):
         all_ok = False
@@ -327,7 +332,7 @@ def main():
         sys.exit(0 if ok else 1)
 
     # 共用：probe raw + series
-    raw_results, schema_counter, raw_errors = _probe_raw()
+    raw_results, _schema_counter, _raw_errors = _probe_raw()
     series_results = _probe_series()
 
     if args.probe_only:
@@ -348,7 +353,7 @@ def main():
         sys.exit(1)
 
     # 写盘（assert_writable 保护）
-    from config_wind import WIND_CATALOG_DIR
+    from wind.config import WIND_CATALOG_DIR
     os.makedirs(WIND_CATALOG_DIR, exist_ok=True)
     assert_writable(WIND_CATALOG_FILE)
     # CC-WIND-1（2026-11-03）：原子写（tmp → fsync → os.replace → 目录 fsync），

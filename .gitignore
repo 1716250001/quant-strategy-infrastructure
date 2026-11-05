@@ -24,3 +24,9 @@ _archive/
 
 # ── 智能体/工具运行产物（非源码；v1.2.4 发版时登记）──
 .workbuddy/
+
+# ── 工具缓存（W7-ART-03：此前靠目录自带 .gitignore 与"空目录不追踪"侥幸未被发现）──
+.benchmarks/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

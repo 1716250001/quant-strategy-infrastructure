@@ -52,9 +52,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from config import (BACKFILL_INDEX_CODES, BACKFILL_INDEX_MONTHLY_CODES,
-                    BACKFILL_PAGE_CONF, META_DIR)
-from common.calendar import open_dates, open_dates_by_market
+from common.calendar import open_dates_by_market
+from config import BACKFILL_INDEX_CODES, BACKFILL_INDEX_MONTHLY_CODES, BACKFILL_PAGE_CONF, META_DIR
 
 
 # ============================================================
@@ -70,7 +69,8 @@ def resolve_codes(kind):
     if kind in (None, "none", ""):
         return []
 
-    meta = lambda f: os.path.join(META_DIR, f)
+    def meta(f):
+        return os.path.join(META_DIR, f)
 
     if kind in ("stock", "stock_all"):
         p = meta("stock_basic.parquet")
@@ -149,7 +149,7 @@ def resolve_codes(kind):
     return []
 
 
-def BACKFILL_META_DIR():
+def backfill_meta_dir():
     """（已废弃）元数据目录。保留仅为兼容旧调用方，请直接使用 config.META_DIR。"""
     return META_DIR
 
@@ -168,7 +168,7 @@ def month_last_trade_dates(start, end=None, calendar="SSE"):
         return []
     s = pd.Series(dates)
     last = s.groupby(s.str[:6]).max()
-    return list(zip(last.index.tolist(), last.values.tolist()))
+    return list(zip(last.index.tolist(), last.values.tolist(), strict=False))
 
 
 def month_list(start, end=None):

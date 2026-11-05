@@ -29,13 +29,17 @@ from datetime import datetime
 
 import pandas as pd
 
-from config import (META_DIR, BACKFILL_PAGE_CONF, TABLE_DATE_COL,
-                    BACKFILL_TARGETS, DAILY_UPDATE_EXTRA)
+from common.dtypes import coerce_float_cols  # DB-R1
+from common.parquet_store import merge_append, upsert_by_year, upsert_grouped
 from common.paths import ensure_dir
-from common.dtypes import coerce_float_cols        # DB-R1
-from common.parquet_store import upsert_grouped, merge_append, upsert_by_year
+from config import (
+    BACKFILL_PAGE_CONF,
+    BACKFILL_TARGETS,
+    DAILY_UPDATE_EXTRA,
+    META_DIR,
+    TABLE_DATE_COL,
+)
 from fetch.base import ts_call_with_retry
-
 
 # ============================================================
 # 0. 存储布局判定（取数方式 ≠ 存储布局）

@@ -18,9 +18,13 @@ CLI:
 
 依赖: pandas + pyarrow（跟随主 venv），不引第三方
 """
-import argparse, sys, os, hashlib
+import argparse
+import hashlib
+import os
+import sys
+
 import pandas as pd
-import numpy as np
+
 
 def sha256(path):
     h = hashlib.sha256()
@@ -64,12 +68,12 @@ def main():
             sys.exit(2)
 
     print(f"{'='*72}")
-    print(f"receipt_reconcile — §64.4 回执对账断言工具")
+    print("receipt_reconcile — §64.4 回执对账断言工具")
     print(f"{'='*72}")
 
     # ① 行数 + 唯一键数
     print(f"\n{'─'*72}")
-    print(f"① 行数 / 唯一键数")
+    print("① 行数 / 唯一键数")
     print(f"{'─'*72}")
     print(f"  new 行数:          {len(new):,}")
     print(f"  new 唯一键数:      {new[key_cols].drop_duplicates().shape[0]:,}")
@@ -147,7 +151,7 @@ def main():
 
     # ④ 空值计数
     print(f"\n{'─'*72}")
-    print(f"④ 每列空值计数")
+    print("④ 每列空值计数")
     print(f"{'─'*72}")
     for col in new.columns:
         n_total = len(new)
@@ -156,7 +160,7 @@ def main():
         print(f"  {col}: {non_null:,} 非空 / {n_null:,} 空 ({100*non_null/n_total:.1f}%)")
 
     print(f"\n{'='*72}")
-    print(f"完成 (RC=0)")
+    print("完成 (RC=0)")
     print(f"{'='*72}")
 
 if __name__ == "__main__":

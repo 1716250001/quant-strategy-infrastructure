@@ -29,7 +29,6 @@ alt/spec.py — akshare 备用库的【表规格唯一真源】
      （见 inject_date 标志）。
 """
 from dataclasses import dataclass, field
-from typing import Optional, Union
 
 
 @dataclass
@@ -43,15 +42,15 @@ class TableSpec:
     date_col: str = "date"                      # 落盘后的日期列名（统一 YYYYMMDD 字符串）
 
     # 源数据的日期列名；None 表示源数据不含日期列（按日型接口），需注入
-    src_date_col: Optional[str] = None
+    src_date_col: str | None = None
 
     # 去重键。列表=复合主键（运行时会校验列是否存在，缺失则回退全列判重）
     # "*" = 全列判重
-    subset: Union[list, str, None] = None
+    subset: list | str | None = None
 
     # 接口的日期参数名（如涨停池的 "date"）。None = 接口不接受日期参数。
     # 与 src_date_col 的区别：date_param 管"怎么调接口"，src_date_col 管"怎么读结果"
-    date_param: Optional[str] = None
+    date_param: str | None = None
     # 日期参数的回溯天数（DB-R11a；2026-10-30）。
     #   0（默认）= 把 target_date 原样传给 date_param（既有行为，zt_pool 族 6 张依赖）。
     #   N > 0    = 传 (target_date − N 个交易日)，用于"当日数据次日才发布"的源
@@ -61,9 +60,9 @@ class TableSpec:
 
     mode: str = "once"                          # once=无参 | enum=按参数枚举多次
     params: dict = field(default_factory=dict)  # 固定参数
-    enum_param: Optional[str] = None            # enum 参数名
+    enum_param: str | None = None            # enum 参数名
     enum_values: list = field(default_factory=list)
-    enum_col: Optional[str] = None              # enum 值写入的列名
+    enum_col: str | None = None              # enum 值写入的列名
 
     # 列重命名：{源列名: 目标列名}。日期列无需在此写，由 src_date_col 处理
     rename: dict = field(default_factory=dict)
@@ -131,7 +130,7 @@ class TableSpec:
     # 清单来源（mode="list" 专用）："<库>:<表名>"，如 "master:hk_basic"。
     #   由 list 引擎解析为"读清单表 → 取标的列 → 变换"三步；
     #   缺省（None）= 退回 alt 库内清单表（us 语义：us_universe）。
-    universe_from: Optional[str] = None
+    universe_from: str | None = None
     # 清单表中的标的列名 / 标的变换（universe_from 解析用）
     #   ⚠ 与下面 symbol_param 是**两个概念**：
     #   universe_col = 清单表里的列名（如 hk_basic 用 "ts_code"）；

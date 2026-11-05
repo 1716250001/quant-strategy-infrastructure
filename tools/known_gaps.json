@@ -37,7 +37,6 @@
       "158060.SZ",
       "158070.SZ",
       "158076.SZ",
-      "158081.SZ",
       "158087.SZ",
       "158088.SZ",
       "158091.SZ",
@@ -462,17 +461,6 @@
         "list_date": "",
         "delist_date": "",
         "nav_rows": 182,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "158081.SZ": {
-        "name": "永赢创业板电池ETF",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 0,
         "daily_attempts": 3,
         "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
         "probe_rows": 0,
@@ -1855,9 +1843,7 @@
       "158088.SZ",
       "158091.SZ",
       "158903.SZ",
-      "158905.SZ",
       "158906.SZ",
-      "158907.SZ",
       "158909.SZ",
       "159319.SZ",
       "159585.SZ",
@@ -1882,9 +1868,7 @@
       "501052.SH",
       "501221.SH",
       "501223.SH",
-      "508038.SH",
       "508606.SH",
-      "508610.SH",
       "512490.SH",
       "512830.SH",
       "513790.SH",
@@ -1906,11 +1890,9 @@
       "562710.SH",
       "562720.SH",
       "563100.SH",
-      "581060.SH",
       "588490.SH",
       "588560.SH",
       "589370.SH",
-      "589450.SH",
       "589590.SH",
       "589610.SH",
       "589670.SH"
@@ -2105,17 +2087,7 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
       },
-      "508038.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
       "508606.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
-      "508610.SH": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
@@ -2170,11 +2142,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
       },
-      "589450.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
       "562690.SH": {
         "probe_rows": 0,
         "probe_date": "20261104",
@@ -2220,17 +2187,7 @@
         "probe_date": "20261104",
         "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
       },
-      "158905.SZ": {
-        "probe_rows": 0,
-        "probe_date": "20261104",
-        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
-      },
       "158906.SZ": {
-        "probe_rows": 0,
-        "probe_date": "20261104",
-        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
-      },
-      "158907.SZ": {
         "probe_rows": 0,
         "probe_date": "20261104",
         "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
@@ -2291,11 +2248,6 @@
         "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
       },
       "563100.SH": {
-        "probe_rows": 0,
-        "probe_date": "20261104",
-        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
-      },
-      "581060.SH": {
         "probe_rows": 0,
         "probe_date": "20261104",
         "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
@@ -2362,7 +2314,6 @@
       "158060.SZ",
       "158070.SZ",
       "158076.SZ",
-      "158081.SZ",
       "158087.SZ",
       "158088.SZ",
       "158091.SZ",
@@ -2514,7 +2465,7 @@
       "589610.SH",
       "589670.SH"
     ],
-    "source_empty_count": 181,
+    "source_empty_count": 180,
     "source_empty_evidence_new": {
       "161022.SZ": {
         "name": "富国创业板指数-A",
@@ -4678,11 +4629,6 @@
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
       "150358.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "158081.SZ": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"

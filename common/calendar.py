@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-  # common.calendar 为包内模块，包限定引用，不与标准库冲突
 """
 common/calendar.py — 交易日历统一读取
 ======================================
@@ -88,10 +88,11 @@ _US_CAL_REL = os.path.join("us_tradecal", "us_tradecal.parquet")
 def _us_cal_path():
     """美股日历文件路径（在库目录下，非 metadata）。"""
     try:
-        from config import MARKET_DATA_DIR
+        import config
+        market_data_dir = config.MARKET_DATA_DIR
     except Exception:
-        MARKET_DATA_DIR = os.path.dirname(os.path.dirname(META_DIR))
-    return os.path.join(MARKET_DATA_DIR, _US_CAL_REL)
+        market_data_dir = os.path.dirname(os.path.dirname(META_DIR))
+    return os.path.join(market_data_dir, _US_CAL_REL)
 
 
 def load_us_cal(only_open=True):

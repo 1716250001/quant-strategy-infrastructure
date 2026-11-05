@@ -177,10 +177,17 @@ def check_config(check_disk=True):
         ConfigCheckResult
     """
     from config import (
-        TABLE_DATE_COL, BACKFILL_TARGETS, DB_AUDIT_PKEYS,
-        DAILY_UPDATE_GROUPS, DAILY_UPDATE_EXEMPT, API_RATE_LIMIT,
-        BACKFILL_INDEX_CODES, BACKFILL_GLOBAL_INDEX_CODES,
-        MARKET_DATA_DIR, META_DIR, DAILY_UPDATE_EXTRA,
+        API_RATE_LIMIT,
+        BACKFILL_GLOBAL_INDEX_CODES,
+        BACKFILL_INDEX_CODES,
+        BACKFILL_TARGETS,
+        DAILY_UPDATE_EXEMPT,
+        DAILY_UPDATE_EXTRA,
+        DAILY_UPDATE_GROUPS,
+        DB_AUDIT_PKEYS,
+        MARKET_DATA_DIR,
+        META_DIR,
+        TABLE_DATE_COL,
     )
 
     res = ConfigCheckResult()

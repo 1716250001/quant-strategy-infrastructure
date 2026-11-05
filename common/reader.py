@@ -41,12 +41,11 @@ common/reader.py — 全量库统一读取层（布局无关）
         ...
 """
 import os
-from datetime import datetime
 
 import pandas as pd
 
-from config import MARKET_DATA_DIR, META_DIR
 from common.parquet_store import list_parquet_files
+from config import MARKET_DATA_DIR
 
 # 布局探测结果缓存 {(root, table): layout}
 _LAYOUT_CACHE = {}
@@ -167,7 +166,7 @@ def dedupe_of_fund_codes(df, code_col="ts_code", date_col=None,
         return (df, 0) if return_dropped else df
 
     def _keys(frame, prefix_col):
-        cols = [prefix_col, date_col] + list(value_cols)
+        cols = [prefix_col, date_col, *value_cols]
         return list(frame[cols].fillna(_DEDUPE_NA).itertuples(index=False, name=None))
 
     sib_set = set(_keys(df[sib].assign(_p=stem[sib].str[:6]), "_p"))

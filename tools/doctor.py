@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 tools/doctor.py — 环境自检
 ============================
@@ -29,7 +29,6 @@ tools/doctor.py — 环境自检
   python main.py doctor --json           # 输出 JSON（供程序消费）
 """
 import argparse
-import io
 import json
 import os
 import shutil
@@ -37,8 +36,14 @@ import sys
 from datetime import datetime
 
 from config import (
-    CODE_DIR, PROJECT_DIR, MARKET_DATA_DIR, META_DIR, DOC_DIR, TS_TOKEN,
-    PUSHPLUS_TOKEN, LEAKY_IDLE_EXEMPT,
+    CODE_DIR,
+    DOC_DIR,
+    LEAKY_IDLE_EXEMPT,
+    MARKET_DATA_DIR,
+    META_DIR,
+    PROJECT_DIR,
+    PUSHPLUS_TOKEN,
+    TS_TOKEN,
 )
 
 OK = "✓"
@@ -80,10 +85,7 @@ class Report:
 # ============================================================
 def check_env(r):
     py = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    if sys.version_info >= (3, 9):
-        r.ok("环境", "Python 版本", py)
-    else:
-        r.warn("环境", "Python 版本", f"{py}（建议 >= 3.9）")
+    r.ok("环境", "Python 版本", py)
 
     deps = [("pandas", "数据帧"), ("pyarrow", "parquet 引擎"),
             ("tushare", "数据源"), ("akshare", "兜底数据源"),
@@ -304,7 +306,7 @@ def check_dead_config_revival(rep):
     import re
     from pathlib import Path
     try:
-        cfg = Path(__file__).resolve().parent.parent / "config.py"
+        cfg = Path(__file__).resolve().parent.parent / "config" / "__init__.py"
         text = cfg.read_text(encoding="utf-8")
         # [ARCHIVED ...] 注释的下一行 = 死配置定义
         dead_names = re.findall(
@@ -313,15 +315,15 @@ def check_dead_config_revival(rep):
             rep.warn("配置", "死配置复活检测", "config.py 无 [ARCHIVED] 标记（G1 标记丢失？）")
             return
         skip = {"_archive", "_scratch", "_venv", "_python", "__pycache__"}
-        root = cfg.parent
+        root = cfg.parent.parent
         revived = []
         for name in set(dead_names):
             pat = re.compile(rf"\b{name}\b")
             for p in root.rglob("*.py"):
                 if any(part in skip for part in p.parts):
                     continue
-                if p.name == "config.py":
-                    continue  # 定义处自身
+                if p == cfg:
+                    continue  # 定义处自身（W3 包化后定义在 config/__init__.py）
                 try:
                     for i, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
                         if pat.search(line):
@@ -358,8 +360,8 @@ def check_leaky_permissions(rep):
       ② 变旧：有本地表但最新日期落后 daily 基准 > 3 个自然日
     """
     try:
-        from config import LEAKY_PERMISSIONS, DAILY_UPDATE_GROUPS
         from common import reader
+        from config import DAILY_UPDATE_GROUPS, LEAKY_PERMISSIONS
     except Exception as e:
         rep.warn("漏网接口", "检查未执行", f"{str(e)[:60]}")
         return
@@ -469,7 +471,7 @@ def check_periodic_tables(rep):
         rep.warn("事件面表", "检查未执行", f"{str(e)[:60]}")
         return
     try:
-        from fetch.periodic_update import data_recency, is_due, load_state, _days, _today
+        from fetch.periodic_update import _days, _today, data_recency, is_due, load_state
     except Exception as e:
         rep.warn("事件面表", "检查未执行", f"{str(e)[:60]}")
         return
@@ -517,7 +519,7 @@ def check_db_version(rep):
     接线后由日更/回补/结构性变更自动写入）。只读、零请求、零写入。
     """
     try:
-        from tools.db_version import show, version_path
+        from common.db_version import show, version_path
     except Exception as e:
         rep.warn("库版本", "检查未执行", f"{str(e)[:60]}")
         return
@@ -608,12 +610,12 @@ def run_doctor(network=False, as_json=False):
                           "items": r.items}, ensure_ascii=False, indent=1))
         return r
 
-    SEP = "=" * 92
-    print(SEP)
+    sep = "=" * 92
+    print(sep)
     print("  环境自检 (doctor)")
     print(f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"  库根: {MARKET_DATA_DIR}")
-    print(SEP)
+    print(sep)
 
     groups = []
     for it in r.items:
@@ -628,7 +630,7 @@ def run_doctor(network=False, as_json=False):
             print(f"    {mark} {it['name']:22s} {it['detail']}")
 
     print()
-    print(SEP)
+    print(sep)
     if r.n_fail:
         print(f"  自检结论: {FAIL} {r.n_fail} 项失败, {r.n_warn} 项提示")
         print("    建议先处理失败项，它们会导致写入/续跑/推送异常。")
@@ -636,7 +638,7 @@ def run_doctor(network=False, as_json=False):
         print(f"  自检结论: {WARN} 全部通过，但有 {r.n_warn} 项提示（通常不影响使用）")
     else:
         print(f"  自检结论: {OK} 全部通过")
-    print(SEP)
+    print(sep)
     return r
 
 

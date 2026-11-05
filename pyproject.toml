@@ -8,7 +8,9 @@ name = "pyramid-strategy"
 # 真源在 config.py 的 __version__，经下方 [tool.setuptools.dynamic] 读取
 dynamic = ["version"]
 description = "A股三层轮动金字塔策略 — 宽基ETF轮动 + 盘中监控 + 全量数据库"
-requires-python = ">=3.9"
+# 2026-11-05 W6：原 >=3.9 无实测依据（UNK-05）；与 btf 对齐，共用 venv 的实际下限是 3.13。
+# 若日后确需支持 3.9，须先在 3.9 实测 main.py --help + config-check 通过后再改回。
+requires-python = ">=3.13"
 dependencies = [
     "numpy",
     "pandas",
@@ -32,13 +34,61 @@ pyramid = "main:main"
 package-dir = {"" = "."}
 # 根目录单文件模块（2026-09-25 G6：qidian_daily_scan → strategies/ 包内；convergence 随盘中背离监控归档；
 # 2026-09-25 F4：pipeline / iv_tracker 随旧宽基ETF轮动采集链归档 → _archive/legacy链-20260925/）
-py-modules = ["config", "indicators", "main"]
+py-modules = ["indicators", "main"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["common*", "fetch*", "push*", "strategies*", "tools*"]
+include = ["common*", "fetch*", "push*", "tools*", "config*", "alt*", "wind*", "cli*"]
 exclude = ["__pycache__*"]
 
 [tool.setuptools.dynamic]
 # 运行时版本 = config.py 的 __version__（纯字面量，setuptools 可静态解析，无需 import）
 version = {attr = "config.__version__"}
+
+# ─────────────────────────────────────────────────────────────
+# ruff：起步档（2026-11-05 W6）。分批收紧路线：
+#   W6a  F821/F811（未定义名/重复定义）—— 本档，真 bug 档
+#   W6b  + F401/F841（未用导入/变量）      —— 约 96 个，多数可 --fix
+#   W6c  + E4/E7/E9 风格类                —— 约 66 个，E402 需 per-file-ignore
+#   W6d  + I（import 排序，104 全可自动修）
+#   W6e  + N/UP/B/A/RUF（对齐 btf 全档）
+# 每档独立派单，每档必须 exit 0 才能进下一档。
+# ─────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = [".", "alt", "common", "config", "fetch", "push", "tools"]
+extend-exclude = ["btf", "_archive", "_scratch", "_venv", "_python"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "RUF"]
+ignore = [
+    "E501",    # 行长交给 formatter（中文长注释多）
+    "UP009",   # 保留 UTF-8 编码声明——中文项目纪律
+    "RUF001",  # 字符串全角标点——中文合理用法
+    "RUF002",  # docstring 全角标点
+    "RUF003",  # 注释全角标点
+]
+
+# E402 逐条判后豁免（W6c）：
+#   · alt/list_backfill.py、tools/research/{build_micro_index,fund_pool_builder}.py
+#     以脚本形态运行，先 sys.path.insert 定位代码根，再 import 本项目模块；上移会 ImportError。
+#   · alt/tests/verify_os_r1r.py 为分段执行的验证脚本（每节打印后按节 import），上移会改变
+#     「先 bootstrap 后导入」的既有顺序。
+# A005 逐条判后豁免（W6e）：common/calendar.py 是包内模块（common.calendar），
+# 只以包限定路径引用，不遮蔽标准库 calendar。该文件首行行内 noqa 未被 ruff 绑定
+# （RUF100 报 unused），故改用 per-file-ignores；alt/io.py 同名豁免行内 noqa 有效。
+[tool.ruff.lint.per-file-ignores]
+"alt/list_backfill.py" = ["E402"]
+"alt/tests/verify_os_r1r.py" = ["E402"]
+"common/calendar.py" = ["A005"]
+"tools/research/build_micro_index.py" = ["E402"]
+"tools/research/fund_pool_builder.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: 慢测试（regress 全量、真实库校验），默认仍会跑，可 -m 'not slow' 跳过",
+]
+filterwarnings = ["error::UnicodeWarning"]

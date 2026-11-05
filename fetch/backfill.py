@@ -33,45 +33,68 @@ fetch/backfill.py — 通用补数引擎（执行编排层）
   - by_date 用 YearBatchWriter 批量落盘（实测比逐天写入快 17 倍）
   - 断点按 target 名独立记录；**仅"调用成功"才记**，失败留待续跑
 """
+import argparse
 import os
 import re
 import sys
-import time
-import argparse
 import threading
+import time
 from datetime import datetime
 
 import pandas as pd
 
-from config import (
-    MARKET_DATA_DIR, META_DIR, BACKFILL_TARGETS, BACKFILL_INDEX_CODES,
-    BACKFILL_PAGED, BACKFILL_PAGE_CONF, FETCH_MAX_WORKERS, BACKFILL_PARALLEL_TARGETS,
-    API_RATE_LIMIT, API_RATE_LIMIT_DEFAULT,
-    BACKFILL_FLUSH_CONF, BACKFILL_FLUSH_DEFAULT,
+from common.parquet_store import (
+    YearBatchWriter,
 )
 from common.paths import ensure_dir
-from common.calendar import open_dates
-from common.parquet_store import (
-    upsert_grouped, merge_append, upsert_by_year, YearBatchWriter,
+from config import (
+    API_RATE_LIMIT,
+    API_RATE_LIMIT_DEFAULT,
+    BACKFILL_FLUSH_CONF,
+    BACKFILL_FLUSH_DEFAULT,
+    BACKFILL_PAGED,
+    BACKFILL_PARALLEL_TARGETS,
+    BACKFILL_TARGETS,
+    FETCH_MAX_WORKERS,
+    MARKET_DATA_DIR,
 )
-from fetch.base import (
-    get_pro, RateLimiter, Checkpoint,
-    fetch_codes_parallel, ts_call_with_retry, ts_fetch_by_date, ts_fetch,   # ts_fetch: DB-R10 R10-1d
-    is_possibly_truncated,                      # DB-R3
+from fetch.backfill_io import (  # noqa: F401
+    BY_CODE_BATCH_THRESHOLD_MB,
+    ByCodeBatchWriter,
+    _ensure_meta,
+    _pick_sort_col,
+    _save_df,
+    by_code_needs_batch,
+    ensure_meta,
+    fetch_paged_by_date,
+    save_df,
+    table_date_col,
+    table_storage_layout,
 )
 
 # ── 从拆分后的兄弟模块 re-export，保持既有调用方（main.py / tools/db_audit.py /
 #    历史脚本）的 import 路径不变 ──
-from fetch.backfill_spec import (          # noqa: F401
-    resolve_codes, month_last_trade_dates, month_list, year_ranges,
-    report_periods, truncate_to_today, _truncate_to_today,
-    build_tasks, estimate_requests, expected_task_count, DAILY_ROWS,
+from fetch.backfill_spec import (  # noqa: F401
+    DAILY_ROWS,
+    _truncate_to_today,
+    build_tasks,
+    estimate_requests,
+    expected_task_count,
+    month_last_trade_dates,
+    month_list,
+    report_periods,
+    resolve_codes,
+    truncate_to_today,
+    year_ranges,
 )
-from fetch.backfill_io import (            # noqa: F401
-    fetch_paged_by_date, save_df, ensure_meta,
-    _save_df, _ensure_meta, _pick_sort_col,
-    table_storage_layout, table_date_col,
-    by_code_needs_batch, ByCodeBatchWriter, BY_CODE_BATCH_THRESHOLD_MB,
+from fetch.base import (
+    Checkpoint,
+    RateLimiter,
+    fetch_codes_parallel,  # ts_fetch: DB-R10 R10-1d
+    get_pro,
+    is_possibly_truncated,  # DB-R3
+    ts_call_with_retry,
+    ts_fetch,
 )
 
 BACKFILL_DIR_ROOT = MARKET_DATA_DIR          # 各 target 在 market_data 下建同名目录
@@ -184,7 +207,6 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
     if force_listed:
         return list(tasks), 0
 
-    mode = conf["mode"]
     if kind in ("month", "range"):
         pending = [t for t in tasks if not cp.is_done(name, f"{t[0]}|{t[1]}")]
     elif kind == "code":
@@ -281,13 +303,12 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     print(f"  任务数={len(tasks)} 待跑={len(pending)} 跳过={skipped} "
           f"| 预估请求≈{est} | 预估耗时≈{est/max(rate,1):.1f}min"
           + (f" | 限量={limit}" if limit else "")
-          + (f" | force_listed" if force_listed else ""))
+          + (" | force_listed" if force_listed else ""))
     print(f"{'─' * 66}")
 
     if dry_run or not pending:
         return {"name": name, "est": est, "done": 0}
 
-    t0 = time.time()
     done_ct = {"n": 0}
 
     # ── 批量落盘（仅对大文件表启用）──
@@ -823,7 +844,8 @@ def list_targets():
     让"这个库有哪些数据、怎么拉的、拉没拉全"一屏可见。
     """
     import json as _json
-    from config import DAILY_UPDATE_GROUPS, DAILY_UPDATE_EXEMPT
+
+    from config import DAILY_UPDATE_EXEMPT, DAILY_UPDATE_GROUPS
     from fetch.backfill_io import table_storage_layout
 
     # 每日更新组归属
@@ -872,15 +894,15 @@ def list_targets():
         else:
             daily = "n/a"            # 非日更形态（by_code/once/paged 等），本就不适用
         desc = conf.get("desc", "")[:20]
-        print(f"  {name:20s} {str(tier):3s} {mode:9s} {layout:8s} "
+        print(f"  {name:20s} {tier!s:3s} {mode:9s} {layout:8s} "
               f"{done:8,d} {daily:10s} {desc}")
 
     print("  " + "-" * 92)
-    print(f"  每日更新组: " +
+    print("  每日更新组: " +
           " / ".join(f"{g}={len(m)}" for g, m in DAILY_UPDATE_GROUPS.items()))
     print(f"  豁免清单: {len(DAILY_UPDATE_EXEMPT)} 项（已在 config 注明原因）")
-    print(f"\n  提示: 断点数为 0 但不代表未拉 —— once/single 类可能已完成（见 db-audit）")
-    print(f"        数据新鲜度与缺口请用: python main.py freshness / db-audit --section gap")
+    print("\n  提示: 断点数为 0 但不代表未拉 —— once/single 类可能已完成（见 db-audit）")
+    print("        数据新鲜度与缺口请用: python main.py freshness / db-audit --section gap")
 
 
 def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
@@ -912,7 +934,7 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
     print(f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"  并发: 每接口 {workers} 线程 | 同时跑 {parallel_targets} 个接口 "
           f"→ 总线程 ≈ {workers * max(parallel_targets, 1)}")
-    print(f"  限频: 按接口独立(实测按接口计, 多接口可叠加)")
+    print("  限频: 按接口独立(实测按接口计, 多接口可叠加)")
     print(f"  存储: {os.path.abspath(BACKFILL_DIR_ROOT)}")
     print(f"  模式: {'DRY-RUN (只估算, 不发请求)' if dry_run else '正式拉取'}")
     if force:
@@ -1039,13 +1061,13 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
     for r in sorted(results, key=lambda x: x["name"]):
         print(f"  {r['name']:20s} 完成={r['done']}")
     print(f"  断点文件: {cp.path}")
-    print(f"\n  提示: 重跑本命令会自动跳过已完成部分")
+    print("\n  提示: 重跑本命令会自动跳过已完成部分")
 
     # ── 库版本（08 §13.5："补数与回补同样写"；EE-D11-1 动作 A）──
     #   只在确有完成项时记（幂等重跑全跳过 ⇒ 无变更 ⇒ 不记）；best-effort。
     if not dry_run and any((r or {}).get("done") for r in results):
         try:
-            from tools.db_version import record as _dbv
+            from common.db_version import record as _dbv
             _dbv([r["name"] for r in results if (r or {}).get("done")],
                  note="补数/回补")
         except Exception as e:

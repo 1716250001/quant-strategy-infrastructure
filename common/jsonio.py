@@ -29,7 +29,7 @@ def load_json(path, default=None, raises=False):
             raise FileNotFoundError(f"JSON 文件不存在: {path}")
         return default
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         if raises:

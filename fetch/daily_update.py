@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 fetch/daily_update.py — 每日增量更新（统一走 backfill 引擎）
 ==============================================================
@@ -50,22 +50,24 @@ main.py gap-update 现在直接调用本模块（命令名不变，定时任务�
   python -m fetch.daily_update --list        # 列出每日更新接口清单
   python -m fetch.periodic_update --status   # 只看事件面表周期通道状态（零请求）
 """
+import argparse
 import os
 import time
-import argparse
 from datetime import datetime
 
-from config import (
-    MARKET_DATA_DIR, BACKFILL_TARGETS,
-    DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS, DAILY_UPDATE_GROUPS_ALIASES,
-    DAILY_UPDATE_LOOKBACK,
-    FETCH_MAX_WORKERS, BACKFILL_PARALLEL_TARGETS,
-)
 from common import reader
-from common.calendar import (open_dates, recent_trade_dates,
-                             trade_dates_between, open_dates_by_market)
-from fetch.base import get_pro, get_latest_trade_date, Checkpoint
+from common.calendar import open_dates_by_market
+from config import (
+    BACKFILL_TARGETS,
+    DAILY_UPDATE_EXTRA,
+    DAILY_UPDATE_GROUPS,
+    DAILY_UPDATE_GROUPS_ALIASES,
+    DAILY_UPDATE_LOOKBACK,
+    FETCH_MAX_WORKERS,
+    MARKET_DATA_DIR,
+)
 from fetch.backfill import run_target
+from fetch.base import Checkpoint, get_latest_trade_date, get_pro
 
 
 # ============================================================
@@ -350,7 +352,7 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     results = []
     t_all = time.time()
     try:
-        for name, conf, dates, info in plan:
+        for name, conf, dates, _info in plan:
             try:
                 r = run_target(pro, name, conf, cp, workers, dry_run=False,
                                verbose=verbose, date_override=dates,
@@ -385,7 +387,7 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     print("  每日增量更新完成 — 汇总")
     print("=" * 78)
     ok_n = fail_n = 0
-    for name, conf, dates, info in plan:
+    for name, _conf, dates, _info in plan:
         done = next((r["done"] for n, r in results if n == name), None)
         if done is None:
             fail_n += 1
@@ -430,7 +432,7 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
                       if isinstance(r, dict) and "skipped" not in r]
         if ok_n > 0 or per_tables:
             try:
-                from tools.db_version import record as _dbv
+                from common.db_version import record as _dbv
                 tables = [n for n, r in results if (r or {}).get("done")] + per_tables
                 _dbv(tables, note=f"日更 ok={ok_n}" + (f"+周期{len(per_tables)}" if per_tables else ""))
             except Exception as e:
@@ -447,9 +449,7 @@ def _report_permission_denied(dry_run=False):
     ⚠ 本函数不做任何数据写入，只读 fetch.base 的权限拒绝记录。
     """
     try:
-        from fetch.base import (permission_denied_records,
-                                permission_denied_apis,
-                                permission_denied_count)
+        from fetch.base import permission_denied_apis, permission_denied_count
     except Exception:
         return
 
@@ -458,13 +458,14 @@ def _report_permission_denied(dry_run=False):
         return
 
     try:
-        from config import LEAKY_PERMISSIONS
+        import config
+        leaky_permissions = config.LEAKY_PERMISSIONS
     except Exception:
-        LEAKY_PERMISSIONS = {}
+        leaky_permissions = {}
 
     apis = permission_denied_apis()
-    leaked = [a for a in apis if a in LEAKY_PERMISSIONS]
-    other = [a for a in apis if a not in LEAKY_PERMISSIONS]
+    leaked = [a for a in apis if a in leaky_permissions]
+    other = [a for a in apis if a not in leaky_permissions]
 
     print("\n" + "!" * 78)
     print("  ★★★ 权限告警：检测到「无权限」错误 ★★★")
@@ -479,7 +480,7 @@ def _report_permission_denied(dry_run=False):
         lines.append(f"**{len(leaked)} 个漏网接口被拒** —— 疑似漏网被收紧：")
         lines.append("")
         for a in leaked:
-            info = LEAKY_PERMISSIONS[a]
+            info = leaky_permissions[a]
             print(f"\n     【{a}】官方门槛 {info['claimed']}（{info['kind']}）")
             print(f"       下游用途: {info['use']}")
             print(f"       替代路径: {info['alt']}")
@@ -505,7 +506,7 @@ def _report_permission_denied(dry_run=False):
 
     # ── PushPlus 推送（失败不影响主流程）──
     try:
-        from config import PUSHPLUS_TOKEN, PUSHPLUS_CHANNEL
+        from config import PUSHPLUS_CHANNEL, PUSHPLUS_TOKEN
         if PUSHPLUS_TOKEN and len(PUSHPLUS_TOKEN) > 10:
             from push.pushplus import PushPlus
             pp = PushPlus(token=PUSHPLUS_TOKEN, channel=PUSHPLUS_CHANNEL,

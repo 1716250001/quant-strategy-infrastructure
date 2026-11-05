@@ -37,6 +37,7 @@
 
 | 文件 | 内容 | 最后更新 |
 |---|---|---|
+| `依赖归属表.md` | 五份依赖文件（根 `pyproject` / `requirements.txt` / `requirements.lock.txt` / btf 两份）各自角色、加依赖改哪几份、版本冲突裁决、发版后必做重装回读 | 2026-11-04 |
 | `进程管理.md` | 采集进程定位与操作（`alt.oversize_fetch` / `alt.list_backfill`），含判据关键词、批量筛选、停止与清理 | 2026-10-23 |
 
 ---

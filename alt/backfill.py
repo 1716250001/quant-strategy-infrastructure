@@ -30,14 +30,13 @@ from datetime import datetime
 
 import pandas as pd
 
-from config_alt import (
+from alt.config import (
     ALT_CHECKPOINT_FILE,
     ALT_DATA_DIR,
-    ALT_META_DIR,
     assert_writable,
     ensure_alt_dirs,
 )
-from alt.io import normalize, save, alt_layout
+from alt.io import normalize, save
 from alt.rate import AltRateLimiter
 from alt.spec import ALL_SPECS, TIERS
 
@@ -463,7 +462,8 @@ def latest_trade_date(market_close_hour=15, verbose=False):
         - 当前时刻 <  15:00 → 今天数据尚未产生，取今天之前最近的交易日
     """
     import pandas as pd
-    from config_alt import TS_DATA_DIR
+
+    from alt.config import TS_DATA_DIR
 
     now = datetime.now()
     today = now.strftime("%Y%m%d")
@@ -495,7 +495,8 @@ def latest_trade_date(market_close_hour=15, verbose=False):
 def _trade_cal_frame():
     """读主库交易日历（只读，绝不写入）；不可用返回 None"""
     import pandas as pd
-    from config_alt import TS_DATA_DIR
+
+    from alt.config import TS_DATA_DIR
 
     p = os.path.join(TS_DATA_DIR, "metadata", "trade_cal.parquet")
     if not os.path.exists(p):
@@ -505,7 +506,7 @@ def _trade_cal_frame():
         cal = cal[(cal["exchange"] == "SSE") & (cal["is_open"] == 1)]
         cal["cal_date"] = cal["cal_date"].astype(str)
         return cal
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -516,7 +517,7 @@ def is_trade_day(d):
         import pandas as pd
         try:
             return pd.Timestamp(str(d)).weekday() < 5
-        except Exception:  # noqa: BLE001
+        except Exception:
             return True
     return bool((cal["cal_date"] == str(d)).any())
 
@@ -612,7 +613,7 @@ def _backfill_dates(sp, tdate):
     try:
         from common.calendar import recent_trade_dates
         ds = recent_trade_dates(sp.max_backfill_days, end_date=tdate)
-    except Exception:  # noqa: BLE001
+    except Exception:
         ds = []
     out = sorted({str(d) for d in ds}, reverse=True)
     return out or [tdate]
@@ -695,7 +696,7 @@ def run(tier=None, only=None, dry_run=False, force=False, limit=None,
                 _est += len(_backfill_dates(sp, tdate))
         print(f"  ⚠ --force：忽略断点强制重跑，预计约 {_est} 次请求"
               f"（按各表窗口展开估算；实际会因'越界即停'减少）")
-        print(f"    费率参考：push2ex 15/分、legulegu 10/分 → 数分钟到十余分钟不等")
+        print("    费率参考：push2ex 15/分、legulegu 10/分 → 数分钟到十余分钟不等")
     print("=" * 78)
 
     results = []
@@ -705,6 +706,7 @@ def run(tier=None, only=None, dry_run=False, force=False, limit=None,
     #   静态基线比对会因主库盘后流水线每日合法写库而长期误报，故在本次
     #   回补前后各记一次主库全量指纹，差异可直接归因于本次操作。
     from contextlib import nullcontext
+
     from alt.audit import isolation_guard
 
     guard = (nullcontext() if dry_run
@@ -735,7 +737,7 @@ def run(tier=None, only=None, dry_run=False, force=False, limit=None,
                     if rr.get("errors"):
                         break
                 r = _merge_daily_results(sp, pairs)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 r = {"table": sp.name, "tier": sp.tier, "mode": sp.mode, "requests": 0,
                      "rows": 0, "added": 0, "ok": False, "skipped": False,
                      "errors": [f"{type(e).__name__}: {e}"],

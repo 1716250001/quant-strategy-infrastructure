@@ -34,5 +34,12 @@ alt — akshare 备用数据源（独立库）
 """
 
 __all__ = [
-    "spec", "rate", "io", "backfill", "update", "verify_spec", "reader", "audit",
+    "audit",
+    "backfill",
+    "io",
+    "rate",
+    "reader",
+    "spec",
+    "update",
+    "verify_spec",
 ]

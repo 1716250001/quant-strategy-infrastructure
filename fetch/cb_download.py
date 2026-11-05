@@ -13,23 +13,31 @@ fetch/cb_download.py — 可转债数据下载器
   python -m fetch.cb_download --dry-run     # 空跑, 只统计不下载
 """
 
-import pandas as pd
+import argparse
 import os
 import time
-import argparse
 from datetime import datetime, timedelta
+
+import pandas as pd
+
+from common.parquet_store import upsert_by_year
 
 # 确保能 import config 和 fetch.base
 from config import (
-    MARKET_DATA_DIR, META_DIR, CB_DAILY_DIR,
-    CB_DAILY_MAX_ROWS, TS_RATE_LIMIT_PER_MIN, FETCH_MAX_WORKERS,
+    CB_DAILY_DIR,
+    CB_DAILY_MAX_ROWS,
+    FETCH_MAX_WORKERS,
+    MARKET_DATA_DIR,
+    META_DIR,
 )
 from fetch.base import (
-    get_pro, RateLimiter, Checkpoint, ensure_dir,
-    ts_call_with_retry, fetch_codes_parallel,
+    Checkpoint,
+    RateLimiter,
+    ensure_dir,
+    fetch_codes_parallel,
+    get_pro,
+    ts_call_with_retry,
 )
-from common.parquet_store import upsert_by_year
-from common.parquet_store import upsert_by_year
 
 
 # ============================================================

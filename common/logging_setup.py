@@ -2,15 +2,14 @@
 """
 common/logging_setup.py — 统一日志初始化
 =========================================
-此前 push/intraday_monitor.py 在 import 时就 logging.basicConfig() 并创建
-文件 handler，导致"只要 import 就产生日志文件"的副作用。
-
-改为：由各入口在 main() 中显式调用 setup_logging()，且保证幂等
-（重复调用不会叠加 handler）。
+日志初始化不在 import 时发生（避免"只要 import 就产生日志文件"的副作用），
+改为：由入口（main.py 的 main()）在启动时显式调用 setup_logging()，
+且保证幂等（重复调用不会叠加 handler）。
 """
 import logging
 import os
 import sys
+from logging.handlers import RotatingFileHandler
 
 from common.paths import LOG_DIR
 
@@ -49,7 +48,12 @@ def setup_logging(name="teleagent", level=logging.INFO, log_file=None, console=T
             log_file = os.path.join(LOG_DIR, log_file)
         else:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
-        fh = logging.FileHandler(log_file, encoding="utf-8")
+        fh = RotatingFileHandler(
+            log_file,
+            maxBytes=5 * 1024 * 1024,   # 单文件 5 MB
+            backupCount=3,               # 保留 3 份备份 → 上限 20 MB
+            encoding="utf-8",
+        )
         fh.setFormatter(fmt)
         root.addHandler(fh)
 

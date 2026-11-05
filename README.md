@@ -7,7 +7,7 @@
 
 > **位置**：`D:\量化策略\代码\`
 > **身份**：**本目录就是 Git 仓库根**（`quant-strategy`，远端 `git@github.com:1716250001/quant-strategy.git`）
-> **版本**：主工程 `7.0.0`（`config.py` 单一真源）｜回测工具 `btf 6.0.0`（**2026-10-26：P16 数据水位口径 ＋ P18 分红去重键；major（含重复公告的 run 分红金额/`total_return` 微降，跨版本不可比）；主工程与 btf 已解耦**）｜**mdf 数据线 `v1.6`（tag `db-v1.6`，2026-10-22 WIND-LIB 发版；沿革 v1.5 tag `db-v1.5`）**
+> **版本**：主工程 `7.0.0`（`config.py` 单一真源）｜回测工具 `btf 7.0.0`（**2026-10-27：R 类停牌口径 ＋ P14 CC-7 送转检查器 ＋ 工具落点治理；**BREAKING**——`is_suspended` 口径改为「仅全日停牌」，跨 7.0.0 边界回测结果不可比；主工程与 btf 已解耦**）｜**mdf 数据线 `v1.6`（tag `db-v1.6`，2026-10-22 WIND-LIB 发版；沿革 v1.5 tag `db-v1.5`）**
 > **不在本目录**：主库数据（`D:\全量数据\market_data\`）、日报数据（`..\数据\`）、回测产物（`..\回测产物\`）、事实类文档（`..\文档\`）——见 §6
 > **顶层总览**：`..\README.md`（工作区级的目录树、数据红线、变更记录）
 
@@ -19,8 +19,8 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 
 | 工程 | 入口 | 版本 | 说明 |
 |---|---|---|---|
-| **主工程**（本层） | `python main.py <cmd>`（安装后亦可 `pyramid <cmd>`） | 7.0.0 | 数据维护 / 全量库体检 / 因子与指数分析 / 奇点扫描 / 推送。**37 个命令名**（31 可见顶级 + 6 隐藏兼容别名，`db` 命令族另含 6 个子命令） |
-| **回测工具子系统** | `btf\`（`bt <cmd>`） | btf 6.0.0 | 独立工程（自带 `pyproject.toml` / `CHANGELOG.md` / **十项质量门**）；**14 条命令族**（HH-3 新增 `adhoc`） + `--version` |
+| **主工程**（本层） | `python main.py <cmd>`（安装后亦可 `pyramid <cmd>`） | 7.0.0 | 数据维护 / 全量库体检 / 因子与指数分析 / 推送。**32 个顶层命令名**（含 `db` 命令族入口）＋ **6 个隐藏兼容别名**（`db-audit` 等旧平铺名，`help=SUPPRESS`）＋ `db` 下 **7 个子命令** |
+| **回测工具子系统** | `btf\`（`bt <cmd>`） | btf 7.0.0 | 独立工程（自带 `pyproject.toml` / `CHANGELOG.md` / **十项质量门**）；**13 条命令族** + `adhoc` + `--version` |
 
 两者的 venv 是同一个：`代码\_venv\Scripts\python.exe`。
 
@@ -46,7 +46,7 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 ├─ tools\                         运维/分析脚本 22 个（数据库体检、体检报告、因子库、基金池、杠杆监控…）
 ├─ push\                          推送（PushPlus 微信推送）
 ├─ alt\                           alt 库（物理隔离于主库；akshare 源，11 模块）
-├─ 代码架构\                       ★ 架构文档体系（40 份，2026-09-30 自 文档\ 迁入）——见 §5
+├─ 代码架构\                       ★ 架构文档体系（40 份，2026-09-30 自 文档\ 迁入）← **不可移动**（btf 守卫测试硬编码此路径），见 docs/README.md §一——见 §5
 │
 ├─ btf\                           ★ 回测工具子系统（自成工程）——见 §4
 │
@@ -91,7 +91,7 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 
 ## 4. `btf\` — 回测工具子系统
 
-独立工程（自带 pyproject / CHANGELOG / 门禁），**版本 6.0.0（2026-10-26：P16 数据水位口径 ＋ P18 分红去重键；分红口径变更、跨版本不可比）**（`btf\_version.py` 单一真源）。
+独立工程（自带 pyproject / CHANGELOG / 门禁），**版本 7.0.0（2026-10-27：R 类停牌口径 ＋ P14 CC-7 送转检查器 ＋ 工具落点治理；含 BREAKING，跨版本不可比）**（`btf\_version.py` 单一真源）。
 
 ```
 btf\
@@ -104,8 +104,8 @@ btf\
 ├─ schemas\            配置 JSON Schema（backtest.v1.json）
 ├─ benchmarks\         B1–B5 基准留档
 ├─ examples\           示例策略（rotation.py）+ 配置
-├─ tools\              常驻工具 21 个（十项门禁脚本 + 对账/复跑/冷备/预算/独立环境裸验证）+ probes\ 探针
-└─ tests\              1288 项（unit / integration / regression / system / benchmark / perf / fixtures；非 L5 1266 ＋ L5 22；V1.2.4 tag 快照口径＝1219）
+├─ tools\              常驻工具 28 个（十项门禁脚本 + 对账/复跑/冷备/预算/独立环境裸验证）+ probes\ 探针
+└─ tests\              1288 项（unit / integration / regression / system / benchmark / perf / fixtures；**以 `pytest --co` 实测为准**，2026-11-05 计）
 ```
 
 - **命令族 13 条**：`config-check` / `run` / `report` / `verify` / `test` / `dataset` / `optimize` / `validate` / `data` + `check` / `cold-backup` / `runs` / `show`（另有 `bt --version`）
@@ -115,6 +115,8 @@ btf\
 ---
 
 ## 5. `代码架构\` — 架构文档体系
+
+> ⚠ 本目录及子目录**不得移动/改名**——`btf/tests/integration/test_doc_claim_guards.py:41` 硬编码 `"代码架构/回测工具架构"`；19 号 29 处、18 号 18 处自引用。
 
 2026-09-30 自 `..\文档\` 整体迁入（与代码同仓，便于版本管理与就近引用）。
 
@@ -194,7 +196,7 @@ python main.py alt-update / alt-audit / alt-backfill / alt-us / alt-verify
 
 # 回测工具（btf；短命令 bt / pyramid 已装在本 venv\Scripts\ 下）
 cd btf
-..\_venv\Scripts\python.exe -m pytest           # 全量测试（1288 项；非 L5 1266 ＋ L5 22；V1.2.4 tag 快照口径＝1219）
+..\_venv\Scripts\python.exe -m pytest           # 全量测试（1288 项；以 `--co` 实测为准）
 ..\_venv\Scripts\python.exe tools\check.py      # 等价于 bt check（10/10 门禁）
 bt run -c <config> / bt report / bt verify / bt check   # 跑回测 / 报告 / 复核 / 门禁
 ```
@@ -203,21 +205,64 @@ bt run -c <config> / bt report / bt verify / bt check   # 跑回测 / 报告 / �
 
 ## 9. 红线与约定
 
-1. **凭据只在 `.env`**，永不进仓；`_archive\` 含历史明文凭据，勿外传。
+1. **凭据只在 `.env`**，永不进仓；`_archive\` 与 `_scratch\wind-研究暂存\` 含历史明文凭据（**其中 Wind 那把与 `.env` 的是一把、尚未轮换**），两处均勿外传——见 `_scratch\README.md` §四。
 2. **所有路径从 `common\paths.py` 取**——禁自行推算 `__file__`、禁硬编码、禁多层 fallback。
 3. **改动生产流水线前先 `--dry-run`**；数据表清单/结构改动后跑 `config-check`。
 4. **回测工具改动须过 `bt check`（10/10）**，并在 `btf\CHANGELOG.md` 追加条目。
 5. **任务级变更须登记**：`代码架构\回测工具架构\18-分步编码计划.md` + `..\README.md` §八。
 6. **验证话术纪律**：不以"全绿"作结论，须附实测输出摘要（btf 铁律）。
+7. **遗留标记统一写法**：`TODO(<派单号>): <一句话>`。禁止只写散文（如"本轮只登记不改"）却不带 `TODO`——否则 `grep TODO` 扫不到，接手的人看不见。存量散记逐步迁移（现状见 `_scratch\README.md` 与 `common\parquet_store.py` 的 `CC-PERF-1` 注释）。
+8. **加/改依赖走 `docs\依赖归属表.md`**，不凭直觉挑文件改；**发版后必须重装并回读版本**（`CFG-04`：曾出现 `pip list` 显示 1.3.4 而源码 7.0.0 的错位）。
+9. **`_scratch\` 清理前先看保留区定义**（`_scratch\README.md` §三）——`PROTECTED` 与保留区定义是一对，**改一处必须改另一处**（2026-11-04 曾因二者脱节，使 `backups\` 5.3 MB 不可重建快照距删除只差一次 `--apply`，见 18 号 §325）。
+10. **提交前跑 `python tools/gate.py`**（ruff ＋ CLI ＋ config-check ＋ smoke 四道）；`--fast` 跳过 smoke。
 
 ---
 
-## 10. 相关文档
+## 10. 双包契约（单仓两工程，边界写在这里）
+
+**事实**：一个 git 仓，装两个 pip 包，共用一个 venv。这不是笔误，是刻意（btf 独立演进，主工程不背回测的依赖）。
+
+| 项 | 主工程 | `btf\` |
+|---|---|---|
+| 包名 | `pyramid-strategy` | `btf` |
+| 声明文件 | `pyproject.toml` + `requirements.txt` + `requirements.lock.txt` | `btf/pyproject.toml` + `btf/requirements.txt` |
+| 版本真源 | `config.py` 的 `__version__` | `btf/btf/_version.py` 的 `__version__` |
+| 发版方式 | `config.py` 改版本号 + `git tag`（`v7.x`） | `_version.py` 改版本号 + `git tag`（同仓同名 tag） |
+| 门禁 | `config-check` + `regress` + `tests/`（W6 补齐） | `bt check` 10/10 + pytest 1288 + ruff + import-linter |
+| 依赖预算 | 无硬上限（28 包冻结） | **≤8，硬上限**（`btf/tools/deps_budget.py` 计数） |
+| 包白名单 | `pyproject` `packages.find.include` | `pyproject` `include = ["btf*", "examples*"]` |
+| 产物落点 | `..\回测产物\`（仓外） | `..\回测产物\runs\`（同一根） |
+
+**四条边界规则**
+
+1. **改哪层、过哪层的门禁**。动 `btf\` 跑 `bt check`；动主工程跑 `config-check` + `regress`。**不许拿一层的门禁证明另一层**。
+2. **依赖不许跨层借**。btf 需要的包必须在 `btf/pyproject.toml` 里声明并在预算内；不能因为"venv 里恰巧有"就不声明（`openpyxl` 就是这么被误归 dev 的，见 `docs\依赖归属表.md` §三）。
+3. **发版各自独立，但 commit 同仓**。主工程版本不动时，btf 可以单独升 major；反之亦然。`git tag` 只有一个序列，故 tag 名必须能区分归属——现状是 `v7.0.0` 同时作两包的版本号，**这不是设计，是巧合，2026-11-04 已记为待解**（见 §11 末行）。
+4. **共享 venv 是便利，不是契约**。两个包的依赖必须各自可独立安装（btf 有裸环境验证 `bare_env_check.py`）。任何"只有一起装才能跑"的情况视为缺陷。
+
+**新增文件放哪一层？**
+
+```
+它服务回测引擎（回测/撮合/绩效/实验）？ → btf\
+它服务数据采集/库治理/推送/CLI？        → 主工程对应包
+它两边都要用？                          → 放 common\，由 btf 反向依赖（现状 btf 不依赖主工程，故一般两边各写一份，不做共享）
+```
+
+> ⚠ 现状：`btf` **不 import 主工程任何模块**（2026-10-24 解耦后达成）。这条要守住——一旦 btf 反向依赖主工程，两包就无法独立发版了。
+
+---
+
+## 11. 相关文档
 
 | 文档 | 位置 |
 |---|---|
 | 工作区总览 / 数据红线 / 变更记录 | `..\README.md` |
+| **依赖归属（加依赖改哪几份）** | `docs\依赖归属表.md` |
+| **草稿区保留区与凭据警示** | `_scratch\README.md` |
 | btf 架构体系（01–21 号 + README） | `代码架构\回测工具架构\README.md` |
 | 全量数据库设计（MD-Foundation） | `代码架构\全量数据库架构\README.md` |
+| 进程管理与排障 | `docs\进程管理.md` |
 | 数据库事实说明（表结构/读取方法/权限） | `..\文档\数据与工程\` |
 | 策略体系与研究 | `..\文档\策略体系\` · `..\文档\市场研究\` |
+
+**待解（2026-11-04 登记，未派单）**：`v7.0.0` 这个 tag 同时是主工程与 btf 的版本号，两包版本一旦分叉就无法用单序列 tag 表达。可选方案：btf 侧改用 `btf-v7.0.0` 前缀，或拆仓。属结构议题，不在本轮整改范围。

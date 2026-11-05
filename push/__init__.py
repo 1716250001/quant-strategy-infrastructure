@@ -14,7 +14,8 @@ def __getattr__(name):
         # [ARCHIVED 2026-09-25 G6] intraday_monitor 已随背离链路归档（_archive/背离扫描器-20260924/）
         raise AttributeError("run_scan 已随盘中背离监控归档（2026-09-25），见 _archive/背离扫描器-20260924/")
     if name == "run_report":
-        return run_report
+        # [ARCHIVED 2026-09-25 G6] 报告链已归档（_archive/日报链路-20260924/）
+        raise AttributeError("run_report 已随报告链归档（2026-09-25），见 _archive/日报链路-20260924/")
     if name == "PushPlus":
         from push.pushplus import PushPlus
         return PushPlus

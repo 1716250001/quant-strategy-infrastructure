@@ -57,12 +57,12 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from config import MARKET_DATA_DIR, PERIODIC_UPDATE_TARGETS
 from common import reader
 from common.calendar import trade_dates_between
 from common.parquet_store import upsert_by_year
 from common.paths import ensure_dir
-from fetch.base import get_pro, RateLimiter, ts_call_with_retry
+from config import MARKET_DATA_DIR, PERIODIC_UPDATE_TARGETS
+from fetch.base import RateLimiter, get_pro, ts_call_with_retry
 
 #: 状态文件（库根；与 .checkpoint.json 同层）
 STATE_NAME = ".periodic_state.json"
@@ -88,7 +88,7 @@ def load_state():
     if not os.path.exists(p):
         return {}
     try:
-        with open(p, "r", encoding="utf-8") as f:
+        with open(p, encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except Exception as e:
@@ -281,7 +281,7 @@ def _completed_codes(name, filename=".backfill_checkpoint.json"):
     if filename not in _CKPT_CACHE:
         p = os.path.join(MARKET_DATA_DIR, filename)
         try:
-            with open(p, "r", encoding="utf-8") as f:
+            with open(p, encoding="utf-8") as f:
                 data = json.load(f)
             _CKPT_CACHE[filename] = data if isinstance(data, dict) else {}
         except Exception:
@@ -538,7 +538,7 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
                        if isinstance(r, dict) and "skipped" not in r]
             if changed:
                 try:
-                    from tools.db_version import record as _dbv
+                    from common.db_version import record as _dbv
                     _dbv(changed, note="事件面表周期通道")
                 except Exception as e:
                     print(f"  [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")

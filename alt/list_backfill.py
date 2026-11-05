@@ -53,7 +53,7 @@ import time
 from datetime import datetime, timedelta
 
 try:
-    import msvcrt                      # §185 R15-1UP：Windows 原生排他文件锁
+    import msvcrt  # §185 R15-1UP：Windows 原生排他文件锁
 except ImportError:                    # 非 Windows ⇒ 降级（跳过加锁，首次告警）
     msvcrt = None
 _MVSCRT_WARNED = False
@@ -62,11 +62,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 
-from config_alt import (
+from alt import io as alt_io
+from alt import spec as spec_mod
+from alt.backfill import AltCheckpoint
+from alt.config import (
     ALT_META_DIR,
     FLUSH_BYTES,
     FLUSH_ROWS,
-    FLUSH_SYMS,
     HK_BATCH_SIZE,
     ROTATE_STATE_FILE,
     TS_DATA_DIR,
@@ -74,13 +76,10 @@ from config_alt import (
     assert_writable,
     ensure_alt_dirs,
 )
-from common.parquet_store import list_parquet_files
-from alt import spec as spec_mod
-from alt import io as alt_io
 from alt.rate import AltRateLimiter
 from alt.urls import guess_url
-from alt.backfill import AltCheckpoint
 from alt.us_backfill import SOCKET_TIMEOUT, _patch_requests_timeout
+from common.parquet_store import list_parquet_files
 
 
 # ============================================================
@@ -117,7 +116,7 @@ class RotateState:
             try:
                 with open(path, encoding="utf-8") as f:
                     self.data = json.load(f)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 self.data = {}
 
     def last_done(self, table, symbol):
@@ -165,7 +164,7 @@ class RotateState:
                 self.data = latest
             except FileNotFoundError:
                 pass                      # 首次写：内存副本即可
-            except Exception as e:        # noqa: BLE001
+            except Exception as e:
                 # §182 R15-1b：重读失败不得静默 → 回退内存副本并告警
                 print(f"[WARN] rotate_state 重读失败，回退内存副本: {e}")
 
@@ -212,7 +211,7 @@ class RotateState:
             dates.append(d)
             try:
                 age = (today - datetime.strptime(d, "%Y-%m-%d")).days
-            except Exception:  # noqa: BLE001
+            except Exception:
                 age = 10 ** 6
             if age <= rd:
                 fresh += 1
@@ -301,7 +300,7 @@ def parse_until(spec_str, now=None):
         hh, mm = int(hh), int(mm)
         if not (0 <= hh <= 23 and 0 <= mm <= 59):
             raise ValueError
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None, f"--until 格式非法: {spec_str!r}（应为 HH:MM）"
     now = now or datetime.now()
     target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
@@ -452,7 +451,7 @@ def _table_disk_rows(name):
     for f in files:
         try:
             n_rows += int(pq.ParquetFile(os.path.join(d, f)).metadata.num_rows)
-        except Exception:  # noqa: BLE001
+        except Exception:
             n_rows += 1
     return len(files), n_rows
 
@@ -1017,7 +1016,7 @@ def _ckpt_done_counts():
     """
     try:
         ck = AltCheckpoint()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return {}
     out = {}
     for t, rec in (ck.data or {}).items():
@@ -1054,7 +1053,7 @@ def show_status(table=None, verbose=True, json_out=False):
             else:
                 try:
                     uni = load_universe(sp, verbose=False)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     item["error"] = str(e)[:120]
                 else:
                     fresh, stale, oldest, newest = state.progress(
@@ -1079,7 +1078,7 @@ def show_status(table=None, verbose=True, json_out=False):
         else:
             try:
                 uni = load_universe(sp, verbose=False)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 print(f"{t:<18}  清单读取失败: {str(e)[:50]}")
             else:
                 fresh, stale, oldest, newest = state.progress(

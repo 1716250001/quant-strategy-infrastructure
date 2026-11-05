@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 tools/check_coverage.py — 可转债与 ETF/LOF 数据覆盖检查
 ========================================================
@@ -19,8 +19,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from common.paths import CB_DAILY_DIR, FUND_DAILY_DIR, META_DIR, MARKET_DATA_DIR
 from common import reader
+from common.paths import MARKET_DATA_DIR, META_DIR
 from fetch.base import get_latest_trade_date
 
 
@@ -269,13 +269,13 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
 
     # 逐表计算 A/B/S/SB 类
     detail = {}  # {table: {"A":..., "B":..., "S":..., "SB":..., "stale_registered":...}}
-    total_A = total_B = total_S = total_SB = 0
+    total_a = total_b = total_s = total_sb = 0
 
     for table, _ in tables:
         first_map = table_first[table]
         registered = set(_kg.get(table, {}).get("source_empty", []))
         registered_late = set(_kg.get(table, {}).get("source_late_start", []))
-        A_list, B_list, S_list, SB_list = [], [], [], []
+        a_list, b_list, s_list, sb_list = [], [], [], []
 
         for _, row in in_fund.iterrows():
             tc = row["ts_code"]
@@ -285,9 +285,9 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
             if tc not in first_map:
                 # 已逐只核验登记的源端空 → S 桶；否则是可执行缺口 A
                 if tc in registered:
-                    S_list.append((tc, name))
+                    s_list.append((tc, name))
                 else:
-                    A_list.append((tc, name))
+                    a_list.append((tc, name))
                 continue
 
             # 有数据但 list_date 无效无法判定 → 跳过 B 类
@@ -298,9 +298,9 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
             if gap > 30:
                 # 已逐只核验的源端晚起点（分级基金稀疏成交/源端历史残缺）→ SB
                 if tc in registered_late:
-                    SB_list.append((tc, name, gap))
+                    sb_list.append((tc, name, gap))
                 else:
-                    B_list.append((tc, name, gap))
+                    b_list.append((tc, name, gap))
 
         # 注册表中但库内实际已无缺口/已有数据的码（注册表失真，须暴露：不能静默）
         stale_reg = sorted(c for c in registered if c in first_map)
@@ -320,34 +320,33 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
             print(f"\n  ⚠ {table}: source_late_start 注册表中有 {len(stale_late)} 只 gap 已消失"
                   f"（注册表须清理）: {stale_late[:5]}")
 
-        total_A += len(A_list)
-        total_B += len(B_list)
-        total_S += len(S_list)
-        total_SB += len(SB_list)
-        detail[table] = {"A": A_list, "B": B_list, "S": S_list, "SB": SB_list,
+        total_a += len(a_list)
+        total_b += len(b_list)
+        total_s += len(s_list)
+        total_sb += len(sb_list)
+        detail[table] = {"A": a_list, "B": b_list, "S": s_list, "SB": sb_list,
                          "stale_registered": stale_reg, "stale_late": stale_late}
 
-        if len(A_list) + len(B_list) + len(S_list) + len(SB_list) == 0:
+        if len(a_list) + len(b_list) + len(s_list) + len(sb_list) == 0:
             continue
 
-        print(f"\n  {table}: A={len(A_list)} B={len(B_list)} "
-              f"S={len(S_list)}(源端空) SB={len(SB_list)}(源端晚起点)")
-        if A_list:
-            print(f"    A 类（库内 0 行·未登记）TOP 10:")
-            for tc, nm in A_list[:10]:
+        print(f"\n  {table}: A={len(a_list)} B={len(b_list)} "
+              f"S={len(s_list)}(源端空) SB={len(sb_list)}(源端晚起点)")
+        if a_list:
+            print("    A 类（库内 0 行·未登记）TOP 10:")
+            for tc, nm in a_list[:10]:
                 print(f"      {tc:12s} {nm}")
-        if B_list:
-            B_sorted = sorted(B_list, key=lambda x: -x[2])
-            print(f"    B 类（起点晚 >30d·未登记）TOP 10:")
-            for tc, nm, gap in B_sorted[:10]:
+        if b_list:
+            b_sorted = sorted(b_list, key=lambda x: -x[2])
+            print("    B 类（起点晚 >30d·未登记）TOP 10:")
+            for tc, nm, gap in b_sorted[:10]:
                 print(f"      {tc:12s} {nm[:20]:20s} gap={gap:4d}d")
 
     print(f"\n===== 汇总（scope={scope}）=====")
-    print(f"A 类合计: {total_A}  B 类合计: {total_B}  "
-          f"S 类（已登记源端空）: {total_S}  SB 类（已登记源端晚起点）: {total_SB}")
-
+    print(f"A 类合计: {total_a}  B 类合计: {total_b}  "
+          f"S 类（已登记源端空）: {total_s}  SB 类（已登记源端晚起点）: {total_sb}")
     # 诚实门禁：只看未登记的可执行缺口；注册表失真同样红（由 R17 细查）
-    rc = 1 if (strict and (total_A > 0 or total_B > 0)) else 0
+    rc = 1 if (strict and (total_a > 0 or total_b > 0)) else 0
 
     if return_detail:
         return rc, detail

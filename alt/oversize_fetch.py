@@ -22,14 +22,11 @@ alt/oversize_fetch.py —— 外盘扩容专用取数引擎（OS-R1~R5）
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
-import math
 import os
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -49,7 +46,14 @@ if str(_PROJ_ROOT) not in sys.path:
 # 规则：**不覆盖用户已设值**；探测顺序与 verify_os_r1r.py 保持一致。
 # ============================================================
 if not os.environ.get("SSL_CERT_FILE"):
-    _ssl_candidates = [r"D:\yf_ca\cacert.pem"]
+    _ssl_candidates = []
+    # ① 显式配置（新增，便于换机/换盘）
+    if os.environ.get("CHICHAO_CERT_FILE"):
+        _ssl_candidates.append(os.environ["CHICHAO_CERT_FILE"])
+    # ② 用户目录派生（可移植）
+    _ssl_candidates.append(os.path.expanduser("~/yf_ca/cacert.pem"))
+    # ③ 现有部署位置——唯一实测存在，保留为兜底（勿删，删了本机立刻断）
+    _ssl_candidates.append(r"D:\yf_ca\cacert.pem")
     try:
         import certifi as _certifi
         _ssl_candidates.append(_certifi.where())
@@ -69,12 +73,11 @@ if not os.environ.get("SSL_CERT_FILE"):
     else:
         print("[bootstrap] ⚠ 未找到 SSL 证书；akshare 网络调用可能失败")
 
-from alt import spec as spec_mod           # noqa: E402
+from alt import spec as spec_mod  # noqa: E402
 from alt.io import normalize as _normalize  # noqa: E402
-from alt.io import save as _save            # noqa: E402
-from alt.rate import AltRateLimiter         # noqa: E402
-from alt.urls import guess_url               # noqa: E402
-
+from alt.io import save as _save  # noqa: E402
+from alt.rate import AltRateLimiter  # noqa: E402
+from alt.urls import guess_url  # noqa: E402
 
 # ============================================================
 # 一、通用工具
@@ -85,9 +88,9 @@ def _strip_hk_suffix(code: str) -> str:
     return code.replace(".HK", "") if code.endswith(".HK") else code
 
 
-def _load_hk_universe() -> List[str]:
+def _load_hk_universe() -> list[str]:
     """从 master:hk_basic 加载港股清单，返回 ['00001', '00002', ..., '00700', ...]"""
-    from config_alt import TS_DATA_DIR
+    from alt.config import TS_DATA_DIR
     path = os.path.join(TS_DATA_DIR, "hk_basic", "hk_basic.parquet")
     if not os.path.exists(path):
         raise RuntimeError(f"master:hk_basic 不存在: {path}")
@@ -113,7 +116,7 @@ INDICATOR_BACKOFF_SEC = 2.0
 
 
 def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
-                      ) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
+                      ) -> tuple[pd.DataFrame | None, str | None]:
     """拉单只港股的估值时序（3 个 indicator 合并）。
 
     返回: (DataFrame[symbol, indicator, date, value], None) 成功
@@ -264,7 +267,7 @@ def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return pd.concat(out_parts, ignore_index=True)
 
 
-def _save_hk_val(df: pd.DataFrame, dest_dir: str) -> Dict:
+def _save_hk_val(df: pd.DataFrame, dest_dir: str) -> dict:
     """落盘到 alt_data/hk_val_pct/ 下，按 date 年分区。
 
     复用 alt.io.normalize + save 的基础设施。
@@ -290,25 +293,25 @@ def _save_hk_val(df: pd.DataFrame, dest_dir: str) -> Dict:
 # ============================================================
 
 def _cp_path(table: str) -> str:
-    from config_alt import ALT_META_DIR
+    from alt.config import ALT_META_DIR
     return os.path.join(ALT_META_DIR, f"oversize_{table}_checkpoint.json")
 
 
-def _load_checkpoint(table: str) -> Dict:
+def _load_checkpoint(table: str) -> dict:
     cp = _cp_path(table)
     if os.path.exists(cp):
-        with open(cp, "r", encoding="utf-8") as fh:
+        with open(cp, encoding="utf-8") as fh:
             return json.load(fh)
     return {"done": [], "empty": [], "fail": [], "stats": {"ok": 0, "empty": 0, "fail": 0}}
 
 
-def _save_checkpoint(table: str, cp: Dict) -> None:
+def _save_checkpoint(table: str, cp: dict) -> None:
     os.makedirs(os.path.dirname(_cp_path(table)), exist_ok=True)
     with open(_cp_path(table), "w", encoding="utf-8") as fh:
         json.dump(cp, fh, ensure_ascii=False, indent=2)
 
 
-def _filter_todo(all_syms: List[str], cp: Dict) -> List[str]:
+def _filter_todo(all_syms: list[str], cp: dict) -> list[str]:
     done_set = set(cp.get("done", [])) | set(cp.get("empty", []))
     return [s for s in all_syms if s not in done_set]
 
@@ -325,7 +328,7 @@ S1_HK_SYMBOLS = [
 ]
 
 
-def _run_s1_baseline(limiter: AltRateLimiter) -> Tuple[int, int]:
+def _run_s1_baseline(limiter: AltRateLimiter) -> tuple[int, int]:
     """跑 S1 基准集 20 只，返回 (ok_count, fail_count)。
 
     CK-25: 20 只全部非空 → S1 PASS；任一为空 → S1 FAIL。
@@ -370,11 +373,11 @@ def _run_s1_baseline(limiter: AltRateLimiter) -> Tuple[int, int]:
 # 五、主入口：hk_val_pct 全量建库
 # ============================================================
 
-def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
+def run_hk_val_pct(*, symbols: list[str] | None = None,
                    checkpoint: bool = True,
                    dry_run: bool = False,
                    s1_first: bool = True,
-                   max_syms: Optional[int] = None) -> Dict:
+                   max_syms: int | None = None) -> dict:
     """执行 hk_val_pct 全量建库。
 
     Args:
@@ -384,14 +387,14 @@ def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
         s1_first: 是否先跑 S1 基准集
         max_syms: 最多处理多少只（用于限制执行时间）
     """
-    from config_alt import ALT_DATA_DIR
+    from alt.config import ALT_DATA_DIR
     dest_dir = os.path.join(ALT_DATA_DIR, "hk_val_pct")
 
     print(f"\n{'#'*60}")
-    print(f"# hk_val_pct 取数（OS-R1 P0-2）")
-    print(f"# 3 indicator × 2785 只 = 8,355 请求")
+    print("# hk_val_pct 取数（OS-R1 P0-2）")
+    print("# 3 indicator × 2785 只 = 8,355 请求")
     print(f"# 档位: {HK_VAL_SRC_HOST} (other 15/分)")
-    print(f"# 预计耗时: ~9 小时")
+    print("# 预计耗时: ~9 小时")
     print(f"{'#'*60}")
 
     limiter = AltRateLimiter(verbose=True)
@@ -414,7 +417,7 @@ def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
 
     # 3) S1 基准集
     if s1_first and not dry_run:
-        s1_ok, s1_issue = _run_s1_baseline(limiter)
+        _s1_ok, s1_issue = _run_s1_baseline(limiter)
         if s1_issue > 0:
             print("\n❌ S1 基准集未全部通过 → 退出（纪律要求）")
             sys.exit(1)
@@ -427,7 +430,7 @@ def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
     # 4) 主循环
     os.makedirs(dest_dir, exist_ok=True)
 
-    buf: List[pd.DataFrame] = []
+    buf: list[pd.DataFrame] = []
     buf_flush_threshold = 50          # 每 50 只 flush 一次
     buf_rows_threshold = 50_000       # 或累计 5 万行就 flush
 
@@ -439,7 +442,6 @@ def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
     last_flush_t = start_t
 
     for i, sym in enumerate(universe, 1):
-        t0 = time.time()
         raw, err = _fetch_hk_val_raw(sym, limiter)
 
         if err:
@@ -507,7 +509,7 @@ def run_hk_val_pct(*, symbols: Optional[List[str]] = None,
 
     total_t = time.time() - start_t
     print(f"\n{'='*60}")
-    print(f"[完成] hk_val_pct 全量建库")
+    print("[完成] hk_val_pct 全量建库")
     print(f"  成功 {done_count} | 空 {empty_count} | 失败 {fail_count}")
     print(f"  总行数 {total_rows:,}")
     print(f"  耗时 {total_t/60:.1f} min")

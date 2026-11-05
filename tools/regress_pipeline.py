@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 tools/regress_pipeline.py — 回归测试（改造不破坏既有流水线）
 ==============================================================
@@ -34,13 +34,15 @@ tools/regress_pipeline.py — 回归测试（改造不破坏既有流水线）
 import io
 import os
 import re
-import sys
 import subprocess
+import sys
 
 # 代码根目录（供 sys.path 与子进程 cwd 使用）
 CODE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if CODE_DIR not in sys.path:
     sys.path.insert(0, CODE_DIR)
+
+import config  # noqa: E402
 
 SEP = "=" * 72
 PY = sys.executable
@@ -129,7 +131,7 @@ def _run_all():
 
 
     def _run_cli(args):
-        return subprocess.run([PY, "main.py"] + args, cwd=CODE_DIR,
+        return subprocess.run([PY, "main.py", *args], cwd=CODE_DIR,
                               capture_output=True, text=True,
                               encoding="utf-8", errors="replace")
 
@@ -170,7 +172,8 @@ def _run_all():
                 # 2026-09-30 P1-1：fetch/report/all/fix-resonance/daily-report/
                 # wind-index/scan-divergence/divergence-trigger/monitor 死命令
                 # 已删（--help 只剩活命令）；leverage/etf-flow 收编为正式入口
-                "qidian", "leverage", "etf-flow"]
+                # 2026-11-05 W5：qidian/qidian-legacy 随 strategies 归档删除入口
+                "leverage", "etf-flow"]
         missing = [m for m in must if m not in subs]
         assert not missing, f"缺失核心子命令: {missing}"
         return (f"(动态取到 {len(subs)} 个子命令, 关键 {len(must)} 个齐全)")
@@ -251,8 +254,8 @@ def _run_all():
             1) core 组必须完整存在（下游策略直接依赖，缺一不可）
             2) 展开结果里每个成员都能取到属性定义
         """
-        from fetch.daily_update import get_target_conf, expand_groups
         from config import DAILY_UPDATE_GROUPS
+        from fetch.daily_update import expand_groups, get_target_conf
         names = expand_groups(["all"])
         core = list(DAILY_UPDATE_GROUPS.get("core", []))
         assert core, "core 组为空"
@@ -267,7 +270,7 @@ def _run_all():
     def r2b():
         from fetch.daily_update import resolve_gaps
         conf = {"mode": "by_date", "date_col": "trade_date", "start": "19901219"}
-        dates, info = resolve_gaps("daily", conf, "20260917", lookback=3)
+        _dates, info = resolve_gaps("daily", conf, "20260917", lookback=3)
         assert info["latest"] is not None, "未能取到库内最新日期"
         assert len(info["refresh"]) == 3, f"复核窗口应为3, 实为{len(info['refresh'])}"
         return (f"(库内最新={info['latest']} 缺口={len(info['gap'])} "
@@ -350,8 +353,8 @@ def _run_all():
 
     def r5b():
         # 2026-09-25 D2: fix_and_resonance 已拆分为 leverage_monitor + etf_flow，原文件归档
-        import tools.leverage_monitor as lm
-        import tools.etf_flow as ef
+        import tools.research.etf_flow as ef
+        import tools.research.leverage_monitor as lm
         assert hasattr(lm, "get_leverage_state") and hasattr(lm, "build_dual_warning")
         assert hasattr(ef, "fetch_etf_shares") and hasattr(ef, "build_shares_output")
         assert hasattr(ef, "compute_fund_flows") and hasattr(ef, "derive_fund_flow")
@@ -405,7 +408,7 @@ def _run_all():
 
 
     def r7a():
-        from fetch.gap_update import run_gap_update, DeprecatedEngineError
+        from fetch._legacy.gap_update import DeprecatedEngineError, run_gap_update
         try:
             run_gap_update(target_date="20260917", dry_run=True)
         except DeprecatedEngineError:
@@ -414,7 +417,7 @@ def _run_all():
 
 
     def r7b():
-        from fetch.intraday_update import run_update, DeprecatedEngineError
+        from fetch._legacy.intraday_update import DeprecatedEngineError, run_update
         try:
             run_update(trade_date="20260917", dry_run=True)
         except DeprecatedEngineError:
@@ -500,15 +503,19 @@ def _run_all():
            仅文档警告拦不住（实测: backfill 的 by_code 写路径就是漏网者），
            必须运行时抛 LayoutGuardError。
         """
-        import tempfile
         import shutil
+        import tempfile
+
         import pandas as pd
+
         from common import reader
         from common.parquet_store import (
-            upsert_grouped, upsert_by_year, LayoutGuardError,
+            LayoutGuardError,
+            upsert_by_year,
+            upsert_grouped,
         )
+        from config import BACKFILL_TARGETS, DAILY_UPDATE_EXTRA
         from fetch.backfill_io import table_storage_layout
-        from config import MARKET_DATA_DIR, BACKFILL_TARGETS, DAILY_UPDATE_EXTRA
 
         # ① 期望 vs 磁盘
         bad = []
@@ -610,8 +617,10 @@ def _run_all():
         另附反向检查: 组里的表必须都有属性定义，否则跑到它时会拿不到配置。
         """
         from config import (
-            BACKFILL_TARGETS, DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS,
+            BACKFILL_TARGETS,
             DAILY_UPDATE_EXEMPT,
+            DAILY_UPDATE_EXTRA,
+            DAILY_UPDATE_GROUPS,
         )
 
         # 引擎真正支持"日更"的判据 —— **从 daily_update 导入，单一真源**
@@ -633,11 +642,11 @@ def _run_all():
         #   ① 模式属日更范畴（by_date / by_range）
         #   ② **所有已在组里的表** —— 必须纳入，否则无法校验其 mode 是否真被支持
         #      （index_global 是 by_code 且只在组里，漏掉它就漏掉了「假纳入」检查）
-        DAILY_MODES = ("by_date", "by_range")
+        daily_modes = ("by_date", "by_range")
         cand = {}
         for src, tag in ((DAILY_UPDATE_EXTRA, "EXTRA"), (BACKFILL_TARGETS, "BACKFILL")):
             for name, conf in src.items():
-                if conf.get("mode") in DAILY_MODES or name in in_group:
+                if conf.get("mode") in daily_modes or name in in_group:
                     cand[name] = {
                         "mode": conf.get("mode"),
                         "freq": conf.get("freq", "day"), "src": tag,
@@ -692,11 +701,12 @@ def _run_all():
         #   DAILY_UPDATE_GROUPS、也不在 DAILY_UPDATE_EXEMPT（后者的判据只覆盖
         #   by_date / freq=day），此前**无归宿、无陈旧监控**（实证停更 4 周无人发现）。
         #   本判据把"第三态"（周期通道）也纳入"要么纳入、要么写理由"的同一条纪律。
+        from config import MARKET_DATA_DIR as _MDD
         from config import PERIODIC_UPDATE_TARGETS
+
         # 列名校验复用 config_check 的"只读 parquet 元数据"助手（同一份实现，
         # 避免第三处各写一份 schema 读取）——故 import 私有名。
         from tools.config_check import _pk_column_names
-        from config import MARKET_DATA_DIR as _MDD
 
         p_bad, p_dual, p_nocol = [], [], []
         for name, spec in PERIODIC_UPDATE_TARGETS.items():
@@ -807,10 +817,11 @@ def _run_all():
           ③ 有缺口时，db_audit 的 expect 必须等于 build_tasks（单一真源）
         """
         import datetime as _dt
-        from tools.db_audit import _period_key, audit_gaps
-        from fetch.backfill_spec import build_tasks, expected_task_count
-        from config import BACKFILL_TARGETS
+
         from common.calendar import open_dates
+        from config import BACKFILL_TARGETS
+        from fetch.backfill_spec import build_tasks, expected_task_count
+        from tools.db.audit import _period_key, audit_gaps
 
         # ① 周期键规范化
         assert _period_key("20160101|20161231", "by_range", "day") == "20160101"
@@ -850,7 +861,7 @@ def _run_all():
         #      若不排除，断言会持续红灯 → "狼来了" → 真漂移反而被忽视。
         #      未声明的表仍按原阈值严查。
         from config import HISTORY_BACKFILL_PENDING
-        from tools.db_audit import GAP_CAT_EXEMPT
+        from tools.db.audit import GAP_CAT_EXEMPT
         pend = set(HISTORY_BACKFILL_PENDING)
         tot_declared = sum(r["missing"] for r in rows.values()
                            if r["name"] in pend)
@@ -885,9 +896,9 @@ def _run_all():
         #   2026-09-29 fund_basic.parquet 被截到 15,000 行且丢了 market 列时，
         #   本项达 28,004（fund_adj/fund_share 各虚增 13,790）。
         #   只设上界（而非并入 500 预算），既保留"狼来了"防护，又不掩盖事故。
-        EXEMPT_GAP_LIMIT = 2000
-        assert exempt_tot < EXEMPT_GAP_LIMIT, (
-            f"豁免表差额 {exempt_tot} ≥ {EXEMPT_GAP_LIMIT} —— 豁免表也在漂移"
+        exempt_gap_limit = 2000
+        assert exempt_tot < exempt_gap_limit, (
+            f"豁免表差额 {exempt_tot} ≥ {exempt_gap_limit} —— 豁免表也在漂移"
             f"（设计性底线实测 424）。"
             f"2026-09-29 fund_basic 截断事故即此类（曾达 28,004）。明细: "
             f"{list(exempt_gaps.items())[:8]}")
@@ -969,10 +980,13 @@ def _run_all():
         ① 引擎判据：不能退回"只认 max_rows"
         ② 数据基线：库内起点不得晚于实测的源端起点（否则=又漏了）
         """
-        from fetch.base import (_is_possibly_truncated, SUSPECT_CAPS,
-                                TRUNC_MAX_ROUNDS)
-        from config import (SOURCE_START_BASELINE, SOURCE_START_BASELINE_COL,
-                            TABLE_DATE_COL, MARKET_DATA_DIR)
+        from config import (
+            MARKET_DATA_DIR,
+            SOURCE_START_BASELINE,
+            SOURCE_START_BASELINE_COL,
+            TABLE_DATE_COL,
+        )
+        from fetch.base import SUSPECT_CAPS, TRUNC_MAX_ROUNDS, _is_possibly_truncated
 
         # ① 引擎判据（关键：3000 < 5000 也必须识别）
         assert _is_possibly_truncated(3000, 5000), (
@@ -986,6 +1000,7 @@ def _run_all():
 
         # ② 数据基线（库内最早不得晚于源端已知起点）
         import os
+
         import pandas as pd
         bad, checked = [], 0
         for name, floor in SOURCE_START_BASELINE.items():
@@ -1054,22 +1069,22 @@ def _run_all():
 
         import pandas as pd
 
-        from alt.reader import join_main, value_on, read_alt, _date_col_of
+        from alt.reader import _date_col_of, join_main, read_alt, value_on
 
         # ---------- ① 低匹配率必须告警（内存构造，不依赖磁盘） ----------
-        L = pd.DataFrame({"date": [f"2026010{i}" for i in range(1, 9)],
+        left = pd.DataFrame({"date": [f"2026010{i}" for i in range(1, 9)],
                           "v": list(range(8))})
-        R = pd.DataFrame({"trade_date": ["20260101", "20260102"], "w": [1, 2]})
+        right = pd.DataFrame({"trade_date": ["20260101", "20260102"], "w": [1, 2]})
         with _w.catch_warnings(record=True) as rec:
             _w.simplefilter("always")
-            out = join_main(L, R, left_date="date", right_date="trade_date")
+            out = join_main(left, right, left_date="date", right_date="trade_date")
             assert len(out) == 8, "left join 应保留左侧全部行"
             assert any("匹配率偏低" in str(x.message) for x in rec), (
                 "匹配率 2/8=25% 应触发告警 —— 原缺陷会静默产生 6 行全 NaN")
         # 高匹配率不得误报
         with _w.catch_warnings(record=True) as rec_hi:
             _w.simplefilter("always")
-            join_main(L, L.rename(columns={"v": "w"}), left_date="date",
+            join_main(left, left.rename(columns={"v": "w"}), left_date="date",
                       right_date="date")
             assert not any("匹配率偏低" in str(x.message) for x in rec_hi), \
                 "完全匹配不应触发告警（防误报）"
@@ -1111,7 +1126,7 @@ def _run_all():
                 pass
             # ④ 日期列必须来自 spec，且该表日期列**恰不在首位**（原 bug 触发条件）
             assert _date_col_of("ebs_lg") == "date", "日期列应由 spec 决定"
-            assert list(ebs.columns)[0] != "date", (
+            assert next(iter(ebs.columns)) != "date", (
                 "该表日期列不在首位 —— 正是 columns[0] 取错的触发条件，"
                 "本断言保证测试有效")
             d_last = str(ebs["date"].max())
@@ -1154,28 +1169,31 @@ def _run_all():
             · 体检只报"数据落后 N 天"，不报原因
           → 结果：分辨不出"漏网被修复"还是"拉取问题"。
         """
-        from fetch.base import (_is_permission_error, _is_rate_limit_error,
-                                permission_denied_count, clear_permission_denied,
-                                ts_call_with_retry)
-        from config import (LEAKY_PERMISSIONS, BACKFILL_TARGETS,
-                            DAILY_UPDATE_EXTRA)
+        from config import BACKFILL_TARGETS, DAILY_UPDATE_EXTRA, LEAKY_PERMISSIONS
+        from fetch.base import (
+            _is_permission_error,
+            _is_rate_limit_error,
+            clear_permission_denied,
+            permission_denied_count,
+            ts_call_with_retry,
+        )
 
         # ---------- ① 判据：只认无权限，不误伤限频/其他 ----------
-        PERM = [
+        perm = [
             "抱歉，您没有接口(daily)访问权限，请参考 https://...",
             "抱歉，您没有接口(fund_portfolio)访问权限，权限的具体详情访问：...",
         ]
-        NOT_PERM = [
+        not_perm = [
             "抱歉，您访问接口(daily)频率超限(200次/分钟)，具体频次详情：...",
             "抱歉，您访问接口(shibor_lpr)频率超限(1次/小时)",
             "抱歉，请指定正确的接口名",
             "HTTPConnectionPool(host='api.tushare.pro'): Read timed out",
             "Expecting value: line 1 column 1 (char 0)",
         ]
-        for m in PERM:
+        for m in perm:
             assert _is_permission_error(m), f"未识别为无权限: {m[:40]}"
             assert not _is_rate_limit_error(m), f"无权限被误判为限频: {m[:40]}"
-        for m in NOT_PERM:
+        for m in not_perm:
             assert not _is_permission_error(m), f"误判为无权限: {m[:40]}"
 
         # ---------- ② 引擎行为：无权限**不重试**（对照实验） ----------
@@ -1225,19 +1243,19 @@ def _run_all():
         assert permission_denied_count() == 0, "clear 后应归零"
 
         # ---------- ④ 清单与表定义交叉验证 ----------
-        KNOWN = set(BACKFILL_TARGETS) | set(DAILY_UPDATE_EXTRA)
+        known = set(BACKFILL_TARGETS) | set(DAILY_UPDATE_EXTRA)
         assert LEAKY_PERMISSIONS, "漏网清单不应为空"
-        bad_name = [k for k in LEAKY_PERMISSIONS if k not in KNOWN]
+        bad_name = [k for k in LEAKY_PERMISSIONS if k not in known]
         assert not bad_name, (
             f"漏网清单含未定义的接口名 {bad_name} —— "
             f"监控会空转（与判重键'键名必须真实存在'同源）")
-        NEED = {"claimed", "kind", "use", "alt", "monitor"}
+        need = {"claimed", "kind", "use", "alt", "monitor"}
         bad_fld = [k for k, v in LEAKY_PERMISSIONS.items()
-                   if not NEED <= set(v.keys())]
-        assert not bad_fld, f"漏网清单缺字段 {bad_fld}（需要 {NEED}）"
+                   if not need <= set(v.keys())]
+        assert not bad_fld, f"漏网清单缺字段 {bad_fld}（需要 {need}）"
 
         n_mon = sum(1 for v in LEAKY_PERMISSIONS.values() if v["monitor"])
-        return (f"(判据OK: 无权限{len(PERM)}例识别/限频与网络{len(NOT_PERM)}例不误伤 | "
+        return (f"(判据OK: 无权限{len(perm)}例识别/限频与网络{len(not_perm)}例不误伤 | "
                 f"★权限错误不重试(1次调用) vs 普通错误重试({pb.calls}次) | "
                 f"记录器OK | 清单{len(LEAKY_PERMISSIONS)}项 "
                 f"表名全合法/字段齐全/其中{n_mon}项纳入告警)")
@@ -1284,9 +1302,10 @@ def _run_all():
         import contextlib
         import inspect
         import tempfile
+
         import fetch.full_download as fd
-        from fetch.base import RateLimiter as RealLimiter
         from config import META_DIR
+        from fetch.base import RateLimiter as RealLimiter
 
         # ---------- ① 保护必须在位: fetch_metadata 有 dry_run 参数 ----------
         params = inspect.signature(fd.fetch_metadata).parameters
@@ -1325,7 +1344,7 @@ def _run_all():
             finally:
                 fd.get_pro, fd.RateLimiter = _orig_pro, _orig_lim
             return (buf.getvalue(), before, _meta_fingerprint(META_DIR),
-                    [l.total_requests for l in spy_limiters])
+                    [lim.total_requests for lim in spy_limiters])
 
         # ---------- ③ 主判据: dry-run(phase=all) 零请求零写入 ----------
         out, before, after, reqs = _probe("all")
@@ -1403,16 +1422,17 @@ def _run_all():
 
         # ⑤ 基数 ≥ 基线（只对下降告警；新增基金只 info 不红）
         import pandas as _pd
+
         from common.paths import META_DIR as _MD
         _basic = _pd.read_parquet(_os.path.join(_MD, "fund_basic.parquet"),
                                   columns=["market", "ts_code"])
-        _marketE_count = (_basic["market"] == "E").sum()
-        if _marketE_count > _baseline_count:
-            print(f"  [info] 场内基金新增 {_marketE_count - _baseline_count} 只，"
-                  f"请更新 known_gaps.market_e_count={_marketE_count}")
+        _markete_count = (_basic["market"] == "E").sum()
+        if _markete_count > _baseline_count:
+            print(f"  [info] 场内基金新增 {_markete_count - _baseline_count} 只，"
+                  f"请更新 known_gaps.market_e_count={_markete_count}")
         else:
-            assert _marketE_count >= _baseline_count, (
-                f"场内基数漂移: market=E 现有 {_marketE_count} 只 < 基线 {_baseline_count}")
+            assert _markete_count >= _baseline_count, (
+                f"场内基数漂移: market=E 现有 {_markete_count} 只 < 基线 {_baseline_count}")
 
         # ① detail 返回 + ②③④ 一次调用覆盖（scope=fund_daily）
         rc, detail = check_fund_history(strict=True, return_detail=True, scope="fund_daily")
@@ -1420,17 +1440,17 @@ def _run_all():
         assert "fund_daily" in detail, f"detail 应含 fund_daily, 实际键={set(detail.keys())}"
 
         fd = detail["fund_daily"]
-        A_fd = {tc for tc, _ in fd["A"]}
-        B_fd = {tc for tc, _, _ in fd["B"]}
-        S_fd = {tc for tc, _ in fd["S"]}
-        SB_fd = {tc for tc, _, _ in fd["SB"]}
+        a_fd = {tc for tc, _ in fd["A"]}
+        b_fd = {tc for tc, _, _ in fd["B"]}
+        s_fd = {tc for tc, _ in fd["S"]}
+        sb_fd = {tc for tc, _, _ in fd["SB"]}
 
         # ② 未登记可执行缺口精确命中基线
-        assert len(A_fd) == fd_expected, (
-            f"fund_daily A 漂移: 实测 {len(A_fd)} ≠ known_gaps {fd_expected}；"
+        assert len(a_fd) == fd_expected, (
+            f"fund_daily A 漂移: 实测 {len(a_fd)} ≠ known_gaps {fd_expected}；"
             f"未登记缺口不得用归零基线绕过（§25）")
-        assert len(B_fd) == fd_expected_b, (
-            f"fund_daily B 漂移: 实测 {len(B_fd)} ≠ known_gaps {fd_expected_b}")
+        assert len(b_fd) == fd_expected_b, (
+            f"fund_daily B 漂移: 实测 {len(b_fd)} ≠ known_gaps {fd_expected_b}")
 
         # ③ 注册表逐码一致性：注册码必须仍为 0 行（stale_registered 为空）
         stale = set(fd.get("stale_registered", []))
@@ -1438,27 +1458,27 @@ def _run_all():
             f"source_empty 注册表失真：{len(stale)} 只库内已有数据仍登记为源端空: "
             f"{sorted(stale)[:5]}")
         # S 桶实测集合必须等于注册表
-        assert S_fd == registered, (
-            f"S 桶与注册表不一致: S-S_reg={sorted(S_fd - registered)[:5]} "
-            f"reg-S={sorted(registered - S_fd)[:5]}")
+        assert s_fd == registered, (
+            f"S 桶与注册表不一致: S-S_reg={sorted(s_fd - registered)[:5]} "
+            f"reg-S={sorted(registered - s_fd)[:5]}")
 
         # ③b 晚起点注册表逐码一致性 + 无 stale
         stale_l = set(fd.get("stale_late", []))
         assert not stale_l, (
             f"source_late_start 注册表失真：{len(stale_l)} 只 gap 已消失仍登记: "
             f"{sorted(stale_l)[:5]}")
-        assert SB_fd == registered_late, (
-            f"SB 桶与注册表不一致: SB-reg={sorted(SB_fd - registered_late)[:5]} "
-            f"reg-SB={sorted(registered_late - SB_fd)[:5]}")
+        assert sb_fd == registered_late, (
+            f"SB 桶与注册表不一致: SB-reg={sorted(sb_fd - registered_late)[:5]} "
+            f"reg-SB={sorted(registered_late - sb_fd)[:5]}")
 
         # ④ strict rc 与未登记缺口一致
-        has_gap = len(A_fd) > 0 or len(B_fd) > 0
+        has_gap = len(a_fd) > 0 or len(b_fd) > 0
         assert rc == (1 if has_gap else 0), (
             f"strict rc 断言失败: rc={rc} has_gap={has_gap}")
 
-        return (f"fund_daily | A={len(A_fd)} B={len(B_fd)} "
-                f"S={len(S_fd)}(源端空) SB={len(SB_fd)}(晚起点)"
-                f"| strict rc={rc} | 基数 {_marketE_count} ≥ 基线 {_baseline_count}")
+        return (f"fund_daily | A={len(a_fd)} B={len(b_fd)} "
+                f"S={len(s_fd)}(源端空) SB={len(sb_fd)}(晚起点)"
+                f"| strict rc={rc} | 基数 {_markete_count} ≥ 基线 {_baseline_count}")
 
 
     check("基金历史起点对账", r17)
@@ -1478,10 +1498,11 @@ def _run_all():
           C5: --codes-file 与 by_date 目标（fund_adj）同用 → 非零退出
           C4: 主 checkpoint 无新增键（hash 不变）
         """
-        import subprocess as _sp
-        import tempfile as _tf
         import hashlib as _hl
         import os as _os
+        import subprocess as _sp
+        import tempfile as _tf
+
         from config import MARKET_DATA_DIR
 
         _main = _os.path.join(_os.path.dirname(__file__), "..", "main.py")
@@ -1496,7 +1517,7 @@ def _run_all():
                 _cp_hash_before = _hl.sha256(_f.read()).hexdigest()
 
         def _run_backfill(args_list, check=False):
-            _r = _sp.run([_py, _main, "backfill"] + args_list,
+            _r = _sp.run([_py, _main, "backfill", *args_list],
                          capture_output=True, text=True, encoding="utf-8",
                          errors="replace")
             return _r.returncode, _r.stdout, _r.stderr
@@ -1590,6 +1611,7 @@ def _run_all():
         """
         import json as _json
         import os as _os
+
         from tools.check_coverage import check_fund_history
 
         _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
@@ -1606,27 +1628,27 @@ def _run_all():
             _rc, _det = check_fund_history(
                 strict=True, return_detail=True, scope=_t)
             _d = _det[_t]
-            _A = {tc for tc, _ in _d["A"]}
-            _B = {tc for tc, _, _ in _d["B"]}
-            _S = {tc for tc, _ in _d["S"]}
-            _SB = {tc for tc, _, _ in _d["SB"]}
+            _a = {tc for tc, _ in _d["A"]}
+            _b = {tc for tc, _, _ in _d["B"]}
+            _s = {tc for tc, _ in _d["S"]}
+            _sb = {tc for tc, _, _ in _d["SB"]}
 
-            assert len(_A) == _exp_a, (
-                f"{_t} A 漂移: 实测 {len(_A)} ≠ 基线 {_exp_a}（禁归零绕过）")
-            assert len(_B) == _exp_b, (
-                f"{_t} B 漂移: 实测 {len(_B)} ≠ 基线 {_exp_b}")
+            assert len(_a) == _exp_a, (
+                f"{_t} A 漂移: 实测 {len(_a)} ≠ 基线 {_exp_a}（禁归零绕过）")
+            assert len(_b) == _exp_b, (
+                f"{_t} B 漂移: 实测 {len(_b)} ≠ 基线 {_exp_b}")
             assert not _d.get("stale_registered"), (
                 f"{_t} source_empty 注册表失真: {_d['stale_registered'][:5]}")
             assert not _d.get("stale_late"), (
                 f"{_t} source_late_start 注册表失真: {_d['stale_late'][:5]}")
-            assert _S == _reg, (
-                f"{_t} S 桶≠注册表: {sorted(_S ^ _reg)[:5]}")
-            assert _SB == _reg_late, (
-                f"{_t} SB 桶≠注册表: {sorted(_SB ^ _reg_late)[:5]}")
-            _has_gap = len(_A) > 0 or len(_B) > 0
+            assert _s == _reg, (
+                f"{_t} S 桶≠注册表: {sorted(_s ^ _reg)[:5]}")
+            assert _sb == _reg_late, (
+                f"{_t} SB 桶≠注册表: {sorted(_sb ^ _reg_late)[:5]}")
+            _has_gap = len(_a) > 0 or len(_b) > 0
             assert _rc == (1 if _has_gap else 0), (
                 f"{_t} strict rc={_rc} 与缺口态 {_has_gap} 不一致")
-            parts.append(f"{_t} A={len(_A)}/B={len(_B)}/S={len(_S)}/SB={len(_SB)}")
+            parts.append(f"{_t} A={len(_a)}/B={len(_b)}/S={len(_s)}/SB={len(_sb)}")
 
         return " | ".join(parts)
 
@@ -1650,13 +1672,15 @@ def _run_all():
         full_download.py 白名单护栏防日更复活，本断言防任何路径回潮。
         evidence 断言（§37）：逐码探针注册表（EE-FUND-6 起），防 evidence 静默破坏。
         """
-        import os as _os
-        import re as _re
         import glob as _glob
         import json as _json
+        import os as _os
+        import re as _re
+
         import pandas as _pd
-        from common.paths import META_DIR as _MD
+
         from common.paths import MARKET_DATA_DIR as _ROOT
+        from common.paths import META_DIR as _MD
 
         # [A4] 本正则只管**场内** 7 位畸形码。fund_basic 另有 240 个 7 位 `.OF`
         #  （market='O'，全 status='D'），其中 74,883 行已在 fund_nav，
@@ -1751,11 +1775,13 @@ def _run_all():
         ⚠ 仅限 fund_daily。fund_nav / fund_adj / fund_share 含 .OF 合法
         （场外基金有净值/分红/份额，但无日线行情）。
         """
-        import os as _os
         import glob as _glob
+        import os as _os
+
         import pandas as _pd
-        from common.paths import META_DIR as _MD
+
         from common.paths import MARKET_DATA_DIR as _ROOT
+        from common.paths import META_DIR as _MD
 
         # fund_basic market=E 集
         _basic = _pd.read_parquet(_os.path.join(_MD, "fund_basic.parquet"),
@@ -1801,10 +1827,12 @@ def _run_all():
         """
         import json as _json
         import os as _os
+
         import pandas as _pd
+
         from common.paths import META_DIR as _MD
 
-        _patch_path = r"D:\全量数据\market_data\derived\fund_basic_patch.parquet"
+        _patch_path = os.path.join(config.MARKET_DATA_DIR, "derived", "fund_basic_patch.parquet")
         assert _os.path.exists(_patch_path), (
             f"派生补表缺失: {_patch_path}")
         _patch = _pd.read_parquet(_patch_path)

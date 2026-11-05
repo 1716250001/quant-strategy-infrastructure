@@ -22,24 +22,22 @@ alt/us_backfill.py — 美股建库（mode="list" 专用入口）
   python -m alt.us_backfill --workers 4         并发线程数（默认 4）
   python -m alt.us_backfill --status            查看进度
 """
-import os
-import sys
-import io as _io
-import time
-import socket
 import argparse
+import os
+import socket
+import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 
-from config_alt import alt_table_dir, assert_writable
-from common.paths import ensure_dir
-from alt import spec as spec_mod
 from alt import io as alt_io
+from alt import spec as spec_mod
 from alt.backfill import AltCheckpoint
+from alt.config import alt_table_dir, assert_writable
+from common.paths import ensure_dir
 
 UNIVERSE = "us_universe"
 DAILY = "us_daily_qfq"
@@ -276,7 +274,7 @@ def build_daily(symbols, workers=4, rebuild=False, verbose=True, limit=None, del
             return
         syms_in_buf = [s for s, _ in buf]
         raw = pd.concat([d for _, d in buf], ignore_index=True)
-        norm, warns = alt_io.normalize(raw, sp)
+        norm, _warns = alt_io.normalize(raw, sp)
         res = alt_io.save(norm, sp)
         if not res.get("ok"):
             _log(f"  ✗ 落盘失败: {res.get('errors')}")
@@ -327,7 +325,7 @@ def build_daily(symbols, workers=4, rebuild=False, verbose=True, limit=None, del
              f"失败 {stat['fail']} | 拉取 {stat['rows']:,} 行 | "
              f"落盘新增 {stat['added']:,} 行 | 耗时 {el/60:.1f} 分钟")
         if errs:
-            _log(f"  失败/异常样例（前 8 条）:")
+            _log("  失败/异常样例（前 8 条）:")
             for e in errs[:8]:
                 _log(f"      {e}")
     stat["errors"] = errs
@@ -388,9 +386,10 @@ def show_status():
     ckpt = AltCheckpoint()
     for name in (UNIVERSE, DAILY):
         try:
-            sp = spec_mod.get(name)
+            spec_mod.get(name)   # 存在性探测（原 sp 赋值未使用；保留守卫）
         except KeyError:
-            _log(f"  {name}: 未登记"); continue
+            _log(f"  {name}: 未登记")
+            continue
         d = alt_table_dir(name)
         files = []
         if os.path.isdir(d):
@@ -436,21 +435,28 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     if args.status:
-        _log("=" * 70); _log("  美股建库状态"); _log("=" * 70)
-        show_status(); return 0
+        _log("=" * 70)
+        _log("  美股建库状态")
+        _log("=" * 70)
+        show_status()
+        return 0
 
     if args.prune_ckpt:
-        _log("=" * 70); _log("  清理断点虚记"); _log("=" * 70)
-        prune_checkpoint(); return 0
+        _log("=" * 70)
+        _log("  清理断点虚记")
+        _log("=" * 70)
+        prune_checkpoint()
+        return 0
 
     # 写入守卫自检（fail-fast）
     for t in (UNIVERSE, DAILY):
         sp = spec_mod.get(t)
         assert_writable(alt_io.table_path(sp, req_date="20260101"))
-    _log(f"[守卫] 写入区自检通过（目标均在 alt 授权区）")
+    _log("[守卫] 写入区自检通过（目标均在 alt 授权区）")
 
     if args.universe:
-        build_universe(); return 0
+        build_universe()
+        return 0
 
     if args.universe_from_cache:
         build_universe_from_cache(args.universe_from_cache)
@@ -471,7 +477,7 @@ def main(argv=None):
     if not args.limit and not args.yes:
         _log(f"\n⚠ 全量建库预计 {est:.0f} 分钟（{len(symbols):,} 只 / {args.workers} 线程）")
         _log(f"  数据量约 1.16 亿行 / ~1 GB，写入 alt 库: {alt_table_dir(DAILY)}")
-        _log(f"  开始？ Ctrl+C 可中断，断点续跑")
+        _log("  开始？ Ctrl+C 可中断，断点续跑")
         try:
             input("  回车继续 > ")
         except EOFError:
@@ -479,7 +485,8 @@ def main(argv=None):
 
     build_daily(symbols, workers=args.workers, rebuild=args.rebuild,
                 limit=args.limit, delay=args.delay)
-    _log("\n[状态]"); show_status()
+    _log("\n[状态]")
+    show_status()
     return 0
 
 

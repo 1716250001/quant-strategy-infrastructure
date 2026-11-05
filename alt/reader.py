@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 alt/reader.py — alt 库读取与【与主库联查】
 ==========================================
@@ -28,13 +28,12 @@ alt/reader.py — alt 库读取与【与主库联查】
 """
 import os
 import warnings
-from typing import Optional
 
 import pandas as pd
 
-from common.reader import read_code, read_range, detect_layout, latest_date
-from config_alt import ALT_DATA_DIR, TS_DATA_DIR
 from alt import spec as sp_mod
+from alt.config import ALT_DATA_DIR, TS_DATA_DIR
+from common.reader import latest_date, read_code, read_range
 
 
 # ============================================================
@@ -53,7 +52,7 @@ def _date_col_of(table: str, fallback: str = "date") -> str:
 
 
 def read_alt(table: str, columns=None, start_date=None, end_date=None,
-             date_col: Optional[str] = None):
+             date_col: str | None = None):
     """读 alt 库某表（布局无关）。
 
     日期列默认取 spec 中的定义；未登记的表按 'date' 处理。
@@ -97,9 +96,9 @@ def _median_gap_days(df: pd.DataFrame, col: str):
 
 
 def join_main(left: pd.DataFrame, right: pd.DataFrame,
-              on: Optional[str] = None, how: str = "left",
-              left_date: Optional[str] = None, right_date: Optional[str] = None,
-              tolerance_days: Optional[int] = None,
+              on: str | None = None, how: str = "left",
+              left_date: str | None = None, right_date: str | None = None,
+              tolerance_days: int | None = None,
               warn_min_match: float = 0.5):
     """把 alt 库数据与主库数据按日期联查。
 
@@ -148,27 +147,27 @@ def join_main(left: pd.DataFrame, right: pd.DataFrame,
     if rc not in right.columns:
         raise KeyError(f"右侧缺少日期列 '{rc}'（实际: {list(right.columns)[:10]}）")
 
-    L = left.copy()
-    R = right.copy()
+    left_df = left.copy()
+    right_df = right.copy()
 
     # ---------- 精确匹配 ----------
     if tolerance_days is None:
         if lc != rc:
-            R = R.rename(columns={rc: lc})
-        out = pd.merge(L, R, on=lc, how=how, suffixes=("", "_m"))
+            right_df = right_df.rename(columns={rc: lc})
+        out = pd.merge(left_df, right_df, on=lc, how=how, suffixes=("", "_m"))
 
         # 低匹配率告警（坑 ①）
-        if warn_min_match and how in ("left", "outer") and len(L):
-            matched = int(L[lc].isin(set(R[lc])).sum())
-            rate = matched / len(L)
+        if warn_min_match and how in ("left", "outer") and len(left_df):
+            matched = int(left_df[lc].isin(set(right_df[lc])).sum())
+            rate = matched / len(left_df)
             if rate < warn_min_match:
                 warnings.warn(
-                    f"联查匹配率偏低：{matched}/{len(L)} = {rate*100:.1f}% "
+                    f"联查匹配率偏低：{matched}/{len(left_df)} = {rate*100:.1f}% "
                     f"（阈值 {warn_min_match*100:.0f}%）。\n"
-                    f"    结果有 {len(L)-matched} 行右侧全为 NaN —— "
+                    f"    结果有 {len(left_df)-matched} 行右侧全为 NaN —— "
                     f"两层数据的日期范围可能不重叠。\n"
                     f"    检查：左侧 {lc} 范围 "
-                    f"{L[lc].min()}~{L[lc].max()} vs "
+                    f"{left_df[lc].min()}~{left_df[lc].max()} vs "
                     f"右侧 {rc} 范围 {right[rc].min()}~{right[rc].max()}；\n"
                     f"    若确实只要重叠部分，用 how='inner'（本次将返回 {matched} 行）。",
                     stacklevel=2)
@@ -176,24 +175,24 @@ def join_main(left: pd.DataFrame, right: pd.DataFrame,
 
     # ---------- 容差匹配（把低频数据填到高频上）----------
     # 方向自动识别（坑 ②）：密集的一侧作为 left（高频序列，结果保留其行数与日期列名）
-    gl = _median_gap_days(L, lc)
-    gr = _median_gap_days(R, rc)
+    gl = _median_gap_days(left_df, lc)
+    gr = _median_gap_days(right_df, rc)
     if gl is not None and gr is not None and gl > gr:
         warnings.warn(
             f"容差匹配方向已自动校正：左侧中位间隔 {gl:.0f} 天 > 右侧 {gr:.0f} 天，"
             f"即左侧更稀疏。\n"
             f"    已交换两侧，使**高频序列**作为结果主体"
-            f"（预期行数 {len(R)}，日期列名保留 '{rc}'）。\n"
+            f"（预期行数 {len(right_df)}，日期列名保留 '{rc}'）。\n"
             f"    若不希望自动校正，请显式调换传参顺序。",
             stacklevel=2)
-        L, R = R, L
+        left_df, right_df = right_df, left_df
         lc, rc = rc, lc
 
-    L["_dt"] = _to_dt(L[lc])
-    R["_dt"] = _to_dt(R[rc])
-    L = L.dropna(subset=["_dt"]).sort_values("_dt")
-    R = R.dropna(subset=["_dt"]).sort_values("_dt")
-    out = pd.merge_asof(L, R, on="_dt", direction="backward",
+    left_df["_dt"] = _to_dt(left_df[lc])
+    right_df["_dt"] = _to_dt(right_df[rc])
+    left_df = left_df.dropna(subset=["_dt"]).sort_values("_dt")
+    right_df = right_df.dropna(subset=["_dt"]).sort_values("_dt")
+    out = pd.merge_asof(left_df, right_df, on="_dt", direction="backward",
                         tolerance=pd.Timedelta(days=tolerance_days),
                         suffixes=("", "_m"))
     return out.drop(columns=["_dt"])
@@ -285,7 +284,7 @@ def expand_qfq_factor(symbol: str, *, with_price: bool = True,
 
 
 def expand_us_qfq_factor(symbol: str, *, with_price: bool = True,
-                          asof: bool = True, root: str = None) -> pd.DataFrame:
+                          asof: bool = True, root: str | None = None) -> pd.DataFrame:
     """`us_qfq_factor`（事件级）→ 逐日乘数序列；**美股复权的唯一入口**。
 
     与港股 `expand_qfq_factor` 同构：骨架∪ + ffill ≡ asof backward。
@@ -429,7 +428,7 @@ def status(verbose=True):
             if dc in df.columns and rows:
                 s = df[dc].astype(str)
                 dr = f"{s.min()} ~ {s.max()}"
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             rows, dr = -1, f"读取失败: {type(e).__name__}"
         rec = {"table": name, "files": len(files), "rows": rows,
                "date_range": dr, "date_col": dc}
@@ -445,8 +444,8 @@ def status(verbose=True):
     return out
 
 
-def compare_with_main(table: str, main_table: Optional[str] = None,
-                      date_col: Optional[str] = None):
+def compare_with_main(table: str, main_table: str | None = None,
+                      date_col: str | None = None):
     """对比 alt 表与主库同名/对应表的最新日期（用于判断谁更新）。
 
     仅做日期维度对比，不读取全量数据。

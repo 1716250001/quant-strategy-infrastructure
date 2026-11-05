@@ -27,10 +27,9 @@ import os
 import sys
 from datetime import datetime
 
-from config import MARKET_DATA_DIR, BACKFILL_TARGETS, DAILY_UPDATE_EXTRA
 from common import reader
 from common.calendar import open_dates
-
+from config import MARKET_DATA_DIR
 
 # 核心表（日常最常看）
 CORE_TABLES = [
@@ -81,8 +80,8 @@ def _latest(table):
     if not files:
         return None
     try:
-        import pyarrow.parquet as pq
         import pandas as pd
+        import pyarrow.parquet as pq
         names = list(pq.ParquetFile(os.path.join(dd, files[-1])).schema_arrow.names)
         col = next((c for c in ([dc] if dc else []) + list(_DATE_FALLBACK)
                     if c in names), None)
@@ -145,13 +144,13 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
 
     if as_json:
         from common.jsonio import print_json
-        n_stale = sum(1 for _, d, l in rows if l is not None and l > 3)
+        n_stale = sum(1 for _, d, lagv in rows if lagv is not None and lagv > 3)
         print_json({
             "base": base,
             "n_tables": len(rows),
             "n_stale": n_stale,
-            "tables": [{"table": n, "latest": (str(dt) if dt else None), "lag": l}
-                       for n, dt, l in rows],
+            "tables": [{"table": n, "latest": (str(dt) if dt else None), "lag": lagv}
+                       for n, dt, lagv in rows],
         }, indent=1)
         return rows
 
@@ -173,9 +172,9 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
                 st = f"· 差{lag}天"
             else:
                 st = f"⚠ 差{lag}天（偏旧）"
-            print(f"  {n:18s} {str(dt):>10s} {lag:6d}  {st}")
+            print(f"  {n:18s} {dt!s:>10s} {lag:6d}  {st}")
         print("-" * 88)
-        n_stale = sum(1 for _, d, l in rows if l is not None and l > 3)
+        n_stale = sum(1 for _, d, lagv in rows if lagv is not None and lagv > 3)
         print(f"  共 {len(rows)} 张表" +
               (f"，其中 {n_stale} 张偏旧（>3 个交易日）" if n_stale else "，全部新鲜"))
     return rows
@@ -240,7 +239,7 @@ def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True,
         n = min(int(rows or 10), len(df))
         print_json({
             "table": table, "code": code, "date": date,
-            "rows": int(len(df)),
+            "rows": len(df),
             "columns": [str(c) for c in df.columns],
             "data": df.tail(n).to_dict(orient="records"),
             "date_col": dc,

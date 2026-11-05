@@ -30,8 +30,10 @@ import sys
 import pandas as pd
 import pyarrow.parquet as pq
 
-MARKET_DATA_DIR = os.environ.get("MARKET_DATA_DIR", r"D:\全量数据\market_data")
-HOLDINGS_FP = r"D:\量化策略\赤潮\rules\current-holdings.md"
+import config
+
+MARKET_DATA_DIR = config.MARKET_DATA_DIR
+HOLDINGS_FP = os.path.join(config.PROJECT_DIR, "赤潮", "rules", "current-holdings.md")
 
 # 次新判定：起始日在该天数内的标的视为次新（起始=上市日即完备，需人工确认上市日）
 RECENT_DAYS = 550
@@ -83,8 +85,8 @@ def _classify(table, code, name, min_rows, kind="normal"):
 def load_consumers():
     """组装消费清单 [(table, code, name, min_rows, kind), ...]。"""
     items = []
-    sys.path.insert(0, r"D:\量化策略\代码")
-    from strategies.qidian import QIDIAN_POOL, XAU_WATCHLIST
+    sys.path.insert(0, config.CODE_DIR)
+    from tools.consumer_pool import QIDIAN_POOL, XAU_WATCHLIST
 
     # 1) A2 池
     for etf, info in QIDIAN_POOL.items():
@@ -105,7 +107,7 @@ def load_consumers():
 
     # 3) 转债温度计（wind，INFO 口径）
     try:
-        from strategies.qidian_daily_scan import WIND_CB_THERMOMETER
+        from tools.consumer_pool import WIND_CB_THERMOMETER
         for c, info in WIND_CB_THERMOMETER.items():
             items.append(("wind_index", c, info["name"], 0, "wind"))
     except Exception:

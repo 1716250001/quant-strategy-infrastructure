@@ -19,6 +19,7 @@ indicators.py — 三层金字塔轮动策略 · 技术指标库
 
 import numpy as np
 
+
 # ============================================================
 # 涨跌幅
 # ============================================================
@@ -159,12 +160,18 @@ def composite_beta_to_status(b):
     """composite_beta → 共振状态描述 (±10量级)"""
     if b is None:
         return "未知"
-    if b >= 6:  return "强势共振"
-    if b >= 3:  return "偏多共振"
-    if b >= 1:  return "中性偏多"
-    if b >= -1: return "中性"
-    if b >= -3: return "偏空共振"
-    if b >= -6: return "偏空共振"
+    if b >= 6:
+        return "强势共振"
+    if b >= 3:
+        return "偏多共振"
+    if b >= 1:
+        return "中性偏多"
+    if b >= -1:
+        return "中性"
+    if b >= -3:
+        return "偏空共振"
+    if b >= -6:
+        return "偏空共振"
     return "弱势共振"
 
 
@@ -172,12 +179,18 @@ def composite_beta_to_position(b):
     """composite_beta → 建议仓位 (字符串, ±10量级)"""
     if b is None:
         return "中性90%"
-    if b >= 6:  return "115%"
-    if b >= 3:  return "105%"
-    if b >= 1:  return "95%"
-    if b >= -1: return "90%"
-    if b >= -3: return "75%（禁止开新仓）"
-    if b >= -6: return "55%（禁止开新仓）"
+    if b >= 6:
+        return "115%"
+    if b >= 3:
+        return "105%"
+    if b >= 1:
+        return "95%"
+    if b >= -1:
+        return "90%"
+    if b >= -3:
+        return "75%（禁止开新仓）"
+    if b >= -6:
+        return "55%（禁止开新仓）"
     return "≤40%（生存模式）"
 
 

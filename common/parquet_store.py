@@ -105,8 +105,8 @@ def _fsync_warn_once(path, err):
     if _FSYNC_WARNED:
         return
     _FSYNC_WARNED = True
-    print("[WARN] fsync 降级: %s errno=%s（本进程仅提示一次）"
-          % (os.path.basename(str(path)), getattr(err, "errno", "?")))
+    print(f"[WARN] fsync 降级: {os.path.basename(str(path))} "
+          f"errno={getattr(err, 'errno', '?')}（本进程仅提示一次）")
 
 
 def _fsync_file(path):
@@ -207,7 +207,7 @@ def _atomic_write_parquet(df, path, schema=None):
     schema 参数（2026-10-11）: 传入既有文件的 arrow schema 时按其对
     列序/类型落盘（防跨分区漂移，见 `_write_aligned`）。
     """
-    tmp = "%s.tmp" % path
+    tmp = f"{path}.tmp"
     if schema is None or not _write_aligned(df, tmp, schema):
         df.to_parquet(tmp, index=False)
     _fsync_file(tmp)                # E-05: 数据先落盘，再换名

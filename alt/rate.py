@@ -16,14 +16,13 @@ alt/rate.py — akshare 专用限流与风控退避
 """
 import threading
 import time
-from datetime import datetime
 
-from config_alt import (
+from alt.config import (
     ALT_BACKOFF_STEPS,
     ALT_MAX_RETRY,
     ALT_SILENCE_ON_BLOCK,
-    rate_for_url,
     host_tier,
+    rate_for_url,
 )
 
 # 瞬态错误的短退避秒数（RE1-1b）：第 n 次重试等待 n × 本值（2s / 4s）
@@ -174,14 +173,12 @@ class AltRateLimiter:
         self.stats["requests"] += 1
 
         for attempt in range(1, ALT_MAX_RETRY + 1):
-            wait_s = self.wait(url)
-            t0 = time.time()
+            self.wait(url)   # 限流等待（原赋值 wait_s 未被使用，保留调用本身）
             try:
                 result = fn()
                 self.stats["success"] += 1
                 return result, True, ""
-            except Exception as e:  # noqa: BLE001
-                cost = time.time() - t0
+            except Exception as e:
                 blocked = is_block_error(e)
                 transient = is_transient_error(e)
 
