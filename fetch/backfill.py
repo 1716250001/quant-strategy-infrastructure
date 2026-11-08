@@ -187,6 +187,30 @@ def _concat_pages(chunks):
     return out.drop_duplicates().reset_index(drop=True)
 
 
+def _dedup_by_key(df, key, sort_col=None):
+    """按 per-table 白名单 `dedup_key` 去重单次拉取结果（未配置 ⇒ 原样返回）。
+
+    为什么要它（2026-11-08 CC-FIX-2R R6-Final）:
+      stk_weekly_monthly / stk_week_month_adj 的同一 (ts_code, trade_date)
+      在**重复拉取**时会返回 end_date 不同的同一行 —— end_date 是"该次查询的
+      数据截止日"，不是业务字段。而 subset="*" 的全列判重认不出这种差异 ⇒
+      每重拉一次就多固化一份。实证 2026.parquet 累积 5,569 组重复
+      （trade_date=20261030 被三次拉取写成 end_date=20261030/20261102/20261103）。
+
+    口径:
+      - 仅对**配置了 dedup_key** 的表生效（当前两张周月线），其余表零影响
+      - 配了 dedup_sort 的表（adj）按该列**降序取首**（= 保留 end_date 最大）
+      - 键列缺失 ⇒ 原样返回（写入侧 upsert_by_year 会 fail-closed 上报）
+    """
+    if df is None or len(df) == 0 or not key:
+        return df
+    if any(c not in df.columns for c in key):
+        return df
+    if sort_col and sort_col in df.columns:
+        df = df.sort_values(sort_col, ascending=False, kind="stable")
+    return df.drop_duplicates(subset=list(key), keep="first").reset_index(drop=True)
+
+
 
 def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=False):
     """计算待跑任务清单（pending）与跳过数。
@@ -374,6 +398,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                     print(f"  [ERROR] {name} {key} 写文件失败，不记断点: {str(e)[:70]}")
                 else:
                     cp.mark_done(name, str(key))
+                    cp.mark_fetched(name)      # F3/R10：表级最近成功写入时间
         elif ok:
             # 调用成功但无数据（EE-FUND-4 G3 三级语义）:
             # - codes-file 模式（§25 R4）：**不记断点**——逐码重拉场景下空返回
@@ -422,6 +447,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             print(f"    {name} → {n} 行已保存")
         # 调用成功（含"确实返空"）才记断点
         cp.mark_done(name, "once")
+        cp.mark_fetched(name)                  # F3/R10：表级最近成功写入时间
         cp.save()
         return {"name": name, "est": est, "done": n}
 
@@ -649,11 +675,16 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         meta = {}              # {日期: (页数, 是否触顶)}
         meta_lock = threading.Lock()
         flush_conf = BACKFILL_FLUSH_CONF.get(conf["api"], BACKFILL_FLUSH_DEFAULT)
+        # R6-Final（2026-11-08）：per-table 白名单。配了 dedup_key 的表按业务键
+        # 落盘（替代 subset="*" 的全列判重，能吸收 end_date 变化导致的"伪新行"）；
+        # 未配的表 subset/sort_by 与改前逐字一致。
+        dedup_key = conf.get("dedup_key")
+        dedup_sort = conf.get("dedup_sort")
 
         writer = YearBatchWriter(
             target_dir,
             date_col=dc,
-            subset=conf.get("subset") or "*",
+            subset=dedup_key or (conf.get("subset") or "*"),
             sort_by=dc,
             flush_days=flush_conf.get("days", 20),
             flush_rows=flush_conf.get("rows", 500_000),
@@ -732,6 +763,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 if df.empty:
                     cp.mark_done(name, dt)
                 else:
+                    # R6-Final：白名单表按业务键去重（adj 保留 end_date 最大行）
+                    df = _dedup_by_key(df, dedup_key, dedup_sort)
                     writer.add(df, dt)       # 累积; 内部 flush 成功后才记断点
             done_ct["n"] += 1
 

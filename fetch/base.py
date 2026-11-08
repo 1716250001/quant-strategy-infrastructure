@@ -338,6 +338,17 @@ class Checkpoint:
             if ts_code not in self.data[api_name]["completed"]:
                 self.data[api_name]["completed"].append(ts_code)
 
+    def mark_fetched(self, api_name):
+        """记录该 API（表）最近一次成功写入的时间戳。
+
+        F3/R10（2026-11-08）：只**新增** `last_fetch` 键，`completed` 结构与
+        语义一字不动；旧断点文件无此键照常读（读取侧不依赖它）。
+        """
+        with self._lock:
+            rec = self.data.setdefault(api_name, {"completed": []})
+            rec.setdefault("completed", [])
+            rec["last_fetch"] = datetime.now().isoformat(timespec="seconds")
+
     def get_completed_count(self, api_name):
         """获取某API已完成数量"""
         with self._lock:

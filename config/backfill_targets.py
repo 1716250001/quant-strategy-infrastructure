@@ -765,6 +765,7 @@ BACKFILL_TARGETS = OrderedDict([
         "freq": "week", "week_anchor": "friday", "max_rows": 0, "tier": "B",
         "start": "20160101",
         "subset": "*",
+        "dedup_key": ["ts_code", "trade_date"],
         "note": "⚠ freq 必须写小写 'week'/'month' —— 传 'W' 会**静默返0行**(实测); "
                 "⚠ week_anchor=friday: 本接口 trade_date 恒为**该周周五**(非最后交易日), "
                 "实证端午周=20160610/跨年周=20260102/春节周=20170127; 误用 last_trade "
@@ -775,6 +776,8 @@ BACKFILL_TARGETS = OrderedDict([
         "freq": "week", "week_anchor": "friday", "max_rows": 0, "tier": "B",
         "start": "20160101",
         "subset": "*",
+        "dedup_key": ["ts_code", "trade_date"],
+        "dedup_sort": "end_date",
         "note": "⚠ 同上(freq=week, week_anchor=friday); 含复权因子字段",
     }),
     ("fut_weekly_monthly", {

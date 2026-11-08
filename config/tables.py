@@ -122,7 +122,11 @@ SOURCE_START_BASELINE = {
     "index_monthly":    "19910731",
     "dividend":         "19901231",
     "stk_managers":     "19890201",
-    "stk_holdernumber": "19000908",
+    # 19000908 → 19920113（2026-11-08 R10/F2）：原基线来自 1900.parquet 的
+    # 3 行垃圾（end_date 全空，源端脏记录），已归档至
+    # 备份/归档文件/marketdata-f2-cleanup-20261108/。剔后实测最小 end_date
+    # = 19920113（21 行真实历史）。**只改基线值，判据方向与强度不变**。
+    "stk_holdernumber": "19920113",
     "stk_holdertrade":  "19940810",
     "stk_rewards":      "19920526",
     "pledge_stat":      "20140307",
@@ -248,17 +252,21 @@ DB_AUDIT_PKEYS = {
     "fund_adj":         ["ts_code", "trade_date"],
     "fund_share":       ["ts_code", "trade_date"],
     "fx_daily":         ["ts_code", "trade_date"],
-    "stk_holdernumber": ["ts_code", "end_date"],
+    # R9a：stk_holdernumber 补 ann_date（同报告期可多次公告）；stk_holdertrade 不改键
+    #   —— 同日多笔属合法多行（不同 holder_name/变动量），键已含 holder_name。
+    "stk_holdernumber": ["ts_code", "end_date", "ann_date"],
     "stk_holdertrade":  ["ts_code", "ann_date", "holder_name"],
     "pledge_stat":      ["ts_code", "end_date"],
-    "share_float":      ["ts_code", "float_date", "holder_name"],
+    # R9a：share_float 补 ann_date（同 float_date+holder_name 可多次公告）
+    "share_float":      ["ts_code", "float_date", "holder_name", "ann_date"],
     "repurchase":       ["ts_code", "ann_date", "proc"],
     "namechange":       ["ts_code", "start_date"],
     "fina_mainbz":      ["ts_code", "end_date", "bz_item"],
     "fina_audit":       ["ts_code", "end_date"],
     "stock_company":    ["ts_code"],
     "cb_issue":         ["ts_code"],
-    "cb_share":         ["ts_code", "publish_date"],
+    # R9a：cb_share 补 end_date（同公告日可含多个报告期）
+    "cb_share":         ["ts_code", "publish_date", "end_date"],
     "cb_rating":        ["ts_code", "rating_date"],
     "new_share":        ["ts_code"],
     "broker_recommend": None,
@@ -285,6 +293,7 @@ DB_AUDIT_PKEYS = {
     "hk_tradecal":      ["cal_date"],
     "stk_managers":     ["ts_code", "ann_date", "name", "title"],
     "express":          ["ts_code", "ann_date", "end_date"],
+    # R9a：**不改键** —— 同日多笔质押属合法多行（不同 holder_name/质押量）
     "pledge_detail":    ["ts_code", "ann_date", "holder_name", "pledge_amount"],
     "weekly":           ["ts_code", "trade_date"],
     "monthly":          ["ts_code", "trade_date"],
@@ -337,9 +346,12 @@ DB_AUDIT_PKEYS = {
     "adj_factor":       ["ts_code", "trade_date"],
     "stk_limit":        ["ts_code", "trade_date"],
     "fund_nav":         ["ts_code", "nav_date"],
-    "income":           ["ts_code", "end_date", "report_type"],
-    "balancesheet":     ["ts_code", "end_date", "report_type"],
-    "cashflow":         ["ts_code", "end_date", "report_type"],
+    # R9a（2026-11-08）：财报三表补 update_flag —— 同一 (ts_code,end_date,report_type)
+    #   存在 update_flag=1/2 的多版本行（更正前/更正后），属业务多行而非重复。
+    #   只改审计判重口径，写入端不动。
+    "income":           ["ts_code", "end_date", "report_type", "update_flag"],
+    "balancesheet":     ["ts_code", "end_date", "report_type", "update_flag"],
+    "cashflow":         ["ts_code", "end_date", "report_type", "update_flag"],
     "fina_indicator":   ["ts_code", "end_date"],
     # ---- 2026-09-19 接口审查补充 ----
     # 判重口径遵循项目"二分"原则（真重复 vs 业务多行），全部用复合键或全列：
@@ -348,8 +360,9 @@ DB_AUDIT_PKEYS = {
     "top10_holders":       ["ts_code", "end_date", "holder_name"],
     "top10_floatholders":  ["ts_code", "end_date", "holder_name"],
     "index_classify":      ["index_code"],
-    "stk_weekly_monthly":  ["ts_code", "trade_date"],
-    "stk_week_month_adj":  ["ts_code", "trade_date"],
+    # R9a：补 freq —— 同一 trade_date 下周线/月线两套行并存属业务多行
+    "stk_weekly_monthly":  ["ts_code", "trade_date", "freq"],
+    "stk_week_month_adj":  ["ts_code", "trade_date", "freq"],
     "fut_weekly_monthly":  ["ts_code", "trade_date"],
     "shibor_lpr":          ["date"],
     "cn_schedule":         None,   # 日程表，无天然主键，跳过判重

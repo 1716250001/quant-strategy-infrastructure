@@ -205,6 +205,19 @@ def _add_ckpt_args(p):
     _add_json(p, help_text="输出结果 JSON（含明细；不打印横幅）")
     p.set_defaults(func=cmd_ckpt)
 
+def cmd_db_freshness(args):
+    """表级数据新鲜度（默认只读恒 exit 0；--strict 有红/黄才非零）"""
+    from tools.db.freshness import run
+    only = {x.strip() for x in args.only.split(",")} if getattr(args, "only", None) else None
+    raise SystemExit(run(only=only, as_json=getattr(args, "json", False),
+                         strict=getattr(args, "strict", False)))
+
+def _add_db_freshness_args(p):
+    p.add_argument("--only", default=None, help="只看指定表, 逗号分隔")
+    p.add_argument("--strict", action="store_true", help="存在红/黄表时 exit 1")
+    _add_json(p, help_text="输出新鲜度 JSON（不打印表格）")
+    p.set_defaults(func=cmd_db_freshness)
+
 def _add_db_migrate_args(p):
     p.add_argument("--tables", default=None, help="指定表, 逗号分隔")
     p.add_argument("--all", action="store_true", help="迁移全部待迁移表")
@@ -220,5 +233,6 @@ _DB_FAMILY = (
     ("schema", "db-schema", _add_db_schema_args, "数据库结构扫描（输出机器可读 schema JSON）"),
     ("report", "db-report", _add_db_report_args, "数据库结构报告（从 schema JSON 生成 Markdown）"),
     ("migrate", "db-migrate", _add_db_migrate_args, "存储布局迁移（by_code → by_year）"),
+    ("freshness", "db-freshness", _add_db_freshness_args, "表级数据新鲜度（只读，恒 exit 0）"),
     ("ckpt", "ckpt", _add_ckpt_args, "断点管理（查看/交叉核对/回填/清虚记）"),
 )

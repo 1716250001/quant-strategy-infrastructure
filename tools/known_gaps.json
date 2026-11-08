@@ -36,7 +36,6 @@
       "158016.SZ",
       "158060.SZ",
       "158070.SZ",
-      "158076.SZ",
       "158087.SZ",
       "158088.SZ",
       "158091.SZ",
@@ -137,7 +136,6 @@
       "506009.SH",
       "508038.SH",
       "508047.SH",
-      "508081.SH",
       "508605.SH",
       "508606.SH",
       "508610.SH",
@@ -1603,11 +1601,6 @@
         "probe_date": "20261104",
         "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
       },
-      "158076.SZ": {
-        "probe_rows": 0,
-        "probe_date": "20261104",
-        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
-      },
       "158901.SZ": {
         "probe_rows": 0,
         "probe_date": "20261104",
@@ -1624,11 +1617,6 @@
         "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
       },
       "180107.SZ": {
-        "probe_rows": 0,
-        "probe_date": "20261104",
-        "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
-      },
-      "508081.SH": {
         "probe_rows": 0,
         "probe_date": "20261104",
         "probe_source": "tushare fund_daily(ts_code=X)（F5 逐对探针 20261104）"
@@ -1843,7 +1831,6 @@
       "158088.SZ",
       "158091.SZ",
       "158903.SZ",
-      "158906.SZ",
       "158909.SZ",
       "159319.SZ",
       "159585.SZ",
@@ -2187,11 +2174,6 @@
         "probe_date": "20261104",
         "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
       },
-      "158906.SZ": {
-        "probe_rows": 0,
-        "probe_date": "20261104",
-        "probe_source": "tushare fund_nav(ts_code=X)（F5 逐对探针 20261104）"
-      },
       "158909.SZ": {
         "probe_rows": 0,
         "probe_date": "20261104",
@@ -2313,7 +2295,6 @@
       "158016.SZ",
       "158060.SZ",
       "158070.SZ",
-      "158076.SZ",
       "158087.SZ",
       "158088.SZ",
       "158091.SZ",
@@ -2422,7 +2403,6 @@
       "506009.SH",
       "508038.SH",
       "508047.SH",
-      "508081.SH",
       "508605.SH",
       "508606.SH",
       "508610.SH",
@@ -2465,7 +2445,7 @@
       "589610.SH",
       "589670.SH"
     ],
-    "source_empty_count": 180,
+    "source_empty_count": 178,
     "source_empty_evidence_new": {
       "161022.SZ": {
         "name": "富国创业板指数-A",
@@ -5203,11 +5183,6 @@
         "probe_date": "20261104",
         "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
       },
-      "158076.SZ": {
-        "probe_rows": 0,
-        "probe_date": "20261104",
-        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
-      },
       "158901.SZ": {
         "probe_rows": 0,
         "probe_date": "20261104",
@@ -5224,11 +5199,6 @@
         "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
       },
       "180107.SZ": {
-        "probe_rows": 0,
-        "probe_date": "20261104",
-        "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"
-      },
-      "508081.SH": {
         "probe_rows": 0,
         "probe_date": "20261104",
         "probe_source": "tushare fund_adj(ts_code=X)（F5 逐对探针 20261104）"

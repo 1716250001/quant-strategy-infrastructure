@@ -91,6 +91,24 @@ class AltCheckpoint:
             json.dump(self.data, f, ensure_ascii=False, indent=1)
         os.replace(tmp, self.path)          # 原子写
 
+    def mark_attempt(self, table):
+        """记录该表最近一次**尝试**时间（被跳过、空返回也记）。
+
+        F3/R10（2026-11-08）：与 `updated`（仅成功写入时刷新）、`done`（完成度）
+        三权分立；只新增 `last_attempt` 键，`done: ["__all__"]` 跳过语义不动。
+        """
+        if self.dry_run:
+            return
+        rec = self.data.setdefault(table, {"done": []})
+        rec.setdefault("done", [])
+        rec["last_attempt"] = datetime.now().isoformat(timespec="seconds")
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        assert_writable(self.path)
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, self.path)
+
     def progress(self, tables):
         """返回 (已完成表数, 总表数)"""
         done = sum(1 for t in tables if self.is_done(t))
@@ -714,6 +732,7 @@ def run(tier=None, only=None, dry_run=False, force=False, limit=None,
 
     with guard:
         for i, sp in enumerate(specs, 1):
+            ckpt.mark_attempt(sp.name)      # F3/R10：跳过/空返回也记"最近尝试"
             dates = _backfill_dates(sp, tdate)
             print(f"\n[{i}/{len(specs)}] {sp.name}  (tier={sp.tier}, layout={sp.layout}, "
                   f"mode={sp.mode}) — {sp.note}")

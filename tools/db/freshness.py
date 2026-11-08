@@ -1,0 +1,261 @@
+# -*- coding: utf-8 -*-
+"""tools/db/freshness.py — 表级数据新鲜度报告（F4/R10，2026-11-08）
+
+回答一个问题：**"数据到哪天" vs "源端到底有没有更新的"**。
+
+双条件（§345 教训：内容日期 ≠ 新鲜度）
+--------------------------------------
+    ds = 今天 − 内容最新日期（读 parquet 日期列）
+    dw = 今天 − 文件最新 mtime（读目录里最新 parquet 的写入时间）
+**dw ≤ 7 直接绿**：刚写过、源端就这些（财报/宏观发布滞后属常态）。
+
+分档阈值
+--------
+    日更表（DAILY_UPDATE_GROUPS ∪ DAILY_UPDATE_EXTRA）
+        黄：ds > 7  且 dw > 7      红：ds > 30 且 dw > 30
+    仅回补表
+        黄：ds > 60 且 dw > 30     红：ds > 180 且 dw > 30
+    alt 表：尊重 spec.max_age_days（金=正常，黄/红按 1x/3x 阈值）
+
+硬约束（CC-FIX-2R Step4）
+-------------------------
+1. **只读**：不写数据文件、不写断点、不建目录。
+2. **恒 exit 0**；仅 `--strict` 时发现红/黄才非零。
+3. 断点缺时间戳（F3 之前的旧文件）→ 显示"未知"，不算错、不改配置"修绿"。
+
+用法
+----
+    python main.py db freshness                 # 全部表
+    python main.py db freshness --only daily    # 只看几张（逗号分隔）
+    python main.py db freshness --json          # 机器可读
+    python main.py db freshness --strict        # 有红/黄时 exit 1
+"""
+import glob
+import json
+import os
+import time
+from datetime import date, datetime
+
+import pandas as pd
+import pyarrow.parquet as pq
+
+from config import MARKET_DATA_DIR
+from config.backfill_targets import BACKFILL_TARGETS
+from config.daily import DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS
+from config.tables import TABLE_DATE_COL
+
+# alt 断点文件（只读，不导入 alt 包以免触发写入守卫初始化）
+ALT_CKPT = os.path.join(os.path.dirname(MARKET_DATA_DIR), "alt_data", ".alt_checkpoint.json")
+MKT_CKPT = os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
+
+_PARTITION_SAMPLE = 3
+_DATE_COL_CANDIDATES = ("trade_date", "ann_date", "end_date", "date", "month", "cal_date")
+
+# 日更表名单（两组并集）
+_DAILY_TABLES = set(DAILY_UPDATE_GROUPS) | set(DAILY_UPDATE_EXTRA)
+
+
+def _pick_date_col(table_dir, preferred):
+    """优先用权威定义；未登记则读 parquet schema 探一个日期列。"""
+    if preferred:
+        return preferred
+    files = sorted(glob.glob(os.path.join(table_dir, "*.parquet")))
+    if not files:
+        return None
+    try:
+        names = set(pq.read_schema(files[-1]).names)
+    except Exception:
+        return None
+    for c in _DATE_COL_CANDIDATES:
+        if c in names:
+            return c
+    return None
+
+
+def _to_date(v):
+    """把 20261108 / '20261108' / Timestamp 统一成 date；失败返回 None。"""
+    if v is None:
+        return None
+    s = str(v).strip()
+    if len(s) >= 10 and s[4] in "-/":
+        s = s[:10].replace("-", "").replace("/", "")
+    if not (s.isdigit() and len(s) == 8):
+        return None
+    try:
+        return datetime.strptime(s, "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def _latest_in_files(files, dc):
+    best = None
+    for f in files:
+        try:
+            s = pd.read_parquet(f, columns=[dc])[dc].dropna()
+        except Exception:
+            continue
+        if not len(s):
+            continue
+        v = str(s.max())
+        best = v if best is None else max(best, v)
+    return best
+
+
+def _as_of(table_dir, dc):
+    """返回 (最新数据日, 取样说明)。布局无关，只读少量分区。"""
+    if not os.path.isdir(table_dir):
+        return None, "目录不存在"
+    files = sorted(glob.glob(os.path.join(table_dir, "*.parquet")))
+    if not files:
+        return None, "无 parquet"
+    names = [os.path.basename(f) for f in files]
+    year_like = [n for n in names if len(n) == 12 and n[:4].isdigit()]
+    if len(year_like) == len(files):
+        picked = files[-_PARTITION_SAMPLE:]
+        return _latest_in_files(picked, dc), f"by_year 末 {len(picked)} 分区"
+    if any("." in n[:-8] for n in names):
+        picked = files[:5]
+        return _latest_in_files(picked, dc), "by_code 抽样 5 码"
+    return _latest_in_files(files[:2], dc), "single"
+
+
+def _newest_mtime(table_dir):
+    """目录内最新 parquet 的 mtime（秒）；无文件返回 None。"""
+    files = glob.glob(os.path.join(table_dir, "*.parquet"))
+    if not files:
+        return None
+    return max(os.path.getmtime(f) for f in files)
+
+
+def _days_since(ts_epoch):
+    if ts_epoch is None:
+        return None
+    return max(0, int((time.time() - ts_epoch) // 86400))
+
+
+def _load_ckpt(path):
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def _verdict(ds, dw, tier, stale_days=None):
+    """绿=正常 / 黄=关注 / 红=滞后 / 未知。dw≤7 一律绿。"""
+    if ds is None and dw is None:
+        return "未知"
+    if dw is not None and dw <= 7:
+        return "正常"
+    if tier == "alt" and stale_days:
+        if ds is None:
+            return "未知"
+        if ds > stale_days * 3:
+            return "红"
+        return "黄" if ds > stale_days else "正常"
+    if tier == "daily":
+        y_ds, y_dw, r_ds, r_dw = 7, 7, 30, 30
+    else:
+        y_ds, y_dw, r_ds, r_dw = 60, 30, 180, 30
+    if ds is None or dw is None:
+        return "未知"
+    if ds > r_ds and dw > r_dw:
+        return "红"
+    if ds > y_ds and dw > y_dw:
+        return "黄"
+    return "正常"
+
+
+def _market_rows(only=None):
+    cp = _load_ckpt(MKT_CKPT)
+    rows = []
+    for name in BACKFILL_TARGETS:
+        if only and name not in only:
+            continue
+        d = os.path.join(MARKET_DATA_DIR, name)
+        dc = _pick_date_col(d, TABLE_DATE_COL.get(name))
+        as_of, how = _as_of(d, dc) if dc else (None, "未登记日期列")
+        rec = cp.get(name, {}) if isinstance(cp.get(name), dict) else {}
+        rows.append({
+            "lib": "market", "table": name, "as_of": as_of, "last_pull": rec.get("last_fetch"),
+            "tier": "daily" if name in _DAILY_TABLES else "backfill",
+            "newest_mtime": _newest_mtime(d), "source": how, "stale_days": None,
+        })
+    return rows
+
+
+def _alt_rows(only=None):
+    from alt.spec import BY_NAME
+    cp = _load_ckpt(ALT_CKPT)
+    root = os.path.dirname(ALT_CKPT)
+    rows = []
+    for name, sp in BY_NAME.items():
+        if only and name not in only:
+            continue
+        d = os.path.join(root, name)
+        as_of, how = _as_of(d, sp.date_col)
+        rec = cp.get(name, {}) if isinstance(cp.get(name), dict) else {}
+        rows.append({
+            "lib": "alt", "table": name, "as_of": as_of, "last_pull": rec.get("last_attempt"),
+            "tier": "alt", "newest_mtime": _newest_mtime(d), "source": how,
+            "stale_days": int(getattr(sp, "max_age_days", 120) or 120),
+        })
+    return rows
+
+
+def build_rows(only=None):
+    rows = _market_rows(only) + _alt_rows(only)
+    today = date.today()
+    for r in rows:
+        d = _to_date(r["as_of"])
+        r["as_of_date"] = d.isoformat() if d else None
+        r["ds"] = (today - d).days if d else None
+        r["dw"] = _days_since(r["newest_mtime"])
+        r.pop("newest_mtime", None)
+        r["verdict"] = _verdict(r["ds"], r["dw"], r["tier"], r["stale_days"])
+    return rows
+
+
+def render(rows):
+    head = (f"{'库':6s} {'表':24s} {'最新数据日':10s} {'ds':>4s} {'dw':>4s} "
+            f"{'最近拉取':20s} {'档':9s} 判定")
+    lines = [head, "-" * 92]
+    for r in rows:
+        lines.append(
+            f"{r['lib']:6s} {r['table']:24s} {str(r['as_of_date'] or '-'):10s} "
+            f"{('-' if r['ds'] is None else r['ds']):>4} {('-' if r['dw'] is None else r['dw']):>4} "
+            f"{str(r['last_pull'] or '未知'):20s} {r['tier']:9s} {r['verdict']}")
+    n_red = sum(1 for r in rows if r["verdict"] == "红")
+    n_yel = sum(1 for r in rows if r["verdict"] == "黄")
+    n_unk = sum(1 for r in rows if r["verdict"] == "未知")
+    lines.append("-" * 92)
+    lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk} | "
+                 f"黄 {n_yel} | 红 {n_red} | 未知 {n_unk}")
+    if n_red or n_yel:
+        lines.append("红表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "红"))
+        lines.append("黄表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "黄"))
+    lines.append("说明: ds=内容最新日期距今天数, dw=文件最新 mtime 距今天数; dw≤7 视为刚写过→绿")
+    lines.append("      默认恒 exit 0；--strict 时存在红/黄才非零")
+    return "\n".join(lines)
+
+
+def run(only=None, as_json=False, strict=False):
+    try:
+        rows = build_rows(only)
+    except Exception as exc:  # noqa: BLE001 —— 诊断工具不得因单表异常拖垮整份报告
+        if as_json:
+            print(json.dumps({"ok": False, "error": repr(exc)}, ensure_ascii=False))
+        else:
+            print(f"[freshness] 生成失败（默认仍 exit 0）: {exc!r}")
+        return 0
+    n_alert = sum(1 for r in rows if r["verdict"] in ("红", "黄"))
+    if as_json:
+        print(json.dumps({"ok": True, "rows": rows,
+                          "n_alert": n_alert}, ensure_ascii=False, indent=1))
+    else:
+        print(render(rows))
+    if strict and n_alert:
+        return 1
+    return 0
