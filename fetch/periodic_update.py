@@ -58,7 +58,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from common import reader
-from common.calendar import trade_dates_between
 from common.parquet_store import upsert_by_year
 from common.paths import ensure_dir
 from config import MARKET_DATA_DIR, PERIODIC_UPDATE_TARGETS
@@ -247,20 +246,54 @@ def fetch_by_range(pro, limiter, name, spec, start, end, verbose=True):
     return ts_call_with_retry(pro, name, limiter, params, verbose=verbose)
 
 
+def _natural_dates(start, end):
+    """窗口内自然日，左开右闭（与 `pull_window` 的 (start, end] 语义一致）。
+
+    ⚠ 不能用 `trade_dates_between`：本通道的日期参数是**公告日**（ann_date），
+      周末/节假日同样有公告。2026-11-08 实证：20261031（周六）35 行、
+      20261107（周六）56 行 —— 交易日口径会让周期通道**结构性漏掉非交易日公告**。
+    """
+    d = datetime.strptime(start, "%Y%m%d") + timedelta(days=1)
+    d1 = datetime.strptime(end, "%Y%m%d")
+    out = []
+    while d <= d1:
+        out.append(d.strftime("%Y%m%d"))
+        d += timedelta(days=1)
+    return out
+
+
 def fetch_by_date(pro, limiter, name, spec, start, end, verbose=True):
-    """逐公告日横截面拉取（dividend 形态）：窗口内交易日各 1 请求。"""
-    dates = trade_dates_between(start, end)
+    """逐公告日横截面拉取（dividend / share_float 形态）：窗口内每个自然日 1~N 请求。
+
+    2026-11-08（CC-FIX-3 Step3 实证）两处修正：
+      ① 日期集由「交易日」改「**自然日**」——公告日不受交易日历约束；
+      ② 配置了 `page_size` 的表启用**单日翻页**——源端单次硬顶 6,000 行，
+         实测 share_float 20261102=11,794 行、20261104=9,056 行，不翻页静默截断近半。
+         未配置 `page_size` 的表（如 dividend，单日仅 10~40 行）请求参数与行为不变。
+    """
+    dates = _natural_dates(start, end)
     if len(dates) > MAX_DATES_PER_RUN:
-        print(f"    [WARN] 窗口内 {len(dates)} 个交易日 > 单次上限 "
+        print(f"    [WARN] 窗口内 {len(dates)} 个自然日 > 单次上限 "
               f"{MAX_DATES_PER_RUN}，本次只拉最近 {MAX_DATES_PER_RUN} 天"
               f"（剩余窗口下次运行继续）")
         dates = dates[-MAX_DATES_PER_RUN:]
+    page = int(spec.get("page_size") or 0)
     frames = []
     for i, d in enumerate(dates, 1):
-        df = ts_call_with_retry(pro, name, limiter, {spec["date_param"]: d},
-                                verbose=verbose)
-        if df is not None and len(df):
-            frames.append(df)
+        offset = 0
+        while True:
+            params = {spec["date_param"]: d}
+            if page:
+                params["limit"] = page
+                if offset:
+                    params["offset"] = offset
+            df = ts_call_with_retry(pro, name, limiter, params, verbose=verbose)
+            n = 0 if df is None else len(df)
+            if n:
+                frames.append(df)
+            if not page or n < page:
+                break
+            offset += n
         if i % 20 == 0:
             print(f"    [{i}/{len(dates)}] 累计 {sum(len(x) for x in frames)} 行")
     if not frames:

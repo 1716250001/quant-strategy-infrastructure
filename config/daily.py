@@ -356,4 +356,23 @@ PERIODIC_UPDATE_TARGETS = OrderedDict([
                   "季报）⇒ 日更无收益、却要 5,900 请求/天。改走**每 7 天一次**的公告日"
                   "横截面增量（1 请求/日，窗口内约 5 请求/次），落盘幂等。",
     }),
+    ("share_float", {
+        "desc": "限售股解禁（by_date 不可用 2026-10-01 实证；ann_date 单日可用 2026-11-08 P7 实证）",
+        # ── 取数形态：逐公告日横截面（by_date 的 trade_date 参数不生效）──
+        "pull": "by_date",
+        "date_param": "ann_date",
+        # ── 落盘形态 ──
+        "date_col": "ann_date",
+        "subset": ["ts_code", "float_date", "ann_date", "holder_name"],
+        # ── 新鲜度信号列：公告日（float_date 是未来解禁日，含未来值，不可作新鲜度信号）──
+        "recency_col": "ann_date",
+        "interval_days": 7,
+        "lookback_days": 60,
+        # 单日翻页：源端单次硬顶 6,000 行（实测 20261102=11,794、20261104=9,056 行）
+        "page_size": 6000,
+        "stale_after_days": 30,
+        "reason": "解禁公告日均有量（P7 实测单日 49 行）但 by_code 断点 5,920 全完成挡死 gap-update、"
+                  "by_date(trade_date) 参数不生效（2026-10-01 实证），属四无孤儿表，10-30 后增量归零。"
+                  "ann_date 单日横截面每 7 天增量：首次窗口 ≤10 请求，此后 ≤8 请求/次，落盘幂等。",
+    }),
 ])

@@ -138,6 +138,11 @@ BACKFILL_PAGE_CONF = {
     #   分页参数名是 `period` 而非 `trade_date`（由 conf["period_param"] 传入）。
     "top10_holders":      (6000, 20),
     "top10_floatholders": (6000, 20),
+    # ⚠ share_float（2026-11-08 CC-FIX-3 实测）:
+    #   按 ts_code 单只拉取时单次硬顶 6,000 行（大盘次新股解禁股东可达上万条），
+    #   页大小取 5,000 留安全边际；按 ann_date 单日同样会超顶（20261102=11,794 行），
+    #   周期通道侧由 PERIODIC_UPDATE_TARGETS["share_float"]["page_size"] 单独控。
+    "share_float":        (5000, 20),
 }
 
 # 兼容旧名(仅按 key 判断是否分页)
