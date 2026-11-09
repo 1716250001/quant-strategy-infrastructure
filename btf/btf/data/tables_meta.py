@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -217,6 +218,35 @@ def factor_table_of(symbol: str) -> str:
             else "adj_factor")
 
 
+# ─────────────────────────────────────────────────────────────
+# feed↔标的 能力路由（D-2；19 号 §255）——`run` 与 `config-check` **共用**
+# ------------------------------------------------------------
+# `run` 用**实例**能力表（第三方 Feed 可写在 `__init__` 里，现行为必须保留），
+# `config-check` 用**类属性**（不实例化 Feed）；两侧只共用「纯比对」与
+# 「消息格式化」，避免第二个判断真源（19 号 §254-C）。
+# ─────────────────────────────────────────────────────────────
+def routing_conflicts(symbols: Iterable[str],
+                      caps: Iterable[str] | None) -> list[tuple[str, str]]:
+    """标的 × 能力表 → `[(sym, 所需表)]`；`caps` 为 None/空 ⇒ 不判（第三方豁免）。"""
+    if not caps:
+        return []
+    cap_set = frozenset(caps)
+    return [(sym, daily_table_of(sym)) for sym in symbols
+            if daily_table_of(sym) not in cap_set]
+
+
+def format_routing_conflicts(conflicts: Iterable[tuple[str, str]],
+                             feed_name: str,
+                             caps: Iterable[str] | None) -> list[str]:
+    """路由冲突 → `run` 现行 item 文本（**逐字保持**；D-2 判据 D2-2/D2-5）。"""
+    supported = sorted(caps or ())
+    return [
+        f"feed↔标的路由不匹配：{sym} 需要 `{table}` 表，但 data.feed="
+        f"{feed_name} 仅支持 {supported}——请改用 data.feed="
+        f"`mixed`（三表自动路由），或从宇宙移除该标的"
+        for sym, table in conflicts]
+
+
 __all__ = ["INDEX_PREFIXES", "INDEX_SUFFIXES", "STOCK_PREFIXES", "STOCK_SHORT",
            "TABLES", "Layout", "TableMeta", "UnitConversion", "daily_table_of",
-           "factor_table_of"]
+           "factor_table_of", "format_routing_conflicts", "routing_conflicts"]

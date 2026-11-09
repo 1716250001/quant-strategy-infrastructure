@@ -161,6 +161,16 @@ def resolve(point: str, name: str) -> PluginFactory:
     return factory
 
 
+def feed_daily_tables(name: str) -> frozenset[str] | None:
+    """Feed 的日线表能力表（D-2；19 号 §255）：**读类属性，不实例化 Feed**。
+
+    未知名 → `RegistryError`（与 `resolve` 同源，消息含可选项）；
+    第三方 Feed 未在**类**上声明 `daily_tables` → None（与 `run` 的
+    `guard_feed_routing` 同口径跳过，不阻断）。
+    """
+    return getattr(resolve(DATA_FEED, name), "daily_tables", None)
+
+
 def create(point: str, name: str, config: Mapping[str, Any] | None = None) -> Any:
     """名字 + 参数 → 实例（config 键作为构造关键字；04 §8.5 配置声明制）。
 
@@ -196,6 +206,7 @@ __all__ = [
     "RegistryError",
     "available",
     "create",
+    "feed_daily_tables",
     "points",
     "register",
     "resolve",

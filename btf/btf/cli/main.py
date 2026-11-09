@@ -96,6 +96,15 @@ def _cmd_config_check(args: argparse.Namespace) -> int:
         print(f"[error] {e}", file=sys.stderr)
         return 1
 
+    # D-2（19 号 §255）：data 轴**静态**校验——feed 名合法性 + feed↔标的 能力
+    # 路由。与 `run` 共用 `tables_meta` 的纯比对/格式化（禁止第二份判断逻辑）；
+    # **始终执行**，与 `--resolve-strategy` 开关无关。
+    from btf.app import data_axis_problems
+
+    problems, warnings = data_axis_problems(cfg)
+    for warning in warnings:
+        print(warning)
+
     run = cfg.get("run", {})
     period = run.get("period", {})
     data = cfg.get("data", {})
@@ -117,6 +126,10 @@ def _cmd_config_check(args: argparse.Namespace) -> int:
     if isinstance(rules, dict):
         print(f"     规则: source={rules.get('source')}"
               f" overrides={len(rules.get('overrides') or [])} 条")
+    if problems:
+        # 与 `run` 装配期**同一格式化**（item 行逐字一致）；此处不构造 runtime。
+        print(f"[error] {ConfigError(problems)}", file=sys.stderr)
+        return 1
     if getattr(args, "resolve_strategy", False):
         # BB-3（19 号 §33.6③ / P3-NEW-5）：策略类可加载性——「随写随测」的首道
         # 门；类名拼错应在**最低成本环节**暴露（原须到 `run` 才报错）。

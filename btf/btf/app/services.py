@@ -43,6 +43,7 @@ __all__ = [
     "build_dataset",
     "build_report_file",
     "cold_backup",
+    "data_axis_problems",
     "filter_btf_env",
     "freeze_dataset",
     "freeze_payload",
@@ -72,6 +73,42 @@ def filter_btf_env(environ: Mapping[str, str] | None = None) -> dict[str, str]:
     """只把 `BTF_*` 环境变量交给配置层（测试/部署隔离；原两处逐字重复）。"""
     src = os.environ if environ is None else environ
     return {k: v for k, v in src.items() if k.startswith("BTF_")}
+
+
+def data_axis_problems(cfg: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+    """`config-check` 的 data 轴**静态**校验（D-2；19 号 §255）。
+
+    返回 `(problems, warnings)`：
+
+    | 情形 | 处理 |
+    |---|---|
+    | `data.feed` 未知名 | problems（消息取自 `RegistryError`，与 `run` 同源） |
+    | `universe.source=explicit` | feed↔标的 路由逐项比对（与 `run` 共用实现） |
+    | `universe.source=all/index` | 需读数据 ⇒ **不判**，但 `[warn]` 声明边界 |
+    | Feed 未声明 `daily_tables` | 与 `run` 一致地跳过（第三方 Feed 豁免） |
+
+    纪律（派单 §2.4）：**不实例化 Feed、不读任何数据**——能力表走
+    `registry.catalog.feed_daily_tables`（类属性）。放 app 层而非 cli：
+    表现层契约禁止 `btf.cli` 直接 import `btf.data`/`btf.registry`。
+    """
+    from btf.data.tables_meta import format_routing_conflicts, routing_conflicts
+    from btf.registry.catalog import RegistryError, feed_daily_tables
+
+    feed_name = str((cfg.get("data") or {}).get("feed") or "?")
+    try:
+        caps = feed_daily_tables(feed_name)
+    except RegistryError as exc:
+        return [str(exc)], []
+    if not caps:
+        return [], []
+    universe = (cfg.get("run") or {}).get("universe") or {}
+    source = str(universe.get("source") or "?")
+    if source != "explicit":
+        return [], [f"[warn] feed↔标的 路由未校验"
+                    f"（universe.source={source}，需数据）"]
+    return format_routing_conflicts(
+        routing_conflicts(universe.get("symbols") or [], caps),
+        feed_name, caps), []
 
 
 def parse_override_value(raw: str) -> Any:

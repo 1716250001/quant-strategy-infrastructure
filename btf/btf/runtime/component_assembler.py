@@ -125,20 +125,22 @@ class ComponentAssembler:
         自动路由（会改变同一配置历史 run 的数字，破坏可比性）。
         自定义 Feed 未声明 `daily_tables` ⇒ 跳过（不阻断第三方 Feed）。
         """
-        from btf.data.tables_meta import daily_table_of
+        from btf.data.tables_meta import (
+            format_routing_conflicts,
+            routing_conflicts,
+        )
 
+        # D-2（19 号 §255）：比对与消息格式化抽到 `tables_meta`，与
+        # `config-check` **共用同一实现**；能力表仍取**实例**（第三方 Feed
+        # 可写在 `__init__` 里——改名解析会静默跳过，属行为变更）。
         caps = getattr(self.rt.feed, "daily_tables", None)
         if not caps:
             return
         feed_name = str((self.rt.config.get("data") or {}).get("feed") or "?")
-        bad = [(sym, daily_table_of(sym)) for sym in self.rt.instruments
-               if daily_table_of(sym) not in caps]
+        bad = routing_conflicts(self.rt.instruments, caps)
         if bad:
-            raise ConfigError([
-                f"feed↔标的路由不匹配：{sym} 需要 `{table}` 表，但 data.feed="
-                f"{feed_name} 仅支持 {sorted(caps)}——请改用 data.feed="
-                f"`mixed`（三表自动路由），或从宇宙移除该标的"
-                for sym, table in bad])
+            raise ConfigError(
+                format_routing_conflicts(bad, feed_name, caps))
         logger.info("feed 路由校验通过：%d 标的（%s 能力表 %s）",
                     len(self.rt.instruments), feed_name, sorted(caps))
 
