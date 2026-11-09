@@ -221,7 +221,11 @@ BACKFILL_TARGETS = OrderedDict([
         #   subset 与周期通道（config/daily.py）同口径：按业务键幂等写入，
         #   防"重拉产生同键双版"。
         "page_size": 5000, "max_pages": 20,
-        "subset": ["ts_code", "float_date", "ann_date", "holder_name"],
+        # CC-FIX-5（2026-11-09，§362）：原 4 键不含 float_share，
+        #   源端存在同 (ts_code,float_date,ann_date,holder_name,share_type)
+        #   的多笔解禁（实证 002215.SZ 李广泽 20260610 三笔），
+        #   键式判重会静默折叠 ⇒ 全列判重。
+        "subset": "*",
     }),
     ("repurchase", {
         "api": "repurchase", "desc": "股票回购", "mode": "by_code",

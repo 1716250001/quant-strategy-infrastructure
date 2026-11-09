@@ -363,7 +363,10 @@ PERIODIC_UPDATE_TARGETS = OrderedDict([
         "date_param": "ann_date",
         # ── 落盘形态 ──
         "date_col": "ann_date",
-        "subset": ["ts_code", "float_date", "ann_date", "holder_name"],
+        # CC-FIX-5（2026-11-09，§362）：同 config/backfill_targets.py，
+        #   4 键不含 float_share 会折叠"同人同日同类型多笔解禁"⇒ 全列判重，
+        #   避免周期刷新重写年度文件时再次丢行。
+        "subset": "*",
         # ── 新鲜度信号列：公告日（float_date 是未来解禁日，含未来值，不可作新鲜度信号）──
         "recency_col": "ann_date",
         "interval_days": 7,

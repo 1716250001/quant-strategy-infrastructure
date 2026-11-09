@@ -258,7 +258,10 @@ DB_AUDIT_PKEYS = {
     "stk_holdertrade":  ["ts_code", "ann_date", "holder_name"],
     "pledge_stat":      ["ts_code", "end_date"],
     # R9a：share_float 补 ann_date（同 float_date+holder_name 可多次公告）
-    "share_float":      ["ts_code", "float_date", "holder_name", "ann_date"],
+    # CC-FIX-5（2026-11-09，§362）：原 4 键会把「同人同日同类型多笔解禁」
+    #   误报为主键重复；加 share_type 后仍有 2 组合法多行（仅 float_share 不同）
+    #   ⇒ 本表无覆盖源端的业务键，改 None（跳过键式判重，由全列判重兜底）。
+    "share_float":      None,
     "repurchase":       ["ts_code", "ann_date", "proc"],
     "namechange":       ["ts_code", "start_date"],
     "fina_mainbz":      ["ts_code", "end_date", "bz_item"],
