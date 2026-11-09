@@ -441,7 +441,7 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None,
     limiter = RateLimiter()
     checkpoint = Checkpoint(MARKET_DATA_DIR)
 
-    if reset:
+    if reset and not dry_run:
         checkpoint.reset()
 
     # ── Tushare 连接 (复用base.get_pro) ──
@@ -546,7 +546,8 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None,
 
 def main():
     parser = argparse.ArgumentParser(description="全市场数据下载器（并发版）")
-    parser.add_argument("--reset", action="store_true", help="清除断点, 从头开始")
+    parser.add_argument("--reset", action="store_true",
+                        help="清除断点（单独使用不会重拉；需配合 --refresh-existing）")
     parser.add_argument("--phase", type=str, default="all",
                         help="指定阶段: meta / daily / fina / all")
     parser.add_argument("--dry-run", action="store_true", help="空跑模式, 只统计不下载")

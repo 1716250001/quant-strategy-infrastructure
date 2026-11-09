@@ -14,6 +14,7 @@ from cli.alt_cmds import (
 from cli.db_cmds import (
     _DB_FAMILY,
     cmd_db_group,
+    cmd_db_meta_close,
     cmd_db_stale_fix,
     cmd_freshness,
     cmd_peek,
@@ -246,6 +247,14 @@ def build_parser():
         #   help=SUPPRESS 的隐藏由 _NoSuppressSubcommands 格式化器处理
         #   （命令仍注册在 choices 中，可正常调用，regress R1 契约依赖）。
         _add_args(sub.add_parser(_flat, help=argparse.SUPPRESS))
+
+    p = db_sub.add_parser("meta-close",
+                          help="元数据刷新后的 R12 收尾（声明重算/补表重建；干跑/--apply）")
+    p.add_argument("--apply", action="store_true",
+                   help="写盘（先自动备份 known_gaps 与补表），并整跑 regress 自检")
+    p.add_argument("--dry-run", action="store_true",
+                   help="显式干跑（默认行为；与 --apply 同时给出时以 --dry-run 为准）")
+    p.set_defaults(func=cmd_db_meta_close)
 
     p = db_sub.add_parser("stale-fix", help="基金 source_empty 注册表对账（干跑/--apply）")
     p.add_argument("--apply", action="store_true",

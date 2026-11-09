@@ -133,6 +133,34 @@ def _days_since(ts_epoch):
     return max(0, int((time.time() - ts_epoch) // 86400))
 
 
+def _days_since_iso(s):
+    """ISO 时间戳 → 距今天数；缺失/不可解析返回 None（CC-FIX-7 Step3）。"""
+    if not s:
+        return None
+    try:
+        return max(0, (datetime.now() - datetime.fromisoformat(str(s))).days)
+    except Exception:
+        return None
+
+
+def _diag(r):
+    """诊断列：分离「每天都拉、源端无新数据」与「没人拉」。
+
+    CC-FIX-7（2026-11-09，§362）：**只做诊断，不参与 `_verdict()`**。
+    仅 market 库（last_fetch 由 fetch/backfill.py 写入）；alt 库用 last_attempt，
+    语义不同，留空。
+    """
+    if r.get("lib") != "market":
+        return ""
+    dw = r.get("dw")
+    if dw is None or dw <= 7:
+        return ""
+    _lf_days = _days_since_iso(r.get("last_pull"))
+    if _lf_days is None:
+        return "无拉取记录"
+    return "已拉取·源端无更新" if _lf_days <= 7 else "拉取记录陈旧"
+
+
 def _load_ckpt(path):
     if not os.path.isfile(path):
         return {}
@@ -179,7 +207,9 @@ def _market_rows(only=None):
         as_of, how = _as_of(d, dc) if dc else (None, "未登记日期列")
         rec = cp.get(name, {}) if isinstance(cp.get(name), dict) else {}
         rows.append({
-            "lib": "market", "table": name, "as_of": as_of, "last_pull": rec.get("last_fetch"),
+            "lib": "market", "table": name, "as_of": as_of,
+            "last_pull": rec.get("last_fetch"),
+            "last_pull_rows": rec.get("last_fetch_rows"),
             "tier": "daily" if name in _DAILY_TABLES else "backfill",
             "newest_mtime": _newest_mtime(d), "source": how, "stale_days": None,
         })
@@ -199,6 +229,7 @@ def _alt_rows(only=None):
         rec = cp.get(name, {}) if isinstance(cp.get(name), dict) else {}
         rows.append({
             "lib": "alt", "table": name, "as_of": as_of, "last_pull": rec.get("last_attempt"),
+            "last_pull_rows": None,
             "tier": "alt", "newest_mtime": _newest_mtime(d), "source": how,
             "stale_days": int(getattr(sp, "max_age_days", 120) or 120),
         })
@@ -232,26 +263,35 @@ def build_rows(only=None):
             _has = bool(glob.glob(os.path.join(_root, name, "*.parquet")))
             r["verdict"] = "正常" if _has else "红"
             r["note"] = "静态名录"
+        r["diag"] = _diag(r)          # CC-FIX-7：诊断列（不参与 verdict）
     return rows
 
 
 def render(rows):
     head = (f"{'库':6s} {'表':24s} {'最新数据日':10s} {'ds':>4s} {'dw':>4s} "
-            f"{'最近拉取':20s} {'档':9s} 判定")
-    lines = [head, "-" * 92]
+            f"{'最近拉取':20s} {'诊断':18s} {'档':9s} 判定")
+    lines = [head, "-" * 110]
     for r in rows:
         _note = f"  ({r['note']})" if r.get("note") else ""
         lines.append(
             f"{r['lib']:6s} {r['table']:24s} {str(r['as_of_date'] or '-'):10s} "
             f"{('-' if r['ds'] is None else r['ds']):>4} {('-' if r['dw'] is None else r['dw']):>4} "
-            f"{str(r['last_pull'] or '未知'):20s} {r['tier']:9s} {r['verdict']}{_note}")
+            f"{str(r['last_pull'] or '未知'):20s} {r.get('diag') or '':18s} "
+            f"{r['tier']:9s} {r['verdict']}{_note}")
     n_red = sum(1 for r in rows if r["verdict"] == "红")
     n_yel = sum(1 for r in rows if r["verdict"] == "黄")
     n_unk = sum(1 for r in rows if r["verdict"] == "未知")
     n_stale = sum(1 for r in rows if r["verdict"] == "已停更")
-    lines.append("-" * 92)
+    lines.append("-" * 110)
     lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk - n_stale} | "
                  f"黄 {n_yel} | 红 {n_red} | 已停更 {n_stale} | 未知 {n_unk}")
+    _diag_ct = {"已拉取·源端无更新": 0, "拉取记录陈旧": 0, "无拉取记录": 0}
+    for r in rows:
+        if r.get("diag") in _diag_ct:
+            _diag_ct[r["diag"]] += 1
+    lines.append(f"诊断: 已拉取·源端无更新 {_diag_ct['已拉取·源端无更新']} | "
+                 f"拉取记录陈旧 {_diag_ct['拉取记录陈旧']} | "
+                 f"无拉取记录 {_diag_ct['无拉取记录']}")
     if n_red or n_yel:
         lines.append("红表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "红"))
         lines.append("黄表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "黄"))

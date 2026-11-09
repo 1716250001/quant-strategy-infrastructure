@@ -261,6 +261,8 @@ DB_AUDIT_PKEYS = {
     # CC-FIX-5（2026-11-09，§362）：原 4 键会把「同人同日同类型多笔解禁」
     #   误报为主键重复；加 share_type（5 键）后实测仍有 127 组合法多行
     #   （2026-11-09 全量复算：仅 float_share 不同；§368 Q3）
+    #   口径＝duplicated() 默认 keep='first'（即审计输出口径）：
+    #   4 键 211 行/206 组，5 键 131 行/127 组（CC-FIX-7，§370 四.2 更正）
     #   ⇒ 本表无覆盖源端的业务键，改 None（跳过键式判重，由全列判重兜底）。
     "share_float":      None,
     "repurchase":       ["ts_code", "ann_date", "proc"],

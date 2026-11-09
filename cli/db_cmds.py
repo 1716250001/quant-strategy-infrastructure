@@ -127,6 +127,15 @@ def cmd_db_group(args):
         print("  例: python main.py db audit --section gap")
         print("  旧平铺名（db-audit / db-schema / db-report / db-clean / db-migrate）仍可用，等价。")
 
+def cmd_db_meta_close(args):
+    """元数据刷新后的 R12 收尾流水线（默认干跑，--apply 才写盘）"""
+    from tools.db.meta_close import run
+    apply = bool(args.apply)
+    if apply and getattr(args, "dry_run", False):
+        print("  [提示] --dry-run 优先：本次不写入（去掉 --dry-run 才真正执行）")
+        apply = False
+    raise SystemExit(run(apply=apply))
+
 def cmd_db_stale_fix(args):
     """基金 source_empty 注册表对账（判定与 R17/R18 同源：check_fund_history）"""
     import json as _json

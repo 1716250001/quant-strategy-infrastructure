@@ -402,21 +402,21 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
 # B2. 截断残留检测（CC-FIX-6，2026-11-09，§366/§367）
 # ============================================================
 def audit_truncation(verbose=True, table_dirs=None):
-    """逐码行数恰为 page_size 整数倍 ⇒ 疑似翻页停在整页（源端极少长这样）。
+    """逐码行数恰为 cap（源端单次硬顶，未配则回落 page_size）整数倍 ⇒ 疑似翻页停在整页（源端极少长这样）。
 
     CC-FIX-4 一次性修过 share_float 的 6,000 行截断，但 5R 前又长出残留（§366）
     —— 一次性点名脚本挡不住复发，故做成常态护栏。
 
     table_dirs: {table: 目录} 覆盖默认 MARKET_DATA_DIR/<table>，
         供"对历史冷备只读复现"用（Step 6b 判据②）。
-    判据完全由 BACKFILL_TARGETS[*]["page_size"] 驱动：新增配了 page_size 的
+    判据由 BACKFILL_TARGETS[*]["cap"] 优先、未配回落 ["page_size"]；新增配了任一字段的
     表自动纳入，本函数不含任何表名/页大小字面量。
     本段是**诊断项**：不计入 run_audit 的 n_issue，也不影响任何退出码。
     """
     if verbose:
         print()
         print(SEP)
-        print("  B2. 截断残留检测（单码行数恰为 page_size 整数倍）")
+        print("  B2. 截断残留检测（单码行数为 cap／page_size 整数倍，见各行标注）")
         print(SEP)
         print("  说明: 只有存在「单次硬顶」的接口才需要 offset 翻页；"
               "停在整页 = 疑似少翻一页。")

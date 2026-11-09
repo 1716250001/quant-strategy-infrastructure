@@ -345,6 +345,11 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     _batch = None
     if (mode == "by_code" and not date_override
             and by_code_needs_batch(name, target_dir)):
+        def _on_batch_flushed(keys):
+            for _k in keys:
+                cp.mark_done(name, str(_k))
+            cp.mark_fetched(name)   # CC-FIX-7：每次 flush 记一次表级拉取时间
+
         _batch = ByCodeBatchWriter(
             target_dir,
             date_col=table_date_col(name),
@@ -352,7 +357,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             sort_by=table_date_col(name),
             flush_codes=conf.get("batch_flush_codes", 500),
             flush_rows=conf.get("batch_flush_rows", 500_000),
-            on_flushed=lambda keys: [cp.mark_done(name, str(k)) for k in keys],
+            on_flushed=_on_batch_flushed,
             on_error=lambda _y, e: print(f"  [ERROR] 批量落盘 {name}: {str(e)[:70]}"),
         )
         print(f"  [批量落盘] {name} 年度文件已超 "
@@ -391,6 +396,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                         print(f"  [ERROR] {name} {key} 落盘失败，不记断点: {str(e)[:70]}")
                     else:
                         cp.mark_done(name, str(key))
+                        cp.mark_fetched(name)   # CC-FIX-7：单码落盘成功（rows 未知）
             else:
                 # 无分区列 → 按标的单文件（仅 stock_company 这类静态元数据）
                 try:
@@ -399,7 +405,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                     print(f"  [ERROR] {name} {key} 写文件失败，不记断点: {str(e)[:70]}")
                 else:
                     cp.mark_done(name, str(key))
-                    cp.mark_fetched(name)      # F3/R10：表级最近成功写入时间
+                    cp.mark_fetched(name, rows=len(df))   # F3/R10 + CC-FIX-7 行数
         elif ok:
             # 调用成功但无数据（EE-FUND-4 G3 三级语义）:
             # - codes-file 模式（§25 R4）：**不记断点**——逐码重拉场景下空返回
@@ -448,7 +454,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             print(f"    {name} → {n} 行已保存")
         # 调用成功（含"确实返空"）才记断点
         cp.mark_done(name, "once")
-        cp.mark_fetched(name)                  # F3/R10：表级最近成功写入时间
+        cp.mark_fetched(name, rows=n)          # F3/R10 + CC-FIX-7 行数
         cp.save()
         return {"name": name, "est": est, "done": n}
 
@@ -458,6 +464,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         dc = conf.get("date_col", "end_date")
         cap = conf.get("cap", 0)          # 该接口的单次返回上限, 用于截断告警
         truncated = []
+        n_ok = 0
         for i, per in enumerate(pending, 1):
             # ⚠ 不要在此 wait —— ts_call_with_retry 内部已按同速率 wait（第365行），
             #   外层再 wait 会**双重计数**：预约式限频器会连续占用两个槽位，
@@ -490,7 +497,10 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                          subset=conf.get("subset"), date_col=dc)
             if df is not None:      # 仅调用成功才记断点
                 cp.mark_done(name, per)
+                n_ok += 1
             print(f"    {name} {i}/{len(pending)} | 报告期={per} | {len(df) if df is not None else 0}行")
+        if n_ok:
+            cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
         if truncated:
             print(f"    [警告] {len(truncated)} 个报告期触及上限 {cap}: {truncated[:5]}")
@@ -509,6 +519,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         pn = conf["param_name"]
         page = conf.get("page_size", 2000)
         max_pages = conf.get("max_pages", 100)
+        n_ok = 0
         for i, val in enumerate(pending, 1):
             chunks, offset, pages = [], 0, 0
             first_ok = False
@@ -539,9 +550,12 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                          subset=conf.get("subset"))
             if first_ok:                # 调用成功(含"确实无数据")→ 记断点
                 cp.mark_done(name, val)
+                n_ok += 1
             flag = "  [警告] 页数触顶, 可能不完整" if truncated else ""
             print(f"    {name} {i}/{len(pending)} | {pn}={val} | "
                   f"{nrow}行 | 页={pages}{flag}")
+        if n_ok:
+            cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
         return {"name": name, "est": est, "done": len(pending)}
 
@@ -558,6 +572,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         page = conf.get("page_size", 5000)
         chunks = []
         done_pages = []                    # 暂存成功页号，落盘成功后才记断点
+        n_ok = 0
         for i, pg in enumerate(pending, 1):
             # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
             df = ts_call_with_retry(pro, conf["api"], limiter,
@@ -567,6 +582,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             if df is None:                     # 调用失败: 不记断点
                 print(f"    {name} 第{pg}页 调用失败，留待续跑")
                 continue
+            n_ok += 1
             nrow = len(df)
             done_pages.append(str(pg))         # 成功（含空页）→ 暂存，不立即记
             if nrow:
@@ -594,6 +610,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 return {"name": name, "est": est, "done": 0}
         for k in done_pages:               # 落盘成功后统一记断点
             cp.mark_done(name, k)
+        if n_ok:
+            cp.mark_fetched(name)          # CC-FIX-7：至少一页调用成功即记拉取时间
         cp.save()
         return {"name": name, "est": est, "done": len(pending)}
 
@@ -603,6 +621,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         cap = conf.get("max_rows", 0)               # DB-R3
         _trunc_hard = []                            # 确凿触顶（未落盘）
         _trunc_soft = []                            # 仅疑似（已落盘）
+        n_ok = 0
         for i, (s, e) in enumerate(pending, 1):
             # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
             _r = {sp: s, ep: e}
@@ -611,6 +630,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             df = ts_call_with_retry(pro, conf["api"], limiter,
                                     _r, verbose=verbose)
             nrow = 0 if df is None else len(df)
+            if df is not None:
+                n_ok += 1
 
             # ---- DB-R3 截断检测 ----
             # 为什么要"触顶不落盘"而不是"落盘+告警"：
@@ -649,6 +670,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             print(f"    [提示汇总] {name} 有 {len(_trunc_soft)} 段疑似截断（已落盘，请核对）：")
             for s, e, n in _trunc_soft:
                 print(f"        {s}~{e}  {n}行")
+        if n_ok:
+            cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
         return {"name": name, "est": est, "done": len(pending)}
 
@@ -682,6 +705,16 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         dedup_key = conf.get("dedup_key")
         dedup_sort = conf.get("dedup_sort")
 
+        _flushed_seen = [0]
+
+        def _on_date_flushed(keys):
+            for _k in keys:
+                cp.mark_done(name, _k)
+            # CC-FIX-7：每次 flush 记一次拉取时间 + 本次落盘行数增量
+            _n = writer.flushed_rows - _flushed_seen[0]
+            _flushed_seen[0] = writer.flushed_rows
+            cp.mark_fetched(name, rows=_n)
+
         writer = YearBatchWriter(
             target_dir,
             date_col=dc,
@@ -689,7 +722,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             sort_by=dc,
             flush_days=flush_conf.get("days", 20),
             flush_rows=flush_conf.get("rows", 500_000),
-            on_flushed=lambda keys: [cp.mark_done(name, k) for k in keys],
+            on_flushed=_on_date_flushed,
             on_error=lambda y, e: print(f"  [ERROR] 批量落盘 {y}: {str(e)[:70]}"),
         )
 
@@ -750,6 +783,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 return              # 调用失败: 不落盘、不记断点, 留待续跑
             if df.empty:
                 cp.mark_done(name, dt)   # 成功但无数据(如休市日): 记断点
+                cp.mark_fetched(name, rows=0)   # CC-FIX-7：成功但返空也要记
             else:
                 # EE-FUND-9A: 过滤 market=O 场外码（仅 fund_daily 生效）
                 if _fund_daily_o_codes is not None and 'ts_code' in df.columns:
@@ -763,6 +797,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                     df = df[_mask]
                 if df.empty:
                     cp.mark_done(name, dt)
+                    cp.mark_fetched(name, rows=0)   # CC-FIX-7：过滤后为空同样记
                 else:
                     # R6-Final：白名单表按业务键去重（adj 保留 end_date 最大行）
                     df = _dedup_by_key(df, dedup_key, dedup_sort)
@@ -815,11 +850,15 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 params["fields"] = conf["fields"]
             return ts_call_with_retry(_pro, conf["api"], _lim, params, verbose=verbose)
 
+        n_ok = 0
+
         def on_result_month(pair, df, ok):
+            nonlocal n_ok
             _save_df(target_dir, conf["api"], df, layout="single",
                      subset=conf.get("subset"))
             if ok:                  # 仅调用成功才记断点
                 cp.mark_done(name, f"{pair[0]}|{pair[1]}")
+                n_ok += 1
             done_ct["n"] += 1
             if done_ct["n"] % 50 == 0:
                 cp.save()
@@ -828,6 +867,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                                     fetch_fn=fetch_fn, max_workers=workers,
                                     on_result=on_result_month, progress=progress,
                                     progress_every=50, verbose=verbose)
+        if n_ok:
+            cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
         return {"name": name, "est": est, "done": stat["ok"]}
 
