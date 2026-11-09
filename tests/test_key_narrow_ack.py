@@ -25,7 +25,11 @@ def test_alarm_when_baseline_exceeded(monkeypatch):
 
 
 def test_dividend_not_acked():
-    """dividend 不在 ACK 里 → 仍是 ⚠ 键可能不足（防日后顺手塞入）。"""
+    """dividend 不在 ACK 里（防日后顺手塞入）。
+
+    CC-FIX-9（§373）折叠后 dividend 应判「✓ 无真重复」；本测试只钉
+    「不许走 ACK 通道」——判定不得是「✓ 已裁定」。
+    """
     assert "dividend" not in KEY_NARROW_ACK
     v = _verdict("dividend")
-    assert v.startswith("⚠ 键可能不足"), v
+    assert not v.startswith("✓ 已裁定"), v
