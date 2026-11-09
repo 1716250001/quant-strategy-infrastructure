@@ -245,7 +245,10 @@ BACKFILL_TARGETS = OrderedDict([
         "api": "suspend_d", "desc": "每日停复牌", "mode": "by_date",
         "max_rows": 0, "tier": "B", "start": "20000101", "note": "接口名是 suspend_d",
         # DB-R10b：自然键取自 DB_AUDIT_PKEYS，防"同日重拉值变化→重复入库"
-        "subset": ["trade_date", "ts_code"],
+        # CC-FIX-8（2026-11-09，§369/§372）：同日同股可同时有 S（停牌）与 R（复牌），
+        #   实证 89 组（2011–2015，均无活跃写入）；键加 suspend_type 后
+        #   潜在折叠损失 0（640,675 行不变）。与 DB_AUDIT_PKEYS 逐字一致。
+        "subset": ["trade_date", "ts_code", "suspend_type"],
     }),
     ("namechange", {
         "api": "namechange", "desc": "股票曾用名", "mode": "by_code",

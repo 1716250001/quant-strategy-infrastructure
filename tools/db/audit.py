@@ -45,6 +45,7 @@ from config import (
     DB_AUDIT_CKPT_EXTERNAL,
     DB_AUDIT_PKEYS,
     DB_AUDIT_UPSTREAM_DUP,
+    KEY_NARROW_ACK,
     MARKET_DATA_DIR,
     TABLE_DATE_COL,
 )
@@ -331,7 +332,12 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
             except Exception:
                 pass
         else:
-            samp = files[:show_samples] if show_samples else files[:5]
+            # CC-FIX-8 v2（§372）：ACK 表的「整行相同=0」必须**全列全量**证明，
+            #   抽样 3 个文件不足以支撑永久 ACK（index_global 131 个小文件，代价可忽略）。
+            if name in KEY_NARROW_ACK:
+                samp = files
+            else:
+                samp = files[:show_samples] if show_samples else files[:5]
             try:
                 fs = []
                 for f in samp:
@@ -362,6 +368,17 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
             verd = (f"ℹ 上游即有重复(抽样{full_dup:,})"
                     if name in DB_AUDIT_UPSTREAM_DUP
                     else f"⚠ 有真重复(抽样{full_dup:,})")
+        elif name in KEY_NARROW_ACK and pk_dup > 0:
+            # CC-FIX-8 v2（§369/§372）：已裁定保留窄键的表 —— 显式 ACK + 增长护栏
+            _ack = KEY_NARROW_ACK[name]
+            _base = int(_ack.get("baseline_dup", 0))
+            _ratio = float(_ack.get("alarm_ratio", 1.5))
+            _lim = _base * _ratio
+            if pk_dup <= _lim:
+                verd = f"✓ 已裁定：上游修订（同键多行 {pk_dup:,} 行，基线 {_base}）"
+            else:
+                verd = (f"⚠ 已裁定表同键多行异常增长：{pk_dup:,} 行 > "
+                        f"基线 {_base}×{_ratio:g}={_lim:g}")
         else:
             # CC-FIX-6 v3（2026-11-09，§368 Q3）：主键有重复、抽样整行全不同时，
             #   是否「键不足」取决于**写入端 subset**（不是审计主键）：

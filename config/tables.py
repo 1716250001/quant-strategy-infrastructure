@@ -240,7 +240,10 @@ DB_AUDIT_PKEYS = {
     "moneyflow_hsgt":   ["trade_date"],
     "ggt_daily":        ["trade_date"],
     "hk_hold":          ["trade_date", "code"],
-    "suspend_d":        ["trade_date", "ts_code"],
+    # CC-FIX-8（2026-11-09，§369/§372）：同日同股可同时有 S（停牌）与 R（复牌），
+    #   实证 89 组同键多行（全在 2011–2015 分区）；键加 suspend_type 后潜在
+    #   折叠损失 0（640,675 行不变）。BACKFILL_TARGETS["subset"] 同步改同一键。
+    "suspend_d":        ["trade_date", "ts_code", "suspend_type"],
     "fut_daily":        ["trade_date", "ts_code"],
     "fut_mapping":      ["trade_date", "ts_code"],
     "disclosure_date":  ["ts_code", "end_date"],
@@ -382,6 +385,28 @@ DB_AUDIT_PKEYS = {
     #    会导致按 [exchange,prd,week_date] 误判 98 行"重复"。
     #    改用 week（周次，无缺失）→ 实测 20,653 行**零重复**。
     "fut_weekly_detail":   ["exchange", "prd", "week"],
+}
+
+# ============================================================
+# 7d-1b. 键窄但**已裁定无需改**的表（CC-FIX-8 v2，2026-11-09，§369/§372）
+# ============================================================
+# 判据（三条缺一不可）：
+#   1) 同键多出来的行是「同一事实的上游修订／补值」，不是两次业务事实；
+#   2) 逐组比较「后一版 vs 前一版」非空列计数，**后版更少 = 0 组**
+#      （否则 keep="last" 会丢值，禁止 ACK）；
+#   3) 整行完全相同 = 0（存在整行相同 ⇒ 是写入重复，不是修订，必须 ⚠）。
+# 另设 baseline_dup + alarm_ratio 护栏：同键多行超基线 1.5× 仍报 ⚠，
+#   防 ACK 变成永久哑巴。新增项必须带 decided + reason + evidence + 两护栏。
+KEY_NARROW_ACK = {
+    "index_global": {
+        "decided": "2026-11-09",
+        "reason": "行情修订／补值：同一指数同日被重拉后部分字段更新，keep='last' 取最新快照",
+        "evidence": "131 组同键多行（全在 2026 分区），整行完全相同 0；"
+                    "差异 vol 97 / low 19 / swing 18 / close 15 / change 15 / high 14 / pct_chg 12 / open 1；"
+                    "非空方向：后版更多 71 / 相同 60 / 更少 0",
+        "baseline_dup": 131,
+        "alarm_ratio": 1.5,
+    },
 }
 
 # ============================================================
