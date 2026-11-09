@@ -91,6 +91,7 @@ from fetch.base import (
     Checkpoint,
     RateLimiter,
     fetch_codes_parallel,  # ts_fetch: DB-R10 R10-1d
+    fetch_paged_by_code,   # CC-FIX-4：by_code offset 翻页
     get_pro,
     is_possibly_truncated,  # DB-R3
     ts_call_with_retry,
@@ -834,6 +835,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     #   透传 fields），而 fetch_codes_parallel 没有 extra_params 通道 ⇒ 仅在配置了
     #   fields 时替换为等价包装；**未配 fields 的表仍走原路径，参数逐字段不变**。
     _bc_fields = conf.get("fields")
+    _bc_page = conf.get("page_size")
     _bc_fetch_fn = None
     if _bc_fields:
         def _bc_fetch_fn(_pro, _lim, code, _f=_bc_fields):
@@ -846,6 +848,16 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             #   会 cp.mark_done ⇒ 失败的标被永久跳过且不报错
             #   （= 2026-09-21 修过的 P0「调用失败被统计成空」在 by_code+fields 上复发）。
             return None if not _ok else df
+    elif _bc_page:
+        # CC-FIX-4（2026-11-09）：share_float 等"单码可超单次硬顶"的接口，
+        #   by_code 必须走 limit/offset 翻页，否则静默截断在 6,000 行。
+        #   未配 page_size 的表仍走原路径（fetch_codes_parallel 默认 ts_fetch），
+        #   参数与行为逐字不变。fields 与 page_size 互斥，fields 优先。
+        def _bc_fetch_fn(_pro, _lim, code, _page=int(_bc_page),
+                         _max_pages=int(conf.get("max_pages", 20))):
+            return fetch_paged_by_code(_pro, conf["api"], _lim, code,
+                                       page=_page, max_pages=_max_pages,
+                                       verbose=verbose)
 
     stat = fetch_codes_parallel(pro, conf["api"], pending, limiter,
                                 fetch_fn=_bc_fetch_fn,

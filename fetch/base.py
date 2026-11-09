@@ -667,6 +667,53 @@ def ts_fetch(pro, api_name, limiter, ts_code, max_rows=5000, extra_params=None,
     return df, True
 
 
+def fetch_paged_by_code(pro, api_name, limiter, ts_code,
+                        page=5000, max_pages=20, verbose=True):
+    """按 ts_code + limit/offset 翻页拉全（share_float 等单码可超 6,000 行的接口）。
+
+    为什么需要它（2026-11-09 CC-FIX-4）:
+      share_float 旧 by_code 路径走 `fetch_codes_parallel → ts_fetch`，单次调用
+      **硬顶 6,000 行**；ts_fetch 的"续拉"是 end_date 往前推，但 share_float 的
+      end_date 会按 ann_date 筛掉最新解禁，不能用于本接口的分页补齐。实测 507 只
+      代码行数恰好 6,000 ⇒ 必须改用 offset 翻页拿全。
+
+    返回: DataFrame（可能为空）；任一次调用失败返回 None
+    —— 与 fetch_codes_parallel 的既有语义一致：None ⇒ 不落盘、不记断点。
+
+    语义:
+      - 每页参数 {"ts_code": ts_code, "limit": page}，第二页起加 "offset": offset；
+      - 单次返回 n < page ⇒ 本码结束；n == page ⇒ 继续下一页；offset += n；
+      - 达 max_pages 仍满页 ⇒ 返回已取部分并打印 [警告] 触顶 max_pages（不静默）；
+      - 任一次 df is None ⇒ 立即 return None；
+      - 全部为空 ⇒ 返回空 DataFrame。
+    """
+    chunks = []
+    offset = 0
+    pages = 0
+    while pages < max_pages:
+        params = {"ts_code": ts_code, "limit": page}
+        if pages > 0:
+            params["offset"] = offset
+        df = ts_call_with_retry(pro, api_name, limiter, params, verbose=verbose)
+        pages += 1
+        if df is None:                 # 调用失败 → None（调用方不落盘、不记断点）
+            return None
+        n = len(df)
+        if n == 0:
+            break
+        chunks.append(df)
+        offset += n
+        if n < page:                   # 不足一页 = 本码已到末尾
+            break
+    else:
+        print(f"  [警告] {api_name} {ts_code} 触顶 max_pages={max_pages}，"
+              f"已取 {sum(len(c) for c in chunks)} 行，可能仍不完整")
+
+    if not chunks:
+        return pd.DataFrame()
+    return pd.concat(chunks, ignore_index=True)
+
+
 # ============================================================
 # 并发批量拉取 (2026-09-15 新增)
 # ============================================================

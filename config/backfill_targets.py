@@ -215,6 +215,13 @@ BACKFILL_TARGETS = OrderedDict([
         #     单只 222 行 / 2007~2020 全历史）。新解禁按需补：
         #     `main.py gap-update --only share_float` 或 akshare 五件套。
         "note": "解禁压力预判｜⚠ by_date 不可用（trade_date 不生效，2026-10-01 实证）",
+        # CC-FIX-4（2026-11-09）：单码单次硬顶 6,000 行 ⇒ by_code 改走
+        #   fetch_paged_by_code（limit/offset 翻页）。此处三键只对 by_code 生效，
+        #   max_rows 是 by_range 的截断检测参数，**不改**。
+        #   subset 与周期通道（config/daily.py）同口径：按业务键幂等写入，
+        #   防"重拉产生同键双版"。
+        "page_size": 5000, "max_pages": 20,
+        "subset": ["ts_code", "float_date", "ann_date", "holder_name"],
     }),
     ("repurchase", {
         "api": "repurchase", "desc": "股票回购", "mode": "by_code",
