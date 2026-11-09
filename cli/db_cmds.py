@@ -36,7 +36,7 @@ def cmd_db_audit(args):
         _banner("db-audit 全量数据库体检")
     only = tuple(x.strip() for x in args.only.split(",")) if getattr(args, "only", None) else None
     if args.section == "all":
-        sections = ("checkpoint", "dup", "gap", "scale")
+        sections = ("checkpoint", "dup", "truncation", "gap", "scale")
     else:
         sections = tuple(x.strip() for x in args.section.split(",") if x.strip())
     run_audit(sections=sections, only=only, exact=getattr(args, "exact", False),
@@ -170,7 +170,7 @@ def _add_db_clean_args(p):
 
 def _add_db_audit_args(p):
     p.add_argument("--section", default="all",
-                   help="检查项: all / checkpoint / dup / gap / scale (可逗号组合)")
+                   help="检查项: all / checkpoint / dup / truncation / gap / scale (可逗号组合)")
     p.add_argument("--only", default=None, help="重复检查只针对指定目录, 逗号分隔")
     p.add_argument("--exact", action="store_true",
                    help="无主键目录做全量整行判重(慢, 约18分钟; 默认抽样)")

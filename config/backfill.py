@@ -67,6 +67,10 @@ BACKFILL_INDEX_CODES = [
 # index_monthly 只服务交易所指数 + 少量 CSI，实测 71 个码里仅这 13 个有月线
 # （58 个 CSI 调用返回 0 行，但其 index_daily 日线齐全 ⇒ 属接口不覆盖，非源端为空）。
 # ⚠ 不要用 BACKFILL_INDEX_CODES 直接喂 index_monthly —— 那会制造 58 个假缺口。
+# CC-FIX-6（2026-11-09，§362）4a 实测：`932000.CSI` / `899050.BJ` 调
+#   pro.index_monthly(start_date="20260101", end_date="20261109") **各返 0 行**
+#   ⇒ 源端不覆盖月线（两码 index_daily 日线齐全）。**码保留不删**：删掉会让
+#   "配置 13 / 库内 11"的差异变成静默消失，保留则每次 backfill 都会显式返回空。
 BACKFILL_INDEX_MONTHLY_CODES = [
     "000016.SH", "000300.SH", "000905.SH", "000852.SH", "932000.CSI",
     "000688.SH", "399006.SZ", "000001.SH", "899050.BJ",

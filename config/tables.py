@@ -259,7 +259,8 @@ DB_AUDIT_PKEYS = {
     "pledge_stat":      ["ts_code", "end_date"],
     # R9a：share_float 补 ann_date（同 float_date+holder_name 可多次公告）
     # CC-FIX-5（2026-11-09，§362）：原 4 键会把「同人同日同类型多笔解禁」
-    #   误报为主键重复；加 share_type 后仍有 2 组合法多行（仅 float_share 不同）
+    #   误报为主键重复；加 share_type（5 键）后实测仍有 127 组合法多行
+    #   （2026-11-09 全量复算：仅 float_share 不同；§368 Q3）
     #   ⇒ 本表无覆盖源端的业务键，改 None（跳过键式判重，由全列判重兜底）。
     "share_float":      None,
     "repurchase":       ["ts_code", "ann_date", "proc"],
@@ -379,6 +380,34 @@ DB_AUDIT_PKEYS = {
     #    会导致按 [exchange,prd,week_date] 误判 98 行"重复"。
     #    改用 week（周次，无缺失）→ 实测 20,653 行**零重复**。
     "fut_weekly_detail":   ["exchange", "prd", "week"],
+}
+
+# ============================================================
+# 7d-2. 已裁定「不会再更新」的表 — freshness 单列一档（CC-FIX-6，2026-11-09，§362）
+# ============================================================
+# 为什么（§366）：6 张红表里有 4 张永远不会好转（源端停更 / 已裁搁置），
+#   继续报红＝红灯疲劳。此处单列 `已停更` 档：**不计入红黄总数**，
+#   `--strict` 也不因它非零。
+# ⚠ 新增项必须带 decided（裁定日期）+ reason（依据），**不许把红表改配置改绿**。
+STALE_BY_DESIGN = {
+    "gz_index":     {"since": "2019-03-04", "decided": "2026-09-19",
+                     "reason": "源端停更（民间利率，已被 shibor 覆盖）"},
+    "shibor_quote": {"since": "2016-12-30", "decided": "2026-09-23",
+                     "reason": "老大决策 SHELVED，维持 2016 现状，不补不删"},
+    "hibor":        {"since": "2016-12-30", "decided": "2026-11-09",
+                     "reason": "market 侧未补（限频 1 次/小时，补 11 年≈11.2h）；"
+                               "港股资金面改引用 alt.hibor（实测 2026-11-06 正常）"},
+    "stk_account":  {"since": "2019-02-22", "decided": "2026-09-19",
+                     "reason": "源端停更，192 行仅存档"},
+    "slb_len_mm":   {"since": "2025-07-25", "decided": "2026-11-09",
+                     "reason": "源端停更（API 实证单次返 5,000 行，最新 20250725）"},
+}
+
+# 静态名录表：无「内容日期」语义，只判「文件存在 + 行数 ≥ 下限」。
+STATIC_TABLES = {
+    "fund_company": {"min_rows": 200,
+                     "reason": "207 行公司名录；date_col 探到常量 end_date=20091229，"
+                               "真实 setup_date 最大 20250116 ⇒ 内容日期判据不适用"},
 }
 
 # 体检时用于缺口分析的 by_date 类接口(有明确交易日维度)

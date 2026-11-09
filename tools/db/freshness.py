@@ -42,7 +42,7 @@ import pyarrow.parquet as pq
 from config import MARKET_DATA_DIR
 from config.backfill_targets import BACKFILL_TARGETS
 from config.daily import DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS
-from config.tables import TABLE_DATE_COL
+from config.tables import (STATIC_TABLES, STALE_BY_DESIGN, TABLE_DATE_COL)
 
 # alt 断点文件（只读，不导入 alt 包以免触发写入守卫初始化）
 ALT_CKPT = os.path.join(os.path.dirname(MARKET_DATA_DIR), "alt_data", ".alt_checkpoint.json")
@@ -215,6 +215,23 @@ def build_rows(only=None):
         r["dw"] = _days_since(r["newest_mtime"])
         r.pop("newest_mtime", None)
         r["verdict"] = _verdict(r["ds"], r["dw"], r["tier"], r["stale_days"])
+        # CC-FIX-6（2026-11-09，§362）：两档特判 —— 名单之外的表判定逐字不变。
+        # ⚠ 只对 market 库生效：alt 库存在同名表 `hibor`（实测 2026-11-09 正常），
+        #   按表名全局匹配会把 alt.hibor 误标「已停更」（首跑实证）。
+        r["note"] = ""
+        name = r["table"]
+        if r["lib"] == "market" and name in STALE_BY_DESIGN:
+            r["verdict"] = "已停更"
+            r["note"] = f"自 {STALE_BY_DESIGN[name]['since']} 停更"
+        elif r["lib"] == "market" and name in STATIC_TABLES:
+            # 静态名录表：无「内容日期」语义 ⇒ 只判「目录存在且有 parquet」。
+            # 取舍：config 里的 min_rows 下限**本版不校验** —— 逐表全量读行数
+            #       成本太高（_as_of 只抽样 2~3 个分区），留作后续判据再启用。
+            _root = (MARKET_DATA_DIR if r["lib"] == "market"
+                     else os.path.dirname(ALT_CKPT))
+            _has = bool(glob.glob(os.path.join(_root, name, "*.parquet")))
+            r["verdict"] = "正常" if _has else "红"
+            r["note"] = "静态名录"
     return rows
 
 
@@ -223,19 +240,25 @@ def render(rows):
             f"{'最近拉取':20s} {'档':9s} 判定")
     lines = [head, "-" * 92]
     for r in rows:
+        _note = f"  ({r['note']})" if r.get("note") else ""
         lines.append(
             f"{r['lib']:6s} {r['table']:24s} {str(r['as_of_date'] or '-'):10s} "
             f"{('-' if r['ds'] is None else r['ds']):>4} {('-' if r['dw'] is None else r['dw']):>4} "
-            f"{str(r['last_pull'] or '未知'):20s} {r['tier']:9s} {r['verdict']}")
+            f"{str(r['last_pull'] or '未知'):20s} {r['tier']:9s} {r['verdict']}{_note}")
     n_red = sum(1 for r in rows if r["verdict"] == "红")
     n_yel = sum(1 for r in rows if r["verdict"] == "黄")
     n_unk = sum(1 for r in rows if r["verdict"] == "未知")
+    n_stale = sum(1 for r in rows if r["verdict"] == "已停更")
     lines.append("-" * 92)
-    lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk} | "
-                 f"黄 {n_yel} | 红 {n_red} | 未知 {n_unk}")
+    lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk - n_stale} | "
+                 f"黄 {n_yel} | 红 {n_red} | 已停更 {n_stale} | 未知 {n_unk}")
     if n_red or n_yel:
         lines.append("红表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "红"))
         lines.append("黄表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "黄"))
+    if n_stale:
+        lines.append("已停更: " + ", ".join(
+            f"{r['table']}({STALE_BY_DESIGN[r['table']]['since']})"
+            for r in rows if r["verdict"] == "已停更"))
     lines.append("说明: ds=内容最新日期距今天数, dw=文件最新 mtime 距今天数; dw≤7 视为刚写过→绿")
     lines.append("      默认恒 exit 0；--strict 时存在红/黄才非零")
     return "\n".join(lines)

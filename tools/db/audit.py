@@ -34,6 +34,7 @@ import sys
 from datetime import datetime
 
 import pandas as pd
+import pyarrow.parquet as pq
 
 from common.calendar import open_dates
 from config import (
@@ -47,6 +48,7 @@ from config import (
     MARKET_DATA_DIR,
     TABLE_DATE_COL,
 )
+from config.daily import DAILY_UPDATE_EXTRA, PERIODIC_UPDATE_TARGETS
 
 SEP = "=" * 96
 
@@ -223,6 +225,27 @@ def audit_checkpoint(verbose=True):
 # ============================================================
 # B. 重复二分判定
 # ============================================================
+def _write_path_subsets(name):
+    """列出该表在**写入端**实际使用的判重键（供 6a「键是否不足」判定）。
+
+    CC-FIX-6 v3（2026-11-09，§368）：只看审计主键会大面积误伤 —— 真实折叠风险
+    取决于写入端 subset：
+      · subset 缺失 / "*"  ⇒ 全列判重，同键不同值不会折叠
+      · subset 为窄键      ⇒ 同键不同值会被丢弃
+    四个来源都解析；DAILY_UPDATE_GROUPS 只声明「谁参与日更」，键仍取自
+    BACKFILL_TARGETS / DAILY_UPDATE_EXTRA，故组内成员不额外产生 subset。
+    """
+    out = []
+    for label, conf in (("backfill", BACKFILL_TARGETS.get(name)),
+                        ("periodic", PERIODIC_UPDATE_TARGETS.get(name)),
+                        ("daily", DAILY_UPDATE_EXTRA.get(name))):
+        if conf is not None:
+            out.append((label, conf.get("subset") or "*"))
+    if not out and any(name in v for v in DAILY_UPDATE_GROUPS.values()):
+        out.append(("daily_group", "*"))
+    return out
+
+
 def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
     """检查各目录的重复情况，区分"主键重复"与"整行真重复"。
 
@@ -333,14 +356,25 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
                 verd = "未采样"
         elif full_dup is None:
             verd = "整行未采样"
-        elif full_dup == 0:
-            verd = "✓ 无真重复"
         elif pk_dup == 0:
-            verd = "✓ 主键干净"
-        elif name in DB_AUDIT_UPSTREAM_DUP:
-            verd = f"ℹ 上游即有重复(抽样{full_dup:,})"
+            verd = "✓ 主键干净" if full_dup > 0 else "✓ 无真重复"
+        elif full_dup > 0:
+            verd = (f"ℹ 上游即有重复(抽样{full_dup:,})"
+                    if name in DB_AUDIT_UPSTREAM_DUP
+                    else f"⚠ 有真重复(抽样{full_dup:,})")
         else:
-            verd = f"⚠ 有真重复(抽样{full_dup:,})"
+            # CC-FIX-6 v3（2026-11-09，§368 Q3）：主键有重复、抽样整行全不同时，
+            #   是否「键不足」取决于**写入端 subset**（不是审计主键）：
+            #     · 全部 "*" ⇒ 全列判重，同键不同值不会折叠 → 业务多行
+            #     · 存在窄键 ⇒ 写入会被折叠 → 报警并点名是哪条路径
+            _ws = _write_path_subsets(name)
+            _narrow = [(lbl, s) for lbl, s in _ws if s != "*"]
+            if not _narrow:
+                verd = "✓ 业务多行（写路径已全列判重）"
+            else:
+                _desc = "; ".join(f"{lbl}={s}" for lbl, s in _narrow)
+                verd = (f"⚠ 键可能不足：同键不同值 {pk_dup:,} 行"
+                        f"（写路径 subset={_desc}）")
 
         results.append({"name": name, "rows": tot, "pk_dup": pk_dup,
                         "full_dup": full_dup, "verdict": verd})
@@ -362,6 +396,103 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
         if not bad:
             print("  ✓ 未发现真重复")
     return results
+
+
+# ============================================================
+# B2. 截断残留检测（CC-FIX-6，2026-11-09，§366/§367）
+# ============================================================
+def audit_truncation(verbose=True, table_dirs=None):
+    """逐码行数恰为 page_size 整数倍 ⇒ 疑似翻页停在整页（源端极少长这样）。
+
+    CC-FIX-4 一次性修过 share_float 的 6,000 行截断，但 5R 前又长出残留（§366）
+    —— 一次性点名脚本挡不住复发，故做成常态护栏。
+
+    table_dirs: {table: 目录} 覆盖默认 MARKET_DATA_DIR/<table>，
+        供"对历史冷备只读复现"用（Step 6b 判据②）。
+    判据完全由 BACKFILL_TARGETS[*]["page_size"] 驱动：新增配了 page_size 的
+    表自动纳入，本函数不含任何表名/页大小字面量。
+    本段是**诊断项**：不计入 run_audit 的 n_issue，也不影响任何退出码。
+    """
+    if verbose:
+        print()
+        print(SEP)
+        print("  B2. 截断残留检测（单码行数恰为 page_size 整数倍）")
+        print(SEP)
+        print("  说明: 只有存在「单次硬顶」的接口才需要 offset 翻页；"
+              "停在整页 = 疑似少翻一页。")
+
+    # CC-FIX-6 v3（2026-11-09，§368）：判据优先用 cap（源端单次硬顶＝截断签名），
+    #   未配 cap 的表回落 page_size。
+    targets = {n: c for n, c in BACKFILL_TARGETS.items()
+               if c.get("page_size") or c.get("cap")}
+    out = []
+    failed = 0
+    for name, conf in sorted(targets.items()):
+        page = int(conf.get("cap") or conf["page_size"])
+        unit = "cap" if conf.get("cap") else "page_size"
+        d = (table_dirs or {}).get(name) or os.path.join(MARKET_DATA_DIR, name)
+        if not os.path.isdir(d):
+            continue
+        files = sorted(glob.glob(os.path.join(d, "*.parquet")))
+        if not files:
+            continue
+
+        # 先只读 schema 判列；任何读取异常都要 fail-loud（§368 第 4 条），不许静默跳过
+        good = []
+        for f in files:
+            try:
+                good.append((f, pq.read_schema(f).names))
+            except Exception as e:
+                failed += 1
+                if verbose:
+                    print(f"  [READ-FAIL] {name}/{os.path.basename(f)}: "
+                          f"{type(e).__name__}: {e}")
+        if not good:
+            continue
+        no_col = [f for f, names in good if "ts_code" not in names]
+        if len(no_col) == len(good):
+            if verbose:
+                print(f"  {name:22s} 无 ts_code 列，跳过（非逐码分页表）")
+            continue
+        if no_col:
+            failed += len(no_col)
+            if verbose:
+                print(f"  [READ-FAIL] {name}: {len(no_col)} 个分片缺 ts_code 列: "
+                      f"{[os.path.basename(f) for f in no_col][:5]}")
+
+        frames = []
+        for f, _names in good:
+            if f in no_col:
+                continue
+            try:
+                frames.append(pd.read_parquet(f, columns=["ts_code"]))
+            except Exception as e:
+                failed += 1
+                if verbose:
+                    print(f"  [READ-FAIL] {name}/{os.path.basename(f)}: "
+                          f"{type(e).__name__}: {e}")
+        if not frames:
+            continue
+        cnt = pd.concat(frames, ignore_index=True)["ts_code"].astype(str).value_counts()
+        sus = cnt[(cnt % page == 0) & (cnt >= page)].sort_values(ascending=False)
+        out.append({"table": name, "cap": page, "cap_source": unit,
+                    "codes": int(len(cnt)), "rows": int(cnt.sum()),
+                    "suspects": {str(k): int(v) for k, v in sus.items()}})
+        if verbose:
+            print(f"  {name:22s} {unit}={page:<5d} {len(cnt):,} 码 / "
+                  f"{int(cnt.sum()):,} 行 → 疑似 {len(sus)} 只")
+            for code, n in list(sus.items())[:10]:
+                print(f"      {code}  db_rows={n:,}  db_rows%{page}={n % page}")
+            if len(sus) > 10:
+                print(f"      ... 其余 {len(sus) - 10} 只见 JSON/明细")
+            print("      " + ("✓ 无截断残留" if len(sus) == 0 else
+                              f"⚠ 疑似截断 {len(sus)} 只"
+                              f"（必须用 fetch_paged_by_code 重探）"))
+    if verbose:
+        print(f"  [统计] 读取失败 {failed} 个文件")
+        if not out:
+            print("  未发现配置了 page_size/cap 的逐码分页表")
+    return out
 
 
 # ============================================================
@@ -782,8 +913,9 @@ def audit_data_check(only=None, verbose=True):
     return rows
 
 
-def run_audit(sections=("checkpoint", "dup", "gap", "scale"), only=None,
-              verbose=True, exact=False, as_json=False, data_check=False):
+def run_audit(sections=("checkpoint", "dup", "truncation", "gap", "scale"),
+              only=None, verbose=True, exact=False, as_json=False,
+              data_check=False):
     """执行体检。exact=True 时无主键目录做全量整行判重(慢, 约18分钟)。
 
     as_json: stdout 输出结果 JSON（CLI --json；2026-09-30 P3 统一）
@@ -812,6 +944,8 @@ def run_audit(sections=("checkpoint", "dup", "gap", "scale"), only=None,
         result["checkpoint"] = audit_checkpoint(v)
     if "dup" in sections:
         result["dup"] = audit_duplicates(only=only, verbose=v, exact=exact)
+    if "truncation" in sections:
+        result["truncation"] = audit_truncation(verbose=v)
     if "gap" in sections:
         result["gap"] = audit_gaps(v)
     if "scale" in sections:
@@ -854,6 +988,10 @@ def run_audit(sections=("checkpoint", "dup", "gap", "scale"), only=None,
         b = [r for r in result["dup"] if "⚠" in r["verdict"]]
         n_issue += len(b)
         print(f"  真重复:     {'✓ 未发现' if not b else f'⚠ {len(b)} 个目录'}")
+    if "truncation" in result:
+        n_sus = sum(len(r["suspects"]) for r in result["truncation"])
+        print(f"  截断残留:   {'✓ 无' if n_sus == 0 else f'⚠ 疑似 {n_sus} 只'}"
+              f"（诊断项，不计入总体）")
     if "gap" in result:
         g = result["gap"]
         # ⚠ 只有**真缺口（日更表）**才计入「待关注」（2026-09-22 修复）：

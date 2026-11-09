@@ -220,7 +220,11 @@ BACKFILL_TARGETS = OrderedDict([
         #   max_rows 是 by_range 的截断检测参数，**不改**。
         #   subset 与周期通道（config/daily.py）同口径：按业务键幂等写入，
         #   防"重拉产生同键双版"。
-        "page_size": 5000, "max_pages": 20,
+        # CC-FIX-6 v3（2026-11-09，§368）：page_size=5000 是**分页请求**页大小
+        #   （刻意留安全边际）；cap=6000 是**源端单次硬顶**，也就是截断残留的
+        #   真实签名（旧实现停在整页即 6,000 行）。audit_truncation 优先用 cap
+        #   判定，未配 cap 的表回落 page_size。
+        "page_size": 5000, "max_pages": 20, "cap": 6000,
         # CC-FIX-5（2026-11-09，§362）：原 4 键不含 float_share，
         #   源端存在同 (ts_code,float_date,ann_date,holder_name,share_type)
         #   的多笔解禁（实证 002215.SZ 李广泽 20260610 三笔），

@@ -39,6 +39,7 @@ from config import (
     TABLE_DATE_COL,
     TS_DAILY_LIMIT,
 )
+from config.tables import DB_AUDIT_PKEYS
 from fetch.base import (
     Checkpoint,
     RateLimiter,
@@ -50,6 +51,9 @@ from fetch.base import (
 # EE-FUND-5 白名单：单一真源 = config.FUND_CODE_PATTERN（与 refresh_meta_basic.py 共用）。
 # 模块级编译，便于单测直接复用「消费方自己的那个正则对象」。
 _VALID_FUND_CODE = re.compile(FUND_CODE_PATTERN)
+
+# CC-FIX-6（2026-11-09，§362）：区分「表未登记」与「登记为 None（跳过键式判重）」
+_UNSET = object()
 
 
 # ============================================================
@@ -262,12 +266,16 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
 # 单API批量下载
 # ============================================================
 def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
-                     max_rows=5000, desc="", dry_run=False, workers=None):
+                     max_rows=5000, desc="", dry_run=False, workers=None,
+                     refresh_existing=False):
     """
     对一组代码逐一调用同一API, 保存为Parquet。
 
     codes: list of ts_code strings
     workers: 并发线程数, None=config.FETCH_MAX_WORKERS(=4); 传1则串行
+    refresh_existing: 库内已有数据的码也重拉（CC-FIX-6，2026-11-09，§362）。
+        默认 False = 旧行为（库内有数据即跳过并补记断点）；断点仍先生效，
+        要彻底重来还需同时 --reset。
 
     2026-09-15 改造: 由纯串行改为线程池并发(默认4线程)。
     网络请求在 worker 线程并发, 落盘与断点标记在主线程串行(无竞争)。
@@ -298,18 +306,25 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
         stored = set(reader.codes_from_store(api_name))
     except Exception:
         stored = set()
+    _refresh = bool(refresh_existing)
+    n_stored_in_pending = 0
     for c in codes:
         if checkpoint.is_done(api_name, c):
             skipped += 1
             continue
-        if c in stored:
+        if c in stored and not _refresh:
             # 库内已有数据 → 补记断点, 避免断点丢失后重复拉取
             # (2026-09-15: 实测 fund_daily 断点缺失导致 1,117 次无效重拉)
             if not dry_run:
                 checkpoint.mark_done(api_name, c)
             skipped += 1
             continue
+        if c in stored:
+            n_stored_in_pending += 1
         pending.append(c)
+
+    if _refresh:
+        print(f"  [refresh-existing] 库内已有 {n_stored_in_pending} 只将重拉")
 
     if dry_run:
         print(f"  [DRY-RUN] 待下载 {len(pending)} 只, 跳过 {skipped} 只")
@@ -333,8 +348,23 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
                     df.to_parquet(os.path.join(api_dir, f"{ts_code}.parquet"),
                                   index=False)
                 else:
-                    subset = (["ts_code", date_col]
-                              if "ts_code" in df.columns else [date_col])
+                    # CC-FIX-6（2026-11-09，§362）：判重键改为取单一真源 DB_AUDIT_PKEYS。
+                    # 原实现自造 ["ts_code", date_col]，对财报三表会按
+                    # (ts_code, end_date) 折叠 —— 实测 income 82,049 /
+                    # balancesheet 126,332 / cashflow 86,948 组，合计 295,329 行。
+                    #   · 明确登记 None（跳过键式判重）→ 全列判重 "*"
+                    #   · 未登记 → 退化旧键并打印提示（不静默）
+                    #   · 已登记 → 用登记键（含 update_flag 等业务多行列）
+                    _key = DB_AUDIT_PKEYS.get(api_name, _UNSET)
+                    if _key is None:
+                        subset = "*"
+                    elif _key is _UNSET:
+                        subset = (["ts_code", date_col]
+                                  if "ts_code" in df.columns else [date_col])
+                        print(f"  [提示] {api_name} 未登记 DB_AUDIT_PKEYS，"
+                              f"退化按 {subset} 判重")
+                    else:
+                        subset = list(_key)
                     _r = upsert_by_year(df, api_dir, date_col=date_col,
                                         subset=subset, sort_by=date_col,
                                         on_error=lambda y, e: print(f"  [ERROR] 分区 {y}: {e}"))
@@ -384,11 +414,13 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
 # ============================================================
 # 主流程编排
 # ============================================================
-def run_download(phase="all", reset=False, dry_run=False, workers=None):
+def run_download(phase="all", reset=False, dry_run=False, workers=None,
+                 refresh_existing=False):
     """执行全市场数据下载。
 
     供本文件 CLI 与统一入口 main.py 的 download-full 子命令共用。
     workers: 并发线程数, None=config.FETCH_MAX_WORKERS(=4)
+    refresh_existing: 库内已有数据的码也重拉（默认 False＝旧行为）
     """
     if workers is None:
         workers = FETCH_MAX_WORKERS
@@ -469,7 +501,8 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None):
             codes = stock_codes if api_name in ("daily", "daily_basic") else fund_codes_listed
             download_one_api(pro, api_name, codes, limiter, checkpoint,
                              MARKET_DATA_DIR, max_rows=max_rows, desc=desc,
-                             dry_run=dry_run, workers=workers)
+                             dry_run=dry_run, workers=workers,
+                             refresh_existing=refresh_existing)
 
     # ── Phase: 财务数据 ──
     if phase in ("all", "fina"):
@@ -479,7 +512,8 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None):
             max_rows = api_conf["max_rows"]
             download_one_api(pro, api_name, stock_codes, limiter, checkpoint,
                              MARKET_DATA_DIR, max_rows=max_rows, desc=desc,
-                             dry_run=dry_run, workers=workers)
+                             dry_run=dry_run, workers=workers,
+                             refresh_existing=refresh_existing)
 
     # ── 最终报告 ──
     print("\n" + "=" * 60)
@@ -518,10 +552,13 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="空跑模式, 只统计不下载")
     parser.add_argument("--workers", type=int, default=None,
                         help=f"并发线程数 (默认{FETCH_MAX_WORKERS}, 传1=串行)")
+    parser.add_argument("--refresh-existing", action="store_true",
+                        help="库内已有数据的码也重拉（跳过 codes_from_store 跳过逻辑；"
+                             "断点仍生效，需彻底重来请同时加 --reset）")
     args = parser.parse_args()
 
     run_download(phase=args.phase, reset=args.reset, dry_run=args.dry_run,
-                 workers=args.workers)
+                 workers=args.workers, refresh_existing=args.refresh_existing)
 
 
 if __name__ == "__main__":
