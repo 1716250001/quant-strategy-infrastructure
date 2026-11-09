@@ -105,31 +105,17 @@ def _cmd_config_check(args: argparse.Namespace) -> int:
     for warning in warnings:
         print(warning)
 
-    run = cfg.get("run", {})
-    period = run.get("period", {})
-    data = cfg.get("data", {})
-    execn = cfg.get("execution", {})
-    rules = cfg.get("rules")
-    print(f"[ok] {cfg['schema_version']} 校验通过：{args.config}")
-    print(f"     策略: {run.get('strategy', '—')}")
-    print(f"     期间: {period.get('start', '?')} → {period.get('end', '?')}"
-          f"（初始资金 {run.get('initial_cash', '—')}）")
-    # X-6（19 号 §18.2）：原打印 `data.completeness.missing_bars_action`
-    # ——该键已于 v0.5.1 作为死键删除（声明而零消费），此处仍消费即为残留；
-    # 改为打印**真实生效**的区间守卫降级开关（P1-11）。
-    print(f"     数据: feed={data.get('feed')}"
-          f" | 降级开关 allow_degraded_limit="
-          f"{data.get('allow_degraded_limit', False)}")
-    print(f"     执行: handler={execn.get('handler')} cost={execn.get('cost_model')}"
-          f" slippage={execn.get('slippage', {}).get('model')}"
-          f" rebalancer={execn.get('rebalancer')}")
-    if isinstance(rules, dict):
-        print(f"     规则: source={rules.get('source')}"
-              f" overrides={len(rules.get('overrides') or [])} 条")
     if problems:
-        # 与 `run` 装配期**同一格式化**（item 行逐字一致）；此处不构造 runtime。
+        # D-2-R（19 号 §257）：失败时**不得**再打印 `[ok] … 校验通过`（原实现
+        # 先打表头后判失败，RC=1 时 stdout/stderr 自相矛盾）。错误块与 `run`
+        # 装配期**同一格式化**（item 行逐字一致）；摘要保留、单份复用。
         print(f"[error] {ConfigError(problems)}", file=sys.stderr)
+        print(f"[fail] {cfg['schema_version']} 校验未通过：{args.config}")
+        _print_config_summary(cfg, args)
         return 1
+    print(f"[ok] {cfg['schema_version']} 校验通过：{args.config}")
+    _print_config_summary(cfg, args)
+    run = cfg.get("run", {})
     if getattr(args, "resolve_strategy", False):
         # BB-3（19 号 §33.6③ / P3-NEW-5）：策略类可加载性——「随写随测」的首道
         # 门；类名拼错应在**最低成本环节**暴露（原须到 `run` 才报错）。
@@ -145,6 +131,34 @@ def _cmd_config_check(args: argparse.Namespace) -> int:
         print("--- 合并后配置（脱敏） ---")
         print(yaml.safe_dump(mask_config(cfg), allow_unicode=True, sort_keys=False))
     return 0
+
+
+def _print_config_summary(cfg: dict[str, Any], args: argparse.Namespace) -> None:
+    """config-check 的 5 行摘要（`[ok]` / `[fail]` 两态**共用单份**）。
+
+    D-2-R（19 号 §257）：禁止复制两份——两份必然漂移，正是 D-2 要治的病。
+    `args` 仅为与派单签名一致（摘要正文只依赖合并后配置）。
+    """
+    run = cfg.get("run", {})
+    period = run.get("period", {})
+    data = cfg.get("data", {})
+    execn = cfg.get("execution", {})
+    rules = cfg.get("rules")
+    print(f"     策略: {run.get('strategy', '—')}")
+    print(f"     期间: {period.get('start', '?')} → {period.get('end', '?')}"
+          f"（初始资金 {run.get('initial_cash', '—')}）")
+    # X-6（19 号 §18.2）：原打印 `data.completeness.missing_bars_action`
+    # ——该键已于 v0.5.1 作为死键删除（声明而零消费），此处仍消费即为残留；
+    # 改为打印**真实生效**的区间守卫降级开关（P1-11）。
+    print(f"     数据: feed={data.get('feed')}"
+          f" | 降级开关 allow_degraded_limit="
+          f"{data.get('allow_degraded_limit', False)}")
+    print(f"     执行: handler={execn.get('handler')} cost={execn.get('cost_model')}"
+          f" slippage={execn.get('slippage', {}).get('model')}"
+          f" rebalancer={execn.get('rebalancer')}")
+    if isinstance(rules, dict):
+        print(f"     规则: source={rules.get('source')}"
+              f" overrides={len(rules.get('overrides') or [])} 条")
 
 
 def _resolve_strategy_problem(spec: Any) -> str | None:
