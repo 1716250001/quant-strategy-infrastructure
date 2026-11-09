@@ -36,7 +36,8 @@ def _seq(code: str, day: str, pre: float, close: float) -> list[dict]:
 
 
 def _check(rows: list[dict], *, st: tuple = (), win: tuple = (),
-           first: tuple = (), list_dates: dict | None = None):
+           first: tuple = (), list_dates: dict | None = None,
+           fund_meta: dict | None = None, table: str = "daily"):
     """默认把所有代码视为**老股**（`list_date` 早于日历起点）——IPO 分支不介入。
 
     `list_dates={}`（显式传空）用于测"`list_date` 缺失 → 首个行情日锚点"。
@@ -44,8 +45,8 @@ def _check(rows: list[dict], *, st: tuple = (), win: tuple = (),
     if list_dates is None:
         list_dates = {r["ts_code"]: "20000101" for r in rows}
     t = pa.Table.from_pylist(rows)
-    return quality._check_cc2(t, "daily", set(st), list_dates, set(CAL),
-                              set(), set(win), set(first))
+    return quality._check_cc2(t, table, set(st), list_dates, set(CAL),
+                              set(), set(win), set(first), fund_meta)
 
 
 def _n(result) -> int:
@@ -139,6 +140,56 @@ class TestTickTolerance:
         result = _check(_seq("600001.SH", "20240102", 10.0, 10.56),
                         st=(("600001.SH", "20240102"),))
         assert _n(result) == 1
+
+
+class TestFundBoardLimitD1:
+    """⑦ 基金 20% 档（D-1；19 号 §255）：**跟踪标的板块 × 时点**。
+
+    双向可证伪：同一只基金在时点**后** +15% 不报、时点**前** +15% 必报；
+    混合型 / 无在册记录在时点后仍必报（证明不是"一律 20%"）。
+    """
+
+    def _run(self, code: str, base: str, target: str, meta: dict):
+        """日历只含相邻两日——保证目标行"前一交易日有行情"（不被口径外豁免）。"""
+        rows = [_row(code, base, 10.0, 10.0), _row(code, target, 10.0, 11.5)]
+        return quality._check_cc2(
+            pa.Table.from_pylist(rows), "fund_daily", set(),
+            {code: "19980101"}, {base, target}, set(), set(), set(), meta)
+
+    def test_gem_after_20200824_not_reported(self):
+        result = self._run("159915.SZ", "20200820", "20200824",
+                           {"159915": ("股票型", "创业板指数P×100%")})
+        assert _n(result) == 0, "创业板 ETF 20% 档（2020-08-24 起）+15% 不应报"
+
+    def test_gem_before_20200824_reported(self):
+        result = self._run("159915.SZ", "20200820", "20200821",
+                           {"159915": ("股票型", "创业板指数P×100%")})
+        assert _n(result) == 1, "2020-08-24 前创业板 ETF 仍 10% ⇒ +15% 必报"
+        assert result[1]["fund_limit_by_source"]["equity_10"] == 1
+
+    def test_star_after_20190722_not_reported(self):
+        result = self._run("588000.SH", "20190719", "20190722",
+                           {"588000": ("股票型", "上证科创板50成份指数收益率×100%")})
+        assert _n(result) == 0
+
+    def test_star_before_20190722_reported(self):
+        result = self._run("588000.SH", "20190718", "20190719",
+                           {"588000": ("股票型", "上证科创板50成份指数收益率×100%")})
+        assert _n(result) == 1
+        assert result[1]["fund_limit_by_source"]["equity_10"] == 1
+
+    def test_mixed_type_not_relaxed(self):
+        """混合型即使 benchmark 含创业板也**不**放宽（派单 §3.3 ②）。"""
+        result = self._run("506009.SH", "20200820", "20200824",
+                           {"506009": ("混合型", "创业板指数收益率×100%")})
+        assert _n(result) == 1, "混合型不得按 20% 放宽"
+        assert result[1]["fund_limit_by_source"]["non_equity_10"] == 1
+
+    def test_unregistered_reported_and_counted(self):
+        result = self._run("159999.SZ", "20200820", "20200824", {})
+        assert _n(result) == 1, "无在册记录 ⇒ 10% 兜底，+15% 必报（不得静默放宽）"
+        assert result[1]["fund_limit_undetermined_rows"] == 1
+        assert result[1]["fund_limit_by_source"]["undetermined_10"] == 1
 
 
 class TestMissingPrevRow:

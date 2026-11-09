@@ -157,6 +157,63 @@ def _board_limit(symbol: str) -> float:
     return _BOARD_LIMIT["main"]
 
 
+#: **基金 20% 档的生效时点**（D-1；19 号 §255）：ETF 限幅必须按「跟踪标的板块
+#: × 时点」取——**不能**"创业板一律 20%"：2020-08-24 前仍为 10%，一律放宽会
+#: 悄悄漏检 10 个百分点（`159915` 10% 时代 2,116 行 max = 10.018%）。
+#: 科创板 2019-07-22 开市即 20%；创业板 2020-08-24 注册制改革起 20%。
+_FUND_STAR_FROM = "20190722"
+_FUND_GEM_FROM = "20200824"
+#: 基金限幅来源桶（披露口径；`undetermined_10` = 无在册记录按 10% 兜底）
+_FUND_LIMIT_SOURCES = ("equity_gem20", "equity_star20", "equity_10",
+                       "non_equity_10", "undetermined_10")
+
+
+def _fund_meta(store: Any) -> dict[str, tuple[str, str]]:
+    """`fund_basic` → `{6 位 code: (fund_type, benchmark)}`（D-1）。
+
+    缺文件 ⇒ **fail-closed**（缺在册记录就无法判档位，拒绝静默回落全 10%）。
+    """
+    t = store.read_file("fund_basic",
+                        columns=["code", "fund_type", "benchmark"])
+    if t is None:
+        raise FileNotFoundError(
+            "基金列表缺失（fund_basic）——CC-2 无法判定 ETF 涨跌幅档位，"
+            "**拒绝静默跳过**（登记布局 = fund/fund_basic_E.parquet）")
+    return {c: (ft or "", bm or "") for c, ft, bm in zip(
+        t.column("code").to_pylist(), t.column("fund_type").to_pylist(),
+        t.column("benchmark").to_pylist(), strict=True)}
+
+
+def _fund_limit(code: str, day: str,
+                fund_meta: dict[str, tuple[str, str]]) -> tuple[float, str]:
+    """基金限幅 **按「跟踪标的板块 × 时点」**（D-1；返回 `(限幅, 来源桶)`）。
+
+    顺序即优先级（派单 §3.3）：
+      ① 无在册记录 → 10%（`undetermined_10`，计数披露）
+      ② `fund_type != "股票型"` → 10%（混合型/债券型/REITs 一律**不放宽**）
+      ③ `benchmark` 含「科创」→ `>= 20190722` 20%，否则 10%
+      ④ `benchmark` 含「创业板」或「双创」→ `>= 20200824` 20%，否则 10%
+      ⑤ 其余 → 10%
+
+    判定只用 `benchmark`（`name` 不参与——语义更杂）；`双创` 归创业板时点。
+    """
+    rec = fund_meta.get(code.split(".", 1)[0])
+    if rec is None:
+        return _MAIN_BOARD_LIMIT, "undetermined_10"
+    fund_type, benchmark = rec
+    if fund_type != "股票型":
+        return _MAIN_BOARD_LIMIT, "non_equity_10"
+    if "科创" in benchmark:
+        if day >= _FUND_STAR_FROM:
+            return _BOARD_LIMIT["star"], "equity_star20"
+        return _MAIN_BOARD_LIMIT, "equity_10"
+    if "创业板" in benchmark or "双创" in benchmark:
+        if day >= _FUND_GEM_FROM:
+            return _BOARD_LIMIT["gem"], "equity_gem20"
+        return _MAIN_BOARD_LIMIT, "equity_10"
+    return _MAIN_BOARD_LIMIT, "equity_10"
+
+
 @dataclass(frozen=True)
 class Finding:
     """单条发现（含 ≤3 条样例，供人工复核）。"""
@@ -388,7 +445,8 @@ def _check_cc2(t: Any, table: str, st_pairs: set[tuple[str, str]],
                suspend_full: set[tuple[str, str]] | None = None,
                delist_win: set[tuple[str, str]] | None = None,
                delist_first: set[tuple[str, str]] | None = None,
-               ) -> tuple[RuleResult, dict[str, int]]:
+               fund_meta: dict[str, tuple[str, str]] | None = None,
+               ) -> tuple[RuleResult, dict[str, Any]]:
     """涨跌幅边界（板块 + ST〔**时点化**〕 + 新股 + 复牌首日 + **退市整理期** + **价格档位容差**）。
 
     返回 `(结果, 豁免/口径计数 dict)`。豁免与口径（**全部来自实测归因 + 规则原文**）：
@@ -405,6 +463,8 @@ def _check_cc2(t: Any, table: str, st_pairs: set[tuple[str, str]],
       · **价格档位容差（EE-2 / OBS-3）**：涨停价按**四舍五入到分**计算 ⇒ 容差取
         `max(_PCT_TOL, _TICK / pre_close)`（低价股 1 档可达 0.5%+，样例
         000005.SZ@20240222：5.56% vs 名义 5%）。
+      · **基金 20% 档（D-1；19 号 §255）**：传 `fund_meta`（仅 `fund_daily` 表）
+        时改按「跟踪标的板块 × 时点」取限幅并披露来源桶；`None` = 股票口径不变。
     """
     if not t.num_rows:
         return RuleResult("CC-2", 0), {}
@@ -449,6 +509,7 @@ def _check_cc2(t: Any, table: str, st_pairs: set[tuple[str, str]],
     exempt_neeq = []
     exempt_no_prev = []
     tick_relaxed = []
+    fund_buckets: list[str] = []
     for i, (code, day) in enumerate(zip(codes, dates, strict=True)):
         exempt_long_gap.append(f"{code}@{day}" in long_gap_first)
         # 新三板时期（精选层设立前）：机制多样 ⇒ 口径外豁免（计数披露）
@@ -469,13 +530,18 @@ def _check_cc2(t: Any, table: str, st_pairs: set[tuple[str, str]],
         #   · 整理期：涨跌幅 = 板块幅度（主板 10%；不再执行 ST 5%）；
         #   · ST：**时点化**（主板 2026-07-06 前 5%，其后 10%；非主板维持板块幅度）；
         #   · 其余：板块幅度。
+        # D-1：`fund_daily` 的"板块"= **跟踪标的板块 × 时点**（见 `_fund_limit`）。
+        if fund_meta is not None:
+            base_lim, bucket = _fund_limit(code, day, fund_meta)
+            fund_buckets.append(bucket)
+        else:
+            base_lim = _board_limit(code)
         if (code, day) in win:
-            lim = _board_limit(code)
+            lim = base_lim
             in_delist.append(True)
             exempt_delist_first.append((code, day) in first)
         else:
-            lim = _st_limit(code, day) if (code, day) in st_pairs else \
-                _board_limit(code)
+            lim = _st_limit(code, day) if (code, day) in st_pairs else base_lim
             in_delist.append(False)
             exempt_delist_first.append(False)
         limits.append(lim)
@@ -529,20 +595,30 @@ def _check_cc2(t: Any, table: str, st_pairs: set[tuple[str, str]],
         findings = (Finding("CC-2", table,
                             "单日涨跌幅越板块/ST/整理期上限（价格尖刺或复权错位）",
                             n, _sample_cols(t, bad)),)
-    return (RuleResult("CC-2", checked, findings),
-            {"exempt_ipo_rows": sum(1 for x in fresh_ipo if x),
-             "exempt_resumption_rows": sum(1 for x in resumed if x),
-             "exempt_delisting_first_rows":
-                 sum(1 for x in exempt_delist_first if x),
-             "exempt_resume_listing_rows":
-                 sum(1 for x in exempt_long_gap if x),
-             "exempt_ipo_anchor_fallback_rows":
-                 sum(1 for x in ipo_anchor_fallback if x),
-             "exempt_neeq_period_rows": sum(1 for x in exempt_neeq if x),
-             "exempt_missing_prev_rows":
-                 sum(1 for x in exempt_no_prev if x),
-             "delisting_window_rows": sum(1 for x in in_delist if x),
-             "tick_tolerance_rows": sum(1 for x in tick_relaxed if x)})
+    counts: dict[str, Any] = {
+        "exempt_ipo_rows": sum(1 for x in fresh_ipo if x),
+        "exempt_resumption_rows": sum(1 for x in resumed if x),
+        "exempt_delisting_first_rows":
+            sum(1 for x in exempt_delist_first if x),
+        "exempt_resume_listing_rows":
+            sum(1 for x in exempt_long_gap if x),
+        "exempt_ipo_anchor_fallback_rows":
+            sum(1 for x in ipo_anchor_fallback if x),
+        "exempt_neeq_period_rows": sum(1 for x in exempt_neeq if x),
+        "exempt_missing_prev_rows":
+            sum(1 for x in exempt_no_prev if x),
+        "delisting_window_rows": sum(1 for x in in_delist if x),
+        "tick_tolerance_rows": sum(1 for x in tick_relaxed if x),
+    }
+    if fund_meta is not None:
+        # D-1 披露：**超阈行**按限幅来源分桶（520 消除 / 128 残留的可核口径）
+        by_source = {key: 0 for key in _FUND_LIMIT_SOURCES}
+        for bucket, hit in zip(fund_buckets, bad.to_pylist(), strict=True):
+            if hit:
+                by_source[bucket] += 1
+        counts["fund_limit_by_source"] = by_source
+        counts["fund_limit_undetermined_rows"] = by_source["undetermined_10"]
+    return RuleResult("CC-2", checked, findings), counts
 
 
 def _list_dates(store) -> dict[str, str]:
@@ -968,7 +1044,9 @@ def run_checks(
     rules: list[RuleResult] = []
     checked_symbols = 0
     tables_used: list[str] = []
-    cc2_counts: dict[str, int] = {}
+    cc2_counts: dict[str, Any] = {}
+    # D-1：基金档位来源单次装载（仅 ETF 场景；缺文件 fail-closed）
+    fund_meta = _fund_meta(store) if "fund_daily" in price_tables else None
     for table in price_tables:
         t = _price_slice(store, table, start_ymd, end_ymd, symbols)
         if not t.num_rows:
@@ -977,11 +1055,16 @@ def run_checks(
         checked_symbols = (len(symbols) if symbols is not None
                            else len(set(t.column("ts_code").to_pylist())))
         rules.append(_check_cc1(t, table))
-        cc2, counts = _check_cc2(t, table, st_pairs, list_dates, cal,
-                                 suspend_full, delist_win, delist_first)
+        cc2, counts = _check_cc2(
+            t, table, st_pairs, list_dates, cal,
+            suspend_full, delist_win, delist_first,
+            fund_meta if table == "fund_daily" else None)
         rules.append(cc2)
         for key, value in counts.items():
-            cc2_counts[key] = cc2_counts.get(key, 0) + value
+            if isinstance(value, dict):       # D-1：`fund_limit_by_source`
+                cc2_counts[key] = value
+            else:
+                cc2_counts[key] = cc2_counts.get(key, 0) + value
         rules.append(_check_cc3(t, table, cal, suspend_full))
         rules.append(_check_cc5_zerovol(t, table))
     for price_table, limit_table in zip(price_tables, limit_tables,

@@ -40,6 +40,10 @@ class TableMeta:
     pk: tuple[str, ...]            # 逻辑去重主键
     conversions: tuple[UnitConversion, ...] = ()
     note: str = ""
+    #: 物理目录名 / 文件名例外（缺省 = `name`）：主库存在「表名 ≠ 目录/文件」
+    #: 的既有布局（如 `fund/fund_basic_E.parquet`）——D-1，19 号 §255。
+    dir_name: str | None = None
+    file_name: str | None = None
 
 
 # ── 股票行情与状态（T-01..T-08）──
@@ -163,14 +167,24 @@ FUND_DIV = TableMeta(
     note="ETF/LOF 分红；div_cash 即每份金额；pay_date 两时点（ADR-20/R32′）",
 )
 
-#: 全部 20 表注册表（05 §9.4：T-01..T-20——16 BY_YEAR / 2 SINGLE / 2 METADATA；
+#: **基金列表**（D-1；19 号 §255）：CC-2 判定 20% 档 ETF 的**跟踪标的**来源。
+#: 物理路径 `fund/fund_basic_E.parquet`（**非**按年、**非** `metadata/`）——
+#: 主键 `code` 为 6 位无后缀（**不是** `ts_code`）；`benchmark` 非空率 100%，
+#: `fund_type` 用于排除混合型/债券型（纯文本匹配会误放宽）。
+FUND_BASIC = TableMeta(
+    name="fund_basic", layout=Layout.SINGLE, date_col="list_date", start=None,
+    pk=("code",), dir_name="fund", file_name="fund_basic_E",
+    note="基金列表（benchmark / fund_type）；CC-2 20% 档判定（D-1）",
+)
+
+#: 全部 21 表注册表（05 §9.4 + D-1：16 BY_YEAR / 3 SINGLE / 2 METADATA；
 #: T-20 `fund_div` 为 CL-2-H/R32′ 新增；T-21 `fund_share` 仅披露不判折算，暂不注册）
 TABLES: dict[str, TableMeta] = {
     t.name: t for t in (
         DAILY, ADJ_FACTOR, STK_LIMIT, SUSPEND_D, NAMECHANGE, DIVIDEND,
         STOCK_BASIC, TRADE_CAL, INDEX_DAILY, DAILY_BASIC, INDEX_WEIGHT,
         INDEX_DAILYBASIC, NEW_SHARE, MONEYFLOW, FINA_INDICATOR, FX_DAILY,
-        FUND_DAILY, ETF_LIMIT, FUND_ADJ, FUND_DIV,
+        FUND_DAILY, ETF_LIMIT, FUND_ADJ, FUND_DIV, FUND_BASIC,
     )
 }
 

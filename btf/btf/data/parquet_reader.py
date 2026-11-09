@@ -211,7 +211,12 @@ def _concat_unified(parts: list) -> object:
 def _resolve_root(meta: TableMeta, root: Path) -> Path:
     if meta.layout is Layout.METADATA:
         return root / "metadata"
-    return root / meta.name
+    return root / (meta.dir_name or meta.name)
+
+
+def _file_stem(meta: TableMeta, table: str) -> str:
+    """物理文件名（不含 `.parquet`）：`file_name` 为既有布局例外（D-1）。"""
+    return meta.file_name or table
 
 
 def _list_year_files(meta: TableMeta, root: Path) -> list[tuple[int, Path]]:
@@ -255,7 +260,7 @@ def read_full(
         ]
 
         return _concat_unified(parts) if parts else pa.table({})
-    path = _resolve_root(meta, root) / f"{table}.parquet"
+    path = _resolve_root(meta, root) / f"{_file_stem(meta, table)}.parquet"
     if not path.is_file():
         raise ReaderError(f"单文件缺失: {path}")
     return _read(path, columns=list(columns) if columns else None)
@@ -336,7 +341,7 @@ def peek_columns(table: str, root: Path) -> list[str]:
         files = _list_year_files(meta, root)
         if files:
             return pq.read_schema(files[0][1]).names
-    path = _resolve_root(meta, root) / f"{table}.parquet"
+    path = _resolve_root(meta, root) / f"{_file_stem(meta, table)}.parquet"
     if path.is_file():
         return pq.read_schema(path).names
     return []
@@ -565,9 +570,7 @@ def table_files(table: str, root: Path, *,
             wanted = {str(y) for y in years}
             files = [p for p in files if p.stem in wanted]
         return files
-    if meta.layout is Layout.SINGLE:
-        return [_resolve_root(meta, root) / f"{table}.parquet"]
-    return [root / "metadata" / f"{table}.parquet"]
+    return [_resolve_root(meta, root) / f"{_file_stem(meta, table)}.parquet"]
 
 
 def file_stems(table: str, root: Path, *,
@@ -593,7 +596,7 @@ def read_file(table: str, root: Path, *, year: int | None = None,
             raise ReaderError(f"表 {table} 为 by_year 布局，须给 year")
         path = _resolve_root(meta, root) / f"{int(year)}.parquet"
     else:
-        path = _resolve_root(meta, root) / f"{table}.parquet"
+        path = _resolve_root(meta, root) / f"{_file_stem(meta, table)}.parquet"
     if not path.is_file():
         return None
     return _read(path, columns=list(columns) if columns else None)
@@ -679,7 +682,7 @@ def column_bounds(table: str, root: Path, *, year: int | None,
             raise ReaderError(f"表 {table} 为 by_year 布局，须给 year")
         path = _resolve_root(meta, root) / f"{int(year)}.parquet"
     else:
-        path = _resolve_root(meta, root) / f"{table}.parquet"
+        path = _resolve_root(meta, root) / f"{_file_stem(meta, table)}.parquet"
     if not path.is_file():
         return None
     pf = pq.ParquetFile(path)

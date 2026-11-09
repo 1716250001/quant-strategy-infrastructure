@@ -38,13 +38,15 @@ class TestTablesMeta:
         断言值随**规范变更**更新（非弱化）：新语义由
         `tests/unit/test_fund_adj_rc04.py::test_registered_and_19_tables` 覆盖。
         """
-        # RC-04：19；**CL-2-H/R32′（2026-10-07）**：20（+`fund_div`，ADR-20）
-        assert len(TABLES) == 20
+        # RC-04：19；**CL-2-H/R32′（2026-10-07）**：20（+`fund_div`，ADR-20）；
+        # **D-1（19 号 §255）**：21（+`fund_basic`，CC-2 基金档位判定）
+        assert len(TABLES) == 21
         for required in (
             "daily", "adj_factor", "stk_limit", "suspend_d", "namechange",
             "dividend", "stock_basic", "trade_cal", "index_daily", "daily_basic",
             "index_weight", "index_dailybasic", "new_share", "moneyflow",
             "fina_indicator", "fx_daily", "fund_daily", "etf_limit", "fund_adj",
+            "fund_basic",
         ):
             assert required in TABLES, f"核心表缺失: {required}"
 

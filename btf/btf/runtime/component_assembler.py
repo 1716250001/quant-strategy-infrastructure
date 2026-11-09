@@ -109,10 +109,16 @@ class ComponentAssembler:
         基准（index_daily，配了 `report.benchmark` 才计入）。
         """
         from btf.data.tables_meta import daily_table_of
+        from btf.domain.types import is_fund_code
 
         tables = {daily_table_of(sym) for sym in self.rt.instruments} or {"daily"}
         tables |= {"stock_basic", "suspend_d", "adj_factor"}
         tables |= {"stk_limit", "etf_limit"}
+        # D-1（19 号 §255，裁决 R-1）：**仅当宇宙含基金代码**时纳入 fund_basic
+        # ——纯股票配置（a1 类）的 data_version 必须逐字不变；无条件加入会让
+        # a1 指纹无谓变化并触发版本门禁。
+        if any(is_fund_code(sym) for sym in self.rt.instruments):
+            tables.add("fund_basic")
         if ((self.rt.config.get("report") or {}).get("benchmark")):
             tables.add("index_daily")
         return sorted(tables)

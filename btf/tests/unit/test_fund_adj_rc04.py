@@ -23,8 +23,9 @@ class TestFundAdjRegistration:
     def test_registered_and_19_tables(self):
         assert "fund_adj" in TABLES
         # RC-04：18 → 19；**CL-2-H/R32′（2026-10-07）**：19 → 20（新增基金
-        # 分红表 `fund_div`——ADR-20；断言随规范变更更新，非弱化）。
-        assert len(TABLES) == 20
+        # 分红表 `fund_div`——ADR-20）；**D-1（19 号 §255）**：20 → 21
+        # （新增 `fund_basic`）；断言随规范变更更新，非弱化。
+        assert len(TABLES) == 21
 
     def test_meta_fields(self):
         meta = TABLES["fund_adj"]
