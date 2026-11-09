@@ -185,6 +185,49 @@ class TestBB3ResolveStrategy:
         assert "PYTHONPATH" in err, err
 
 
+class TestD2DataAxisOutput:
+    """D-2（19 号 §255）＋ D-2-R（§257）：data 轴失败时**不得**打印 [ok]。
+
+    负向测试：失败态输出只能靠"断言不含"来守——正向用例测不出（T-56）。
+    """
+
+    @staticmethod
+    def _cfg(tmp_path, feed: str, symbols: list[str]):
+        import yaml
+
+        cfg = _config(tmp_path, start="2024-01-02", end="2024-01-05")
+        data = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+        data["data"]["feed"] = feed
+        data["run"]["universe"]["symbols"] = symbols
+        cfg.write_text(yaml.safe_dump(data, allow_unicode=True),
+                       encoding="utf-8")
+        return cfg
+
+    def test_routing_conflict_prints_fail_not_ok(self, tmp_path, capsys):
+        """ETF 标的 ＋ 只支持 daily 的 feed ⇒ 路由冲突。"""
+        from btf.cli.main import main
+
+        cfg = self._cfg(tmp_path, "tushare_parquet", ["510050.SH"])
+        rc = main(["config-check", str(cfg)])
+        cap = capsys.readouterr()
+        assert rc == 1
+        assert "[ok]" not in cap.out, "失败态不得打印 [ok]（D-2-R 回归）"
+        assert "[fail]" in cap.out
+        assert "feed↔标的路由不匹配" in cap.err
+
+    def test_unknown_feed_prints_fail_not_ok(self, tmp_path, capsys):
+        """feed 名非法 ⇒ 同样走 [fail]，且消息含可选项。"""
+        from btf.cli.main import main
+
+        cfg = self._cfg(tmp_path, "no_such_feed", ["000001.SZ"])
+        rc = main(["config-check", str(cfg)])
+        cap = capsys.readouterr()
+        assert rc == 1
+        assert "[ok]" not in cap.out
+        assert "[fail]" in cap.out
+        assert "未知插件名" in cap.err
+
+
 class TestBB4ShortPeriodWarning:
     """BB-4：极短区间告警**不阻断**；正常区间无告警。"""
 

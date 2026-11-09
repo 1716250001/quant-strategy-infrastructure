@@ -111,10 +111,10 @@ def _cmd_config_check(args: argparse.Namespace) -> int:
         # 装配期**同一格式化**（item 行逐字一致）；摘要保留、单份复用。
         print(f"[error] {ConfigError(problems)}", file=sys.stderr)
         print(f"[fail] {cfg['schema_version']} 校验未通过：{args.config}")
-        _print_config_summary(cfg, args)
+        _print_config_summary(cfg)
         return 1
     print(f"[ok] {cfg['schema_version']} 校验通过：{args.config}")
-    _print_config_summary(cfg, args)
+    _print_config_summary(cfg)
     run = cfg.get("run", {})
     if getattr(args, "resolve_strategy", False):
         # BB-3（19 号 §33.6③ / P3-NEW-5）：策略类可加载性——「随写随测」的首道
@@ -133,11 +133,10 @@ def _cmd_config_check(args: argparse.Namespace) -> int:
     return 0
 
 
-def _print_config_summary(cfg: dict[str, Any], args: argparse.Namespace) -> None:
+def _print_config_summary(cfg: dict[str, Any]) -> None:
     """config-check 的 5 行摘要（`[ok]` / `[fail]` 两态**共用单份**）。
 
     D-2-R（19 号 §257）：禁止复制两份——两份必然漂移，正是 D-2 要治的病。
-    `args` 仅为与派单签名一致（摘要正文只依赖合并后配置）。
     """
     run = cfg.get("run", {})
     period = run.get("period", {})
