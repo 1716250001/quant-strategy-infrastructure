@@ -232,6 +232,11 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
     if force_listed:
         return list(tasks), 0
 
+    # once = 全量快照覆盖写（源端会回溯修订）；跳过与否由调度层 is_due(last_fetch)
+    # 决定，**completed 断点不作为跳过判据**（CC-FIX-16 §0.2，§382）。
+    if kind == "once":
+        return list(tasks), 0
+
     if kind in ("month", "range"):
         pending = [t for t in tasks if not cp.is_done(name, f"{t[0]}|{t[1]}")]
     elif kind == "code":
@@ -453,6 +458,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             n = len(df)
             print(f"    {name} → {n} 行已保存")
         # 调用成功（含"确实返空"）才记断点
+        # 该标记只作历史标记，**不用于跳过**（once 跳过由调度层 is_due 判定，
+        # CC-FIX-16 §0.2；切勿据此提前 return，否则全量快照表永不刷新）
         cp.mark_done(name, "once")
         cp.mark_fetched(name, rows=n)          # F3/R10 + CC-FIX-7 行数
         cp.save()

@@ -87,6 +87,12 @@ class _FakeCp:
     def __init__(self, *a, **kw):
         self.data = {}
 
+    def is_done(self, name, key):
+        return False            # CC-FIX-16：估算器不再吞异常，替身须补此接口
+
+    def mark_done(self, name, key):
+        pass
+
     def mark_fetched(self, name):
         self.data.setdefault(name, {"completed": []})["last_fetch"] = "2026-11-10T12:00:00"
 
