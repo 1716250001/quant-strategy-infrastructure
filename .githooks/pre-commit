@@ -1,0 +1,39 @@
+#!/bin/sh
+# btf 暂存变更 → 提交前跑 ruff（≈1 s，与 `bt check` 第 1/10 项同命令同 cwd）。
+# 依据：19 号 §272 / 派单 H-1（2026-11-11）。拦截 F821 这类「改坏即崩」。
+# 跳过：`git commit --no-verify`（须在提交说明或账本里写明理由）。
+
+changed=$(git diff --cached --name-only --diff-filter=ACMR)
+if ! printf '%s\n' "$changed" | grep -q '^btf/'; then
+    exit 0
+fi
+
+root=$(git rev-parse --show-toplevel) || exit 0
+
+py="$root/btf/../_venv/Scripts/python.exe"
+if [ ! -x "$py" ]; then
+    if command -v python >/dev/null 2>&1; then
+        py=python
+    elif command -v python3 >/dev/null 2>&1; then
+        py=python3
+    else
+        py=""
+    fi
+fi
+
+if [ -z "$py" ] || ! "$py" -m ruff --version >/dev/null 2>&1; then
+    echo "[warn] ruff 不可用（解释器: ${py:-未找到}）——本次未校验 btf 暂存变更，提交继续。" >&2
+    exit 0
+fi
+
+if (cd "$root/btf" && "$py" -m ruff check btf tests tools); then
+    exit 0
+fi
+
+cat >&2 <<'EOF'
+[pre-commit] ruff 未通过（btf 暂存变更）——本次提交已阻断。
+  常见原因：引用了已删除/未定义的符号（F821）。
+  修复：按上面 ruff 报告改；改完重新 git add。
+  例外：确需跳过时用 `git commit --no-verify`，并在提交说明或账本里写明理由。
+EOF
+exit 1

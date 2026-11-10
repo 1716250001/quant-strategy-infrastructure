@@ -266,3 +266,15 @@ bt run -c <config> / bt report / bt verify / bt check   # 跑回测 / 报告 / �
 | 策略体系与研究 | `..\文档\策略体系\` · `..\文档\市场研究\` |
 
 **待解（2026-11-04 登记，未派单）**：`v7.0.0` 这个 tag 同时是主工程与 btf 的版本号，两包版本一旦分叉就无法用单序列 tag 表达。可选方案：btf 侧改用 `btf-v7.0.0` 前缀，或拆仓。属结构议题，不在本轮整改范围。
+
+---
+
+## 12. Git 钩子（提交前静态检查）
+
+本仓用 `core.hooksPath` 指向**版本化**的 `.githooks/`（换机后一行启用）：
+
+```
+git config core.hooksPath .githooks
+```
+
+暂存区含 `btf/` 变更时，提交前自动跑 `ruff check btf tests tools`（≈1 s，与 `bt check` 第 1/10 项同命令、同 cwd），失败即阻断提交；文档/数据线提交零输出、零成本。跳过：`git commit --no-verify`（须在提交说明或账本里写明理由）。
