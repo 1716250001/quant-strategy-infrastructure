@@ -477,7 +477,10 @@ STATIC_TABLES = {
 PENDING_REFRESH = {
     "cn_ppi":    {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
     "cn_m":      {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
-    "cn_pmi":    {"plan": "once 补拉（列名对齐后）", "decided": "2026-11-10"},
+    # CC-FIX-15 §二（老大选 C 挂账不动）：保留登记，仅改 plan 注记；
+    # ⛔ 不得为「待补拉归零」删登记或改判定词（freshness 仍显示「待补拉 1」）。
+    "cn_pmi":    {"plan": "挂账不动：源端列集变更（59 vs 65 列），待裁定 A/B/C（§381）",
+                  "decided": "2026-11-10"},
     "cn_gdp":    {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
     "sf_month":  {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
 }

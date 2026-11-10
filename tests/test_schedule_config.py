@@ -21,16 +21,49 @@ def _scheduled_set():
 
 
 def test_coverage_no_omission():
-    """判据 1：57 张必须**全部**有归属（在册 36 ＋ 剔除 21）。"""
+    """判据 1：57 张必须**全部**有归属（在册 33 ＋ 剔除 24，CC-FIX-15）。"""
     cover = set(SCHEDULE) | set(EXCLUDED)
     assert cover == _scheduled_set()
     assert not (set(SCHEDULE) & set(EXCLUDED))
-    assert len(SCHEDULE) == 36 and len(EXCLUDED) == 21
+    assert len(SCHEDULE) == 33 and len(EXCLUDED) == 24
 
 
 def test_freq_values_valid():
     assert all(v in FREQ_DAYS for v in SCHEDULE.values())
     assert set(SCHEDULE.values()) == {"D", "W", "M", "Q"}
+
+
+def test_cn_pmi_blocked_and_dual_channel_excluded():
+    """CC-FIX-15 A1/A2/A5：cn_pmi 退出排班但保留挂账；双通道两表剔除。"""
+    from config.tables import PENDING_REFRESH
+
+    assert "cn_pmi" not in SCHEDULE and "cn_pmi" in EXCLUDED
+    assert "源端列集变更" in EXCLUDED["cn_pmi"]
+    assert "挂账不动" in PENDING_REFRESH["cn_pmi"]["plan"]
+    for name in ("fund_nav", "fund_share"):
+        assert name not in SCHEDULE and name in EXCLUDED
+
+
+def test_grayscale_candidates_are_safe():
+    """CC-FIX-15 A4：灰度候选恰 5 张，均非 once/静态/停更/待补拉/剔除，且当前到期。"""
+    from config.schedule import GRAYSCALE
+    from config.tables import PENDING_REFRESH, STALE_BY_DESIGN, STATIC_TABLES
+
+    assert len(GRAYSCALE) == 5 and len(set(GRAYSCALE)) == 5
+    for name in GRAYSCALE:
+        conf = BACKFILL_TARGETS[name]
+        assert conf["mode"] != "once", name
+        assert name not in STATIC_TABLES and name not in STALE_BY_DESIGN
+        assert name not in PENDING_REFRESH and name not in EXCLUDED
+        assert name in SCHEDULE
+        assert is_due(SCHEDULE[name], None) is True, name
+
+
+def test_a9_cn_pmi_visible_when_forced_back(monkeypatch):
+    """A9 负例：强行塞回 SCHEDULE 后 select 必须报出它（证明无别处静默过滤）。"""
+    monkeypatch.setitem(sr.SCHEDULE, "cn_pmi", "M")
+    rows = {r[0]: r[4] for r in sr.select(cp=None)}
+    assert rows["cn_pmi"] == "ok"
 
 
 def test_no_overlap_with_daily_groups():
