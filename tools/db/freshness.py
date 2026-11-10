@@ -30,6 +30,7 @@
     python main.py db freshness --json          # 机器可读
     python main.py db freshness --strict        # 有红/黄时 exit 1
 """
+import calendar
 import glob
 import json
 import os
@@ -49,7 +50,10 @@ ALT_CKPT = os.path.join(os.path.dirname(MARKET_DATA_DIR), "alt_data", ".alt_chec
 MKT_CKPT = os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
 
 _PARTITION_SAMPLE = 3
-_DATE_COL_CANDIDATES = ("trade_date", "ann_date", "end_date", "date", "month", "cal_date")
+# CC-FIX-12（2026-11-10，§378）：补月频/季频/周频列名——`cn_ppi`/`cn_m`/`sf_month` 用
+# 小写 month、`cn_pmi` 用大写 MONTH、`cn_gdp` 用 quarter、`fut_weekly_detail` 用 week_date。
+_DATE_COL_CANDIDATES = ("trade_date", "ann_date", "end_date", "date", "month",
+                        "cal_date", "MONTH", "quarter", "week_date")
 
 # 日更表名单（两组并集）
 _DAILY_TABLES = set(DAILY_UPDATE_GROUPS) | set(DAILY_UPDATE_EXTRA)
@@ -73,12 +77,27 @@ def _pick_date_col(table_dir, preferred):
 
 
 def _to_date(v):
-    """把 20261108 / '20261108' / Timestamp 统一成 date；失败返回 None。"""
+    """把 20261108 / '20261108' / 202608(月) / '2026Q3'(季) / Timestamp 统一成 date。
+
+    CC-FIX-12（2026-11-10，§378）：月频/季频表此前一律解析失败 → ds=None → 判「未知」
+    （监控盲区）。口径：**取期末日**（202608→2026-08-31、2026Q3→2026-09-30），
+    既不把「月」误当「日」，也不因月初口径把月度释放时滞多算 30 天。
+    """
     if v is None:
         return None
     s = str(v).strip()
     if len(s) >= 10 and s[4] in "-/":
         s = s[:10].replace("-", "").replace("/", "")
+    if len(s) == 6 and s.isdigit():
+        y, m = int(s[:4]), int(s[4:])
+        if 1 <= m <= 12:
+            return date(y, m, calendar.monthrange(y, m)[1])
+        return None
+    if len(s) == 6 and s[:4].isdigit() and s[4] in "Qq" and s[5].isdigit():
+        q = int(s[5])
+        if 1 <= q <= 4:
+            return date(int(s[:4]), q * 3, calendar.monthrange(int(s[:4]), q * 3)[1])
+        return None
     if not (s.isdigit() and len(s) == 8):
         return None
     try:
@@ -239,6 +258,10 @@ def _alt_rows(only=None):
 def build_rows(only=None):
     rows = _market_rows(only) + _alt_rows(only)
     today = date.today()
+    _alt_specs = {}
+    if any(r["lib"] == "alt" for r in rows):
+        from alt.spec import BY_NAME as _ALT_BY_NAME   # 惰性导入（同 _alt_rows）
+        _alt_specs = _ALT_BY_NAME
     for r in rows:
         d = _to_date(r["as_of"])
         r["as_of_date"] = d.isoformat() if d else None
@@ -263,6 +286,29 @@ def build_rows(only=None):
             _has = bool(glob.glob(os.path.join(_root, name, "*.parquet")))
             r["verdict"] = "正常" if _has else "红"
             r["note"] = "静态名录"
+        elif r["lib"] == "market" and (BACKFILL_TARGETS.get(name) or {}).get("enabled") is False:
+            # CC-FIX-12（2026-11-10，§378）：配置侧显式关闭（tier X，建库价值有限，
+            #   bc_bestotcqt/stk_mins/report_rc）⇒ 永不进更新通道，按「已停更」呈现。
+            #   复用既有判定词、以既有配置为证，**不新增档位**。
+            r["verdict"] = "已停更"
+            r["note"] = "未启用（enabled=False）"
+        elif r["lib"] == "alt":
+            # CC-FIX-12：alt 侧复用 spec 既有语义（alt/update.py 同源），不新增档位：
+            #   has_date=False → 静态快照（"无日期维度"，判有数据即正常）
+            #   spec.note 标「已废弃」且未建 → 已废弃（us_daily_qfq，§159）
+            #   known_stale 且未建 → 源端停更（macro_bank_brazil/india，Wind 线承接）
+            _sp = _alt_specs.get(name)
+            _root = os.path.dirname(ALT_CKPT)
+            _has = bool(glob.glob(os.path.join(_root, name, "*.parquet")))
+            if _sp is not None and not getattr(_sp, "has_date", True):
+                r["verdict"] = "正常" if _has else "红"
+                r["note"] = "静态快照（无日期维度）"
+            elif not _has and getattr(_sp, "known_stale", ""):
+                r["verdict"] = "已停更"
+                r["note"] = "源端停更·未建表"
+            elif not _has and "已废弃" in (getattr(_sp, "note", "") or ""):
+                r["verdict"] = "已停更"
+                r["note"] = "已废弃（spec.note 标注）"
         r["diag"] = _diag(r)          # CC-FIX-7：诊断列（不参与 verdict）
     return rows
 
@@ -297,7 +343,7 @@ def render(rows):
         lines.append("黄表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "黄"))
     if n_stale:
         lines.append("已停更: " + ", ".join(
-            f"{r['table']}({STALE_BY_DESIGN[r['table']]['since']})"
+            f"{r['table']}({STALE_BY_DESIGN.get(r['table'], {}).get('since', '源端停更')})"
             for r in rows if r["verdict"] == "已停更"))
     lines.append("说明: ds=内容最新日期距今天数, dw=文件最新 mtime 距今天数; dw≤7 视为刚写过→绿")
     lines.append("      默认恒 exit 0；--strict 时存在红/黄才非零")

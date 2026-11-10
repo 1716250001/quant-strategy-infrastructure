@@ -428,6 +428,17 @@ STALE_BY_DESIGN = {
                      "reason": "源端停更，192 行仅存档"},
     "slb_len_mm":   {"since": "2025-07-25", "decided": "2026-11-09",
                      "reason": "源端停更（API 实证单次返 5,000 行，最新 20250725）"},
+    # ---- CC-FIX-12（2026-11-10，§378）：24 张「未知」定性后的停更/改引用登记 ----
+    "hs_const":     {"since": "2019-12-27", "decided": "2026-11-10",
+                     "reason": "源端冻结（§203.2 实证：库内零缺口、无消费方、tier C）；"
+                               "§369 裁定「只登记不修复」"},
+    "fut_weekly_detail": {"since": "2020-04-24", "decided": "2026-11-10",
+                          "reason": "源端停更（API 实证：SHFE／DCE 各拉 4,000 行，"
+                                    "week_date 最新均 20200424，与库内止点逐字吻合）"},
+    "hk_daily":     {"since": "2026-11-10", "decided": "2026-11-10",
+                     "reason": "market 侧未建（enabled=False、tier X、断点无记录）；"
+                               "港股日线改引用 alt.hk_daily（实测 2026-11-06 正常，"
+                               "856.7 万行／135 MB），照 hibor 先例"},
 }
 
 # 静态名录表：无「内容日期」语义，只判「文件存在 + 行数 ≥ 下限」。
@@ -435,6 +446,24 @@ STATIC_TABLES = {
     "fund_company": {"min_rows": 200,
                      "reason": "207 行公司名录；date_col 探到常量 end_date=20091229，"
                                "真实 setup_date 最大 20250116 ⇒ 内容日期判据不适用"},
+    # ---- CC-FIX-12（2026-11-10，§378）：一次性名录／关系快照（无「内容日期」语义）----
+    # 共同依据：均为 mode=once / by_param / paged 的一次性建库，BACKFILL_TARGETS 无周期
+    #   更新通道，断点只有 {'completed': ['once'...]}（从无 last_fetch）；库内日期列是
+    #   **业务生效日**（list_date/in_date/out_date/month），不是数据新鲜度。
+    #   ⇒ 与 fund_company 同类：判「目录存在且有 parquet」，行数下限本版不校验。
+    "hk_basic":          {"min_rows": 2000,
+                          "reason": "港股标的名录（2,785 行；list_date 最新 20260909 是上市日）"},
+    "fut_basic":         {"min_rows": 5000, "reason": "期货合约名录（11,275 行）"},
+    "opt_basic":         {"min_rows": 10000, "reason": "期权合约名录（30,730 行）"},
+    "us_basic":          {"min_rows": 10000, "reason": "美股标的名录（24,255 行）"},
+    "bse_mapping":       {"min_rows": 100, "reason": "北交所旧码→新码映射（248 行）"},
+    "index_classify":    {"min_rows": 500, "reason": "申万行业分类（856 行，无日期列）"},
+    "index_member_hist": {"min_rows": 10000,
+                          "reason": "指数历史成分（23,460 行；in_date/out_date 为纳入/剔除生效日）"},
+    "index_member_all":  {"min_rows": 2000,
+                          "reason": "指数成分全量关系（5,211 行；in_date 为生效日）"},
+    "cn_schedule":       {"min_rows": 100,
+                          "reason": "财报披露日程（176 行；month 覆盖 202601-202612 未来日期）"},
 }
 
 # 体检时用于缺口分析的 by_date 类接口(有明确交易日维度)
