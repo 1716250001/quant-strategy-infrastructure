@@ -7,7 +7,8 @@
 语义（派单 §三／§六）
 1. **互斥**：目标表若在当日日更组内 → 跳过并记日志；另用文件锁（`.schedule.lock`）拒绝并发。
 2. **断点语义**（CC-FIX-7 同源）：成功 → `last_fetch`；失败 → 只写 `last_attempt`。
-3. **到期判定**：`last_fetch` 距今 ≥ `FREQ_DAYS[freq]`（无记录＝到期）。
+3. **到期判定（双条件，CC-FIX-19）**：有 `RELEASE_DAY` 的表按「已过本月发布日 ∧ 上次
+   拉取早于该锚点」判；其余表沿用 `last_fetch` 距今 ≥ `FREQ_DAYS[freq]`（无记录＝到期）。
 4. **dry-run（默认）零请求**（连 `get_pro()` 都不调）；请求量按断点过滤后的待跑任务计，
    `--refresh` 时按全量任务计；峰值按 `API_RATE_LIMIT` 报出。
 5. **护栏**（CC-FIX-16）：裸 `--refresh` 拒绝（全档 84,325 次）；`--budget N`（默认 2,000）
@@ -17,12 +18,13 @@
 用法：python -m fetch.schedule_runner --dry-run｜--freq M --dry-run｜--freq W --apply
 """
 import argparse, json, os, sys  # noqa: E401
+from calendar import monthrange
 from datetime import date, datetime
 from config import MARKET_DATA_DIR
 from config.daily import (DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS,
                           PERIODIC_UPDATE_TARGETS)
 from config.backfill_targets import BACKFILL_TARGETS
-from config.schedule import FREQ_DAYS, SCHEDULE
+from config.schedule import FREQ_DAYS, RELEASE_DAY, SCHEDULE
 from fetch.backfill import (API_RATE_LIMIT, API_RATE_LIMIT_DEFAULT,
                             _compute_pending, run_target)
 from fetch.backfill_spec import build_tasks, estimate_requests
@@ -70,15 +72,30 @@ def _last_fetch(cp, name):
     rec = cp.data.get(name) if isinstance(cp.data, dict) else None
     return rec.get("last_fetch") if isinstance(rec, dict) else None
 
-def is_due(freq, last_fetch, today=None):
-    """到期判定：无拉取记录＝到期；否则距今 ≥ FREQ_DAYS[freq]。"""
+def _last_dom(year, month):
+    """当月最后一天（发布日超出月末时夹紧，如 2 月 30 日 → 28/29）。"""
+    return monthrange(year, month)[1]
+
+def is_due(freq, last_fetch, today=None, name=None):
+    """到期判定（CC-FIX-19 双条件）。
+
+    无拉取记录＝到期（行为不变）；有 `RELEASE_DAY` 的表按日历锚点判，
+    「已过本月发布日 ∧ 上次拉取早于该锚点」才到期；其余表沿用等间隔。
+    """
+    t = today or date.today()
     if not last_fetch:
         return True
     try:
-        days = ((today or date.today()) - datetime.fromisoformat(str(last_fetch)).date()).days
+        lf = datetime.fromisoformat(str(last_fetch)).date()
     except Exception:  # noqa: BLE001 —— 时间戳不可解析按到期（宁可多拉一次）
         return True
-    return days >= FREQ_DAYS[freq]
+    if name in RELEASE_DAY:
+        day, months = RELEASE_DAY[name]
+        if months and t.month not in months:
+            return False                      # 非发布月，不到期
+        anchor = date(t.year, t.month, min(day, _last_dom(t.year, t.month)))
+        return t >= anchor and lf < anchor    # 已过本月发布日且上次早于锚点
+    return (t - lf).days >= FREQ_DAYS[freq]
 
 def _est_requests(name, conf, cp, refresh=False):
     """本次请求量＝待跑任务数（refresh 时按全量任务计；只读）。
@@ -114,7 +131,7 @@ def select(freqs=None, only=None, cp=None, refresh=False, exclude=None):
         if name in exclude:            # R10 备份窗口互斥（§三.5，预留）
             out.append((name, freq, False, 0, "skip_excluded"))
             continue
-        due = is_due(freq, _last_fetch(cp, name) if cp else None)
+        due = is_due(freq, _last_fetch(cp, name) if cp else None, name=name)
         if cp is None:
             out.append((name, freq, due, 0, "ok" if due else "skip_fresh"))
             continue
