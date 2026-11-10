@@ -1,6 +1,14 @@
 {
   "_comment": "EE-FUND 缺口基线（2026-10-17 §25 复审后诚实口径，禁归零绕过门禁）。fund_daily.A/B = 【未登记】可执行缺口，R17 精确对账；source_empty = 逐只三轮核验（2 轮批量含 --force + 1 轮单线程 ts_code 全历史空；REIT/LOF 另经 trade_date 全市场反查 0 命中；nav 为全市场净值口径、其存在不代表有交易所成交）确认 tushare fund_daily 无源端行情的 150 只，进 S 桶；source_late_start = 6 只分级/稀疏成交基金，源端历史本身残缺/晚起点，进 SB 桶。注册表与实测逐码强一致（库内补到数据而注册表未清 → R17 红）。",
   "market_e_count": 2996,
+  "_audit": [
+    {
+      "at": "2026-11-10",
+      "ref": "§385",
+      "action": "2026-11-10 §385 老大追认批准；来源 db stale-fix --apply；备份 bak-20261110-pre-stale-fix；仅 fund_nav 段 158909.SZ",
+      "changed": "fund_nav.source_empty 删 158909.SZ ＋ source_empty_evidence 删 1 条（共 6 行）"
+    }
+  ],
   "fund_daily": {
     "A": 0,
     "B": 0,
@@ -1849,7 +1857,6 @@
       "158088.SZ",
       "158091.SZ",
       "158092.SZ",
-      "158909.SZ",
       "159319.SZ",
       "159585.SZ",
       "159756.SZ",
@@ -2018,11 +2025,6 @@
         "probe_rows": 0,
         "status": "nan",
         "probed_at": "2026-11-09"
-      },
-      "158909.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-11-09",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
       },
       "159319.SZ": {
         "probe_rows": 0,
