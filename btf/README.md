@@ -84,6 +84,7 @@ run:
   - `tushare_parquet` —— **只读 `daily`**（股票宇宙）
   - `mixed` —— 按代码段自动路由三表（`daily` / `fund_daily` / `index_daily`）
   - 宇宙里有 ETF/LOF/指数却用了 `tushare_parquet` ⇒ **装配期直接 `ConfigError`**（不静默跑出 0 交易日）
+- **ETF 场景必需 `metadata/fund_basic.parquet`**（`fund_type`／`benchmark` 供 CC-2 判定涨跌幅档位）；**缺表即 fail-closed 拒跑**。
 
 ---
 

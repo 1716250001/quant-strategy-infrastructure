@@ -158,30 +158,30 @@ class TestFundBoardLimitD1:
 
     def test_gem_after_20200824_not_reported(self):
         result = self._run("159915.SZ", "20200820", "20200824",
-                           {"159915": ("股票型", "创业板指数P×100%")})
+                           {"159915.SZ": ("股票型", "创业板指数P×100%")})
         assert _n(result) == 0, "创业板 ETF 20% 档（2020-08-24 起）+15% 不应报"
 
     def test_gem_before_20200824_reported(self):
         result = self._run("159915.SZ", "20200820", "20200821",
-                           {"159915": ("股票型", "创业板指数P×100%")})
+                           {"159915.SZ": ("股票型", "创业板指数P×100%")})
         assert _n(result) == 1, "2020-08-24 前创业板 ETF 仍 10% ⇒ +15% 必报"
         assert result[1]["fund_limit_by_source"]["equity_10"] == 1
 
     def test_star_after_20190722_not_reported(self):
         result = self._run("588000.SH", "20190719", "20190722",
-                           {"588000": ("股票型", "上证科创板50成份指数收益率×100%")})
+                           {"588000.SH": ("股票型", "上证科创板50成份指数收益率×100%")})
         assert _n(result) == 0
 
     def test_star_before_20190722_reported(self):
         result = self._run("588000.SH", "20190718", "20190719",
-                           {"588000": ("股票型", "上证科创板50成份指数收益率×100%")})
+                           {"588000.SH": ("股票型", "上证科创板50成份指数收益率×100%")})
         assert _n(result) == 1
         assert result[1]["fund_limit_by_source"]["equity_10"] == 1
 
     def test_mixed_type_not_relaxed(self):
         """混合型即使 benchmark 含创业板也**不**放宽（派单 §3.3 ②）。"""
         result = self._run("506009.SH", "20200820", "20200824",
-                           {"506009": ("混合型", "创业板指数收益率×100%")})
+                           {"506009.SH": ("混合型", "创业板指数收益率×100%")})
         assert _n(result) == 1, "混合型不得按 20% 放宽"
         assert result[1]["fund_limit_by_source"]["non_equity_10"] == 1
 

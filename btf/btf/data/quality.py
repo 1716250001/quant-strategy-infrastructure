@@ -169,18 +169,18 @@ _FUND_LIMIT_SOURCES = ("equity_gem20", "equity_star20", "equity_10",
 
 
 def _fund_meta(store: Any) -> dict[str, tuple[str, str]]:
-    """`fund_basic` → `{6 位 code: (fund_type, benchmark)}`（D-1）。
+    """`fund_basic` → `{ts_code: (fund_type, benchmark)}`（D-1／D-3）。
 
     缺文件 ⇒ **fail-closed**（缺在册记录就无法判档位，拒绝静默回落全 10%）。
     """
     t = store.read_file("fund_basic",
-                        columns=["code", "fund_type", "benchmark"])
+                        columns=["ts_code", "fund_type", "benchmark"])
     if t is None:
         raise FileNotFoundError(
             "基金列表缺失（fund_basic）——CC-2 无法判定 ETF 涨跌幅档位，"
-            "**拒绝静默跳过**（登记布局 = fund/fund_basic_E.parquet）")
+            "**拒绝静默跳过**（登记布局 = metadata/fund_basic.parquet）")
     return {c: (ft or "", bm or "") for c, ft, bm in zip(
-        t.column("code").to_pylist(), t.column("fund_type").to_pylist(),
+        t.column("ts_code").to_pylist(), t.column("fund_type").to_pylist(),
         t.column("benchmark").to_pylist(), strict=True)}
 
 
@@ -197,7 +197,7 @@ def _fund_limit(code: str, day: str,
 
     判定只用 `benchmark`（`name` 不参与——语义更杂）；`双创` 归创业板时点。
     """
-    rec = fund_meta.get(code.split(".", 1)[0])
+    rec = fund_meta.get(code)
     if rec is None:
         return _MAIN_BOARD_LIMIT, "undetermined_10"
     fund_type, benchmark = rec
