@@ -16,6 +16,8 @@
     仅回补表
         黄：ds > 60 且 dw > 30     红：ds > 180 且 dw > 30
     alt 表：尊重 spec.max_age_days（金=正常，黄/红按 1x/3x 阈值）
+    CC-FIX-14（§380）：「黄」且命中 `config.tables.PENDING_REFRESH` → 「待补拉」
+        （只改写黄，不计入 `--strict` 告警；未命中的黄照常显示黄）
 
 硬约束（CC-FIX-2R Step4）
 -------------------------
@@ -43,7 +45,8 @@ import pyarrow.parquet as pq
 from config import MARKET_DATA_DIR
 from config.backfill_targets import BACKFILL_TARGETS
 from config.daily import DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS
-from config.tables import (STATIC_TABLES, STALE_BY_DESIGN, TABLE_DATE_COL)
+from config.tables import (PENDING_REFRESH, STATIC_TABLES, STALE_BY_DESIGN,
+                           TABLE_DATE_COL)
 
 # alt 断点文件（只读，不导入 alt 包以免触发写入守卫初始化）
 ALT_CKPT = os.path.join(os.path.dirname(MARKET_DATA_DIR), "alt_data", ".alt_checkpoint.json")
@@ -166,11 +169,12 @@ def _diag(r):
     """诊断列：分离「每天都拉、源端无新数据」与「没人拉」。
 
     CC-FIX-7（2026-11-09，§362）：**只做诊断，不参与 `_verdict()`**。
-    仅 market 库（last_fetch 由 fetch/backfill.py 写入）；alt 库用 last_attempt，
-    语义不同，留空。
+    CC-FIX-14（2026-11-10，§380）：market 侧补第 4 态「目录缺失」；alt 侧补齐同列
+    （此前恒空，§十.1）。两库口径一致：dw≤7 不诊断；alt 的 last_pull 取
+    last_attempt，同为「最近一次尝试拉取」时刻。
     """
-    if r.get("lib") != "market":
-        return ""
+    if r.get("source") == "目录不存在":
+        return "目录缺失"
     dw = r.get("dw")
     if dw is None or dw <= 7:
         return ""
@@ -309,6 +313,13 @@ def build_rows(only=None):
             elif not _has and "已废弃" in (getattr(_sp, "note", "") or ""):
                 r["verdict"] = "已停更"
                 r["note"] = "已废弃（spec.note 标注）"
+        # CC-FIX-14（2026-11-10，§380）：**仅**「黄 ∧ 命中补拉登记」→「待补拉」。
+        #   其余判定逐字不变（未命中的黄仍显示黄，防吞警）；strict 的 n_alert
+        #   只数红/黄，故「待补拉」不计警——strict 逻辑本身不改。
+        if r["verdict"] == "黄" and name in PENDING_REFRESH:
+            _pr = PENDING_REFRESH[name]
+            r["verdict"] = "待补拉"
+            r["note"] = f"补拉计划: {_pr['plan']}（{_pr['decided']} 决定）"
         r["diag"] = _diag(r)          # CC-FIX-7：诊断列（不参与 verdict）
     return rows
 
@@ -328,19 +339,24 @@ def render(rows):
     n_yel = sum(1 for r in rows if r["verdict"] == "黄")
     n_unk = sum(1 for r in rows if r["verdict"] == "未知")
     n_stale = sum(1 for r in rows if r["verdict"] == "已停更")
+    n_pend = sum(1 for r in rows if r["verdict"] == "待补拉")
     lines.append("-" * 110)
-    lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk - n_stale} | "
-                 f"黄 {n_yel} | 红 {n_red} | 已停更 {n_stale} | 未知 {n_unk}")
-    _diag_ct = {"已拉取·源端无更新": 0, "拉取记录陈旧": 0, "无拉取记录": 0}
+    lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk - n_stale - n_pend} | "
+                 f"待补拉 {n_pend} | 黄 {n_yel} | 红 {n_red} | 已停更 {n_stale} | 未知 {n_unk}")
+    _diag_ct = {"已拉取·源端无更新": 0, "拉取记录陈旧": 0, "无拉取记录": 0, "目录缺失": 0}
     for r in rows:
         if r.get("diag") in _diag_ct:
             _diag_ct[r["diag"]] += 1
     lines.append(f"诊断: 已拉取·源端无更新 {_diag_ct['已拉取·源端无更新']} | "
                  f"拉取记录陈旧 {_diag_ct['拉取记录陈旧']} | "
-                 f"无拉取记录 {_diag_ct['无拉取记录']}")
+                 f"无拉取记录 {_diag_ct['无拉取记录']} | "
+                 f"目录缺失 {_diag_ct['目录缺失']}")
     if n_red or n_yel:
         lines.append("红表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "红"))
         lines.append("黄表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "黄"))
+    if n_pend:
+        lines.append("待补拉: " + ", ".join(
+            r["table"] for r in rows if r["verdict"] == "待补拉"))
     if n_stale:
         lines.append("已停更: " + ", ".join(
             f"{r['table']}({STALE_BY_DESIGN.get(r['table'], {}).get('since', '源端停更')})"
