@@ -346,7 +346,10 @@ PERIODIC_UPDATE_TARGETS = OrderedDict([
         "date_param": "ann_date",
         # ── 落盘形态 ──
         "date_col": "end_date",
-        "subset": ["ts_code", "end_date", "ann_date", "div_proc"],
+        # CC-FIX-11（§376）：源端实证同 4 键会返空壳行（cash_div/cash_div_tax 全 NaN，
+        # §372/§373），窄键判重会把 keep=last 读方（btf feed.py 公司行动装载）喂成 0 值。
+        # 改 "*" 全列判重：值不丢、宁可行数增；复发由 audit dup + test_dividend_not_acked 报警。
+        "subset": "*",
         # ── 新鲜度信号列：公告日（end_date 是报告期，无法反映"有无新公告"）──
         "recency_col": "ann_date",
         "interval_days": 7,
