@@ -493,7 +493,7 @@ def audit_truncation(verbose=True, table_dirs=None):
         cnt = pd.concat(frames, ignore_index=True)["ts_code"].astype(str).value_counts()
         sus = cnt[(cnt % page == 0) & (cnt >= page)].sort_values(ascending=False)
         out.append({"table": name, "cap": page, "cap_source": unit,
-                    "codes": int(len(cnt)), "rows": int(cnt.sum()),
+                    "codes": len(cnt), "rows": int(cnt.sum()),
                     "suspects": {str(k): int(v) for k, v in sus.items()}})
         if verbose:
             print(f"  {name:22s} {unit}={page:<5d} {len(cnt):,} 码 / "
@@ -619,11 +619,7 @@ def audit_gaps(verbose=True):
     cp = json.load(open(cp_path, encoding="utf-8"))
     today = datetime.now().strftime("%Y%m%d")
 
-    # 延迟导入, 复用 backfill 的任务构建逻辑(保证口径一致)
-    try:
-        from fetch.backfill import build_tasks
-    except Exception:
-        build_tasks = None
+    # 任务计算一律走 fetch.backfill_spec.expected_task_count（快照日 20261113）
 
     if verbose:
         print(f"  基准日: {today}")
@@ -647,7 +643,7 @@ def audit_gaps(verbose=True):
 
         expect = None
         if mode == "by_date":
-            # ⚠ 必须复用 build_tasks（单一真源）—— 它处理了 freq 参数：
+            # ⚠ 必须复用 expected_task_count（单一真源）—— 它处理了 freq 参数：
             #   freq=week/month 的接口（weekly/monthly）只需在**周末/月末那个
             #   交易日**拉一次，而非每个交易日。
             #
@@ -658,14 +654,16 @@ def audit_gaps(verbose=True):
             #   （margin/margin_detail/hk_hold 各 1 条断点虚记）被彻底淹没。
             #   这与 R10 揭示的"两个结构各管一摊"同源：任务计算在
             #   backfill_spec（正确）与 db_audit（错漏）各写了一遍。
-            if build_tasks is not None:
-                try:
-                    tasks, kind = build_tasks(name, conf, dry_run=True)
-                    if kind == "date" and tasks:
-                        expect = [str(t) for t in tasks]
-                except Exception:
-                    expect = None
-            if expect is None:      # 兜底：build_tasks 不可用时退回按日枚举
+            # 2026-11-11 P3-1 收口：改调 expected_task_count（快照日 20261113），
+            # 与 R12 的"真源"逐位一致；build_tasks 仍按真实今天跑，属执行侧。
+            from fetch.backfill_spec import expected_task_count
+            try:
+                tasks, kind = expected_task_count(name, conf)
+                if kind == "date" and tasks:
+                    expect = [str(t) for t in tasks]
+            except Exception:
+                expect = None
+            if expect is None:      # 兜底：expected_task_count 不可用时退回按日枚举
                 start = conf.get("start", "20160101")
                 expect = [d for d in open_dates(start_date=start) if d <= today]
         elif mode in ("by_range", "by_period"):
@@ -677,7 +675,7 @@ def audit_gaps(verbose=True):
             #   且已处理 single_range、截断到今天、各 kind 的格式转换。
             #   **不要再在 db_audit 内新增任何自行实现的任务计算。**
             from fetch.backfill_spec import expected_task_count
-            tasks, kind = expected_task_count(name, conf, today=today)
+            tasks, kind = expected_task_count(name, conf)
             if tasks is None:
                 expect = None
             else:
@@ -687,19 +685,17 @@ def audit_gaps(verbose=True):
                 #     此处按断点键比对，故用前者。）
                 expect = [str(t) for t in tasks]
         elif mode in ("by_code", "by_month", "once"):
-            if build_tasks is not None:
-                try:
-                    tasks, kind = build_tasks(name, conf, dry_run=True)
-                    if kind == "need_meta":
-                        expect = None
-                    elif kind == "month":
-                        expect = [f"{t[0]}|{t[1]}" for t in tasks]
-                    elif kind == "code":
-                        expect = [str(t) for t in tasks]
-                    elif kind == "once":
-                        expect = ["once"]
-                except Exception:
+            # 2026-11-11 同上：by_month 的 month_last_trade_dates 在 build_tasks
+            # 内不传 end（取 datetime.now()）⇒ 体检侧会按天漂移，故统一走真源。
+            from fetch.backfill_spec import expected_task_count
+            try:
+                tasks, kind = expected_task_count(name, conf)
+                if kind == "need_meta" or tasks is None:
                     expect = None
+                else:
+                    expect = [str(t) for t in tasks]
+            except Exception:
+                expect = None
 
         if expect is None:
             if verbose:

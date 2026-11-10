@@ -31,6 +31,14 @@
 4. LEGACY / DEAD 只读不写。
 5. mixed 只登记不动值（wz_index / stk_seasoned 的 'once' 死键归 P3-5）。
 
+第 6 条（`.lock` 处置，2026-11-11 老大裁定，18 号 §399-N1）
+--------------------------------------------------------
+6. `*.lock` 文件不登记。
+   理由：锁文件不回答「某键是否已完成」，也不承载任何完成度语义；
+   把它登记为 NOT_A_CHECKPOINT 会让「反向扫描 0 未登记」这条判据
+   依赖一份会随进程增删的文件清单 —— 锁文件生命周期是秒级，登记即过时。
+   ⇒ 扫描口径改为：**排除 `*.lock` 后再比对**，并在扫描脚本里显式写出这条排除。
+
 authority 判定
 --------------
 PRIMARY            完成判定的权威载体
@@ -294,11 +302,16 @@ DOMAINS: tuple[CheckpointDomain, ...] = (
         key_space="code",
         completed_field="completed",
         timestamp_field=None,
-        authority="PRIMARY",
+        authority="LEGACY",
         tables=_tables(
             "cb_daily",
         ),
-        note="可转债独立断点（cb_download.py 的 Checkpoint 子类）；键=债券代码。",
+        note=("可转债独立断点（cb_download.py 的 Checkpoint 子类）；键=债券代码。"
+              "★2026-11-11 P3-1 收口：PRIMARY→LEGACY（18 号 §399-N2）。"
+              "理由：mtime 2026-08-16 静止 87 天；cb_download 只由 cli/fetch_cmds.py:67 "
+              "手工触发、不进 SCHEDULE；非 DEAD 因手工触发仍会写。"
+              "⚠ 双载体：cb_daily 另有 .backfill_checkpoint.json 的 35 条日期键（daily_update 写），"
+              "与 fund_daily 同构；消费侧按 code 维度应继续读本文件，但不得视为每日刷新源。"),
     ),
     CheckpointDomain(
         id="market.periodic_state",

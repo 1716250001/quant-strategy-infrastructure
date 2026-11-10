@@ -475,13 +475,23 @@ BACKFILL_TARGETS = OrderedDict([
         "api": "weekly", "desc": "个股周线(验算用)", "mode": "by_date",
         "freq": "week", "max_rows": 0, "tier": "B", "start": "20160101",
         "subset": "*",
-        "note": "验算数据: 与本地 daily 聚合对比; 每周末拉全市场(实测约5634行/周)",
+        "audit_skip": True,
+        "note": ("验算数据: 与本地 daily 聚合对比; 每周末拉全市场(实测约5634行/周)。"
+                 "★2026-11-11 P3-1 收口补 audit_skip=True（18 号 §399-N4，老大裁定）："
+                 "checkpoint 里 weekly 的 completed 混有 daily_update 写的日更日期键"
+                 "（实测 24 条 2026-09-21~11-10），与 by_date+freq=week 的周末键"
+                 "同一 key_space 双语义 ⇒ db_audit 按周末键比对必报假缺口。"
+                 "⛔ 代价：本表自此无缺口监控（不在 DAILY_UPDATE_EXTRA / check_coverage / SCHEDULE）。"
+                 "替代口径见 tools/ckpt_tool.py --show 与 P3-4 拆域。"),
     }),
     ("monthly", {
         "api": "monthly", "desc": "个股月线(验算用)", "mode": "by_date",
         "freq": "month", "max_rows": 0, "tier": "B", "start": "20160101",
         "subset": "*",
-        "note": "验算数据: 与本地 daily 聚合对比",
+        "audit_skip": True,
+        "note": ("验算数据: 与本地 daily 聚合对比。"
+                 "★2026-11-11 同上：completed 混 43 条日更日期键，与月末键双语义。"
+                 "⛔ 代价同上：自此无 db_audit 缺口监控。"),
     }),
     ("index_weekly", {
         "api": "index_weekly", "desc": "指数周线(验算用)", "mode": "by_code",

@@ -46,6 +46,12 @@ by_date 的 freq 参数（2026-09-19 新增）:
   2. by_range 的当年区间端点必须是"今天"而非 12-31, 否则已完成任务
      会被误判成缺口。
   3. by_period 的 end_date 是精确匹配报告期, 不是日期区间。
+  4. **体检侧固定快照日**（2026-11-11 P3-1 收口，18 号 §400 裁定 4）:
+     `expected_task_count()` 的 `today` 默认取 `_resolve_today()`（= ASOF_DEFAULT
+     常量 20261113 / 环境变量 CHICHAO_ASOF），**不再取 `datetime.now()`**；
+     而 `build_tasks()`（取数执行侧）仍按真实今天跑。
+     ⇒ 两侧在真实今天 ≠ 快照日时**永久错位是有意为之**：快照日之后的增量
+       不属本轮判据范围。⛔ 不要把 `_resolve_today()` 用到执行侧。
 """
 import os
 from datetime import datetime
@@ -157,6 +163,20 @@ def backfill_meta_dir():
 # ============================================================
 # 二、日期维度工具
 # ============================================================
+ASOF_DEFAULT = "20261113"   # 体检侧快照日（P3 判据基线，18 号 §400 定；勿改 datetime.now()）
+
+
+def _resolve_today(today=None):
+    """解析体检侧的"快照日"。优先级：显式入参 > 环境变量 CHICHAO_ASOF > ASOF_DEFAULT。
+
+    ⚠ 仅用于**体检/估算侧**（expected_task_count）。取数执行侧（build_tasks）
+      必须按真实今天跑，见模块 docstring 纪律 4。
+    """
+    if today:
+        return str(today)
+    return os.environ.get("CHICHAO_ASOF") or ASOF_DEFAULT
+
+
 def month_last_trade_dates(start, end=None, calendar="SSE"):
     """每月最后一个交易日。返回 [('201601', '20160129'), ...]
 
@@ -206,8 +226,7 @@ def week_last_trade_dates(start, end=None, calendar="SSE", anchor="last_trade"):
         # 该周周一 + 4 天 = 该周周五（ISO 周必含周五）
         monday = dt - pd.to_timedelta(dt.dt.weekday, unit="D")
         friday = (monday + pd.Timedelta(days=4)).dt.strftime("%Y%m%d")
-        today = datetime.now().strftime("%Y%m%d")
-        return sorted({x for x in friday.tolist() if x <= today})   # 排除未来周五
+        return sorted({x for x in friday.tolist() if x <= end})   # 排除未来周五
 
     key = dt.dt.strftime("%G-%V")          # ISO 年-周，跨年周正确合并
     last = s.groupby(key).max()
@@ -250,14 +269,16 @@ def report_periods(start, end=None):
     return out
 
 
-def truncate_to_today(dates):
+def truncate_to_today(dates, today=None):
     """把日期列表截断到"今天"，剔除交易日历里的未来交易日。
 
     交易日历 trade_cal 覆盖到未来(实测到 20271231), 不截断会导致:
       - 白跑数百次请求(未来日期 Tushare 返回 None)
       - 缺口分析算出"缺口到 2027 年"的假象
+
+    today: 显式快照日（体检侧传入）；None = 真实今天（执行侧行为不变）。
     """
-    today = datetime.now().strftime("%Y%m%d")
+    today = today or datetime.now().strftime("%Y%m%d")
     return [d for d in dates if str(d) <= today]
 
 
@@ -407,23 +428,30 @@ def expected_task_count(name, conf, today=None):
 
     与 build_tasks 的差别: 此处确保结果可复现（不因 dry_run 差异而变），
     并统一把 by_range 的当年端点处理为"今天"。
+
+    today: 快照日；None → `_resolve_today()`（ASOF_DEFAULT 常量，**不是**
+    datetime.now()）。⇒ 本函数按天漂移已被消除；执行侧 build_tasks 不变。
     """
     mode = conf["mode"]
-    today = today or datetime.now().strftime("%Y%m%d")
+    today = _resolve_today(today)
 
     if mode == "by_date":
         start = conf.get("start", "20160101")
         cal = conf.get("calendar", "SSE")
         freq = conf.get("freq", "day")
         if freq == "week":
-            # ⚠ 必须与 build_tasks 同口径（否则 R12 缺口分析会漂移）
+            # ⚠ 必须与 build_tasks 同口径（否则 R12 缺口分析会漂移）；
+            #   体检侧额外把快照日传下去 ⇒ 结果不再随真实日期漂移。
             return truncate_to_today(week_last_trade_dates(
-                start, calendar=cal,
-                anchor=conf.get("week_anchor", "last_trade"))), "date"
+                start, end=today, calendar=cal,
+                anchor=conf.get("week_anchor", "last_trade")), today=today), "date"
         if freq == "month":
             return truncate_to_today(
-                [d for _, d in month_last_trade_dates(start, calendar=cal)]), "date"
-        return truncate_to_today(open_dates_by_market(cal, start_date=start)), "date"
+                [d for _, d in month_last_trade_dates(start, end=today, calendar=cal)],
+                today=today), "date"
+        return truncate_to_today(
+            open_dates_by_market(cal, start_date=start, end_date=today),
+            today=today), "date"
 
     if mode == "by_range":
         # ⚠ 当年端点用"今天"（见模块 docstring 纪律 2）
@@ -444,7 +472,21 @@ def expected_task_count(name, conf, today=None):
         start = conf.get("start", "20160101")
         return [d for d in report_periods(start) if d <= today], "period"
 
-    # by_code / by_month / once 交给 build_tasks（它们不依赖日期截断）
+    # by_month 也必须走快照日（2026-11-11）：build_tasks 的 month_last_trade_dates
+    # 不传 end 就取 datetime.now()，会让 extra/miss 随真实日期漂移；此处按
+    # build_tasks 的 by_month 分支原样复刻，只把 end 换成 today。
+    if mode == "by_month":
+        start = conf.get("start", "20160101")
+        codes = resolve_codes(conf.get("codes"))
+        if codes is None:
+            return None, "need_meta"
+        pairs = month_last_trade_dates(
+            start, end=today, calendar=conf.get("calendar", "SSE"))
+        if not codes:
+            return [f"None|{m}" for m, _ in pairs], "month"
+        return [f"{c}|{d}" for c in codes for _, d in pairs], "month"
+
+    # by_code / once 交给 build_tasks（它们不依赖日期截断）
     tasks, kind = build_tasks(name, conf, dry_run=True)
     if kind == "need_meta" or tasks is None:
         return None, kind
