@@ -35,7 +35,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -105,25 +105,31 @@ def _cmd_config_check(args: argparse.Namespace) -> int:
     for warning in warnings:
         print(warning)
 
-    if problems:
+    # D-2-R2／D-4（19 号 §263／§265）：策略可解析性判定**前移**到 `[ok]` 之前
+    # ——失败态不得再印"校验通过"；`策略可加载 ✓` 仍在摘要之后，RC=0 逐字节
+    # 不变。判定前由 `_resolve_strategy_problem` 复用 `inject_strategy_paths`
+    # （与 runtime／walkforward 同一实现），修「声明 strategy_paths 却假红」。
+    run = cfg.get("run", {})
+    problem_strategy = (_resolve_strategy_problem(run.get("strategy"), run)
+                        if getattr(args, "resolve_strategy", False) else None)
+
+    if problems or problem_strategy:
         # D-2-R（19 号 §257）：失败时**不得**再打印 `[ok] … 校验通过`（原实现
         # 先打表头后判失败，RC=1 时 stdout/stderr 自相矛盾）。错误块与 `run`
         # 装配期**同一格式化**（item 行逐字一致）；摘要保留、单份复用。
-        print(f"[error] {ConfigError(problems)}", file=sys.stderr)
+        if problems:
+            print(f"[error] {ConfigError(problems)}", file=sys.stderr)
+        if problem_strategy:
+            print(f"[error] 策略不可加载：{problem_strategy}", file=sys.stderr)
         print(f"[fail] {cfg['schema_version']} 校验未通过：{args.config}")
         _print_config_summary(cfg)
         return 1
     print(f"[ok] {cfg['schema_version']} 校验通过：{args.config}")
     _print_config_summary(cfg)
-    run = cfg.get("run", {})
     if getattr(args, "resolve_strategy", False):
         # BB-3（19 号 §33.6③ / P3-NEW-5）：策略类可加载性——「随写随测」的首道
         # 门；类名拼错应在**最低成本环节**暴露（原须到 `run` 才报错）。
         # 默认关闭：`config-check` 仍只做「四层合并 + Schema」，行为向后兼容。
-        problem = _resolve_strategy_problem(run.get("strategy"))
-        if problem:
-            print(f"[error] 策略不可加载：{problem}", file=sys.stderr)
-            return 1
         print(f"     策略可加载: {run.get('strategy')} ✓")
     if args.dump:
         import yaml
@@ -160,17 +166,31 @@ def _print_config_summary(cfg: dict[str, Any]) -> None:
               f" overrides={len(rules.get('overrides') or [])} 条")
 
 
-def _resolve_strategy_problem(spec: Any) -> str | None:
+def _resolve_strategy_problem(spec: Any,
+                              run_cfg: Mapping[str, Any] | None = None) -> str | None:
     """检查 `module:Class` 可加载（BB-3）：返回问题描述或 None。
 
     只做**最低成本**校验：模块可 import + 类属性存在 + 是 StrategyBase 子类
     （构造参数/契约协商仍归 `build()`）。
+
+    D-4（19 号 §263）：import 前须按 `run.strategy_paths` 注入路径——与
+    `Runtime._load_strategy`／`optimize.walkforward` **共用**
+    `inject_strategy_paths`（禁第三份实现）；否则声明了策略路径的配置会被
+    假红拦掉（`config-check` 拒绝、`run` 接受）。
     """
     if not spec or not isinstance(spec, str) or ":" not in spec:
         return f"run.strategy 需形如 module:Class，得 {spec!r}"
     module_name, _, class_name = spec.partition(":")
     import importlib
 
+    if run_cfg is not None:
+        from btf.app import inject_strategy_paths
+        from btf.config.validation import ConfigError
+
+        try:
+            inject_strategy_paths(run_cfg)
+        except ConfigError as exc:
+            return f"run.strategy_paths 注入失败：{exc}"
     try:
         module = importlib.import_module(module_name)
     except Exception as exc:                     # 模块侧任意加载错误均归此处

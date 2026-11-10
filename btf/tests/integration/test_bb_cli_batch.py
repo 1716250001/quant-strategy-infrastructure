@@ -158,8 +158,10 @@ class TestBB3ResolveStrategy:
         capsys.readouterr()
         assert main(["config-check", str(cfg_path),
                      "--resolve-strategy"]) == 1
-        err = capsys.readouterr().err
-        assert "no attribute" in err or "无属性" in err, err
+        cap = capsys.readouterr()
+        assert "[ok]" not in cap.out, "失败态不得印 [ok]（D4-2 回归）"
+        assert "[fail]" in cap.out
+        assert "no attribute" in cap.err or "无属性" in cap.err, cap.err
 
     def test_good_class_reports_loadable(self, _feed_registered, tmp_path,
                                         capsys):
@@ -181,8 +183,40 @@ class TestBB3ResolveStrategy:
         cfg_path.write_text(text, encoding="utf-8")
         assert main(["config-check", str(cfg_path),
                      "--resolve-strategy"]) == 1
-        err = capsys.readouterr().err
-        assert "PYTHONPATH" in err, err
+        cap = capsys.readouterr()
+        assert "[ok]" not in cap.out, "失败态不得印 [ok]（D4-2 回归）"
+        assert "[fail]" in cap.out
+        assert "PYTHONPATH" in cap.err, cap.err
+
+    def test_strategy_paths_respected(self, _feed_registered, tmp_path,
+                                      capsys, monkeypatch):
+        """D-4：配置声明的 `run.strategy_paths` 必须在无 PYTHONPATH 下生效。
+
+        假红回归：`config-check` 曾只收 `spec`、不注入路径 ⇒ 同一配置
+        `run` 能跑、`config-check` 却 `ModuleNotFoundError`（19 号 §263）。
+        """
+        import yaml
+        from btf.cli.main import main
+
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+        pkg = tmp_path / "d4strat"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "m.py").write_text(
+            "from btf.strategy.base import StrategyBase\n\n"
+            "class S(StrategyBase):\n"
+            "    pass\n", encoding="utf-8")
+        cfg_path = _config(tmp_path, start=DAYS[0], end=DAYS[-1])
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        data["run"]["strategy"] = "d4strat.m:S"
+        data["run"]["strategy_paths"] = [str(tmp_path)]
+        cfg_path.write_text(yaml.safe_dump(data, allow_unicode=True),
+                            encoding="utf-8")
+        assert main(["config-check", str(cfg_path),
+                     "--resolve-strategy"]) == 0
+        out = capsys.readouterr().out
+        assert "[ok]" in out, out
+        assert "策略可加载" in out
 
 
 class TestD2DataAxisOutput:

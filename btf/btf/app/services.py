@@ -111,6 +111,18 @@ def data_axis_problems(cfg: Mapping[str, Any]) -> tuple[list[str], list[str]]:
         feed_name, caps), []
 
 
+def inject_strategy_paths(run_cfg: Mapping[str, Any]) -> list[Path]:
+    """`run.strategy_paths` 注入（**单源转发**；D-4／19 号 §265）。
+
+    实现归 `btf.runtime._runtime`（`_load_strategy`／`walkforward` 共用同一
+    实现）；此处只暴露 facade 入口——表现层契约禁止 `btf.cli` 直接 import
+    `btf.runtime`（import-linter 铁律 5／新 10）。
+    """
+    from btf.runtime._runtime import inject_strategy_paths as _inject
+
+    return _inject(run_cfg)
+
+
 def parse_override_value(raw: str) -> Any:
     """CLI 字符串 → 配置值（**单源类型推断**：int → float → str）。
 
