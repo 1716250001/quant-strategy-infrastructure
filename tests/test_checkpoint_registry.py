@@ -171,16 +171,12 @@ def test_t5_direct_write_guard():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="派单 T5 要求每处直写带 `# DB-WRITE-ACK`，但全仓 0/15 处尚无该注释；"
-           "补注释需改 10 个白名单外文件，待赤潮裁决（扩白名单 or 并入 G7）。",
-)
-def test_t5b_ack_annotations():
-    """T5（注释）：每个直写点须带 `# DB-WRITE-ACK` 声明「我知悉此处绕过了存储层」。"""
-    sites = _direct_writes()
-    missing = [f"{f}:{i}" for f, i, line in sites if "DB-WRITE-ACK" not in line]
-    assert not missing, f"缺 # DB-WRITE-ACK 的直写点 {len(missing)} 处: {missing[:5]}"
+# NOTE（2026-11-11，老大裁定 / 18 号 §410.7）：原 test_t5b_ack_annotations 已删除。
+# 它曾以 xfail(strict=True) 存在 —— 等于把「每处直写须带 # DB-WRITE-ACK」这条判据
+# 单方面降级为「不要求」，并以 `1 xfailed` 长期污染「全绿」基线。
+# 现状实测 0/15 处带该注释；补注释须改 10 个白名单外文件，超出 P3-2b 白名单。
+# ⇒ ACK 判据移交 G7（存储层收口）重新评估：补注释，还是改用 parquet_store 强制收口。
+# ⛔ 不要在此重新加回 xfail —— 要恢复须从 G7 走正式判据变更流程。
 
 
 # ------------------------------------------------------------ 负例（K4）
