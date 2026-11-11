@@ -394,6 +394,9 @@ def fill_missing_codes(name, spec, pro, limiter, dry_run=False, verbose=False):
                     r = upsert_by_year(d2, os.path.join(MARKET_DATA_DIR, name),
                                        date_col=col, subset=spec["subset"],
                                        sort_by=col)
+                    if r.get("fail"):
+                        failed.append(code)     # 分区写失败 ⇒ 计入失败，不记断点
+                        continue
                     n_rows += int(r.get("added", 0))
         if cp is not None:
             cp.mark_done(name, code)        # 成功（含返空）即记断点
