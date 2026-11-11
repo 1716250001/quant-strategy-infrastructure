@@ -49,6 +49,7 @@ from config import (
     MARKET_DATA_DIR,
     TABLE_DATE_COL,
 )
+from config import checkpoint_registry as _cfg
 from config.daily import DAILY_UPDATE_EXTRA, PERIODIC_UPDATE_TARGETS
 
 SEP = "=" * 96
@@ -141,7 +142,26 @@ def _get_data_latest_date(name):
 # ============================================================
 # A. 断点 × 落盘 交叉校验
 # ============================================================
-CHECKPOINT_FILES = [".checkpoint.json", ".cb_checkpoint.json", ".backfill_checkpoint.json"]
+def _checkpoint_files(exclude_authorities=("NOT_A_CHECKPOINT",)):
+    """按 registry 列出全部断点载体（去重，按库+文件名稳定排序）。
+
+    P3-2（2026-11-11）：原为硬编码 3 个文件名 —— 实测数据根下有 21 个载体，
+    只认 3 个等于「audit 全绿」并不覆盖其余 18 个。现改由单一真源驱动：
+    同一文件被多个域引用时只登一次（如 .backfill_checkpoint.json 有 9 个域）。
+
+    默认排除 NOT_A_CHECKPOINT（audit_report/isolation_log 等 5 个报告类 JSON，
+    不回答"某键是否完成"）⇒ 剩余 21 个即 P3-0 的"21 载体"。
+    """
+    seen = {}
+    for d in _cfg.all_domains():
+        if d.authority in exclude_authorities:
+            continue
+        key = (d.library, d.file)
+        # 同一文件多个域时以 PRIMARY 为代表（如实测 .backfill_checkpoint.json
+        # 有 9 个域、.checkpoint.json 有 code 与 done_dates 两个域）
+        if key not in seen or (seen[key].authority != "PRIMARY" and d.authority == "PRIMARY"):
+            seen[key] = d
+    return [seen[k] for k in sorted(seen)]
 
 
 def audit_checkpoint(verbose=True):
@@ -160,7 +180,18 @@ def audit_checkpoint(verbose=True):
         print("  异常 = 断点说完成但无文件; 提示 = 命名/来源差异(非故障)")
 
     errors, infos = [], []
-    for cp_name in CHECKPOINT_FILES:
+    inventory = _checkpoint_files()
+    if verbose:
+        print(f"\n  遍历断点载体 {len(inventory)} 个（registry 驱动，已去重；"
+              f"21 载体 = 全部 − NOT_A_CHECKPOINT）:")
+        for d in inventory:
+            print(f"    [{d.library:11s}] {d.file:46s} {d.authority:13s} {d.owner}")
+    for dom in inventory:
+        if dom.library != "market_data" or dom.authority not in ("PRIMARY", "SUPPLEMENTARY"):
+            continue        # alt 结构不同（done 列表）/ 备份与旧格式只登记不核对
+        if dom.completed_field != "completed":
+            continue        # done_dates 等异构字段（.periodic_state）不在本段口径内
+        cp_name = dom.file
         cp_path = os.path.join(MARKET_DATA_DIR, cp_name)
         if not os.path.exists(cp_path):
             if verbose:
@@ -220,7 +251,118 @@ def audit_checkpoint(verbose=True):
             print(f"    [{n}] {s}")
         if not infos:
             print("    ✓ 无")
+        # G1 双向差集（P3-2b）：与上方"断点×落盘"互补 —— 上方看目录/文件，
+        # 这里看**账本键**本身（extra 藏旧右端/日更日期键/下架代码）。
+        audit_checkpoint_diff(verbose=True)
     return errors, infos
+
+
+# ============================================================
+# A2. G1 双向差集（P3-2b，2026-11-11）
+# ============================================================
+def _task_date(task, mode):
+    """取任务键里的"日期部分"，用于把 miss 拆成未来日/真实日。
+
+    非日期维度（by_code 的代码、once 的标记）返回 "" ⇒ 一律计入"真实"，
+    绝不能让它们被误判成"未来日"而掩盖真缺口。
+    """
+    s = str(task)
+    if mode in ("by_code", "once"):
+        return ""
+    if mode in ("by_range", "by_month"):
+        return s.rpartition("|")[2]
+    return s
+
+
+def audit_checkpoint_diff(verbose=True):
+    """G1：断点账本 × 应有任务的**双向差集**（含未来日拆分）。
+
+    与 audit_gaps 的三点差别（这就是它存在的理由）：
+      1. **双向**：既算 miss（应有·断点无），也算 extra（断点有·应有无）——
+         extra 正是"旧右端日/日更日期键/已下架代码"的藏身处；
+      2. **不做数据新鲜度替换**：audit_gaps 会用 parquet 最新日期推断断点虚记
+         并重写 miss，本函数只看账本本身，避免两套口径互相覆盖；
+      3. **miss 拆未来/真实**：快照日之后的交易日属正常未到账（A 股日历
+         已排到 2027），必须单列，否则"146 条缺口"会盖住"40 条真缺口"。
+
+    与 audit_gaps 保持一致的地方：同一套 X/enabled/audit_skip 过滤、
+    同一个 `_period_key` 折周期端点口径（否则周/月滚动端点会天天假红）。
+    """
+    cp_path = os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
+    if not os.path.exists(cp_path):
+        return []
+    cp = json.load(open(cp_path, encoding="utf-8"))
+    today = datetime.now().strftime("%Y%m%d")
+    from fetch.backfill_spec import expected_task_count
+
+    rows = []
+    tot = {"expect": 0, "done": 0, "extra": 0, "miss": 0, "future": 0, "real": 0}
+    for name, conf in BACKFILL_TARGETS.items():
+        if conf.get("tier") == "X" or conf.get("enabled") is False:
+            continue
+        if conf.get("audit_skip"):
+            continue
+        mode = conf["mode"]
+        freq = conf.get("freq", "day")
+        done = [str(x) for x in cp.get(name, {}).get("completed", [])]
+        if not done and mode != "once":
+            continue
+        expect, _kind = expected_task_count(name, conf)
+        if expect is None:
+            continue
+        expect = [str(x) for x in expect]
+        exp_keys = {_period_key(e, mode, freq) for e in expect}
+        done_keys = {_period_key(d, mode, freq) for d in done}
+        # extra 与 miss 同走 `_period_key`（派单 M1）：
+        #   by_range 只比起始日 ⇒ 右端日随运行时点漂移不算脏键（否则 12 张正常表
+        #   各报 1~2 条，合计 17 条，会把"旧右端日"误导成待清理脏键）。
+        #   ⚠ 代价：single_range 表"断点右端超前磁盘"看不见（派单总表 U4 已登记）。
+        extra = [d for d in done if _period_key(d, mode, freq) not in exp_keys]
+        miss = [e for e in expect if _period_key(e, mode, freq) not in done_keys]
+        future = [m for m in miss if _task_date(m, mode) > today]
+        real = [m for m in miss if _task_date(m, mode) <= today]
+        if not extra and not miss:
+            continue
+        if real:
+            verdict = "★ 真缺口"
+        elif extra:
+            verdict = "⚠ extra"
+        else:
+            verdict = "未来日(正常)"
+        rows.append({"name": name, "mode": mode, "expect": len(expect),
+                     "done": len(done), "extra": len(extra), "miss": len(miss),
+                     "miss_future": len(future), "miss_real": len(real),
+                     "verdict": verdict, "extra_keys": extra[:3],
+                     "miss_keys": (real or future)[:3]})
+        tot["expect"] += len(expect)
+        tot["done"] += len(done)
+        tot["extra"] += len(extra)
+        tot["miss"] += len(miss)
+        tot["future"] += len(future)
+        tot["real"] += len(real)
+
+    if verbose:
+        print()
+        print(SEP)
+        print("  A2. G1 双向差集（周期键口径；extra=断点有·应有无，miss=应有·断点无）")
+        print(SEP)
+        print(f"  基准日(真实今天): {today}")
+        print(f"\n  {'表名':18s} {'模式':9s} {'期望':>6s} {'实际':>6s} {'extra':>6s} "
+              f"{'miss':>6s} {'未来':>5s} {'真实':>5s}  判定")
+        print("  " + "-" * 84)
+        for r in rows:
+            print(f"  {r['name']:18s} {r['mode']:9s} {r['expect']:6d} {r['done']:6d} "
+                  f"{r['extra']:6d} {r['miss']:6d} {r['miss_future']:5d} "
+                  f"{r['miss_real']:5d}  {r['verdict']}")
+            # 样例键：M3 要求能直接看到"哪只代码/哪一天"（如 001381.SZ）
+            if r["extra_keys"] or r["miss_keys"]:
+                print(f"    样例: extra={r['extra_keys'] or '-'} "
+                      f"miss={r['miss_keys'] or '-'}")
+        print("  " + "-" * 84)
+        print(f"  合计: 期望 {tot['expect']} | 实际 {tot['done']} | extra {tot['extra']} "
+              f"| miss {tot['miss']}（未来 {tot['future']} + 真实 {tot['real']}）"
+              f" | {len(rows)} 张表有差")
+    return rows
 
 
 # ============================================================
