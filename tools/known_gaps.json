@@ -161,7 +161,6 @@
       "560430.SH",
       "561270.SH",
       "561860.SH",
-      "561970.SH",
       "562090.SH",
       "562100.SH",
       "562210.SH",
@@ -1663,11 +1662,6 @@
         "probe_date": "2026-11-09",
         "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
       },
-      "561970.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-11-09",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
       "562090.SH": {
         "probe_rows": 0,
         "probe_date": "2026-11-09",
@@ -1901,7 +1895,6 @@
       "562630.SH",
       "562690.SH",
       "562710.SH",
-      "562720.SH",
       "562730.SH",
       "563100.SH",
       "588490.SH",
@@ -2246,11 +2239,6 @@
         "probe_date": "2026-11-09",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
       },
-      "562720.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-11-09",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
       "562730.SH": {
         "probe_rows": 0,
         "status": "nan",
@@ -2452,7 +2440,6 @@
       "560430.SH",
       "561270.SH",
       "561860.SH",
-      "561970.SH",
       "562090.SH",
       "562100.SH",
       "562210.SH",
@@ -2480,7 +2467,7 @@
       "589610.SH",
       "589670.SH"
     ],
-    "source_empty_count": 181,
+    "source_empty_count": 180,
     "source_empty_evidence_new": {
       "161022.SZ": {
         "name": "富国创业板指数-A",
@@ -5289,11 +5276,6 @@
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
       "561860.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-11-09",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "561970.SH": {
         "probe_rows": 0,
         "probe_date": "2026-11-09",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
