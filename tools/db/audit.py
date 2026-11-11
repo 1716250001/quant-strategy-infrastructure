@@ -38,6 +38,7 @@ import pyarrow.parquet as pq
 
 from common.calendar import open_dates
 from config import (
+    ALT_DATA_DIR,
     BACKFILL_PARALLEL_TARGETS,
     BACKFILL_TARGETS,
     DAILY_UPDATE_GROUPS,
@@ -164,83 +165,131 @@ def _checkpoint_files(exclude_authorities=("NOT_A_CHECKPOINT",)):
     return [seen[k] for k in sorted(seen)]
 
 
+def _carrier_root(dom):
+    """载体所在库根：market_data / alt_data（跨库混算会造出假异常）。"""
+    return MARKET_DATA_DIR if dom.library == "market_data" else ALT_DATA_DIR
+
+
+def _count_parquet(d):
+    """目录下 parquet 文件数；目录不存在返回 -1。"""
+    if not os.path.isdir(d):
+        return -1
+    return len([f for f in os.listdir(d) if f.endswith(".parquet")])
+
+
+def _alt_spec_note(name):
+    """取 alt 表 spec 的 note（惰性导入，避免 market-only 体检付 alt 导入成本）。"""
+    try:
+        from alt.spec import BY_NAME
+    except Exception:
+        return ""
+    sp = BY_NAME.get(name)
+    return getattr(sp, "note", "") or ""
+
+
+def _check_carrier(dom):
+    """核对**单个**断点载体，返回 (level, depth, msg)。
+
+    K2 修正（18 号 §409.2）：上一版打印 21 个载体、实际只核 3 个（三道 continue
+    把 alt 14 / LEGACY 3 / 异构字段 1 全跳过）—— 那是"假装覆盖"。现在**每个载体
+    都必须给出结论**，深度分两级：
+
+      deep  ：账本记录数 × 落盘文件数逐表对账（completed/done 为列表的账本）
+      struct：JSON 可解析 + 记录结构在位（异构字段、进度快照类文件）
+
+    ⛔ 不许再加"跳过"分支 —— 跳过就等于 K2 倒退。
+    """
+    path = os.path.join(_carrier_root(dom), dom.file)
+    if not os.path.exists(path):
+        lvl = "error" if dom.authority in ("PRIMARY", "SUPPLEMENTARY") else "info"
+        return lvl, "struct", "文件不存在"
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except Exception as e:
+        return "error", "struct", f"JSON 损坏: {str(e)[:40]}"
+    if not isinstance(data, dict) or not data:
+        return "info", "struct", "空文件 / 非 dict"
+
+    field = dom.completed_field
+    recs = {k: v for k, v in data.items() if isinstance(v, dict)}
+    hit = [k for k, v in recs.items() if field and isinstance(v.get(field), list)]
+    if not hit:
+        # 异构字段（如 .periodic_state 的 last_run 是标量）或纯进度快照：只做结构核对
+        if not field:
+            lack = "无完成字段定义"
+        elif any(field in v for v in recs.values()):
+            lack = f"{field} 非列表"
+        else:
+            lack = f"无 {field} 字段"
+        return "ok", "struct", f"{len(recs)} 条记录（{lack}，仅结构核对）"
+
+    errs, infos = [], []
+    root = _carrier_root(dom)
+    for k in sorted(hit):
+        done_n = len(recs[k][field])
+        target = DB_AUDIT_CKPT_ALIASES.get(k, k)
+        nf = _count_parquet(os.path.join(root, target))
+        if done_n > 0 and nf <= 0:
+            # alt 侧复用既有语义（freshness.py:313 同源）：spec.note 标「已废弃」
+            # 且未建表 ⇒ 已归档，不是缺数据（us_daily_qfq，§159）。
+            if dom.library == "alt_data" and "已废弃" in _alt_spec_note(k):
+                infos.append(f"{k}: 断点 {done_n} 条，表已废弃归档（spec.note）")
+            else:
+                errs.append(f"{k}: 断点 {done_n} 条但落盘 {max(nf, 0)} 个文件")
+        elif nf > 0 and done_n == 0 and target not in DB_AUDIT_CKPT_EXTERNAL:
+            infos.append(f"{k}: 有 {nf} 个文件但断点 0")
+    # 账本里没有完成记录、但磁盘上有文件的表：多数是"由其他流程填充"（外部流程），
+    # 改前会报出来，改后不得因为"没进 hit"就静默吞掉（§409 同型：假装覆盖）。
+    for k in sorted(recs):
+        if k in hit:
+            continue
+        target = DB_AUDIT_CKPT_ALIASES.get(k, k)
+        nf = _count_parquet(os.path.join(root, target))
+        if nf > 0:
+            infos.append(f"{k}: 有 {nf} 个文件但账本无 {field} 记录")
+    if errs:
+        return "error", "deep", "；".join(errs[:3])
+    if infos:
+        return "info", "deep", "；".join(infos[:3])
+    return "ok", "deep", f"{len(hit)} 张表逐表对账通过"
+
+
 def audit_checkpoint(verbose=True):
-    """检查所有断点文件与实际落盘的交叉一致性。
+    """检查所有断点文件与实际落盘的交叉一致性（registry 驱动，21 载体全覆盖）。
+
+    P3-2b 修正（18 号 §409.2）：上一版打印 21 个载体却只真核 3 个，K2 判不通过。
+    现每个载体都给结论，deep/struct 两级在汇总行明示，不再"假覆盖"。
 
     判定分级(避免误报):
       异常(error): 断点>0 但目标目录不存在 / 无任何文件  ← 真的缺数据
       提示(info):  有文件但断点=0, 且该目录由其他流程填充 ← 正常
-      提示(info):  断点键名经别名映射后才找到目录          ← 命名差异
       正常(OK):    其余
     """
     if verbose:
         print(SEP)
         print("  A. 断点 × 落盘 交叉校验")
         print(SEP)
-        print("  异常 = 断点说完成但无文件; 提示 = 命名/来源差异(非故障)")
+        print("  deep = 账本键×落盘逐表对账; struct = JSON/结构核对; 异常 = 断点说完成但无文件")
 
-    errors, infos = [], []
+    errors, infos, deep_n = [], [], 0
     inventory = _checkpoint_files()
     if verbose:
         print(f"\n  遍历断点载体 {len(inventory)} 个（registry 驱动，已去重；"
               f"21 载体 = 全部 − NOT_A_CHECKPOINT）:")
-        for d in inventory:
-            print(f"    [{d.library:11s}] {d.file:46s} {d.authority:13s} {d.owner}")
     for dom in inventory:
-        if dom.library != "market_data" or dom.authority not in ("PRIMARY", "SUPPLEMENTARY"):
-            continue        # alt 结构不同（done 列表）/ 备份与旧格式只登记不核对
-        if dom.completed_field != "completed":
-            continue        # done_dates 等异构字段（.periodic_state）不在本段口径内
-        cp_name = dom.file
-        cp_path = os.path.join(MARKET_DATA_DIR, cp_name)
-        if not os.path.exists(cp_path):
-            if verbose:
-                print(f"\n  [{cp_name}] 不存在, 跳过")
-            continue
-        try:
-            cp = json.load(open(cp_path, encoding="utf-8"))
-        except Exception as e:
-            errors.append((cp_name, f"断点文件损坏: {str(e)[:50]}"))
-            print(f"\n  [{cp_name}] ⛔ 读取失败: {str(e)[:60]}")
-            continue
-
-        print(f"\n  [{cp_name}] {os.path.getsize(cp_path)/1024:.1f} KB | {len(cp)} 个键")
-        print(f"  {'键名':22s} {'断点记录':>9s} {'实际文件':>9s}  状态")
-        print("  " + "-" * 60)
-
-        for name in sorted(cp):
-            done = len(cp[name].get("completed", [])) if isinstance(cp[name], dict) else 0
-
-            # 别名映射
-            target = DB_AUDIT_CKPT_ALIASES.get(name, name)
-            aliased = target != name
-            d = os.path.join(MARKET_DATA_DIR, target)
-
-            if not os.path.isdir(d):
-                if done > 0:
-                    st = "⛔ 断点有记录但目录不存在"
-                    errors.append((f"{cp_name}:{name}", "断点有记录但目录不存在"))
-                else:
-                    st = "(目录不存在, 断点也为0) 跳过"
-                nf = -1
-            else:
-                nf = len([f for f in os.listdir(d) if f.endswith(".parquet")])
-                if done > 0 and nf == 0:
-                    st = "⛔ 断点有记录但无文件"
-                    errors.append((f"{cp_name}:{name}", "断点有记录但无文件"))
-                elif nf > 0 and done == 0:
-                    if target in DB_AUDIT_CKPT_EXTERNAL:
-                        st = "提示: 由其他流程填入(非故障)"
-                        infos.append((f"{cp_name}:{name}", "外部流程填充, 断点不记录"))
-                    else:
-                        st = "提示: 有文件但断点为0"
-                        infos.append((f"{cp_name}:{name}", "有文件但断点为0"))
-                else:
-                    st = "OK"
-            show = f"{name} → {target}" if aliased else name
-            print(f"  {show:22s} {done:9d} {nf:9d}  {st}")
+        lvl, depth, msg = _check_carrier(dom)
+        deep_n += depth == "deep"
+        if verbose:
+            tag = {"ok": "OK  ", "info": "提示", "error": "⛔  "}[lvl]
+            print(f"    {tag} [{depth:6s}] {dom.library:11s} {dom.file:46s} {msg}")
+        if lvl == "error":
+            errors.append((f"{dom.library}/{dom.file}", msg))
+        elif lvl == "info":
+            infos.append((f"{dom.library}/{dom.file}", msg))
 
     if verbose:
+        print(f"\n  覆盖: 载体 {len(inventory)} 个全部核过（deep {deep_n} / "
+              f"struct {len(inventory) - deep_n}）")
         print(f"\n  ⛔ 真异常: {len(errors)}")
         for n, s in errors:
             print(f"    [{n}] {s}")

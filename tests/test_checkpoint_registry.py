@@ -15,6 +15,7 @@ import pytest
 
 from config import MARKET_DATA_DIR
 from config import checkpoint_registry as _cfg
+from tools.db import audit
 from tools.db import checkpoint_registry as _pg
 
 CODE_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -205,3 +206,28 @@ def test_timestamp_none_or_iso():
     """时间戳口径：要么 None，要么严格 ISO（不许把 dict/空串透出去）。"""
     ts = _pg.timestamp("alt.ckpt.__whole__", "stk_etf")
     assert ts is None or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", ts)
+
+
+# ------------------------------------------------- K2 覆盖面（§409.2 返工）
+def test_k2_audit_checks_all_carriers(monkeypatch):
+    """K2：audit 必须**真核**每个载体，而不是只打印 21 个、实际核 3 个。
+
+    §409.2 的教训：上一版只断言 `_checkpoint_files()` 返回 21，没测「是否真的核」，
+    于是三道 continue 把 18 个载体全跳过而测试仍绿（测试绿 ≠ 判据对）。
+    这里用 spy 数 `_check_carrier` 的实际调用次数与深度。
+    """
+    calls, depths = [], []
+    orig = audit._check_carrier
+
+    def spy(dom):
+        calls.append(dom.file)
+        res = orig(dom)
+        depths.append(res[1])
+        return res
+
+    monkeypatch.setattr(audit, "_check_carrier", spy)
+    errors, _infos = audit.audit_checkpoint(verbose=False)
+    assert len(calls) == len(audit._checkpoint_files()) == 21, \
+        f"只核了 {len(calls)} 个载体（应 21）"
+    assert depths.count("deep") >= 6, f"深度核对仅 {depths.count('deep')} 个，K2 要求 ≥6"
+    assert not errors, f"真实数据上不应有真异常：{errors}"
