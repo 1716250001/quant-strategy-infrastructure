@@ -188,10 +188,14 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
             """
             if ok and df is not None and not df.empty:
                 try:
-                    upsert_by_year(df, CB_DAILY_DIR, date_col="trade_date",
-                                   subset=["ts_code", "trade_date"],
-                                   sort_by="trade_date",
-                                   on_error=lambda y, e: print(f"  [ERROR] 分区 {y}: {e}"))
+                    _r = upsert_by_year(df, CB_DAILY_DIR, date_col="trade_date",
+                                        subset=["ts_code", "trade_date"],
+                                        sort_by="trade_date",
+                                        on_error=lambda y, e: print(f"  [ERROR] 分区 {y}: {e}"))
+                    if _r.get("fail"):
+                        raise RuntimeError(
+                            f"按年分区 {_r['fail']} 个年份写入失败"
+                            f"（partitions={_r.get('partitions')}）")
                     counters["success"] += 1
                     checkpoint.mark_done(ts_code)
                 except Exception as e:
