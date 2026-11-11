@@ -384,7 +384,6 @@ def fill_missing_codes(name, spec, pro, limiter, dry_run=False, verbose=False):
         if not ok:
             failed.append(code)
             continue
-        n_ok += 1
         if df is not None and len(df):
             d2 = _normalize(df)
             col = spec["date_col"]
@@ -398,6 +397,7 @@ def fill_missing_codes(name, spec, pro, limiter, dry_run=False, verbose=False):
                         failed.append(code)     # 分区写失败 ⇒ 计入失败，不记断点
                         continue
                     n_rows += int(r.get("added", 0))
+        n_ok += 1                        # 分区失败已在上面 continue，此处才是真成功
         if cp is not None:
             cp.mark_done(name, code)        # 成功（含返空）即记断点
         if i % 10 == 0 or i == len(missing):

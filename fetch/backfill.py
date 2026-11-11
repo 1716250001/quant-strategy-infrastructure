@@ -144,6 +144,35 @@ def _is_registered_source_empty(name, code):
     return reg is not None and str(code) in reg
 
 
+def _table_source_empty_dates_registry(name):
+    """返回某表 source_empty_dates（**日期维度**）set；无该字段返回 None。
+
+    ⚠ 与代码维度 `source_empty` 是**两套独立键空间**（2026-11-11 §415 A单）：
+      `_is_registered_source_empty` 是裸 `str(code) in reg`，若把日期混入同一数组，
+      任何一处不知前缀约定的调用点都会静默返回 False、永不命中 —— 故独立字段。
+    """
+    kg = _load_known_gaps()
+    entry = kg.get(name)
+    if not isinstance(entry, dict) or "source_empty_dates" not in entry:
+        return None
+    return set(str(x) for x in (entry.get("source_empty_dates") or []))
+
+
+def _is_registered_source_empty_date(name, dt):
+    """该日期是否在表的 source_empty_dates 注册表中（核验过的源端空日）。"""
+    reg = _table_source_empty_dates_registry(name)
+    return reg is not None and str(dt) in reg
+
+
+def _empty_as_done(name):
+    """该表是否显式保持「空即 done」（乙档待补数 / 丙档未定性）。
+
+    仅由 `known_gaps.json` 的 `empty_as_done: true` 开启；默认 False ⇒ fail-closed。
+    """
+    entry = _load_known_gaps().get(name)
+    return isinstance(entry, dict) and entry.get("empty_as_done") is True
+
+
 def _load_codes_file(path):
     r"""读取 --codes-file 清单（UTF-8 文本，一行一个 ts_code，# 注释，空行忽略）。
 
@@ -418,7 +447,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             # - 常规 by_code + 该表有 source_empty 注册表（G3 fail-closed）：
             #   仅「逐码核验登记的源端空」记 done；**未注册空码留待续跑**
             #   （防瞬时空被静默标完成；由 check-coverage/R 门禁驱动人工核验登记）。
-            # - 无注册表的表：保持原「空即 done」语义（全市场/报告期表确实无数据）。
+            # - 无注册表的表：仅 `empty_as_done=true`（乙/丙档）保持「空即 done」，
+            #   其余 fail-closed（A单 2026-11-11）。
             if listed_codes is not None:
                 pass
             elif _table_source_empty_registry(name) is not None:
@@ -426,7 +456,12 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                     cp.mark_done(name, str(key))
                 # 未注册空码：不记断点
             else:
-                cp.mark_done(name, str(key))
+                # ⛔ 2026-11-11 P3-8 A单：原为无条件 mark_done（"空即 done"）——
+                #    中断后会造出「断点说完成、落盘 0 条」的假绿（18 号 §411.1 实证）。
+                #    现仅对显式标注 `empty_as_done` 的乙/丙档表保持原语义；
+                #    其余无注册表 ⇒ fail-closed：空码不记断点，留待续跑。
+                if _empty_as_done(name):
+                    cp.mark_done(name, str(key))
         done_ct["n"] += 1
         if done_ct["n"] % 200 == 0:
             cp.save()
@@ -789,7 +824,11 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             if df is None:
                 return              # 调用失败: 不落盘、不记断点, 留待续跑
             if df.empty:
-                cp.mark_done(name, dt)   # 成功但无数据(如休市日): 记断点
+                # ⛔ 2026-11-11 P3-8 A单：by_date 待跑清单已由 open_dates 过滤为交易日，
+                #    "休市日"理由不成立；空返回更可能是限频/重试耗尽 ⇒ 仅**已登记空日**
+                #    （或显式 empty_as_done 的乙/丙档表）才记 done，其余留待续跑。
+                if _is_registered_source_empty_date(name, dt) or _empty_as_done(name):
+                    cp.mark_done(name, dt)
                 cp.mark_fetched(name, rows=0)   # CC-FIX-7：成功但返空也要记
             else:
                 # EE-FUND-9A: 过滤 market=O 场外码（仅 fund_daily 生效）
@@ -803,7 +842,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                         pass
                     df = df[_mask]
                 if df.empty:
-                    cp.mark_done(name, dt)
+                    if _is_registered_source_empty_date(name, dt) or _empty_as_done(name):
+                        cp.mark_done(name, dt)
                     cp.mark_fetched(name, rows=0)   # CC-FIX-7：过滤后为空同样记
                 else:
                     # R6-Final：白名单表按业务键去重（adj 保留 end_date 最大行）
