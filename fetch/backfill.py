@@ -173,56 +173,52 @@ def _empty_as_done(name):
     return isinstance(entry, dict) and entry.get("empty_as_done") is True
 
 
-_STRUCT_WEEKDAY_CACHE = {}
+# 已实证「源端 T+1 发布」的表白名单：当日空 ≠ 缺数，可记 done（次日由日更补回）。
+# 证据（2026-11-11 §417 源端实测）: margin(20261111) → 0 行；margin(20261110) → 3 行。
+# ⛔ 新增表必须先实测「当日 0 行 + 前一交易日有数据」，不得按接口族类推
+#    （§418 F-1b：无差别豁免会把「当日锚点未发布」当成结构性空，掩盖真实延迟）。
+_T1_PUBLISH_TABLES = frozenset({"margin"})
 
 
-def _disk_weekdays(name):
-    """该表库内数据出现过的星期集合（0=周一）；读不到返回空集。
+def _is_structural_empty(name, dt):
+    """「结构性空」豁免（2026-11-11 §417 F-1；§418 F-1a/F-1b 收窄）：可记 done 的空返回。
 
-    仅 by_date 且 freq=week/month 的「结构性空」判定使用，结果进程内缓存。
-    """
-    if name in _STRUCT_WEEKDAY_CACHE:
-        return _STRUCT_WEEKDAY_CACHE[name]
-    from config import TABLE_DATE_COL
-    dc = TABLE_DATE_COL.get(name) or "trade_date"
-    d = os.path.join(MARKET_DATA_DIR, name)
-    wds = set()
-    try:
-        for f in os.listdir(d):
-            if not f.endswith(".parquet"):
-                continue
-            try:
-                s = pd.read_parquet(os.path.join(d, f), columns=[dc])[dc]
-            except Exception:
-                continue
-            s = pd.to_datetime(
-                s.dropna().astype(str).str.replace("-", "", regex=False).str[:8],
-                errors="coerce").dropna()
-            wds |= set(s.dt.weekday.unique())
-    except OSError:
-        pass
-    _STRUCT_WEEKDAY_CACHE[name] = wds
-    return wds
+    仅两类，且都必须**可证**：
+      ① 严格晚于今天：源端不可能发布未来数据 ⇒ 必然空；
+      ② 恰为今天且表在 `_T1_PUBLISH_TABLES`（已实证 T+1 发布）⇒ 当日空属发布延迟。
+    ⛔ 历史日一律**不**豁免（fail-closed，留待续跑）：历史上该有数据却返空
+       正是要暴露的限频/重试耗尽，不能静默记 done。
+    ⛔ 原「freq=week/month 且库内历史无该星期」判据已删除（§418.1 穷举证明：
+       5 张周月表恒返 False，属死代码）。
 
-
-def _is_structural_empty(name, conf, dt):
-    """「结构性空」豁免（2026-11-11 §417 F-1）：与源端发布规律一致的空返回。
-
-    两类：
-      ① 当日/未来：源端尚未发布（如 margin 类 T+1 才公布）⇒ 必然空；
-      ② freq=week/month：该表库内历史从未出现过该星期 ⇒ 源端结构（周/月线锚点）。
+    责任边界（§418 F-1d）：② 记 done 不会吞数据 —— `fetch/daily_update.py:359`
+    以 `ignore_checkpoint=True` 重算缺口，右端含当日 ⇒ 次日源端发布后必然重拉。
     ⚠ 仅用于**记 done**，不写入 `source_empty_dates`（不进注册表，单独计数）。
     """
-    if str(dt) >= datetime.now().strftime("%Y%m%d"):
+    today = datetime.now().strftime("%Y%m%d")
+    if str(dt) > today:
         return True
-    if conf.get("freq") in ("week", "month"):
-        try:
-            wd = datetime.strptime(str(dt), "%Y%m%d").weekday()
-        except ValueError:
-            return False
-        seen = _disk_weekdays(name)
-        return bool(seen) and wd not in seen
+    if str(dt) == today:
+        return name in _T1_PUBLISH_TABLES
     return False
+
+
+def _resolve_empty_date(name, dt, cp, struct_ct):
+    """by_date 空返回的处置：已登记空日/结构性空 ⇒ 记 done；否则留待续跑。
+
+    抽成模块级函数是为了让处置分支可被 pytest 直接钉死（§418 F-1c），
+    原来它内联在 run_target 的 on_result 闭包里，无法观测计数器。
+
+    返回处置标签: "registered" / "structural" / "pending"
+    """
+    if _is_registered_source_empty_date(name, dt) or _empty_as_done(name):
+        cp.mark_done(name, dt)
+        return "registered"
+    if _is_structural_empty(name, dt):
+        cp.mark_done(name, dt)
+        struct_ct["n"] += 1
+        return "structural"
+    return "pending"
 
 
 def _load_codes_file(path):
@@ -881,12 +877,8 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 # ⛔ 2026-11-11 P3-8 A单：by_date 待跑清单已由 open_dates 过滤为交易日，
                 #    "休市日"理由不成立；空返回更可能是限频/重试耗尽 ⇒ 仅**已登记空日**
                 #    （或显式 empty_as_done 的乙/丙档表）才记 done，其余留待续跑。
-                # ⭐ §417 F-1：结构性空（当日未发布 / 周月锚点规律）记 done 但单独计数。
-                if _is_registered_source_empty_date(name, dt) or _empty_as_done(name):
-                    cp.mark_done(name, dt)
-                elif _is_structural_empty(name, conf, dt):
-                    cp.mark_done(name, dt)
-                    struct_ct["n"] += 1
+                # ⭐ §417 F-1 / §418 F-1b：未来日、已实证 T+1 发布表的当日空算结构性空。
+                _resolve_empty_date(name, dt, cp, struct_ct)
                 cp.mark_fetched(name, rows=0)   # CC-FIX-7：成功但返空也要记
             else:
                 # EE-FUND-9A: 过滤 market=O 场外码（仅 fund_daily 生效）
@@ -900,11 +892,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                         pass
                     df = df[_mask]
                 if df.empty:
-                    if _is_registered_source_empty_date(name, dt) or _empty_as_done(name):
-                        cp.mark_done(name, dt)
-                    elif _is_structural_empty(name, conf, dt):
-                        cp.mark_done(name, dt)
-                        struct_ct["n"] += 1
+                    _resolve_empty_date(name, dt, cp, struct_ct)
                     cp.mark_fetched(name, rows=0)   # CC-FIX-7：过滤后为空同样记
                 else:
                     # R6-Final：白名单表按业务键去重（adj 保留 end_date 最大行）
@@ -931,7 +919,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         cp.save()
         if struct_ct["n"]:
             print(f"    [结构性空] {name}: {struct_ct['n']} 天"
-                  f"（源端未发布/周月锚点规律，记 done 不入注册表）")
+                  f"（未来日 / 已实证 T+1 发表当日，记 done 不入注册表）")
 
         with meta_lock:
             trunc_days = [d for d, v in meta.items() if v[1]]
