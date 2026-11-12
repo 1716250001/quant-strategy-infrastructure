@@ -161,6 +161,13 @@ def resolve_gaps(name, conf, target_date, lookback):
     if conf.get("mode") == "by_range":
         return _resolve_gaps_range(table, conf, target_date)
 
+    # ── freq=week|month: 缺口必须按「周期取样日」算，不能按逐交易日（W-1 / §449.1）──
+    # ⚠ 原先漏了这一分支：5 张周/月表每天拿到 5~10 个「交易日」缺口，
+    #   非取样日的请求必然返空（每天白烧 25 个请求），且 returned 的日期
+    #   会被 run_target 记进断点 ⇒ 完成度账虚记（stk_week_month_adj 58 条）。
+    if conf.get("freq") in ("week", "month"):
+        return _resolve_gaps_periodic(table, conf, target_date, lookback)
+
     cal = conf.get("calendar", "SSE")
     reader.clear_cache(table)
     latest = reader.latest_date(table, date_col)
@@ -180,6 +187,41 @@ def resolve_gaps(name, conf, target_date, lookback):
     gaps = [d for d in all_dates if str(latest) < d <= target_date]
     dates = sorted(set(gaps) | set(refresh))
     return dates, {"latest": latest, "gap": gaps, "refresh": refresh}
+
+
+def _resolve_gaps_periodic(name, conf, target_date, lookback):
+    """freq=week|month 表的缺口 = 「周期取样日」序列上的缺口（W-1 修复）。
+
+    ⛔ 取样日算法**一律复用 `fetch/backfill_spec.py`**，本文件不重写周/月末逻辑
+       （否则就是"两个结构各管一摊"，见 `engine_supports_daily` 的纪律注释）。
+    ⛔ `anchor` 逐表从 `conf["week_anchor"]` 取（5 张表里 3 张实测为 "friday"），
+       默认 "last_trade"；写死会让 stk_weekly_monthly 族静默漏掉长假周。
+    ⭐ 复核窗口 = 最近 `lookback` 个**取样日**（不是交易日），否则 monthly 会退回逐日。
+    """
+    from fetch.backfill_spec import month_last_trade_dates, week_last_trade_dates
+
+    cal = conf.get("calendar", "SSE")
+    start = conf.get("start", "20160101")
+    date_col = conf.get("date_col") or "trade_date"
+
+    if conf["freq"] == "week":
+        samples = week_last_trade_dates(
+            start, target_date, calendar=cal,
+            anchor=conf.get("week_anchor", "last_trade"))
+    else:
+        samples = [d for _m, d in
+                   month_last_trade_dates(start, target_date, calendar=cal)]
+    samples = [d for d in samples if str(d) <= str(target_date)]
+
+    reader.clear_cache(name)
+    latest = reader.latest_date(name, date_col)
+    refresh = samples[-lookback:] if (lookback and samples) else []
+
+    if not latest:
+        return sorted(set(samples)), {"latest": None, "gap": samples, "refresh": refresh}
+
+    gaps = [d for d in samples if str(latest) < d <= str(target_date)]
+    return sorted(set(gaps) | set(refresh)), {"latest": latest, "gap": gaps, "refresh": refresh}
 
 
 def _resolve_gaps_range(name, conf, target_date, date_col=None):
