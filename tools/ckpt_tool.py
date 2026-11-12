@@ -145,6 +145,7 @@ def _do_show(tables=None, verbose=True):
         print("-" * 100)
 
     rows = []
+    bm_failed = []      # G-1：by_month 未能核对的表（读盘失败/文件缺失）
     for name in names:
         conf = _conf_of(name)
         if not conf:
@@ -159,7 +160,8 @@ def _do_show(tables=None, verbose=True):
         elif mode == "by_code":
             disk = _disk_codes(name)
         elif name in BY_MONTH_COMPARE:
-            disk, _key_desc = _disk_by_month(name)   # §423：by_month 两表旁路
+            # §423：by_month 两表旁路；G-1：三元组带失败原因
+            disk, _key_desc, bm_err = _disk_by_month(name)
         else:
             disk = None      # 其余模式无对应口径（见 COVERED_MODES 说明）
 
@@ -193,6 +195,10 @@ def _do_show(tables=None, verbose=True):
             n_all = len(done - disk)
             if n_all > fake:
                 note += (f"  · 全虚记 {n_all:,}（含 {n_all - fake:,} 个非任务集键记入断点）")
+        # G-1：by_month 读盘失败/文件缺失必须亮红，⛔ 不许与「未核对」同形
+        if name in BY_MONTH_COMPARE and disk is None and bm_err:
+            note += ("  " if note else "") + f"⛔ 未核对（{bm_err}）"
+            bm_failed.append({"name": name, "err": bm_err})
 
         n_disk = len(disk) if disk is not None else -1
         if verbose:
@@ -208,6 +214,10 @@ def _do_show(tables=None, verbose=True):
         ts = sum(x["stale"] for x in rows if x["stale"])
         print("-" * 100)
         print(f"  合计: 疑似虚记 {tf:,} 项 | 断点滞后 {ts:,} 项")
+        if bm_failed:
+            # G-1：⛔「没报」不等于「没问题」——这 N 张根本没读到盘
+            detail = "、".join(f"{x['name']}（{x['err']}）" for x in bm_failed)
+            print(f"  ⛔ by_month 读盘失败 {len(bm_failed)} 张（**未核对**，不是没问题）: {detail}")
 
         # 未覆盖模式汇总（避免"没报=没问题"的误解 —— I5）
         unc = {}
@@ -240,25 +250,34 @@ def _do_show(tables=None, verbose=True):
 # ── by_month 磁盘键（§423 G单）────────────────────────────
 # ============================================================
 def _disk_by_month(name):
-    """by_month 表的磁盘键集合（与断点键**逐字同形**）。无注册项返回 (None, None)。
+    """by_month 表的磁盘键集合。返回 (键集, 键形态, 失败原因)。
 
     ⚠ broker_recommend 必须补 `None|` 前缀，否则与断点键不匹配 ⇒ fake 假红 131（实测踩过）。
+
+    四态可分（G-1/§426）：
+      未注册 → (None, None, None)
+      文件缺失 → (None, None, "文件缺失")
+      读盘异常 → (None, None, f"读取失败: {类型名}")
+      正常     → (set, desc, None)
+
+    ⛔ ``None`` 与「未注册」本来同形 ⇒ 报表显示 `-/-/-`、说明空白、合计报 0，
+       读盘失败看起来和「没核对」一模一样，比改前更隐蔽。故必须带出原因。
     """
     spec = BY_MONTH_COMPARE.get(name)
     if not spec:
-        return None, None
+        return None, None, None
     fname, datecol, codecol, prefix = spec
     p = os.path.join(MARKET_DATA_DIR, name, fname)
     if not os.path.exists(p):
-        return None, None
+        return None, None, "文件缺失"
     try:
         df = pd.read_parquet(p)
         d = df[datecol].astype(str).str.replace("-", "", regex=False)
         if codecol:
-            return set(df[codecol].astype(str) + "|" + d), "code|date"
-        return set(prefix + d), f"{prefix}date" if prefix else "date"
-    except Exception:
-        return None, None
+            return set(df[codecol].astype(str) + "|" + d), "code|date", None
+        return set(prefix + d), f"{prefix}date" if prefix else "date", None
+    except Exception as exc:
+        return None, None, f"读取失败: {type(exc).__name__}"
 
 
 # ============================================================
