@@ -291,14 +291,18 @@ def _dedup_by_key(df, key, sort_col=None):
 
 
 
-def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=False):
+def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=False,
+                     ignore_checkpoint=False):
     """计算待跑任务清单（pending）与跳过数。
 
     从 run_target 提取，供 dry-run 分支复用（零网络）。
 
     过滤规则:
+      - ignore_checkpoint=True: 忽略断点，全部任务视为待跑（--force 语义）。
+        ⭐ 2026-11-12 CLI-1（§430.2）：把这个开关**下沉进本函数**，让
+        预览（dry-run）与执行（run_target）共用同一条判断 —— 原先靠调用方
+        「先把 tasks 换成全量」实现，dry-run 路径漏做 ⇒ 预览说 0、实跑拉 13。
       - force_listed=True: **完全忽略 checkpoint 与库内 present**，清单内全部计入 pending
-      - ignore_checkpoint 由调用方在传入 tasks 前处理（force 时 tasks 即全量）
       - by_code + by_year：读库内已有代码集合，库内已有 → 跳过
       - by_code + 单文件：{code}.parquet 存在 → 跳过
       - 其余：cp.is_done → 跳过
@@ -306,6 +310,9 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
     Returns:
         (pending: list, skipped: int)
     """
+    if ignore_checkpoint:
+        return list(tasks), 0
+
     # force_listed 语义：完全忽略 checkpoint/present，清单内全计入 pending
     if force_listed:
         return list(tasks), 0
@@ -395,13 +402,10 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             return None
 
     # 过滤已完成: 断点已标记 或 (by_code) 目标文件已存在 → 跳过
-    if ignore_checkpoint:
-        pending = list(tasks)
-        skipped = 0
-    else:
-        pending, skipped = _compute_pending(
-            name, conf, tasks, kind, cp, dry_run=dry_run,
-            force_listed=force_listed)
+    # ⭐ CLI-1：--force 的 ignore_checkpoint 也走 _compute_pending 的同一判断
+    pending, skipped = _compute_pending(
+        name, conf, tasks, kind, cp, dry_run=dry_run,
+        force_listed=force_listed, ignore_checkpoint=ignore_checkpoint)
     if limit:
         pending = pending[:limit]
     est = estimate_requests(pending, conf)
@@ -1179,7 +1183,7 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
                     kind = "code"
                 pending, skipped = _compute_pending(
                     name, conf, tasks, kind, cp, dry_run=True,
-                    force_listed=force_listed)
+                    force_listed=force_listed, ignore_checkpoint=force)
                 est = estimate_requests(pending, conf)
             except Exception as e:
                 print(f"  {name:20s} [估算失败] {type(e).__name__}: {str(e)[:60]}")
