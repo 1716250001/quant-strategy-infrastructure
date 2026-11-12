@@ -1,13 +1,19 @@
 @echo off
-rem P1-1（§435）：周期调度每日入口 —— 只调用 CLI，不直接调模块
-rem ⛔ 解释器必须用项目 venv（系统 python 无 pandas）
-chcp 65001 >nul
+rem P1-1 (section 435): daily schedule entry - CLI only, never call module directly.
+rem
+rem This file is intentionally PURE ASCII. The repo root path contains CJK
+rem characters, and cmd.exe resolves a .bat by the ACTIVE CODE PAGE, so a file
+rem holding CJK bytes breaks as soon as the code page and the file encoding
+rem disagree (observed: Task Scheduler LastResult=3, "path not found").
+rem Do NOT hardcode the path here and do NOT switch to UTF-8: derive it from
+rem the script location with %~dp0 instead, so the bytes stay ASCII forever.
+rem Line endings must stay CRLF.
 setlocal
-set "ROOT=D:\量化策略\代码"
+cd /d "%~dp0.."
+set "ROOT=%CD%"
 set "PY=%ROOT%\_venv\Scripts\python.exe"
 set "LOGDIR=%ROOT%\_scratch\schedule_logs"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%"
-for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set "DAY=%%i"
-cd /d "%ROOT%"
+set "DAY=%DATE:~0,4%%DATE:~5,2%%DATE:~8,2%"
 "%PY%" main.py schedule --apply >> "%LOGDIR%\%DAY%.log" 2>&1
 exit /b %ERRORLEVEL%
