@@ -42,6 +42,17 @@ CKPT = os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
 # "没报问题 = 该表没问题"（2026-09-19 独立审查 I5）。
 COVERED_MODES = ("by_date", "by_code")
 
+# ⭐ 2026-11-12 §423 G单：by_month 单独开洞（旁路 table_storage_layout）。
+#   为什么不能改 table_storage_layout：它有 7 处调用方，且把 by_month 归 STORAGE_SINGLE
+#   （语义「区间键无磁盘对应物」）—— 这个理由对下面两张表**不成立**：
+#     index_weight     断点 `index_code|YYYYMMDD`  ⇄ 磁盘 `index_code|trade_date`（同形）
+#     broker_recommend 断点 `None|YYYYMM`          ⇄ 磁盘 "None|"+month（⭐ 必须补前缀）
+#   key → (parquet 文件名, 日期列, 代码列 or None, 磁盘键前缀)
+BY_MONTH_COMPARE = {
+    "index_weight": ("index_weight.parquet", "trade_date", "index_code", ""),
+    "broker_recommend": ("broker_recommend.parquet", "month", None, "None|"),
+}
+
 
 def _load():
     if not os.path.exists(CKPT):
@@ -147,6 +158,8 @@ def _do_show(tables=None, verbose=True):
             disk = _disk_dates(name, dc)
         elif mode == "by_code":
             disk = _disk_codes(name)
+        elif name in BY_MONTH_COMPARE:
+            disk, _key_desc = _disk_by_month(name)   # §423：by_month 两表旁路
         else:
             disk = None      # 其余模式无对应口径（见 COVERED_MODES 说明）
 
@@ -173,8 +186,13 @@ def _do_show(tables=None, verbose=True):
                 note += ("  " if note else "") + "· 断点滞后（磁盘有数据未记）"
         # ⚠ 必须在 disk 分支**之外**：未覆盖模式的 disk 恒为 None，
         #   若写在分支内则永远不会执行（实测踩过）。
-        if mode not in COVERED_MODES:
+        if mode not in COVERED_MODES and name not in BY_MONTH_COMPARE:
             note += ("  " if note else "") + "· 本工具不核对该模式"
+        # §423：by_month 报 fake（任务集口径）时，把「全虚记 done−disk」作为附注
+        if name in BY_MONTH_COMPARE and disk is not None and fake is not None:
+            n_all = len(done - disk)
+            if n_all > fake:
+                note += (f"  · 全虚记 {n_all:,}（含 {n_all - fake:,} 个非任务集键记入断点）")
 
         n_disk = len(disk) if disk is not None else -1
         if verbose:
@@ -194,7 +212,7 @@ def _do_show(tables=None, verbose=True):
         # 未覆盖模式汇总（避免"没报=没问题"的误解 —— I5）
         unc = {}
         for x in rows:
-            if x.get("mode") not in COVERED_MODES:
+            if x.get("mode") not in COVERED_MODES and x["name"] not in BY_MONTH_COMPARE:
                 unc.setdefault(x["mode"], []).append(x["name"])
         if unc:
             n_t = sum(len(v) for v in unc.values())
@@ -216,6 +234,31 @@ def _do_show(tables=None, verbose=True):
         print("         --clear  清疑似虚记（续跑会重拉这些任务以核验）")
         print("         --execute 才真正写入，默认干跑")
     return rows
+
+
+# ============================================================
+# ── by_month 磁盘键（§423 G单）────────────────────────────
+# ============================================================
+def _disk_by_month(name):
+    """by_month 表的磁盘键集合（与断点键**逐字同形**）。无注册项返回 (None, None)。
+
+    ⚠ broker_recommend 必须补 `None|` 前缀，否则与断点键不匹配 ⇒ fake 假红 131（实测踩过）。
+    """
+    spec = BY_MONTH_COMPARE.get(name)
+    if not spec:
+        return None, None
+    fname, datecol, codecol, prefix = spec
+    p = os.path.join(MARKET_DATA_DIR, name, fname)
+    if not os.path.exists(p):
+        return None, None
+    try:
+        df = pd.read_parquet(p)
+        d = df[datecol].astype(str).str.replace("-", "", regex=False)
+        if codecol:
+            return set(df[codecol].astype(str) + "|" + d), "code|date"
+        return set(prefix + d), f"{prefix}date" if prefix else "date"
+    except Exception:
+        return None, None
 
 
 # ============================================================
@@ -275,6 +318,9 @@ def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
                 print(f"  [口径差异] {name}: mode={conf.get('mode')} / "
                       f"layout={table_storage_layout(name)}（按 layout 执行）")
         if not disk:
+            if verbose and name in BY_MONTH_COMPARE:
+                # §423：--fix 只补「磁盘有→断点无」，by_month 的问题是反向虚记
+                print(f"  [{name}] by_month 虚记请用 --show 查看（--fix 只补滞后方）")
             continue
         done = set(str(x) for x in cp.get(name, {}).get("completed", []))
         add = sorted(str(x) for x in disk - done)
