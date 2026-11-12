@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from common.parquet_store import upsert_by_year
+from common.parquet_store import _atomic_write_parquet, upsert_by_year
 
 # 确保能 import config 和 fetch.base
 from config import (
@@ -124,7 +124,7 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
 
     cb_df = ts_call_with_retry(pro, "cb_basic", limiter, {})
     if cb_df is not None and not cb_df.empty:
-        cb_df.to_parquet(cb_basic_path, index=False)
+        _atomic_write_parquet(cb_df, cb_basic_path)
         print(f"  可转债总数: {len(cb_df)}")
         print(f"  字段: {len(cb_df.columns)}列")
         print(f"  已保存: {cb_basic_path}")

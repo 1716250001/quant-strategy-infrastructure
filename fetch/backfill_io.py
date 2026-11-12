@@ -30,7 +30,12 @@ from datetime import datetime
 import pandas as pd
 
 from common.dtypes import coerce_float_cols  # DB-R1
-from common.parquet_store import merge_append, upsert_by_year, upsert_grouped
+from common.parquet_store import (
+    _atomic_write_parquet,
+    merge_append,
+    upsert_by_year,
+    upsert_grouped,
+)
 from common.paths import ensure_dir
 from config import (
     BACKFILL_PAGE_CONF,
@@ -425,7 +430,7 @@ def ensure_meta(pro, limiter, kind, dry_run=False):
     df = ts_call_with_retry(pro, api, limiter, {})
     if df is not None and not df.empty:
         ensure_dir(META_DIR)
-        df.to_parquet(path, index=False)
+        _atomic_write_parquet(df, path)
         print(f"  [前置] {api}: {len(df)} 行已保存")
         return True
     print(f"  [前置] {api} 拉取失败")

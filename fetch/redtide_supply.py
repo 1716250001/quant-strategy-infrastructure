@@ -24,7 +24,7 @@ import pandas as pd
 
 from common import reader
 from common.calendar import open_dates
-from common.parquet_store import list_parquet_files, upsert_by_year
+from common.parquet_store import _atomic_write_parquet, list_parquet_files, upsert_by_year
 from config import (
     MARKET_DATA_DIR,
     MARKET_STATE_DERIVED_DIR,
@@ -253,7 +253,7 @@ def run_market_state(dry_run=False, start_year=None, years=None):
             result = result.sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
 
         # 写入
-        result.to_parquet(output_path, index=False)
+        _atomic_write_parquet(result, output_path)
 
         n_limit_down = result["is_limit_down_close"].sum()
         print(f"    写入: {len(result)}行 | 跌停标记: {n_limit_down}条")

@@ -27,7 +27,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from common.parquet_store import upsert_by_year
+from common.parquet_store import _atomic_write_parquet, upsert_by_year
 
 # 确保能 import config 和 fetch.base
 from config import (
@@ -169,7 +169,7 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
         stock_df = pd.concat(stock_list, ignore_index=True).drop_duplicates(subset="ts_code")
         stock_path = os.path.join(meta_dir, "stock_basic.parquet")
         _guard_overwrite(stock_path, stock_df)
-        stock_df.to_parquet(stock_path, index=False)
+        _atomic_write_parquet(stock_df, stock_path)
         print(f"  → 合计 {len(stock_df)} 只股票, 已保存")
     else:
         stock_df = pd.DataFrame()
@@ -233,7 +233,7 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
             fund_df = fund_df.loc[_code_s.str.match(_VALID_FUND_CODE)].reset_index(drop=True)
         path = os.path.join(meta_dir, "fund_basic.parquet")
         _guard_overwrite(path, fund_df)
-        fund_df.to_parquet(path, index=False)
+        _atomic_write_parquet(fund_df, path)
         print(f"  → 合计 {len(fund_df)} 只基金 (场内E {n_e} + 场外O "
               f"{n_o_total}/{n_o_pages}页), 已保存")
     else:
@@ -249,7 +249,7 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
         if cal is not None and not cal.empty:
             cal_path = os.path.join(meta_dir, "trade_cal.parquet")
             _guard_overwrite(cal_path, cal)
-            cal.to_parquet(cal_path, index=False)
+            _atomic_write_parquet(cal, cal_path)
             trade_dates = cal[cal["is_open"] == 1]["cal_date"].tolist()
             print(f"  → {len(trade_dates)} 个交易日, 已保存")
         else:
@@ -345,8 +345,7 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
                 date_col = TABLE_DATE_COL.get(api_name, "trade_date")
                 if date_col not in df.columns:
                     # 无分区列 → 保持按标的单文件（仅 stock_company）
-                    df.to_parquet(os.path.join(api_dir, f"{ts_code}.parquet"),
-                                  index=False)
+                    _atomic_write_parquet(df, os.path.join(api_dir, f"{ts_code}.parquet"))
                 else:
                     # CC-FIX-6（2026-11-09，§362）：判重键改为取单一真源 DB_AUDIT_PKEYS。
                     # 原实现自造 ["ts_code", date_col]，对财报三表会按

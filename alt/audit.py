@@ -55,6 +55,7 @@ from alt.config import ALT_DATA_DIR, ALT_META_DIR, TS_DATA_DIR, assert_writable,
 from alt.reader import read_alt
 from common import reader as _reader
 from common.calendar import recent_trade_dates, trade_dates_between
+from common.parquet_store import _atomic_write_parquet
 
 SNAPSHOT_FILE = os.path.join(ALT_META_DIR, "main_db_snapshot.json")
 ISO_LOG_FILE = os.path.join(ALT_META_DIR, "isolation_log.json")
@@ -681,7 +682,7 @@ def fix_dupes(only=None, dry_run=True, verbose=True):
                     assert_writable(p)
                     os.makedirs(os.path.join(bk_root, sp.name), exist_ok=True)
                     shutil.copy2(p, os.path.join(bk_root, sp.name, f))
-                    dedup.reset_index(drop=True).to_parquet(p, index=False)
+                    _atomic_write_parquet(dedup.reset_index(drop=True), p)
 
         if touched:
             for f, b, a in touched:

@@ -45,6 +45,7 @@ import pandas as pd
 
 from common.parquet_store import (
     YearBatchWriter,
+    _atomic_write_parquet,
 )
 from common.paths import ensure_dir
 from config import (
@@ -482,7 +483,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             else:
                 # 无分区列 → 按标的单文件（仅 stock_company 这类静态元数据）
                 try:
-                    df.to_parquet(os.path.join(target_dir, f"{key}.parquet"), index=False)
+                    _atomic_write_parquet(df, os.path.join(target_dir, f"{key}.parquet"))
                 except Exception as e:
                     print(f"  [ERROR] {name} {key} 写文件失败，不记断点: {str(e)[:70]}")
                 else:
@@ -537,7 +538,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         n = 0
         if not df.empty:
             ensure_dir(target_dir)
-            df.to_parquet(os.path.join(target_dir, f"{conf['api']}.parquet"), index=False)
+            _atomic_write_parquet(df, os.path.join(target_dir, f"{conf['api']}.parquet"))
             n = len(df)
             print(f"    {name} → {n} 行已保存")
         # 调用成功（含"确实返空"）才记断点

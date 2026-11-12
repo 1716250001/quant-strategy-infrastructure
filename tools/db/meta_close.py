@@ -26,6 +26,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from common.parquet_store import _atomic_write_parquet
 from config import MARKET_DATA_DIR, META_DIR, PROJECT_DIR
 
 TABLES = ("fund_daily", "fund_nav", "fund_adj", "fund_share")
@@ -359,7 +360,7 @@ def run(apply=False, verbose=True):
 
         if not patch_same:
             os.makedirs(os.path.dirname(PATCH_PATH), exist_ok=True)
-            new_patch.to_parquet(PATCH_PATH, index=False)
+            _atomic_write_parquet(new_patch, PATCH_PATH)
             print(f"[写入] {PATCH_PATH}（{len(new_patch)} 行）")
 
     # ---- 8. 自检 ----

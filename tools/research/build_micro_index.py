@@ -49,6 +49,7 @@ sys.path.insert(0, _CODE_ROOT)
 
 import config
 from common import reader
+from common.parquet_store import _atomic_write_parquet
 
 DEFAULT_DATA = config.MARKET_DATA_DIR
 
@@ -137,7 +138,7 @@ def build(data_dir=DEFAULT_DATA, start="20160101", out_dir=None, exclude_st=Fals
         vol = df["ret"].std() * np.sqrt(245)
         mdd = ((df["nav"] / df["nav"].cummax()) - 1).min()
         print(f"   [{mode:7s}] {len(df)}日 年化{ann*100:6.2f}% 波动{vol*100:5.1f}% 回撤{mdd*100:6.1f}%")
-        df.to_parquet(os.path.join(out_dir, f"micro_{mode}.parquet"), index=False)
+        _atomic_write_parquet(df, os.path.join(out_dir, f"micro_{mode}.parquet"))
 
     print(f"[4/4] 已保存 → {out_dir}")
     return out
