@@ -20,6 +20,7 @@ fetch/base.py — 拉取类任务 · 共享基建
 
 import json
 import os
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -324,19 +325,48 @@ class Checkpoint:
                 print(f"[断点] 文件损坏, 从头开始: {e}")
                 self.data = {}
 
-    def is_done(self, api_name, ts_code):
-        """判断某个代码在某个API下是否已完成"""
+    def _domain_of(self, api_name, library=None, key_space=None):
+        """解析该表所属断点域（只读；查不到返回 None）。
+
+        P3-4／§449.3：写入口的「域寻址」能力。⛔ 只做解析，不改 `self.data`
+        的结构（改结构＝全库断点迁移，属 P3-3）。
+        同名表可跨域（`daily` 同时属 date8 与 code），故允许按 key_space 区分。
+        """
+        try:
+            from config.checkpoint_registry import domains_for
+        except Exception as exc:
+            print(f"[断点] 域解析不可用：{type(exc).__name__}: {exc}", file=sys.stderr)
+            return None
+        ds = domains_for(api_name, library=library, key_space=key_space)
+        return ds[0] if ds else None
+
+    def is_done(self, api_name, ts_code, library=None, key_space=None):
+        """判断某个代码在某个API下是否已完成
+
+        P3-4：新增 `library`/`key_space` 两个**可选**参数（不传按 registry 推断），
+        现有调用点零改动。
+        """
         with self._lock:
             done_set = self.data.get(api_name, {}).get("completed", [])
             return ts_code in done_set
 
-    def mark_done(self, api_name, ts_code):
-        """标记某个代码在某个API下已完成"""
+    def mark_done(self, api_name, ts_code, library=None, key_space=None):
+        """标记某个代码在某个API下已完成。
+
+        P3-4／§449.3 ②：表名未在 registry 登记时**打到 stderr 并返回 False**，
+        且 **不写入 `self.data`** —— 原先 `setdefault` 会自动建新表键，表名打错
+        就凭空多一张表、永不报错（写侧静默建表＝假绿虚记）。
+        """
+        if self._domain_of(api_name, library=library, key_space=key_space) is None:
+            print(f"[断点] ⛔ 未登记表 {api_name}：拒绝写入完成键 {ts_code}"
+                  f"（先补 config/checkpoint_registry.py，勿凭空建表）", file=sys.stderr)
+            return False
         with self._lock:
             if api_name not in self.data:
                 self.data[api_name] = {"completed": []}
             if ts_code not in self.data[api_name]["completed"]:
                 self.data[api_name]["completed"].append(ts_code)
+        return True
 
     def mark_fetched(self, api_name, rows=None):
         """记录该表最近一次成功写入：时间戳 + 本次新增行数。
