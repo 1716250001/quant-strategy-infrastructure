@@ -109,6 +109,9 @@ def cmd_db_migrate(args):
             print(f"  {t:22s} {'daily' if t in DAILY_TABLES else 'periodic'}")
         return
     _banner("db-migrate 存储布局迁移")
+    # ⭐ CLI-2（§430.3）：五条写命令里唯一默认真写的这条改回干跑。
+    # 两个开关同时给时必须干跑（沿用 cmd_db_clean 的「冲突时选安全的一边」）。
+    dry_run = (not args.apply) or bool(args.dry_run)
     if args.all:
         tables = list(PENDING_TABLES)
     elif args.daily:
@@ -117,7 +120,7 @@ def cmd_db_migrate(args):
         tables = [x.strip() for x in args.tables.split(",") if x.strip()]
     else:
         tables = None
-    run_migrate(tables=tables, dry_run=args.dry_run,
+    run_migrate(tables=tables, dry_run=dry_run,
                 keep_backup=not args.no_backup)
 
 def cmd_db_group(args):
@@ -231,7 +234,10 @@ def _add_db_migrate_args(p):
     p.add_argument("--tables", default=None, help="指定表, 逗号分隔")
     p.add_argument("--all", action="store_true", help="迁移全部待迁移表")
     p.add_argument("--daily", action="store_true", help="只迁移每日更新链路表")
-    p.add_argument("--dry-run", action="store_true", help="只报告计划, 不改动文件")
+    p.add_argument("--apply", action="store_true",
+                   help="真正执行迁移（默认干跑，只打印计划）")
+    p.add_argument("--dry-run", action="store_true",
+                   help="显式干跑（等同默认行为，保留向后兼容）")
     p.add_argument("--no-backup", action="store_true", help="不留备份（不推荐）")
     p.add_argument("--list", action="store_true", help="列出待迁移表后退出")
     p.set_defaults(func=cmd_db_migrate)

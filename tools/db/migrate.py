@@ -358,6 +358,9 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
 
 
 def run_migrate(tables=None, dry_run=False, keep_backup=True):
+    # ⚠ 本函数默认 dry_run=False（真写）；CLI 入口 `db migrate` 已在 cli/db_cmds.py
+    #   `cmd_db_migrate` 改为「默认干跑 + --apply 才写」（CLI-2 / §430.3）。
+    #   `python -m tools.db.migrate` 的 __main__ 分支按派单要求**保持原样**（非 CLI 路径）。
     tables = tables or DEFAULT_TABLES
     print("=" * 78)
     print(f"  存储布局迁移 by_code → by_year  {'（DRY-RUN，不改动文件）' if dry_run else ''}")

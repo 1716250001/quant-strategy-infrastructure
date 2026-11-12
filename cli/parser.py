@@ -72,8 +72,8 @@ _EPILOG = """
   python main.py db schema                      结构扫描（输出 schema JSON）
   python main.py db report                      生成结构报告 Markdown
   python main.py db report --refresh            一步完成：先扫描再出报告
-  python main.py db migrate --dry-run           布局迁移计划（by_code→by_year）
-  python main.py db migrate --all               执行迁移（自动备份+行数校验）
+  python main.py db migrate --dry-run           布局迁移计划（by_code→by_year，此为默认）
+  python main.py db migrate --all --apply       执行迁移（自动备份+行数校验）
   python main.py db clean                       存量清理（默认干跑；--dry-run 显式干跑）
   python main.py db clean --apply --only fina_indicator   执行清理
   python main.py db ckpt --show                 断点×磁盘交叉核对
