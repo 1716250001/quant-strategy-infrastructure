@@ -17,16 +17,18 @@
 7. 红线：不改 `subset`、不碰 audit、不写任何取数参数。
 用法：python -m fetch.schedule_runner --dry-run｜--freq M --dry-run｜--freq W --apply
 """
-import argparse, json, os, sys  # noqa: E401
+import argparse
+import json
+import os
+import sys
 from calendar import monthrange
 from datetime import date, datetime
+
 from config import MARKET_DATA_DIR
-from config.daily import (DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS,
-                          PERIODIC_UPDATE_TARGETS)
 from config.backfill_targets import BACKFILL_TARGETS
+from config.daily import DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS, PERIODIC_UPDATE_TARGETS
 from config.schedule import FREQ_DAYS, RELEASE_DAY, SCHEDULE
-from fetch.backfill import (API_RATE_LIMIT, API_RATE_LIMIT_DEFAULT,
-                            _compute_pending, run_target)
+from fetch.backfill import API_RATE_LIMIT, API_RATE_LIMIT_DEFAULT, _compute_pending, run_target
 from fetch.backfill_spec import build_tasks, estimate_requests
 from fetch.base import Checkpoint, get_pro
 
@@ -48,9 +50,9 @@ class _InstanceLock:
     def __enter__(self):
         try:
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
+        except FileExistsError as exc:
             raise SystemExit(f"[schedule] 已有实例在跑（锁文件 {self.path}）；"
-                             f"确认无进程后可手动删除该文件再试")
+                             f"确认无进程后可手动删除该文件再试") from exc
         os.write(fd, f"{os.getpid()} {datetime.now().isoformat(timespec='seconds')}".encode())
         os.close(fd)
         return self
@@ -87,7 +89,8 @@ def is_due(freq, last_fetch, today=None, name=None):
         return True
     try:
         lf = datetime.fromisoformat(str(last_fetch)).date()
-    except Exception:  # noqa: BLE001 —— 时间戳不可解析按到期（宁可多拉一次）
+    except Exception:
+        # 时间戳不可解析按到期（宁可多拉一次）
         return True
     if name in RELEASE_DAY:
         day, months = RELEASE_DAY[name]
@@ -137,7 +140,8 @@ def select(freqs=None, only=None, cp=None, refresh=False, exclude=None):
             continue
         try:
             est = _est_requests(name, conf, cp, refresh)
-        except Exception as exc:  # noqa: BLE001 —— 不得伪装成 0/ok（§0.1）
+        except Exception as exc:
+            # 不得伪装成 0/ok（§0.1）
             print(f"⚠ 估算失败: {name}: {type(exc).__name__}: {exc}")
             out.append((name, freq, due, 0, "est_error"))
             continue
@@ -211,7 +215,7 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
         return 2 if over else 0
 
     pro, failed = get_pro(), []
-    for name, freq, _due, _est, _st in todo:
+    for name, _freq, _due, _est, _st in todo:
         try:
             res = run_target(pro, name, BACKFILL_TARGETS[name], cp, workers=workers,
                              dry_run=False, verbose=False, limit=limit,
@@ -221,7 +225,8 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
             cp.mark_fetched(name)          # 成功：补 last_fetch（run_target 内多已写）
             cp.save()
             print(f"[ok] {name} 完成={res.get('done')}")
-        except Exception as exc:  # noqa: BLE001 —— 单表失败不得拖垮整轮
+        except Exception as exc:
+            # 单表失败不得拖垮整轮
             _mark_attempt(cp, name)
             failed.append(name)
             print(f"[fail] {name}: {type(exc).__name__}: {exc}")

@@ -228,7 +228,7 @@ def _regress_tail(n=40):
             encoding="utf-8", errors="replace", timeout=3600)
         lines = ((r.stdout or "") + (r.stderr or "")).strip().splitlines()
         return r.returncode, lines[-n:]
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return 1, [f"[ERROR] regress 无法执行: {type(e).__name__}: {e}"]
 
 

@@ -15,7 +15,7 @@
 import pandas as pd
 
 from common.parquet_store import upsert_by_year
-from config import BACKFILL_TARGETS, PERIODIC_UPDATE_TARGETS, DB_AUDIT_PKEYS
+from config import BACKFILL_TARGETS, DB_AUDIT_PKEYS, PERIODIC_UPDATE_TARGETS
 
 COLS = ["ts_code", "ann_date", "float_date", "float_share",
         "float_ratio", "holder_name", "share_type"]

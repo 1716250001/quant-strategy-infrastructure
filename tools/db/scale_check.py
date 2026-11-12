@@ -33,8 +33,8 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import config  # noqa: E402
-from config.scale_anchors import SCALE_ANCHORS  # noqa: E402
+import config
+from config.scale_anchors import SCALE_ANCHORS
 
 ROOT = Path(config.DATA_ROOT)
 L2_THRESHOLD = 0.01          # 1%
@@ -101,7 +101,7 @@ def _scan_l1(table: str, col: str, lo: float, hi: float, limit: int = 5) -> dict
     for p in _paths(table):
         try:
             sch = pq.read_schema(p).names
-            cols = [col] + _id_cols(sch)
+            cols = [col, *_id_cols(sch)]
             df = pq.read_table(p, columns=cols).to_pandas()
         except Exception:
             continue
@@ -122,7 +122,7 @@ def _scan_l1(table: str, col: str, lo: float, hi: float, limit: int = 5) -> dict
     return {"n_low": n_low, "n_high": n_high, "samples": samples}
 
 
-def _latest(table: str, cols: list[str]) -> "object | None":
+def _latest(table: str, cols: list[str]) -> object | None:
     """最后一个分片（最新年份）按 ts_code 取最新一行（只读）。"""
     files = _paths(table)
     if not files:
@@ -197,7 +197,7 @@ def cmd_l2() -> list[dict]:
         for _, r in m[rel > L2_THRESHOLD].assign(rel=rel).nlargest(10, "rel").iterrows():
             out.append({"pair": "total_mv↔total_share×close", "ts_code": r["ts_code"],
                         "rel": float(r["rel"]), "a": float(r["total_mv"]), "b": float(pred.loc[r.name])})
-        out.append({"pair": "total_mv↔total_share×close", "checked": int(len(m)),
+        out.append({"pair": "total_mv↔total_share×close", "checked": len(m),
                     "over": int((rel > L2_THRESHOLD).sum()), "note": "单位：total_share 股×close 元/1e4=万元"})
 
     if db is not None and inc is not None:
@@ -208,7 +208,7 @@ def cmd_l2() -> list[dict]:
         for _, r in m[rel > L2_THRESHOLD].assign(rel=rel).nlargest(10, "rel").iterrows():
             out.append({"pair": "pe_ttm×n_income_ttm↔total_mv", "ts_code": r["ts_code"],
                         "rel": float(r["rel"]), "a": float(r["total_mv"]), "b": float(pred.loc[r.name])})
-        out.append({"pair": "pe_ttm×n_income_ttm↔total_mv", "checked": int(len(m)),
+        out.append({"pair": "pe_ttm×n_income_ttm↔total_mv", "checked": len(m),
                     "over": int((rel > L2_THRESHOLD).sum()),
                     "note": "单位：TTM 净利 元；pe_ttm 倍；/1e4→万元（仅 pe_ttm>0）"})
 
@@ -220,7 +220,7 @@ def cmd_l2() -> list[dict]:
         for _, r in m[rel > L2_THRESHOLD].assign(rel=rel).nlargest(10, "rel").iterrows():
             out.append({"pair": "fund_daily.amount↔vol×close", "ts_code": r["ts_code"],
                         "rel": float(r["rel"]), "a": float(r["amount"]), "b": float(pred.loc[r.name])})
-        out.append({"pair": "fund_daily.amount↔vol×close", "checked": int(len(m)),
+        out.append({"pair": "fund_daily.amount↔vol×close", "checked": len(m),
                     "over": int((rel > L2_THRESHOLD).sum()),
                     "note": "单位：amount 千元；vol 手×100×close/1000"})
     return out

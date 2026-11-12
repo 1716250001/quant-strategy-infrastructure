@@ -29,7 +29,7 @@ def cmd_db_backup(args):
         st = backup_status()
         print("  [干跑] 未写任何文件。计划：")
         print(f"    源  : {st['root']}")
-        print(f"    方式: 硬链增量快照 + sha256 校验 → 7 版轮转／周备 4 版")
+        print("    方式: 硬链增量快照 + sha256 校验 → 7 版轮转／周备 4 版")
         print(f"    上一版: {st['latest'] or '无（首次全量）'}")
         print("    真跑: 加 --execute")
         return 0

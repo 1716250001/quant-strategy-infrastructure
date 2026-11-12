@@ -45,8 +45,7 @@ import pyarrow.parquet as pq
 from config import MARKET_DATA_DIR
 from config.backfill_targets import BACKFILL_TARGETS
 from config.daily import DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS
-from config.tables import (PENDING_REFRESH, STATIC_TABLES, STALE_BY_DESIGN,
-                           TABLE_DATE_COL)
+from config.tables import PENDING_REFRESH, STALE_BY_DESIGN, STATIC_TABLES, TABLE_DATE_COL
 
 # alt 断点文件（只读，不导入 alt 包以免触发写入守卫初始化）
 ALT_CKPT = os.path.join(os.path.dirname(MARKET_DATA_DIR), "alt_data", ".alt_checkpoint.json")
@@ -264,7 +263,7 @@ def build_rows(only=None):
     today = date.today()
     _alt_specs = {}
     if any(r["lib"] == "alt" for r in rows):
-        from alt.spec import BY_NAME as _ALT_BY_NAME   # 惰性导入（同 _alt_rows）
+        from alt.spec import BY_NAME as _ALT_BY_NAME  # 惰性导入（同 _alt_rows）
         _alt_specs = _ALT_BY_NAME
     for r in rows:
         d = _to_date(r["as_of"])
@@ -331,9 +330,9 @@ def render(rows):
     for r in rows:
         _note = f"  ({r['note']})" if r.get("note") else ""
         lines.append(
-            f"{r['lib']:6s} {r['table']:24s} {str(r['as_of_date'] or '-'):10s} "
+            f"{r['lib']:6s} {r['table']:24s} {r['as_of_date'] or '-'!s:10s} "
             f"{('-' if r['ds'] is None else r['ds']):>4} {('-' if r['dw'] is None else r['dw']):>4} "
-            f"{str(r['last_pull'] or '未知'):20s} {r.get('diag') or '':18s} "
+            f"{r['last_pull'] or '未知'!s:20s} {r.get('diag') or '':18s} "
             f"{r['tier']:9s} {r['verdict']}{_note}")
     n_red = sum(1 for r in rows if r["verdict"] == "红")
     n_yel = sum(1 for r in rows if r["verdict"] == "黄")
@@ -369,7 +368,8 @@ def render(rows):
 def run(only=None, as_json=False, strict=False):
     try:
         rows = build_rows(only)
-    except Exception as exc:  # noqa: BLE001 —— 诊断工具不得因单表异常拖垮整份报告
+    except Exception as exc:
+        # 诊断工具不得因单表异常拖垮整份报告
         if as_json:
             print(json.dumps({"ok": False, "error": repr(exc)}, ensure_ascii=False))
         else:

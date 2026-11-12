@@ -4,11 +4,10 @@ from datetime import date, timedelta
 
 import pytest
 
-from config.backfill_targets import BACKFILL_TARGETS
-from config.daily import (DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS,
-                          PERIODIC_UPDATE_TARGETS)
-from config.schedule import EXCLUDED, FREQ_DAYS, SCHEDULE
 import fetch.schedule_runner as sr
+from config.backfill_targets import BACKFILL_TARGETS
+from config.daily import DAILY_UPDATE_EXTRA, DAILY_UPDATE_GROUPS, PERIODIC_UPDATE_TARGETS
+from config.schedule import EXCLUDED, FREQ_DAYS, SCHEDULE
 from fetch.schedule_runner import daily_names, is_due
 
 

@@ -92,7 +92,7 @@ from fetch.base import (
     Checkpoint,
     RateLimiter,
     fetch_codes_parallel,  # ts_fetch: DB-R10 R10-1d
-    fetch_paged_by_code,   # CC-FIX-4：by_code offset 翻页
+    fetch_paged_by_code,  # CC-FIX-4：by_code offset 翻页
     get_pro,
     is_possibly_truncated,  # DB-R3
     ts_call_with_retry,
@@ -999,7 +999,11 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         #   未配 page_size 的表仍走原路径（fetch_codes_parallel 默认 ts_fetch），
         #   参数与行为逐字不变。fields 与 page_size 互斥，fields 优先。
         def _bc_fetch_fn(_pro, _lim, code, _page=int(_bc_page),
-                         _max_pages=int(conf.get("max_pages", 20))):
+                         _max_pages=None):
+            # RUFF-1 B008：默认值里调 conf.get 改为函数体内求值（行为等价：
+            #   conf 在 run_target 内是闭包常量；调用方都不传该参数）
+            if _max_pages is None:
+                _max_pages = int(conf.get("max_pages", 20))
             return fetch_paged_by_code(_pro, conf["api"], _lim, code,
                                        page=_page, max_pages=_max_pages,
                                        verbose=verbose)
