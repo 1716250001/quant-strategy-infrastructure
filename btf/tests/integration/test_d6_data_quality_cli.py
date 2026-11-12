@@ -104,6 +104,21 @@ def test_unknown_table_rc2(root, capsys):
     assert "[ok]" not in cap.out
 
 
+def test_registered_table_without_shards_rc2(root, capsys):
+    """已登记表但在该 root 下零分片 ⇒ RC=2（**不得**静默出空报告/假绿）。
+
+    与 `test_unknown_table_rc2` 的区别（**两条不同代码路径，勿合并/勿删**）：
+    上例是**未登记**表（`table_files` 抛 `ReaderError` → 归一为 `ValueError`）；
+    本例是**已登记但盘上无分片**（`services.run_data_quality` 的 `if not files`
+    闸）——后者拆掉即「表名合法、盘上没有」式的完美假绿。
+    """
+    rc = main(_args(root, "--limit-table", "dividend"))
+    cap = capsys.readouterr()
+    assert rc == 2
+    assert "无分片" in cap.err
+    assert "[ok]" not in cap.out
+
+
 def test_json_stdout_is_single_object(root, capsys):
     """`--json`：stdout 只有一个可解析 JSON 对象，人话走 stderr（D6-4）。"""
     rc = main(_args(root, "--json"))
