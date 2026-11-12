@@ -50,7 +50,9 @@ __all__ = [
     "list_runs",
     "parse_override_value",
     "parse_overrides",
+    "quality_blocking_findings",
     "run_backtest",
+    "run_data_quality",
     "run_detail",
     "run_gate_check",
     "run_mc",
@@ -121,6 +123,62 @@ def inject_strategy_paths(run_cfg: Mapping[str, Any]) -> list[Path]:
     from btf.runtime._runtime import inject_strategy_paths as _inject
 
     return _inject(run_cfg)
+
+
+def run_data_quality(
+    root: str | Path | None,
+    start_ymd: str,
+    end_ymd: str,
+    *,
+    price_tables: Sequence[str] = ("daily",),
+    limit_tables: Sequence[str] = ("stk_limit",),
+    symbols: set[str] | None = None,
+) -> Any:
+    """`bt data quality`（**D-6**／19 号 §275）：把 `quality.run_checks` 暴露为 CLI。
+
+    **零规则改动**——本函数只做三件外围事（判定逻辑全在 `btf.data.quality`）：
+
+    1. 数据根缺省取 `paths.MARKET_DATA_DIR`（不新写探测）；目录不存在 ⇒
+       `FileNotFoundError`（CLI 映射 RC=2）；
+    2. **表名 typo 必须硬错**：逐个表检查磁盘分片，无分片 ⇒ `ValueError`
+       （`表 <T> 在 <root> 下无分片…`）——否则一次拼错就是一次**假绿**；
+    3. 未登记表（`ReaderError`）同样归一为 `ValueError`（表现层不 import data 层
+       异常类型）。
+
+    ⛔ `st_symbols` 不传（CLI 无 ST 名单来源）⇒ CC-2 的 ST 分支不生效，
+    finding **只会偏多**（假红方向）；CLI 侧须 `[warn]` 显式声明。
+    """
+    from btf.config.paths import MARKET_DATA_DIR
+    from btf.data.parquet_reader import ReaderError, table_files
+    from btf.data.quality import run_checks
+
+    base = Path(root) if root else MARKET_DATA_DIR
+    if not Path(base).is_dir():
+        raise FileNotFoundError(f"数据根不可用：{base}")
+    for table in (*price_tables, *limit_tables):
+        try:
+            files = [p for p in table_files(table, base) if p.is_file()]
+        except ReaderError as exc:
+            raise ValueError(f"{exc}（检查 --price-table/--limit-table）") from exc
+        if not files:
+            raise ValueError(
+                f"表 {table} 在 {base} 下无分片"
+                f"（检查 --price-table/--limit-table）")
+    return run_checks(base, start_ymd, end_ymd, symbols=symbols,
+                      price_tables=tuple(price_tables),
+                      limit_tables=tuple(limit_tables))
+
+
+def quality_blocking_findings(report: Any) -> int:
+    """阻断型 finding 行数（`NON_BLOCKING_RULES` **不计**；D6-3）。
+
+    单一真源仍是 `btf.data.quality.NON_BLOCKING_RULES`——表现层**不得**自己写
+    `rule == "CC-7"`（否则该常量一改就漂移）；`report.ok` 与本文同源。
+    """
+    from btf.data.quality import NON_BLOCKING_RULES
+
+    return sum(r.n_findings for r in report.rules
+               if r.rule not in NON_BLOCKING_RULES)
 
 
 def parse_override_value(raw: str) -> Any:

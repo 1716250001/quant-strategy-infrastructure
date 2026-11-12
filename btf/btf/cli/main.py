@@ -563,6 +563,8 @@ def _cmd_data(args: argparse.Namespace) -> int:
     """
     from btf.app import scan_consolidation
 
+    if args.data_action == "quality":
+        return _cmd_data_quality(args)
     if args.data_action not in _DATA_ACTIONS:
         print(f"[error] 未知 data 动作：{args.data_action!r}"
               f"（可选 {_DATA_ACTIONS}）", file=sys.stderr)
@@ -605,18 +607,123 @@ def _cmd_data(args: argparse.Namespace) -> int:
     return 0
 
 
-#: data 子动作（R34′；21 号 §4.13）
-_DATA_ACTIONS = ("scan-consolidation",)
+#: data 子动作（R34′；21 号 §4.13；`quality` = D-6／19 号 §275）
+_DATA_ACTIONS = ("scan-consolidation", "quality")
+
+
+def _is_ymd(value: str) -> bool:
+    """`YYYYMMDD` 且为合法日期（`--start/--end` 用法闸）。"""
+    from datetime import datetime
+
+    if len(value) != 8 or not value.isdigit():
+        return False
+    try:
+        datetime.strptime(value, "%Y%m%d")
+    except ValueError:
+        return False
+    return True
+
+
+def _cmd_data_quality(args: argparse.Namespace) -> int:
+    """`bt data quality`：区间质检明细（**D-6**；19 号 §275）。
+
+    把 `quality.run_checks`（CC-1～CC-7）暴露为 CLI：**零规则改动**。
+
+    退出码（D6-3）：**0 = `report.ok`**（CC-7 属 `NON_BLOCKING_RULES`，只报
+    不阻断）／**1 = `report.ok` 为假**／**2 = 用法或前置错误**（日期格式、
+    start>end、数据根不可用、指定表磁盘无分片/未登记）。
+    ⛔ 禁用 `n_findings > 0` 判 0/1——该求和**含 CC-7**，会把「仅 CC-7」误判 RC=1。
+
+    `--json` 时 stdout **只留一个 JSON 对象**，人话（`[info]`/`[warn]`/`[ok]`）
+    一律走 stderr（否则 `jq` 直接崩）。
+    """
+    import json
+
+    from btf.app import quality_blocking_findings, run_data_quality
+
+    start = (args.start or "").strip()
+    end = (args.end or "").strip()
+    for label, value in (("--start", start), ("--end", end)):
+        if not _is_ymd(value):
+            print(f"[error] {label} 需形如 YYYYMMDD，得 {value!r}",
+                  file=sys.stderr)
+            return 2
+    if start > end:
+        print(f"[error] 区间非法：--start {start} > --end {end}",
+              file=sys.stderr)
+        return 2
+    symbols: set[str] | None = None
+    if args.symbols:
+        symbols = {s.strip() for s in args.symbols.split(",") if s.strip()}
+        if not symbols:
+            print("[error] --symbols 为空（逗号分隔的 ts_code 列表）",
+                  file=sys.stderr)
+            return 2
+    price = tuple(args.price_tables or ("daily",))
+    limit = tuple(args.limit_tables or ("stk_limit",))
+    # 人话走 stderr 还是 stdout：`--json` 时 stdout 只许一个 JSON 对象
+    chatter = sys.stderr if args.json else sys.stdout
+    print(f"[info] quality 开始：price={'/'.join(price)} "
+          f"limit={'/'.join(limit)} 区间 {start}→{end} "
+          f"{'全库' if symbols is None else f'{len(symbols)} 只'}", file=chatter)
+    print("[warn] 未提供 ST 名单：CC-2 的 ST 分支（5% 上限）不生效，ST 股按常规档判 "
+          "⇒ finding 可能偏多（假红方向）", file=chatter)
+    try:
+        report = run_data_quality(args.root, start, end, price_tables=price,
+                                  limit_tables=limit, symbols=symbols)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"[error] 用法/前置错误：{exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:                    # 主库不可用等
+        print(f"[error] quality 失败：{type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return 1
+    payload = report.as_dict()
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(payload, ensure_ascii=False, indent=2,
+                                  sort_keys=True) + "\n", encoding="utf-8")
+        print(f"[info] 明细已落盘：{out}", file=chatter)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    blocking = quality_blocking_findings(report)
+    cc7 = report.n_findings - blocking
+    rows = max((r.checked_rows for r in report.rules), default=0)
+    for r in report.rules:
+        print(f"       {r.name:<24} {'ok' if r.ok else 'fail':<5} "
+              f"{r.n_findings:>5} / {r.checked_rows:>11,} 行", file=chatter)
+    # §2.5：**末行**为结论（`[ok]`／`[fail]`），逐规则行在其上
+    state = "ok" if report.ok else "fail"
+    print(f"[{state}] quality：{rows:,} 行 / {report.symbols} 只 | "
+          f"阻断型 finding {blocking} | CC-7（只报不阻断）{cc7} 行 | "
+          f"用时 {report.seconds:.1f}s", file=chatter)
+    return 0 if report.ok else 1
 
 
 def _args_data(p: argparse.ArgumentParser) -> None:
     p.add_argument("data_action", nargs="?", default="scan-consolidation",
                    choices=_DATA_ACTIONS,
-                   help="子动作：scan-consolidation（ETF/LOF 份额折算双证据扫描）")
+                   help="子动作：scan-consolidation（ETF/LOF 份额折算双证据扫描）"
+                        "|quality（区间质检明细，CC-1～CC-7）")
     p.add_argument("--config", help="回测配置 YAML（取 universe/period）")
     p.add_argument("--out", help="结果 JSON 路径（缺省只打印）")
     p.add_argument("--tolerance", type=float, default=0.005,
                    help="双证据偏差容差（缺省 0.005＝0.5%%，ADR-20 第 5 条）")
+    p.add_argument("--start", help="quality：区间起（含）YYYYMMDD")
+    p.add_argument("--end", help="quality：区间止（含）YYYYMMDD")
+    p.add_argument("--price-table", action="append", dest="price_tables",
+                   metavar="T",
+                   help="quality：价格表（可重复；缺省 daily）")
+    p.add_argument("--limit-table", action="append", dest="limit_tables",
+                   metavar="T",
+                   help="quality：涨跌停表（可重复；缺省 stk_limit）")
+    p.add_argument("--symbols",
+                   help="quality：逗号分隔 ts_code（缺省全库）")
+    p.add_argument("--root",
+                   help="quality：数据根（缺省 paths.MARKET_DATA_DIR）")
+    p.add_argument("--json", action="store_true",
+                   help="quality：stdout 只输出 JSON（人话走 stderr）")
 
 
 def _args_dataset(p: argparse.ArgumentParser) -> None:
@@ -624,7 +731,8 @@ def _args_dataset(p: argparse.ArgumentParser) -> None:
                    choices=_DATASET_ACTIONS,
                    help="子动作：build-golden（构建）|verify（与主库对账，不写）"
                         "|refcalc（内嵌数据重算，不读主库）"
-                        "|freeze（数据冻结清单，CL-4）")
+                        "|freeze（数据冻结清单，CL-4）"
+                        "|refresh-hash（实算指纹写回配置）")
     p.add_argument("--cases", default="g1", help="案例（g1|all|逗号分隔）")
     p.add_argument("--list", action="store_true", help="列出案例与待补组")
     p.add_argument("--verify", action="store_true",
@@ -1162,7 +1270,8 @@ COMMANDS: dict[str, tuple[CommandHandler, str, ArgAdder]] = {
              _args_test),
     "dataset": (_cmd_dataset,
                 "黄金集：build-golden 构建 / verify 主库对账 / refcalc 内嵌重算"
-                " / freeze（CL-4 数据冻结清单）",
+                " / freeze（CL-4 数据冻结清单）"
+                " / refresh-hash（实算指纹写回配置）",
                 _args_dataset),
     "optimize": (_cmd_optimize,
                  "参数网格搜索（grid_search 进程池；v0.5 V5-3）", _args_optimize),
@@ -1179,7 +1288,7 @@ COMMANDS: dict[str, tuple[CommandHandler, str, ArgAdder]] = {
                  _args_validate),
     "data": (_cmd_data,
              "数据专项扫描：scan-consolidation（ETF/LOF 份额折算双证据；"
-             "R34′/ADR-20）",
+             "R34′/ADR-20）/ quality（区间质检明细，CC-1～CC-7）",
              _args_data),
     "adhoc": (_cmd_adhoc,
               "一次性/外部回测脚本的产物契约封装（= python tools/adhoc_run.py；"
