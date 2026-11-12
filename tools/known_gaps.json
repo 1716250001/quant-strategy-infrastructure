@@ -137,7 +137,6 @@
       "168601.SZ",
       "169108.SZ",
       "169109.SZ",
-      "180107.SZ",
       "181002.SZ",
       "501033.SH",
       "501041.SH",
@@ -156,7 +155,6 @@
       "506009.SH",
       "508038.SH",
       "508047.SH",
-      "508605.SH",
       "508606.SH",
       "508610.SH",
       "512490.SH",
@@ -1330,11 +1328,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
       },
-      "180107.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-11-09",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
       "181002.SZ": {
         "name": "华泰紫金华住安住REIT",
         "list_date": "",
@@ -1524,17 +1517,6 @@
       },
       "508047.SH": {
         "name": "山证晋中公投瑞阳供热REIT",
-        "list_date": "",
-        "delist_date": "",
-        "nav_rows": 1,
-        "daily_attempts": 3,
-        "evidence": "ts_code全历史查询空(3次,含单线程) + A1/--force两轮批量空",
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_daily(ts_code=X)（reprobe_source_empty）"
-      },
-      "508605.SH": {
-        "name": "华夏保利发展REIT",
         "list_date": "",
         "delist_date": "",
         "nav_rows": 1,
@@ -1905,11 +1887,9 @@
       "562220.SH",
       "562630.SH",
       "562690.SH",
-      "562710.SH",
       "562730.SH",
       "563100.SH",
       "588490.SH",
-      "588560.SH",
       "589370.SH",
       "589590.SH",
       "589610.SH",
@@ -2245,11 +2225,6 @@
         "probe_date": "2026-11-09",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
       },
-      "562710.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-11-09",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
       "562730.SH": {
         "probe_rows": 0,
         "status": "nan",
@@ -2263,11 +2238,6 @@
       "588490.SH": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
-      },
-      "588560.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-11-09",
         "probe_source": "tushare fund_nav(ts_code=X)（reprobe_source_empty）"
       },
       "589370.SH": {
@@ -2413,7 +2383,6 @@
       "168601.SZ",
       "169108.SZ",
       "169109.SZ",
-      "180107.SZ",
       "181002.SZ",
       "501002.SH",
       "501033.SH",
@@ -2435,7 +2404,6 @@
       "506009.SH",
       "508038.SH",
       "508047.SH",
-      "508605.SH",
       "508606.SH",
       "508610.SH",
       "512490.SH",
@@ -2478,7 +2446,7 @@
       "589610.SH",
       "589670.SH"
     ],
-    "source_empty_count": 180,
+    "source_empty_count": 178,
     "source_empty_evidence_new": {
       "161022.SZ": {
         "name": "富国创业板指数-A",
@@ -5101,11 +5069,6 @@
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
-      "180107.SZ": {
-        "probe_rows": 0,
-        "probe_date": "2026-11-09",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
       "181002.SZ": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
@@ -5207,11 +5170,6 @@
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
       },
       "508047.SH": {
-        "probe_rows": 0,
-        "probe_date": "2026-10-29",
-        "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
-      },
-      "508605.SH": {
         "probe_rows": 0,
         "probe_date": "2026-10-29",
         "probe_source": "tushare fund_adj(ts_code=X)（reprobe_source_empty）"
@@ -16324,58 +16282,58 @@
   },
   "cb_issue": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 28 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 28 条；2026-11-12 B-2 只读探针抽 1 键（120001.SZ）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "cb_rating": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 65 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 65 条；2026-11-12 B-2 只读探针抽 1 键（100001.SH）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "cb_share": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 80 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 80 条；2026-11-12 B-2 只读探针抽 1 键（110101.SH）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "dividend": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 36 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 36 条；2026-11-12 B-2 只读探针抽 1 键（001246.SZ）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "fina_audit": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 66 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 66 条；2026-11-12 B-2 只读探针抽 1 键（000508.SZ）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "fina_mainbz": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 26 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 26 条；2026-11-12 B-2 只读探针抽 1 键（000508.SZ）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "forecast": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 959 天未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 959 天；2026-11-12 B-2 只读探针抽 1 键（20060208）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "fund_div": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 377 天未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 377 天；2026-11-12 B-2 只读探针抽 1 键（20080108）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "index_monthly": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 2 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 2 条；2026-11-12 B-2 只读探针抽 1 键（899050.BJ）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "index_weekly": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 60 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 60 条；2026-11-12 B-2 只读探针抽 1 键（899050.BJ）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "namechange": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 1 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 1 条；2026-11-12 B-2 只读探针抽 1 键（T600018.SH）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "stk_managers": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 32 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 32 条；2026-11-12 B-2 只读探针抽 1 键（000013.SZ）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "stk_rewards": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 11 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 11 条；2026-11-12 B-2 只读探针抽 1 键（688797.SH）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   },
   "stock_company": {
     "empty_as_done": true,
-    "note": "P3-8 A单 丙档（2026-11-11）：未抽样定性，缺口 31 条未核；保持现状「空即 done」，待后续定性"
+    "note": "P3-8 A单 丙档（2026-11-11）：缺口 31 条；2026-11-12 B-2 只读探针抽 1 键（000765.SZ）源端返 0 行 ⇒ 已抽样证实源端空；保持现状「空即 done」"
   }
 }
