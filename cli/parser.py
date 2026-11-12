@@ -28,6 +28,7 @@ from cli.fetch_cmds import (
     cmd_gap_update,
     cmd_intraday_update,
     cmd_redtide_supply,
+    cmd_schedule,
 )
 from cli.misc_cmds import (
     cmd_check_consumer,
@@ -222,6 +223,20 @@ def build_parser():
                         "（B 类缺口补数专用，不影响断点）")
     _add_dry_run(p, help_text="只估算请求数, 不发请求")
     p.set_defaults(func=cmd_backfill)
+
+    p = sub.add_parser("schedule", help="周期调度执行器（默认干跑；--apply 才实跑）")
+    p.add_argument("--freq", default=None, help="频率档，逗号分隔：D,W,M,Q（默认全档）")
+    p.add_argument("--only", default=None, help="只跑指定表，逗号分隔")
+    p.add_argument("--workers", type=int, default=1, help="每接口并发（默认 1）")
+    p.add_argument("--limit", type=int, default=None, help="每表最多跑 N 个任务")
+    p.add_argument("--budget", type=int, default=2000,
+                   help="单轮请求预算（默认 2000；超限 RC=2 并列跳过清单）")
+    p.add_argument("--apply", action="store_true", help="实际执行（不加则等同 --dry-run）")
+    p.add_argument("--dry-run", action="store_true", help="只输出计划，不发请求（默认行为）")
+    p.add_argument("--refresh", action="store_true",
+                   help="忽略断点重拉（裸 --refresh 会被拒；须配 --freq 或 --only）")
+    p.add_argument("--exclude", default=None, help="跳过这些表，逗号分隔（R10 备份窗口互斥）")
+    p.set_defaults(func=cmd_schedule)
 
     p = sub.add_parser("check-coverage", help="数据覆盖体检（可转债 + ETF/LOF）")
     p.add_argument("date", nargs="?", default=None,

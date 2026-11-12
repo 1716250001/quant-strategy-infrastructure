@@ -55,6 +55,24 @@ def cmd_fund_nav(args):
         end_date=end_date,
     )
 
+def cmd_schedule(args):
+    """周期调度执行器（默认干跑；--apply 才实跑）。
+
+    ⭐ P1-1（§435）：薄代理 —— 参数语义、裸 `--refresh` 拒绝、实例锁全部留在
+    `fetch/schedule_runner.py`，本函数只做 argparse→run() 的转接，不复制任何判断。
+    """
+    from fetch.schedule_runner import _InstanceLock, run
+    _banner("schedule 周期调度执行器")
+    freqs = [x.strip().upper() for x in args.freq.split(",")] if args.freq else None
+    only = [x.strip() for x in args.only.split(",")] if args.only else None
+    excl = [x.strip() for x in args.exclude.split(",")] if args.exclude else None
+    with _InstanceLock():
+        return run(freqs, only,
+                   dry_run=(not args.apply) or bool(args.dry_run),
+                   workers=args.workers, limit=args.limit, refresh=args.refresh,
+                   exclude=excl, budget=args.budget)
+
+
 def cmd_download_full(args):
     """全市场数据下载（建库/重建）"""
     from fetch.full_download import run_download
