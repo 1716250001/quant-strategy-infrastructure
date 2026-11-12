@@ -6,6 +6,37 @@
 from cli._shared import _add_json, _banner
 
 
+def cmd_db_backup(args):
+    """日备（默认干跑；--execute 才真跑；--status 只读复用 doctor.backup_status）"""
+    from tools.doctor import backup_status
+    if args.status or not args.mirror:
+        st = backup_status()
+        _banner("db-backup 日备状态")
+        if not st["exists"]:
+            print(f"  备份根: {st['root']}（不存在 ⇒ 从未备份）")
+            return 1 if args.status else 0
+        d = st["stale_days"]
+        print(f"  备份根 : {st['root']}")
+        print(f"  最新快照: {st['latest']}（{d} 天前）")
+        print(f"  版本数 : {st['n_versions']}/{st['keep']}")
+        print(f"  校验清单: {'有' if st['sha_ok'] else '缺'}（{st['sha_rows']:,} 行）")
+        if not args.mirror:
+            return 0
+    # --mirror：默认干跑（与 db clean / ckpt --fix 同风格）
+    apply = bool(args.execute) and not bool(getattr(args, "dry_run", False))
+    _banner("db-backup 日备" + ("" if apply else "（干跑）"))
+    if not apply:
+        st = backup_status()
+        print("  [干跑] 未写任何文件。计划：")
+        print(f"    源  : {st['root']}")
+        print(f"    方式: 硬链增量快照 + sha256 校验 → 7 版轮转／周备 4 版")
+        print(f"    上一版: {st['latest'] or '无（首次全量）'}")
+        print("    真跑: 加 --execute")
+        return 0
+    from tools.data_backup import mirror
+    return mirror()
+
+
 def cmd_db_clean(args):
     """存量数据清理（版本冗余压缩；默认干跑，--apply 才写入）"""
     from tools.db.clean import DB_CLEAN_TARGETS, run_clean

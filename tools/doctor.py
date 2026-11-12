@@ -568,6 +568,75 @@ def check_scheduler(r):
 
 
 # ============================================================
+# 8b. 日备陈旧（R10-1 / §427）
+# ============================================================
+def backup_status(daily_root=None):
+    """只读日备状态（doctor 与 `db backup --status` 共用；⛔ 绝不触发备份）。
+
+    返回 dict：root / exists / latest / stale_days / n_versions / keep / sha_ok / sha_rows
+    """
+    base = daily_root or os.path.join(os.path.dirname(MARKET_DATA_DIR), "_backup", "daily")
+    st = {"root": base, "exists": os.path.isdir(base), "latest": None,
+          "stale_days": None, "n_versions": 0, "keep": 7,
+          "sha_ok": False, "sha_rows": 0}
+    if not st["exists"]:
+        return st
+    try:
+        days = sorted(d for d in os.listdir(base)
+                      if len(d) == 8 and d.isdigit()
+                      and os.path.isdir(os.path.join(base, d)))
+    except OSError:
+        return st
+    st["n_versions"] = len(days)
+    if not days:
+        return st
+    st["latest"] = days[-1]
+    try:
+        st["stale_days"] = (datetime.now() -
+                            datetime.strptime(days[-1], "%Y%m%d")).days
+    except ValueError:
+        pass
+    sha = os.path.join(base, days[-1], "sha256.jsonl")
+    if os.path.isfile(sha) and os.path.getsize(sha) > 0:
+        st["sha_ok"] = True
+        try:
+            with open(sha, encoding="utf-8") as f:
+                st["sha_rows"] = sum(1 for _ in f)
+        except OSError:
+            st["sha_ok"] = False
+    return st
+
+
+def check_backup(r):
+    """日备陈旧检查（0～1 OK／2～6 WARN／≥7 FAIL）。
+
+    ⛔ 只读恒不写：只 stat 目录，绝不触发 mirror()。
+    阈值照抄 KEEP_DAILY=7：跨夜跑备份属正常 ⇒ 2 天起才提示；7 天=轮转池全空 ⇒ FAIL。
+    """
+    st = backup_status()
+    if not st["exists"]:
+        r.warn("备份", "日备", f"从未备份（{st['root']} 不存在）")
+        return
+    if not st["latest"]:
+        r.warn("备份", "日备", f"备份根存在但无快照（{st['root']}）")
+        return
+    ver = f"{st['n_versions']}/{st['keep']}"
+    one = "｜⚠ 7 版轮转实际只有 1 份" if st["n_versions"] == 1 else ""
+    d = st["stale_days"]
+    if d is None:
+        r.warn("备份", "日备", f"最新 {st['latest']}（日期无法解析），版本 {ver}{one}")
+    elif d <= 1:
+        r.ok("备份", "日备", f"最新 {st['latest']}（{d} 天前），版本 {ver}{one}")
+    elif d <= 6:
+        r.warn("备份", "日备", f"日备已停 {d} 天（最新 {st['latest']}，版本 {ver}）{one}")
+    else:
+        r.fail("备份", "日备",
+               f"日备已停 {d} 天（最新 {st['latest']}，轮转池已全空 KEEP_DAILY=7）")
+    if not st["sha_ok"]:
+        r.warn("备份", "校验", f"最新快照缺 sha256.jsonl 或为空（{st['latest']}）")
+
+
+# ============================================================
 # 主流程
 # ============================================================
 def _harden_stdout():
@@ -603,6 +672,7 @@ def run_doctor(network=False, as_json=False):
     check_periodic_tables(r)
     check_db_version(r)
     check_scheduler(r)
+    check_backup(r)
 
     if as_json:
         print(json.dumps({"generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

@@ -21,7 +21,7 @@ tools/data_backup.py — 全量数据冷备清单与校验（DB3；对齐 btf co
   · **fail-closed**：任一文件读取/哈希失败 → 不产出、退出非零；
   · verify 对"镜像副本"跑才有长期意义——对源跑仅在同一批次时刻有效
     （数据根按日更新，隔日对源 verify 会"报正常更新"，属预期）。
-独立脚本，不注册进 main.py（clean_scratch 先例：不动 CLI 契约）。
+已注册为 `db backup` 子命令（R10-1／§427；§428 裁「不注册进 main.py」约束作废，mirror() 本体仍不改）。
 
 用法：
     python tools/data_backup.py --make-manifest

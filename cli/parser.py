@@ -13,6 +13,7 @@ from cli.alt_cmds import (
 )
 from cli.db_cmds import (
     _DB_FAMILY,
+    cmd_db_backup,
     cmd_db_group,
     cmd_db_meta_close,
     cmd_db_stale_fix,
@@ -272,6 +273,14 @@ def build_parser():
     p.add_argument("--dry-run", action="store_true",
                    help="显式干跑（默认行为；与 --apply 同时给出时以 --dry-run 为准）")
     p.set_defaults(func=cmd_db_meta_close)
+
+    p = db_sub.add_parser("backup", help="日备（默认干跑；--execute 才真跑；--status 只读）")
+    p.add_argument("--status", action="store_true", help="只看状态（零动作，复用 doctor 检查）")
+    p.add_argument("--mirror", action="store_true", help="日备（默认干跑，只打印计划）")
+    p.add_argument("--execute", action="store_true", help="真正执行日备（硬链快照＋校验）")
+    p.add_argument("--dry-run", action="store_true",
+                   help="显式干跑（与 --execute 同时给出时以干跑为准）")
+    p.set_defaults(func=cmd_db_backup)
 
     p = db_sub.add_parser("stale-fix", help="基金 source_empty 注册表对账（干跑/--apply）")
     p.add_argument("--apply", action="store_true",
