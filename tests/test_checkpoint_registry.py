@@ -79,16 +79,16 @@ def _direct_writes():
 def test_t1_describe_summary():
     """T1：全库汇总的域总量、权威分布、库分布、三元组数必须与登记表逐字一致。"""
     s = _pg.describe()
-    assert s["n_domains"] == 40
-    # DEAD 是声明里的保留等级，当前 0（P3-1 F1）；只要非 0 就是漂移。
-    assert s["by_authority"].get("DEAD", 0) == 0, f"DEAD 应保持 0：{s['by_authority']}"
+    assert s["n_domains"] == 43
+    # DEAD：W-2 补登记 3 张零载体表（bc_bestotcqt/stk_mins/report_rc，§449.4）。
+    assert s["by_authority"].get("DEAD", 0) == 3, f"DEAD 应为 3：{s['by_authority']}"
     for auth, n in {"PRIMARY": 16, "SUPPLEMENTARY": 14,
                     "LEGACY": 5, "NOT_A_CHECKPOINT": 5}.items():
         assert s["by_authority"].get(auth) == n, f"权威分布漂移：{s['by_authority']}"
     assert set(s["by_authority"]) <= {
         "PRIMARY", "SUPPLEMENTARY", "LEGACY", "DEAD", "NOT_A_CHECKPOINT"}, \
         f"出现了未声明的权威等级：{s['by_authority']}"
-    assert s["by_library"] == {"market_data": 18, "alt_data": 22}, \
+    assert s["by_library"] == {"market_data": 21, "alt_data": 22}, \
         f"库分布漂移：{s['by_library']}"
     assert s["primary_triples"] == 216, f"PRIMARY 三元组应为 216：{s['primary_triples']}"
     assert sum(s["by_key_space"].values()) == s["primary_triples"]
@@ -98,7 +98,7 @@ def test_t1_describe_summary():
 def test_t2_primary_uniqueness():
     """T2：同 (library, table, key_space) 的 PRIMARY 恰 1 个；三元组总数 303。"""
     triples = [(d.library, t, d.key_space) for d in _cfg.all_domains() for t in d.tables]
-    assert len(set(triples)) == 303, f"三元组应为 303 个，实测 {len(set(triples))}"
+    assert len(set(triples)) == 306, f"三元组应为 306 个，实测 {len(set(triples))}"
 
     prim = {}
     for d in _cfg.all_domains():

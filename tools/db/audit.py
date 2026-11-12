@@ -157,6 +157,10 @@ def _checkpoint_files(exclude_authorities=("NOT_A_CHECKPOINT",)):
     for d in _cfg.all_domains():
         if d.authority in exclude_authorities:
             continue
+        # ⛔ W-2/E 单：file="" 表示「零载体」（表存在但从未启用、无断点文件），
+        #    不是「载体名为空字符串」—— 计入会让 audit 去读库根目录本身。
+        if not d.file:
+            continue
         key = (d.library, d.file)
         # 同一文件多个域时以 PRIMARY 为代表（如实测 .backfill_checkpoint.json
         # 有 9 个域、.checkpoint.json 有 code 与 done_dates 两个域）

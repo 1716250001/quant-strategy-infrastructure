@@ -709,6 +709,47 @@ DOMAINS: tuple[CheckpointDomain, ...] = (
         tables=frozenset(),
         note="版本元数据（6 键），非完成度。",
     ),
+    # ── W-2 补登记（§449.4 / E 单）：3 张零载体表 ──
+    # 三张均 tier=X / enabled=False / 磁盘无目录 / 断点无键 ⇒ 无载体文件。
+    # ⛔ file="" 是有意为之：不编造不存在的文件名，靠 note 说明「无载体」。
+    CheckpointDomain(
+        id="market.backfill.zero_carrier.bc_bestotcqt",
+        library="market_data",
+        owner="fetch/backfill.py",
+        file="",
+        key_space="range8",
+        completed_field=None,
+        timestamp_field=None,
+        authority="DEAD",
+        tables=frozenset({"bc_bestotcqt"}),
+        note="零载体：by_range、tier=X、enabled=False、note 写明「无标的代码、建库价值有限」；"
+             "无断点文件（file 留空表示无载体，勿编名）。",
+    ),
+    CheckpointDomain(
+        id="market.backfill.zero_carrier.stk_mins",
+        library="market_data",
+        owner="fetch/backfill.py",
+        file="",
+        key_space="code",
+        completed_field=None,
+        timestamp_field=None,
+        authority="DEAD",
+        tables=frozenset({"stk_mins"}),
+        note="零载体：by_code、tier=X、enabled=False、note 写明「限频1次/小时，实务不可行」；"
+             "⚠ API_RATE_LIMIT 无此键 ⇒ 落兜底 170/分（60 倍超速），启用前必须先补限频。",
+    ),
+    CheckpointDomain(
+        id="market.backfill.zero_carrier.report_rc",
+        library="market_data",
+        owner="fetch/backfill.py",
+        file="",
+        key_space="code",
+        completed_field=None,
+        timestamp_field=None,
+        authority="DEAD",
+        tables=frozenset({"report_rc"}),
+        note="零载体：by_code、tier=X、enabled=False、note 写明「1次/分钟，逐只不可行」；无断点文件。",
+    ),
 )
 
 ALL_DOMAINS: tuple[CheckpointDomain, ...] = DOMAINS
