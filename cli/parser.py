@@ -82,8 +82,10 @@ _EPILOG = """
   python main.py regress                        回归测试（改数据层后必跑）
 
   # 数据速查
-  python main.py freshness --all                全部表最新日期
-  python main.py freshness --stale 3 --json     落后表（JSON）
+  python main.py db freshness                   表级新鲜度（双条件 ds+dw；推荐）
+  python main.py db freshness --only dividend,index_weight   只看指定表
+  python main.py db freshness --json            新鲜度 JSON（机器可读）
+  python main.py freshness --all                旧版单条件速览（兼容保留，建议用 db freshness）
   python main.py peek daily --code 600519.SH    预览某张表的实际数据
   python main.py peek daily --json              预览（JSON，机器可读）
   python main.py doctor                         环境自检
@@ -267,7 +269,8 @@ def build_parser():
     p.set_defaults(func=cmd_regress)
 
     # ── 数据速查 ──
-    p = sub.add_parser("freshness", help="数据新鲜度速查（各表最新日期）")
+    p = sub.add_parser("freshness",
+                       help="数据新鲜度速查（旧版单条件；建议用 db freshness 双条件版）")
     p.add_argument("tables", nargs="?", default=None,
                    help="逗号分隔的表名（默认核心表）")
     p.add_argument("--all", action="store_true", help="显示全部表")
