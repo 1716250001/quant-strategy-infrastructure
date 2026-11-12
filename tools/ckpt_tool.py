@@ -27,6 +27,7 @@ tools/ckpt_tool.py — 断点管理
 import json
 import os
 import shutil
+import sys
 from datetime import datetime
 
 import pandas as pd
@@ -84,7 +85,9 @@ def _disk_dates(name, date_col):
         try:
             s = pd.read_parquet(os.path.join(d, f), columns=[date_col])[date_col]
             out |= set(s.astype(str).unique())
-        except Exception:
+        except Exception as exc:
+            # G-2：⛔ 不许静默返空（读失败会被上层当成"磁盘没数据"⇒ 假红虚记）
+            print(f"[warn] 读 {f} 失败：{type(exc).__name__}: {exc}", file=sys.stderr)
             continue
     return out
 
@@ -95,7 +98,8 @@ def _disk_codes(name):
     reader.clear_cache(name)
     try:
         return set(reader.codes_from_store(name, root=MARKET_DATA_DIR))
-    except Exception:
+    except Exception as exc:
+        print(f"[warn] {name} 码集读取失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         return set()
 
 
@@ -111,7 +115,8 @@ def _recent_trade_dates(n=1):
         today = datetime.now().strftime("%Y%m%d")
         ds = [d for d in open_dates(start_date="20200101") if d <= today]
         return set(ds[-n:]) if ds else set()
-    except Exception:
+    except Exception as exc:
+        print(f"[warn] 交易日历读取失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         return set()
 
 
@@ -119,12 +124,14 @@ def _tasks_of(name, conf):
     """应有的任务集合（复用 backfill 的构建逻辑，保证口径一致）"""
     try:
         from fetch.backfill_spec import expected_task_count
-    except Exception:
+    except Exception as exc:
+        print(f"[warn] {name} 任务集导入失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         return None, None
     try:
         exp, kind = expected_task_count(name, conf)
         return (set(str(x) for x in exp) if exp else None), kind
-    except Exception:
+    except Exception as exc:
+        print(f"[warn] {name} 任务集计算失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         return None, None
 
 

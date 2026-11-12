@@ -27,8 +27,10 @@ def cmd_db_backup(args):
     _banner("db-backup 日备" + ("" if apply else "（干跑）"))
     if not apply:
         st = backup_status()
+        from tools.data_backup import DEFAULT_ROOT
         print("  [干跑] 未写任何文件。计划：")
-        print(f"    源  : {st['root']}")
+        print(f"    源  : {DEFAULT_ROOT}")      # R10-1b：源＝数据根（不是日备根）
+        print(f"    备至: {st['root']}")
         print("    方式: 硬链增量快照 + sha256 校验 → 7 版轮转／周备 4 版")
         print(f"    上一版: {st['latest'] or '无（首次全量）'}")
         print("    真跑: 加 --execute")

@@ -231,6 +231,18 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
             failed.append(name)
             print(f"[fail] {name}: {type(exc).__name__}: {exc}")
     _kg_report([r[0] for r in todo])
+    # R10-2（§446）：日备随调度自动跑。仅「真跑」且无失败时才备——
+    # 干跑不备（无用）、有失败不备（备的是半截库）。mirror() 自带
+    # .backup.lock（O_CREAT|O_EXCL）与「今日快照已存在不覆盖」双保护，
+    # 重复调用安全，故此处不需要额外幂等判断。
+    if not dry_run and not failed:
+        try:
+            from tools.data_backup import mirror
+            _rc = mirror()
+            print(f"[schedule] 日备 rc={_rc}")
+        except Exception as exc:
+            # 备份失败不改变取数退出码（否则计划任务 LastTaskResult 会一直非 0）
+            print(f"[schedule] 日备异常：{type(exc).__name__}: {exc}")
     print(f"[schedule] 完成 {len(todo) - len(failed)}/{len(todo)}，失败 {len(failed)}")
     if over:
         return 2
