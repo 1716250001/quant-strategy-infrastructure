@@ -12,6 +12,12 @@
       "at": "2026-11-11",
       "ref": "§415 A单",
       "action": "84 请求分层抽样后登记：甲档 6 表 source_empty＋12 表 source_empty_dates；乙档 stk_holdernumber 标注待补数；其余缺口表丙档标注 empty_as_done"
+    },
+    {
+      "at": "2026-11-12",
+      "ref": "§422 老大裁定 A",
+      "action": "三项裁定全部接受：(1) fx_daily 1,953 条接受「⑥ 外汇日历口径漂移、不清理」；(2) index_weight 5 码改判为「不补数、清 650 虚记键」（原建议的补 499 键已撤回）；(3) P3-3 采纳 cn_ppi + index_monthly 替代 monthly（14 请求）。",
+      "changed": "index_weight.completed 9,906→9,256（清 5 码 ×130 月）；fx_daily 增 calendar_drift_note；known_gaps._audit +1 条；P3-3 仅裁定不改配置。断点备份 bak_20261112_092019。"
     }
   ],
   "fund_daily": {
@@ -16254,7 +16260,8 @@
       "20260327",
       "20260403"
     ],
-    "note": "P3-8 A单 甲档登记（2026-11-11）：by_date 缺口 23 天，P3-7 §二 已 4/4（或推定）源端空；登记后仅已登记空日才记 done"
+    "note": "P3-8 A单 甲档登记（2026-11-11）：by_date 缺口 23 天，P3-7 §二 已 4/4（或推定）源端空；登记后仅已登记空日才记 done",
+    "calendar_drift_note": "【2026-11-12 §422 老大裁定】extra 4,032 条已定性，全部【不清理】：(1) 71 条 <1990（磁盘 74 行，仅 XAUUSD/XAGUSD.FXCM）；(2) 1,939 条 1990–20070520（早于任务起点 20070521，磁盘 1,939/1,939 全有数据）；(3) 69 条 .FXCM 代码键（fx_obasic 69/69 均为 FXCM）；(4) 1,953 条 ≥20070521 但非 SSE 交易日 —— 周六 618／周日 1,003／工作日非 SSE 332，∩SSE开市 = 0，磁盘 1,953/1,953 全有数据。属 FXCM 外汇日历（fx_obasic.trading_hours=\"Sun 17.00 - Fri 16.55\"）的真实交易日，不是脏键。要与 A 股任务集口径统一，须改代码引入 FX 日历 —— 属功能扩展，不属数据清算，不在本裁定范围。"
   },
   "sz_daily_info": {
     "source_empty_dates": [
