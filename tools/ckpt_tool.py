@@ -221,6 +221,35 @@ def _do_show(tables=None, verbose=True):
 # ============================================================
 # --fix：按磁盘回填断点（幂等，只增不减）
 # ============================================================
+def _fix_disk_set(name, conf):
+    """--fix 的磁盘对照集：按**存储布局**分派，返回 (集合, 键形态) 或 (None, None)。
+
+    ⛔ 为什么不能只信 `conf["mode"]`（2026-11-12 §421 C-1）：
+       「取数方式 ≠ 存储布局」——17 张表配置说 by_code、磁盘却是 by_year，
+       单看 mode 会在新增模式时判错有无磁盘对应物。
+    分派口径（与派单 C §1.3 一致）：
+       layout=single（by_range/by_month/once/by_param/paged）→ 跳过（区间键无磁盘对应物）
+       layout=by_code → 按代码（stock_company 一类一标一行）
+       layout=by_year → 键形态由 mode 定：by_date 按日期 / by_code 按代码
+    """
+    from fetch.backfill_io import (
+        STORAGE_BY_CODE,
+        STORAGE_SINGLE,
+        table_storage_layout,
+    )
+    layout = table_storage_layout(name)
+    mode = conf.get("mode")
+    if layout == STORAGE_SINGLE:
+        return None, None
+    if layout != STORAGE_BY_CODE and mode not in ("by_date", "by_code"):
+        # by_year 但键不是日期/代码（如 by_period 的报告期）⇒ 无磁盘一一对应物
+        return None, None
+    dc = conf.get("date_col") or TABLE_DATE_COL.get(name) or "trade_date"
+    if layout == STORAGE_BY_CODE or mode == "by_code":
+        return _disk_codes(name), "code"
+    return _disk_dates(name, dc), "date"
+
+
 def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
     cp = _load()
     names = tables or sorted(cp.keys())
@@ -230,16 +259,25 @@ def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
         print("=" * 100)
 
     total = 0
+    diffs = []
     for name in names:
         conf = _conf_of(name)
-        if not conf or conf.get("mode") != "by_date":
+        if not conf:
             continue
-        dc = conf.get("date_col") or TABLE_DATE_COL.get(name) or "trade_date"
-        disk = _disk_dates(name, dc)
+        disk, _kind = _fix_disk_set(name, conf)
+        # 口径差异提示：--show 按 mode 判定，本函数按存储布局判定（§421 C-1）。
+        # 只在**判定结论不同**时提示（by_code 表落在 by_year 布局属正常，不算差异）。
+        _old_kind = {"by_date": "date", "by_code": "code"}.get(conf.get("mode"))
+        if _kind != _old_kind:
+            diffs.append(f"{name}(mode={conf.get('mode')}/layout={_kind})")
+            if verbose:
+                from fetch.backfill_io import table_storage_layout
+                print(f"  [口径差异] {name}: mode={conf.get('mode')} / "
+                      f"layout={table_storage_layout(name)}（按 layout 执行）")
         if not disk:
             continue
         done = set(str(x) for x in cp.get(name, {}).get("completed", []))
-        add = sorted(disk - done)
+        add = sorted(str(x) for x in disk - done)
         if not add:
             continue
         total += len(add)
@@ -252,7 +290,10 @@ def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
                                 "disk": len(disk), "added": len(add),
                                 "samples": [str(x) for x in add[:5]]})
         if execute:
-            cp.setdefault(name, {})["completed"] = sorted(done | disk)
+            cp.setdefault(name, {})["completed"] = sorted(done | {str(x) for x in disk})
+
+    if diffs and verbose:
+        print(f"\n  [口径差异] 共 {len(diffs)} 张: {diffs}")
 
     # ⚠ 落盘不依赖 verbose（--json 也必须真正写入），只由 execute 决定
     if execute and total:

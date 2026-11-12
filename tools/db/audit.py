@@ -303,7 +303,96 @@ def audit_checkpoint(verbose=True):
         # G1 双向差集（P3-2b）：与上方"断点×落盘"互补 —— 上方看目录/文件，
         # 这里看**账本键**本身（extra 藏旧右端/日更日期键/下架代码）。
         audit_checkpoint_diff(verbose=True)
+        # C-2（§421）：断点键 × **磁盘键** 的双向差集（哪个键到底属于谁）
+        audit_checkpoint_disk(verbose=True)
     return errors, infos
+
+
+# ============================================================
+# A3. C-2 断点键 × 磁盘键 双向差集（§421，2026-11-12）
+# ============================================================
+def audit_checkpoint_disk(verbose=True):
+    """逐表给出「断点键 vs 磁盘键」的**双向差集**与归属结论。
+
+    与 A2（audit_checkpoint_diff）的分工：
+      A2 = 断点账本 × 应有任务（extra/miss，回答"该拉没拉"）
+      本函数 = 断点账本 × **磁盘键**（回答"断点记的这个键磁盘到底有没有"）
+    ⚠ 与 C-3 的分工：本函数只看「键在不在」，C-3 看「注册表里的码库内到底有没有数据」。
+
+    口径（与 `tools/ckpt_tool --show` 同源，避免两套解释）：
+      by_date → `_disk_dates`（排除最近 1 个已收盘交易日，T 日源端可能未发布）
+      by_code → `_disk_codes`
+      其余模式无磁盘一一对应物 → 不出现在本表（由 A2 覆盖）
+    """
+    from tools.ckpt_tool import _disk_codes, _disk_dates, _recent_trade_dates
+
+    cp_path = os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
+    if not os.path.exists(cp_path):
+        return []
+    cp = json.load(open(cp_path, encoding="utf-8"))
+    recent = _recent_trade_dates(1)
+
+    rows = []
+    for name in sorted(set(BACKFILL_TARGETS) | set(DAILY_UPDATE_EXTRA)):
+        conf = BACKFILL_TARGETS.get(name) or DAILY_UPDATE_EXTRA.get(name) or {}
+        mode = conf.get("mode")
+        if mode not in ("by_date", "by_code"):
+            continue
+        done = {str(x) for x in cp.get(name, {}).get("completed", [])}
+        if not done:
+            continue
+        if mode == "by_date":
+            dc = conf.get("date_col") or TABLE_DATE_COL.get(name) or "trade_date"
+            disk = _disk_dates(name, dc)
+        else:
+            disk = _disk_codes(name)
+        if disk is None:
+            continue
+        disk = {str(x) for x in disk}
+        if mode == "by_date":
+            # 断点有磁盘无：排除 T 日（源端未发布属正常，见 ckpt_tool 同口径）
+            only_ckpt = {x for x in done - disk if x not in recent}
+        else:
+            only_ckpt = done - disk
+        only_disk = disk - done
+        if not only_ckpt and not only_disk:
+            verdict = "一致"
+        elif only_ckpt and only_disk:
+            verdict = "两边都有缺口"
+        elif only_ckpt:
+            verdict = "⚠ 断点有·磁盘无（疑虚记/待核验）"
+        else:
+            verdict = "断点滞后（磁盘有·断点无，需 ckpt --fix）"
+        rows.append({"name": name, "mode": mode, "ckpt": len(done), "disk": len(disk),
+                     "only_ckpt": len(only_ckpt), "only_disk": len(only_disk),
+                     "verdict": verdict,
+                     "samples": sorted(only_ckpt)[:3] or sorted(only_disk)[:3]})
+
+    if verbose:
+        print()
+        print(SEP)
+        print("  A3. C-2 断点键 × 磁盘键 双向差集（键在不在；T 日已排除）")
+        print(SEP)
+        if not rows:
+            print("  ✓ 无差异（全部表：断点键与磁盘键完全一致）")
+            return rows
+        print(f"  {'表名':18s} {'模式':8s} {'断点':>7s} {'磁盘':>7s} "
+              f"{'断点有磁盘无':>12s} {'磁盘有断点无':>12s}  结论")
+        print("  " + "-" * 96)
+        tot_c = tot_d = tot_a = tot_b = 0
+        for r in rows:
+            print(f"  {r['name']:18s} {r['mode']:8s} {r['ckpt']:7,d} {r['disk']:7,d} "
+                  f"{r['only_ckpt']:12,d} {r['only_disk']:12,d}  {r['verdict']}")
+            if r["samples"]:
+                print(f"    样例: {r['samples']}")
+            tot_c += r["ckpt"]
+            tot_d += r["disk"]
+            tot_a += r["only_ckpt"]
+            tot_b += r["only_disk"]
+        print("  " + "-" * 96)
+        print(f"  合计: {len(rows)} 张有差 | 断点有磁盘无 {tot_a:,} | "
+              f"磁盘有断点无 {tot_b:,}（断点 {tot_c:,} / 磁盘 {tot_d:,}）")
+    return rows
 
 
 # ============================================================

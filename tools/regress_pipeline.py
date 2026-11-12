@@ -81,6 +81,116 @@ def check(name, fn):
         _say(f"  [失败] {name} → {str(e)[:160]}")
 
 
+# ============================================================
+# C-3（18 号 §421）：known_gaps 登记 × 库内实据 双向断言
+# ============================================================
+# 为什么需要（§414.4 实证）：R20 原本只查 `source_empty_count == len(...)` 的自洽性，
+# 只要「删登记 + 同步改 count」就能全绿 —— 删对删错没人拦。
+# 现补两条**数据侧**断言：
+#   正向：登记的码/日期，库内必须**确实无数据**（有数据 ⇒ 登记该清了）；
+#   反向：历史范围内「断点已 done 但库内无数据」的日期必须已登记
+#         （防 A 型「空即 done」造成的静默漏登记；etf_limit 2019 整段缺失即此型）。
+# 基线常量只作**下界**（登记只增不减）：少于此数必是整键/批量误删。
+# ⚠ 若确需清登记（库内补到数据），须同步下调本基线并经老大批 —— 这是有意的摩擦力。
+SOURCE_EMPTY_FLOOR = {
+    "fund_daily": 173, "fund_nav": 61, "fund_adj": 180, "fund_share": 131,
+    "pledge_detail": 2336, "repurchase": 2280, "express": 1562,
+    "pledge_stat": 1458, "stk_holdertrade": 611, "share_float": 352,
+}
+SOURCE_EMPTY_DATES_FLOOR = {
+    "block_trade": 356, "ggt_top10": 134, "hsgt_top10": 102, "hk_hold": 72,
+    "fx_daily": 23, "sz_daily_info": 6, "suspend_d": 5, "fut_daily": 3,
+    "fut_mapping": 2, "eco_cal": 2, "bc_otcqt": 1, "sge_daily": 1,
+}
+
+
+def registry_vs_disk_assert(kg, root, conf_of, cp, floors_empty=None, floors_dates=None):
+    """校验 known_gaps 登记与库内实据的双向一致性（C-3 §421）。
+
+    kg        : known_gaps.json 内容
+    root      : 数据根（MARKET_DATA_DIR）
+    conf_of   : name → 该表配置（BACKFILL_TARGETS / DAILY_UPDATE_EXTRA）
+    cp        : .backfill_checkpoint.json 内容
+    返回摘要字符串；任一违反即 AssertionError（由 check() 记为失败）。
+    """
+    import glob as _glob
+
+    import pandas as _pd
+
+    from config import TABLE_DATE_COL as _TDC
+
+    fe = SOURCE_EMPTY_FLOOR if floors_empty is None else floors_empty
+    fd = SOURCE_EMPTY_DATES_FLOOR if floors_dates is None else floors_dates
+
+    def _codes(t):
+        out = set()
+        for fp in _glob.glob(os.path.join(root, t, "*.parquet")):
+            try:
+                out |= set(_pd.read_parquet(fp, columns=["ts_code"])["ts_code"].astype(str))
+            except Exception:
+                continue
+        return out
+
+    def _dates(t, dc):
+        out = set()
+        for fp in _glob.glob(os.path.join(root, t, "*.parquet")):
+            try:
+                out |= set(_pd.read_parquet(fp, columns=[dc])[dc].astype(str))
+            except Exception:
+                continue
+        return out
+
+    n_c = n_d = 0
+    for t, entry in kg.items():
+        if not isinstance(entry, dict):
+            continue
+        if "source_empty" in entry:
+            reg = {str(x) for x in entry.get("source_empty") or []}
+            n_c += len(reg)
+            floor = fe.get(t, 0)
+            assert len(reg) >= floor, (
+                f"{t}.source_empty={len(reg)} < 基线 {floor}"
+                f"（整键/批量误删？清登记须同步下调基线并经批）")
+            if reg:
+                bad = sorted(reg & _codes(t))
+                assert not bad, (
+                    f"{t}.source_empty 有 {len(bad)} 个码库内已有数据却仍登记"
+                    f"（应清登记，否则 R17 口径失真）: {bad[:5]}")
+        if "source_empty_dates" in entry:
+            reg = {str(x) for x in entry.get("source_empty_dates") or []}
+            n_d += len(reg)
+            floor = fd.get(t, 0)
+            assert len(reg) >= floor, (
+                f"{t}.source_empty_dates={len(reg)} < 基线 {floor}（整键/批量误删？）")
+            conf = conf_of(t) or {}
+            dc = conf.get("date_col") or _TDC.get(t) or "trade_date"
+            disk = _dates(t, dc)
+            bad = sorted(reg & disk)
+            assert not bad, (
+                f"{t}.source_empty_dates 有 {len(bad)} 天库内已有数据却仍登记: {bad[:5]}")
+            # 反向：历史范围内「done 且无数据」必须已登记
+            #   （> 磁盘最大日期 的 done 属在途/旧版假绿，日更会自愈，不计入）
+            if conf and disk and not entry.get("empty_as_done"):
+                from fetch.backfill_spec import expected_task_count
+                exp = {str(x) for x in (expected_task_count(t, conf)[0] or [])}
+                done = {str(x) for x in cp.get(t, {}).get("completed", [])}
+                dmax = max(disk)
+                rev = sorted(x for x in ((exp & done) - disk) - reg if x < dmax)
+                assert not rev, (
+                    f"{t}.source_empty_dates 漏登记 {len(rev)} 天"
+                    f"（断点 done 但库内无数据）: {rev[:5]}")
+
+    # 基线表整键消失（连字段都没了）也必须红 —— 上面循环看不到的删除
+    for t, f in fe.items():
+        assert f == 0 or (isinstance(kg.get(t), dict) and "source_empty" in kg[t]), (
+            f"{t}.source_empty 键整段消失（基线 {f} 条）")
+    for t, f in fd.items():
+        assert f == 0 or (isinstance(kg.get(t), dict) and "source_empty_dates" in kg[t]), (
+            f"{t}.source_empty_dates 键整段消失（基线 {f} 天）")
+
+    return f"source_empty {n_c:,} 码 + source_empty_dates {n_d:,} 天 双向断言通过"
+
+
 def run(verbose=True, as_json=False):
     """执行全部回归检查。返回 (passed_n, failed_n)。
 
@@ -1754,8 +1864,20 @@ def _run_all():
         assert _kg.get("market_e_count") == _e_actual, (
             f"market_e_count={_kg.get('market_e_count')} ≠ fund_basic 实测 {_e_actual}")
 
+        # ⑦ C-3（§421）：source_empty / source_empty_dates 双向断言
+        #   遍历注册表全部条目（当前 10 表 9,144 码 + 12 表 707 天），不硬编码表名。
+        from config import BACKFILL_TARGETS as _BT
+        from config import DAILY_UPDATE_EXTRA as _DUE
+        _cp_path = _os.path.join(_ROOT, ".backfill_checkpoint.json")
+        _cp = {}
+        if _os.path.exists(_cp_path):
+            with open(_cp_path, encoding="utf-8") as _f:
+                _cp = _json.load(_f)
+        _c3 = registry_vs_disk_assert(
+            _kg, _ROOT, lambda t: _BT.get(t) or _DUE.get(t), _cp)
+
         return (f"fund_basic E={_e_actual} 无幽灵码；四表 parquet/注册表 0 残留；"
-                f"count 声明全一致；evidence 全表配对")
+                f"count 声明全一致；evidence 全表配对；{_c3}")
 
 
     check("幽灵码护栏+声明一致", r20)
