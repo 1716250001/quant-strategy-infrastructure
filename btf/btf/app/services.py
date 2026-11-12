@@ -146,7 +146,10 @@ def run_data_quality(
        异常类型）。
 
     ⛔ `st_symbols` 不传（CLI 无 ST 名单来源）⇒ CC-2 的 ST 分支不生效，
-    finding **只会偏多**（假红方向）；CLI 侧须 `[warn]` 显式声明。
+    **主板 ST 股 5%~10% 的越界会漏检（假阴性方向，finding 偏少）**——
+    与 `data/quality.py::run_checks` docstring 及
+    `tests/unit/test_data_quality.py::test_cc2_st_branch_is_triggerable` 同源；
+    CLI 侧须 `[warn]` 显式声明。
     """
     from btf.config.paths import MARKET_DATA_DIR
     from btf.data.parquet_reader import ReaderError, table_files

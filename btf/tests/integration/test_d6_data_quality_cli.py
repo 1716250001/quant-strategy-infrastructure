@@ -119,6 +119,21 @@ def test_registered_table_without_shards_rc2(root, capsys):
     assert "[ok]" not in cap.out
 
 
+def test_st_disclosure_direction(root, capsys):
+    """ST 缺名单的方向必须写对：**漏检（假阴性）**，不是「偏多（假红）」。
+
+    依据 `tests/unit/test_data_quality.py::test_cc2_st_branch_is_triggerable`
+    的两臂实测：不传 ST → 不报（漏检面）；传 ST → 检出。
+    故文案若写「偏多」即为**方向性谎报**——把下界说成上界。
+    断言**双向**：只查「漏检」的话，「漏检 ＋ 偏多」并存的文案也能蒙混过关。
+    """
+    rc = main(_args(root))
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "漏检" in out, "ST 披露必须写明「漏检」"
+    assert "偏多" not in out, "不得把漏检写成「偏多」（方向相反）"
+
+
 def test_json_stdout_is_single_object(root, capsys):
     """`--json`：stdout 只有一个可解析 JSON 对象，人话走 stderr（D6-4）。"""
     rc = main(_args(root, "--json"))

@@ -666,8 +666,9 @@ def _cmd_data_quality(args: argparse.Namespace) -> int:
     print(f"[info] quality 开始：price={'/'.join(price)} "
           f"limit={'/'.join(limit)} 区间 {start}→{end} "
           f"{'全库' if symbols is None else f'{len(symbols)} 只'}", file=chatter)
-    print("[warn] 未提供 ST 名单：CC-2 的 ST 分支（5% 上限）不生效，ST 股按常规档判 "
-          "⇒ finding 可能偏多（假红方向）", file=chatter)
+    print("[warn] 未提供 ST 名单：CC-2 的 ST 分支（主板 ST 5% 上限）不生效，"
+          "ST 股按板块常规档判 ⇒ 主板 ST 股 5%~10% 的越界会**漏检**"
+          "（假阴性方向，finding 偏少）", file=chatter)
     try:
         report = run_data_quality(args.root, start, end, price_tables=price,
                                   limit_tables=limit, symbols=symbols)
