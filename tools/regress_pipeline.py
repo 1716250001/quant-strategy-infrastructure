@@ -93,7 +93,10 @@ def check(name, fn):
 # 基线常量只作**下界**（登记只增不减）：少于此数必是整键/批量误删。
 # ⚠ 若确需清登记（库内补到数据），须同步下调本基线并经老大批 —— 这是有意的摩擦力。
 SOURCE_EMPTY_FLOOR = {
-    "fund_daily": 173, "fund_nav": 61, "fund_adj": 180, "fund_share": 131,
+    # 2026-11-12 下调（数据侧清登记，逐码验过库内已有数据）：
+    #   fund_daily 173→171 / fund_adj 180→178（180107.SZ、508605.SH 已到数）
+    #   fund_nav   61→59 （562710.SH、588560.SH 已到数）
+    "fund_daily": 171, "fund_nav": 59, "fund_adj": 178, "fund_share": 131,
     "pledge_detail": 2336, "repurchase": 2280, "express": 1562,
     "pledge_stat": 1458, "stk_holdertrade": 611, "share_float": 352,
 }
