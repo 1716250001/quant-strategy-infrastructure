@@ -5,6 +5,34 @@
 
 ## [未发布]
 
+### 新增（Added）
+
+- **CC-2 基金 20% 档**：按「跟踪标的 × 时点」判定 ETF 涨跌幅上限（星 20% / 创 20% /
+  其余 10%），来源表 `metadata/fund_basic.parquet`（19 号 §255；`2ecc28e`）
+- **`bt data quality --start/--end`**：区间质检明细（CC-1～CC-7，`--price-table` /
+  `--limit-table` / `--symbols` / `--json` / `--out`）；RC 0=`report.ok`／1=有阻断型
+  finding／2=用法或前置错误；表名未登记或盘上无分片一律 RC=2（19 号 §275；`954c845`）
+- 补「**已登记表零分片 ⇒ RC=2**」负向例：覆盖「表名合法、盘上没有」形态的假绿
+  （19 号 §276；`9a665d3`）
+
+### 修复（Fixed）
+
+- **`config-check` 补 data 轴**：feed 名解析 ＋ `universe.source=explicit` 的
+  feed↔标的 路由预检（与 `run` 同源）（19 号 §255；`7d81152`）
+- **`config-check` 失败态不再打印 `[ok]`**：改 `[fail]` ＋ 摘要，RC=0 输出逐字节不变
+  （19 号 §257；`a210599`）
+- **`config-check --resolve-strategy` 假红/假绿双修**：策略可解析性判定前移到 `[ok]`
+  之前，并复用 `inject_strategy_paths`（与 runtime／walkforward 同一实现）
+  （19 号 §265；`f105727`）
+
+### 变更（Changed）
+
+- **`fund_basic` 换源解耦**：由孤儿快照 `fund/fund_basic_E.parquet` 改指日更
+  `metadata/fund_basic.parquet`；拆掉为它专设的 `TableMeta.dir_name`/`file_name`
+  与 `_file_stem()`；`_fund_meta` 按完整 `ts_code` 索引（19 号 §262；`7a5ec33`）
+- **T-56 补 2 例负向测试**（`config-check` 失败态不得印 `[ok]`）＋ 摘要函数去未用参数
+  （19 号 §258；`c96e7f2`）
+
 ## [7.0.0] — 2026-10-27（**R 类停牌口径 ＋ P14 CC-7 送转检查器 ＋ 工具落点治理**；19 号 §172–§177）
 
 > **BREAKING（交易判定变更）**：`is_suspended` 口径由「当天在 `suspend_d` 表即停牌」

@@ -1,6 +1,6 @@
 # btf — A 股日线回测工具
 
-> 版本 **6.0.0**（单一真源 `btf/_version.py`）｜Python 3.13｜单人本机使用
+> 版本 **7.0.0**（单一真源 `btf/_version.py`）｜Python 3.13｜单人本机使用
 > 一份配置 + 一个策略类 → 按日循环跑完整段回测 → 产出可复核的指标与产物。
 
 ---
@@ -25,7 +25,7 @@
 python -m pip install -e .
 
 # 2) 版本与门禁
-bt --version          # btf 6.0.0
+bt --version          # btf 7.0.0
 bt check              # 十项质量门，须 10/10
 
 # 3) 跑一个自带示例
@@ -44,13 +44,14 @@ bt verify <run_id>
 
 ```
 btf/
-├─ btf/              核心包（17 子包：domain/data/strategy/engine/execution/risk/
+├─ btf/              核心包（16 个子包：domain/data/strategy/engine/execution/risk/
 │                    portfolio/analytics/experiment/optimize/runtime/app/viz/
-│                    registry/config/cli + btf_datasets）
+│                    registry/config/cli）
+│  └─ btf_datasets/  数据集目录（无 __init__.py、不是常规包，仅命名空间包；golden_v1 / corp_actions）
 ├─ schemas/          配置 JSON Schema（backtest.v1.json，唯一一份）
 ├─ examples/         示例策略 rotation.py + 示例配置（不进 wheel）
 ├─ tools/            常驻工具 28 个（门禁脚本 / 对账 / 复跑 / 冷备 / 审计）
-├─ tests/            1288 项（l1–l5 + smoke 五层）
+├─ tests/            1305 项（l1–l5 + smoke 五层）
 ├─ benchmarks/       B1–B5 基准留档
 ├─ CHANGELOG.md      版本留痕（Keep a Changelog）
 └─ pyproject.toml    ruff + import-linter 十契约 + pytest 标记
@@ -100,6 +101,8 @@ run:
 | `bt report <run_id>` | 生成 HTML/Markdown 报告（幂等） |
 | `bt test` | 按层跑测试（`--layer`） |
 | `bt dataset freeze --config <yaml>` | 冻结数据集指纹（`content_hash` 与门禁同源） |
+| `bt dataset refresh-hash --dry-run --config <yaml>` | 实算数据指纹并列出**旧值→新值**（`--dry-run` 不写盘；写回时行级替换，不重排 YAML） |
+| `bt data quality --start <d> --end <d> [--price-table T] [--limit-table T] [--symbols A,B] [--json] [--out P]` | 区间质检明细（CC-1～CC-7）；RC **0**=无阻断型 finding／**1**=有／**2**=用法错 |
 | `bt optimize` | 网格搜索 |
 | `bt validate` | walk-forward / 蒙特卡洛 |
 | `bt adhoc` | **一次性/外部回测脚本**的产物契约封装（跑仓外策略时用它最省事） |

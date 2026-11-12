@@ -2,6 +2,7 @@
 """L2：**文档披露数字守卫**（R60′，2026-10-09；19 号 §109.5/§110.2）。
 
 四组守卫（**只读**文档；T-C 读 19 号作完成清单源头；**不写**任何文件；不碰业务代码）：
+（T-E／T-F 起补 `btf/README.md` 自身的版本与计数守卫，见文件末尾。）
 
 - **T-A 计数守卫**：六份现状文档必须**同时声明**两个口径（「tag 快照」＋「工作区」），
   且**「工作区」值 == 实测 collect 非 L5 数**（子进程 cwd ＝ `代码/btf`；`--collect-only`
@@ -58,16 +59,51 @@ def _read(name: str) -> list[str]:
     return (DOC_DIR / name).read_text(encoding="utf-8").splitlines()
 
 
-def _measured_non_l5() -> int:
-    """实测 collect 非 L5 数（cwd＝`代码/btf`；`--collect-only` **不带 `-q`**）。"""
+def _measured_collect(marker: str | None = None) -> int:
+    """实测 collect 数（cwd＝`代码/btf`；`--collect-only` **不带 `-q`**）。
+
+    `marker=None` ⇒ **全量**（T-F 用）；`"not l5"` ⇒ **非 L5**（T-A 用）。
+    ⚠ 口径不可互换：README 的「l1–l5 + smoke 五层」是全量，用非 L5 会差 22。
+    """
+    cmd = [sys.executable, "-m", "pytest", "tests", "--collect-only",
+           "-p", "no:cacheprovider"]
+    if marker:
+        cmd += ["-m", marker]
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests", "--collect-only",
-         "-p", "no:cacheprovider", "-m", "not l5"],
-        cwd=str(BTF_ROOT), capture_output=True, text=True, encoding="utf-8",
-        errors="replace", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        cmd, cwd=str(BTF_ROOT), capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     assert proc.returncode == 0, (
         f"collect 失败（EXIT={proc.returncode}）：{proc.stdout[-400:]}")
     return sum(1 for ln in proc.stdout.splitlines() if "::" in ln)
+
+
+def _measured_non_l5() -> int:
+    """实测 collect 非 L5 数（T-A 口径；见 `_measured_collect`）。"""
+    return _measured_collect("not l5")
+
+
+#: btf 自身 README（**不在 `CURRENT_DOCS`**：那组是架构文档目录，§278-E）
+BTF_README = BTF_ROOT / "README.md"
+#: 版本单一真源文件（守卫取值来源，禁 hardcode）
+BTF_VERSION_FILE = BTF_ROOT / "btf" / "_version.py"
+
+
+def _source_version() -> str:
+    """从 `btf/_version.py` 读 `__version__`——**禁 hardcode**（D7-6）。"""
+    m = re.search(r'^__version__\s*=\s*"([^"]+)"',
+                  BTF_VERSION_FILE.read_text(encoding="utf-8"), re.MULTILINE)
+    assert m, f"{BTF_VERSION_FILE}: 未找到 `__version__ = \"...\"` 声明"
+    return m.group(1)
+
+
+#: 表头声明：`版本 **X.Y.Z**`
+_VER_DECL_PAT = re.compile(r"版本\s*\*\*([0-9]+\.[0-9]+\.[0-9]+)\*\*")
+#: 示例注释：`bt --version   # btf X.Y.Z`
+_VER_CLI_PAT = re.compile(
+    r"bt\s+--version\s*#[^\n]*?btf\s+([0-9]+\.[0-9]+\.[0-9]+)")
+#: 目录树：`tests/   1305 项`
+_CNT_PAT = re.compile(r"tests/\s+([0-9]+)\s*项")
 
 
 # ───────────────────────── T-A 计数守卫 ─────────────────────────
@@ -237,3 +273,51 @@ def test_t_d_timevarying_format_guard():
     assert not bad, "\n".join(
         f"{CHANGELOG}:{i} 声明值=条目块有「扫描时刻」但无日期；"
         f"实测值=须含 YYYY-MM-DD（块首行={ln.strip()[:90]}）" for i, ln in bad)
+
+
+# ─────────────── T-E／T-F：`btf/README.md`（§278-E／§279 D-7） ───────────────
+# 为什么单列：`CURRENT_DOCS` 里的 `README.md` 是**架构目录**的 README，不是
+# `btf/README.md` ⇒ btf README 长期零守卫，版本号与测试计数一路漂（§278）。
+# 与 `tests/ 1288 项`（§278）。
+
+def test_t_e_btf_readme_version_guard():
+    """T-E：`btf/README.md` **两处**版本声明都必须 == `_version.py`。
+
+    M1（表头 `版本 **X.Y.Z**`）与 M2（示例注释 `bt --version # btf X.Y.Z`）是
+    **同一个错误的两次出现** ⇒ 两处都查，只查一处必漏（D7-7①②）。
+    另断言两种形态都存在——否则正则失配会让守卫静默空转。
+    """
+    want = _source_version()
+    text = BTF_README.read_text(encoding="utf-8")
+    assert _VER_DECL_PAT.search(text), (
+        f"{BTF_README}:— 声明值=缺表头「版本 **X.Y.Z**」；实测值={want}")
+    assert _VER_CLI_PAT.search(text), (
+        f"{BTF_README}:— 声明值=缺示例注释「bt --version # btf X.Y.Z」；"
+        f"实测值={want}")
+    problems: list[str] = []
+    for i, ln in enumerate(text.splitlines(), 1):
+        for pat in (_VER_DECL_PAT, _VER_CLI_PAT):
+            for got in pat.findall(ln):
+                if got != want:
+                    problems.append(
+                        f"{BTF_README}:{i} 声明值={got}；实测值={want}"
+                        f"（行={ln.strip()[:90]}）")
+    assert not problems, "\n".join(problems)
+
+
+def test_t_f_btf_readme_count_guard():
+    """T-F：`btf/README.md` 的 `tests/ N 项` == 实测**全量** collect。
+
+    ⚠ 口径：README 那句是「l1–l5 + smoke 五层」＝**全量**；用 `_measured_non_l5()`
+    会差 22（§279-B-1）。
+    """
+    measured = _measured_collect(None)
+    text = BTF_README.read_text(encoding="utf-8")
+    got = _CNT_PAT.findall(text)
+    assert got, (f"{BTF_README}:— 声明值=缺 `tests/ N 项`；"
+                 f"实测值=全量 collect {measured}")
+    bad = [g for g in got if int(g) != measured]
+    assert not bad, "\n".join(
+        f"{BTF_README}:— 声明值（tests 项数）={g}；实测值={measured}"
+        f"（口径=全量 collect，非 L5 不计）" for g in bad)
+
