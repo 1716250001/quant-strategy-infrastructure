@@ -125,12 +125,18 @@ def registry_vs_disk_assert(kg, root, conf_of, cp, floors_empty=None, floors_dat
     fe = SOURCE_EMPTY_FLOOR if floors_empty is None else floors_empty
     fd = SOURCE_EMPTY_DATES_FLOOR if floors_dates is None else floors_dates
 
+    unreadable: list[str] = []
+
     def _codes(t):
         out = set()
         for fp in _glob.glob(os.path.join(root, t, "*.parquet")):
             try:
                 out |= set(_pd.read_parquet(fp, columns=["ts_code"])["ts_code"].astype(str))
-            except Exception:
+            except Exception as exc:
+                # K 档（§451）：静默 continue 会让代码集偏少 ⇒ source_empty 误判为源端真空。
+                unreadable.append(fp)
+                print(f"[regress] 分片读取失败 {fp}: {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
                 continue
         return out
 
@@ -139,7 +145,10 @@ def registry_vs_disk_assert(kg, root, conf_of, cp, floors_empty=None, floors_dat
         for fp in _glob.glob(os.path.join(root, t, "*.parquet")):
             try:
                 out |= set(_pd.read_parquet(fp, columns=[dc])[dc].astype(str))
-            except Exception:
+            except Exception as exc:
+                unreadable.append(fp)
+                print(f"[regress] 分片读取失败 {fp}: {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
                 continue
         return out
 
@@ -191,7 +200,11 @@ def registry_vs_disk_assert(kg, root, conf_of, cp, floors_empty=None, floors_dat
         assert f == 0 or (isinstance(kg.get(t), dict) and "source_empty_dates" in kg[t]), (
             f"{t}.source_empty_dates 键整段消失（基线 {f} 天）")
 
-    return f"source_empty {n_c:,} 码 + source_empty_dates {n_d:,} 天 双向断言通过"
+    if unreadable:
+        print(f"[regress] ⚠ {len(unreadable)} 个分片读取失败"
+              f"（代码/日期集偏少，source_empty 可能误判为源端真空）", file=sys.stderr)
+    return (f"source_empty {n_c:,} 码 + source_empty_dates {n_d:,} 天 双向断言通过"
+            + (f" | ⚠ {len(unreadable)} 分片读取失败" if unreadable else ""))
 
 
 def run(verbose=True, as_json=False):
@@ -264,7 +277,9 @@ def _run_all():
         try:
             sp = parser._subparsers._group_actions[0]
             return sorted(sp.choices.keys())
-        except Exception:
+        except Exception as exc:
+            print(f"[regress] 从 build_parser 取子命令失败，回退解析 --help: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             # 兜底：解析 --help 文本中的 {a,b,c}
             r = _run_cli(["--help"])
             m = re.search(r"\{([a-z0-9_\-,]+)\}", r.stdout)
@@ -1036,6 +1051,7 @@ def _run_all():
         #    —— 这是"两个结构各管一摊"的**通杀**断言: 任何一处自行重写
         #    都会在此暴露（本次即有缺口的 shibor_lpr 被抓出 14 vs 1）。
         mismatched = []
+        et_err = []
         for name, conf in BACKFILL_TARGETS.items():
             if conf.get("tier") == "X" or conf.get("enabled") is False:
                 continue
@@ -1047,7 +1063,11 @@ def _run_all():
                 continue
             try:
                 exp, _k = expected_task_count(name, conf)
-            except Exception:
+            except Exception as exc:
+                # K 档（§451）：静默 continue ⇒ 该表口径比对被跳过（漏检）。
+                et_err.append(name)
+                print(f"[regress] expected_task_count 失败 {name}: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 continue
             if exp is None:
                 continue
@@ -1067,6 +1087,7 @@ def _run_all():
                 f"（漂移面 {tot_core} | 豁免表设计面 {exempt_tot} | "
                 f"日更表真缺口 {daily_tot}）"
                 + (f" + 已声明历史扩展待补 {tot_declared}" if tot_declared else "")
+                + (f" | ⚠ {len(et_err)} 表口径计算失败" if et_err else "")
                 + ")")
 
 
@@ -1116,6 +1137,7 @@ def _run_all():
 
         import pandas as pd
         bad, checked = [], 0
+        unread13: list[str] = []
         for name, floor in SOURCE_START_BASELINE.items():
             d = os.path.join(MARKET_DATA_DIR, name)
             if not os.path.isdir(d):
@@ -1140,7 +1162,11 @@ def _run_all():
                     if len(s):
                         v = str(s.min())
                         mn = v if mn is None else min(mn, v)
-            except Exception:
+            except Exception as exc:
+                # K 档（§451）：静默 continue 让该表整表跳过 ⇒ 截断漏检。
+                unread13.append(os.path.join(d, f))
+                print(f"[regress] 分片读取失败 {os.path.join(d, f)}: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 continue
             if mn is None:
                 continue
@@ -1154,7 +1180,8 @@ def _run_all():
             f"以下 by_code 表的库内起点晚于源端已知起点 → 疑似又被截断: {bad}\n"
             f"    → 修复: python main.py backfill --only <表名> --force")
         return (f"(引擎判据OK | 数据基线 {checked} 张全部不晚于源端 | "
-                f"续拉轮数上限={TRUNC_MAX_ROUNDS})")
+                f"续拉轮数上限={TRUNC_MAX_ROUNDS}"
+                + (f" | ⚠ {len(unread13)} 分片读取失败" if unread13 else "") + ")")
 
 
     check("by_code 截断防护", r13)
@@ -1226,7 +1253,9 @@ def _run_all():
         detail = ""
         try:
             ebs = read_alt("ebs_lg")
-        except Exception:
+        except Exception as exc:
+            print(f"[regress] read_alt(ebs_lg) 失败（跳过 ③④）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             ebs = None
         if ebs is not None and len(ebs):
             # ③ 列名写错必须抛 KeyError（不得与"无数据"同样返回 None）

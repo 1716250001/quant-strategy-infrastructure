@@ -243,7 +243,9 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
     try:
         with open(_kg_path, encoding="utf-8") as _f:
             _kg = _json.load(_f)
-    except Exception:
+    except Exception as exc:
+        print(f"[check_coverage] 读 known_gaps 失败（按无登记处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         _kg = {}
 
     fund_basic = pd.read_parquet(os.path.join(META_DIR, "fund_basic.parquet"))

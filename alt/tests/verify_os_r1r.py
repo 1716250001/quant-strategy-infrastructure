@@ -427,7 +427,9 @@ def _real_columns(table: str):
         return None
     try:
         return list(pd.read_parquet(os.path.join(d, files[0])).columns)
-    except Exception:
+    except Exception as exc:
+        print(f"[verify_os_r1r] 读列失败 {d}: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return None
 
 

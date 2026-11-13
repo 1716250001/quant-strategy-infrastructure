@@ -36,6 +36,7 @@ import calendar
 import glob
 import json
 import os
+import sys
 import time
 from datetime import date, datetime
 
@@ -70,7 +71,9 @@ def _pick_date_col(table_dir, preferred):
         return None
     try:
         names = set(pq.read_schema(files[-1]).names)
-    except Exception:
+    except Exception as exc:
+        print(f"[freshness] 读 schema 失败 {files[-1]}: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return None
     for c in _DATE_COL_CANDIDATES:
         if c in names:
@@ -108,12 +111,29 @@ def _to_date(v):
         return None
 
 
+# K 档（§451）：分片读取失败原实现静默 continue ⇒ 最新日期可能判老、误报停更。
+# 统一计数并允许末尾汇报（方向安全，但不该静默）。
+_UNREADABLE: list[str] = []
+
+
+def _note_unreadable(f, exc):
+    _UNREADABLE.append(str(f))
+    print(f"[freshness] 分片读取失败 {f}: {type(exc).__name__}: {exc}", file=sys.stderr)
+
+
+def _report_unreadable():
+    if _UNREADABLE:
+        print(f"[freshness] ⚠ {len(_UNREADABLE)} 个分片读取失败"
+              f"（最新日期可能判老，停更结论需复核）", file=sys.stderr)
+
+
 def _latest_in_files(files, dc):
     best = None
     for f in files:
         try:
             s = pd.read_parquet(f, columns=[dc])[dc].dropna()
-        except Exception:
+        except Exception as exc:
+            _note_unreadable(f, exc)
             continue
         if not len(s):
             continue
@@ -160,7 +180,9 @@ def _days_since_iso(s):
         return None
     try:
         return max(0, (datetime.now() - datetime.fromisoformat(str(s))).days)
-    except Exception:
+    except Exception as exc:
+        print(f"[freshness] ISO 时间戳解析失败 {s!r}: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
@@ -189,7 +211,9 @@ def _load_ckpt(path):
     try:
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
-    except Exception:
+    except Exception as exc:
+        print(f"[freshness] 读断点失败 {path}: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return {}
 
 
@@ -381,6 +405,7 @@ def run(only=None, as_json=False, strict=False):
                           "n_alert": n_alert}, ensure_ascii=False, indent=1))
     else:
         print(render(rows))
+    _report_unreadable()
     if strict and n_alert:
         return 1
     return 0

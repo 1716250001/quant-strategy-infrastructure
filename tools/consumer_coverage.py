@@ -39,6 +39,21 @@ HOLDINGS_FP = os.path.join(config.PROJECT_DIR, "赤潮", "rules", "current-holdi
 RECENT_DAYS = 550
 MIN_ROWS = 250
 
+# K 档（§451）：分片读取失败原实现静默 continue ⇒ 行数偏少、覆盖判定可能假绿。
+_UNREADABLE: list[str] = []
+
+
+def _note_unreadable(fn, exc):
+    _UNREADABLE.append(str(fn))
+    print(f"[consumer_coverage] 分片读取失败 {fn}: {type(exc).__name__}: {exc}",
+          file=sys.stderr)
+
+
+def _report_unreadable():
+    if _UNREADABLE:
+        print(f"[consumer_coverage] ⚠ {len(_UNREADABLE)} 个分片读取失败"
+              f"（行数偏少，WARN/PASS 结论需复核）", file=sys.stderr)
+
 
 def _rows(table, code):
     d = os.path.join(MARKET_DATA_DIR, table)
@@ -52,7 +67,8 @@ def _rows(table, code):
             tbl = pq.read_table(os.path.join(d, fn),
                                 filters=[("ts_code", "=", code)],
                                 columns=["trade_date"])
-        except Exception:
+        except Exception as exc:
+            _note_unreadable(fn, exc)
             continue
         if tbl.num_rows:
             s = tbl.to_pandas()["trade_date"].astype(str)
@@ -158,6 +174,7 @@ def main():
 
     print("  " + "-" * 72)
     print(f"  合计 {len(results)} 项: PASS {n_pass} | INFO {n_info} | WARN {n_warn}")
+    _report_unreadable()
     if n_warn:
         print("  ⚠ WARN 项需人工核对（真缺口 → backfill/单标的补；上市晚 → 忽略）")
         return 2

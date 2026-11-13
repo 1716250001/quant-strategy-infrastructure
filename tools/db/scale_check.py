@@ -40,6 +40,21 @@ ROOT = Path(config.DATA_ROOT)
 L2_THRESHOLD = 0.01          # 1%
 L3_THRESHOLD = 0.50          # 月环比 50%
 
+# K 档（§451）：分片读取失败原实现静默 continue ⇒ 统计量偏少、可能假绿。
+# 统一计数并允许末尾汇报；不改任何计算口径。
+_SHARD_FAILS: list[str] = []
+
+
+def _shard_fail(p, exc):
+    _SHARD_FAILS.append(str(p))
+    print(f"[scale_check] 分片读取失败 {p}: {type(exc).__name__}: {exc}", file=sys.stderr)
+
+
+def _report_shard_fails():
+    if _SHARD_FAILS:
+        print(f"[scale_check] ⚠ {len(_SHARD_FAILS)} 个分片读取失败"
+              f"（统计量偏少，结论可能假绿）", file=sys.stderr)
+
 
 def _paths(table: str) -> list[Path]:
     d = ROOT / table
@@ -58,7 +73,8 @@ def _stats_table(table: str, col: str) -> dict:
     for p in _paths(table):
         try:
             t = pq.read_table(p, columns=[col])
-        except Exception:
+        except Exception as exc:
+            _shard_fail(p, exc)
             continue
         arr = t.column(col).combine_chunks().drop_null()
         n += len(arr)
@@ -67,7 +83,8 @@ def _stats_table(table: str, col: str) -> dict:
         try:
             q = pc.quantile(arr, q=[0.001, 0.999], interpolation="linear")
             a, b = float(q[0].as_py()), float(q[1].as_py())
-        except Exception:
+        except Exception as exc:
+            _shard_fail(p, exc)
             continue
         used += 1
         lo = a if lo is None else min(lo, a)
@@ -91,6 +108,7 @@ def cmd_stats(tables: list[str] | None, out: str | None) -> int:
     if out:
         Path(out).write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"[OK] 写入 {out}")
+    _report_shard_fails()
     return 0
 
 
@@ -103,7 +121,8 @@ def _scan_l1(table: str, col: str, lo: float, hi: float, limit: int = 5) -> dict
             sch = pq.read_schema(p).names
             cols = [col, *_id_cols(sch)]
             df = pq.read_table(p, columns=cols).to_pandas()
-        except Exception:
+        except Exception as exc:
+            _shard_fail(p, exc)
             continue
         if col not in df:
             continue
@@ -132,7 +151,8 @@ def _latest(table: str, cols: list[str]) -> object | None:
             sch = pq.read_schema(p).names
             use = [c for c in cols if c in sch] + [c for c in _id_cols(sch) if c not in cols]
             df = pq.read_table(p, columns=use).to_pandas()
-        except Exception:
+        except Exception as exc:
+            _shard_fail(p, exc)
             continue
         if df.empty:
             continue
@@ -154,7 +174,8 @@ def _ttm_income():
             continue
         try:
             frames.append(pq.read_table(p, columns=["ts_code", "end_date", "n_income"]).to_pandas())
-        except Exception:
+        except Exception as exc:
+            _shard_fail(p, exc)
             continue
     if not frames:
         return None
@@ -240,7 +261,8 @@ def cmd_l3(tables: list[str] | None) -> list[dict]:
                     continue
                 try:
                     frames.append(pq.read_table(p, columns=["trade_date", col]).to_pandas())
-                except Exception:
+                except Exception as exc:
+                    _shard_fail(p, exc)
                     continue
             if not frames:
                 continue
@@ -312,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         Path(args.out).write_text(text + "\n", encoding="utf-8", newline="\n")
         print(f"[OK] 写入 {args.out}")
+    _report_shard_fails()
     return 0
 
 

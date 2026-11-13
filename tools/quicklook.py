@@ -89,7 +89,9 @@ def _latest(table):
             return None
         s = pd.read_parquet(os.path.join(dd, files[-1]), columns=[col])[col]
         return str(s.max()) if len(s) else None
-    except Exception:
+    except Exception as exc:
+        print(f"[quicklook] 读最新日期失败 {dd}: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return None
 
 

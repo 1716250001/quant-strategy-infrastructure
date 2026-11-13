@@ -381,7 +381,9 @@ def check_leaky_permissions(rep):
         """YYYYMMDD 日期差（自然日）；解析失败返回 None"""
         try:
             return (datetime.strptime(b, "%Y%m%d") - datetime.strptime(a, "%Y%m%d")).days
-        except Exception:
+        except Exception as exc:
+            print(f"[doctor] 日期解析失败 {a!r}/{b!r}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             return None
 
     idle, stale, no_table, undated, healthy, exempted = [], [], [], [], [], []
@@ -405,7 +407,9 @@ def check_leaky_permissions(rep):
         try:
             reader.clear_cache(api)
             latest = reader.latest_date(api)
-        except Exception:
+        except Exception as exc:
+            print(f"[doctor] 读最新日期失败 {api}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             latest = None
         gap = _days(latest, base) if (base and latest) else None
         if latest is None:

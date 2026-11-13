@@ -85,7 +85,9 @@ def _parquet_column_names(path):
     try:
         import pyarrow.parquet as pq
         return list(pq.ParquetFile(path).schema_arrow.names)
-    except Exception:
+    except Exception as exc:
+        print(f"[db.audit] 读 parquet 元数据失败 {path}: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return []
 
 
@@ -136,7 +138,9 @@ def _get_data_latest_date(name):
             if latest is None or v > latest:
                 latest = v
         return latest if seen else None
-    except Exception:
+    except Exception as exc:
+        print(f"[db.audit] 读库内最新日期失败: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return None
 
 
@@ -185,7 +189,11 @@ def _alt_spec_note(name):
     """取 alt 表 spec 的 note（惰性导入，避免 market-only 体检付 alt 导入成本）。"""
     try:
         from alt.spec import BY_NAME
-    except Exception:
+    except Exception as exc:
+        # SKIP（§451 基线误判）：返回 "" 是故意的（调用方只判 "已废弃" in note），
+        # 空串＝无废弃标记；此处只补可观测性，不改返回值。
+        print(f"[db.audit] 导入 alt.spec 失败（note 按空处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return ""
     sp = BY_NAME.get(name)
     return getattr(sp, "note", "") or ""
@@ -571,7 +579,9 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
                 if len(x):
                     frames.append(x)
                     tot += len(x)
-            except Exception:
+            except Exception as exc:
+                print(f"[db.audit] 读主键列失败，回退全列 {f}: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 # 主键列可能不存在, 回退读全列
                 try:
                     x = pd.read_parquet(os.path.join(d, f))
@@ -832,7 +842,9 @@ def _period_key(task, mode, freq):
             dd = _dt.date(int(s[:4]), int(s[4:6]), int(s[6:8]))
             y, w, _ = dd.isocalendar()
             return f"{y}W{w:02d}"
-        except Exception:
+        except Exception as exc:
+            print(f"[db.audit] 周期键折算失败（回退原串 {s}）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             return s
     return s
 
@@ -856,7 +868,9 @@ def _period_ongoing(task, freq, today):
             b = _dt.date(int(today[:4]), int(today[4:6]),
                          int(today[6:8])).isocalendar()[:2]
             return a == b
-        except Exception:
+        except Exception as exc:
+            print(f"[db.audit] 周周期判定失败 {task!r}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             return False
     return False
 
@@ -945,7 +959,9 @@ def audit_gaps(verbose=True):
                 tasks, kind = expected_task_count(name, conf)
                 if kind == "date" and tasks:
                     expect = [str(t) for t in tasks]
-            except Exception:
+            except Exception as exc:
+                print(f"[db.audit] expected_task_count 失败 {name}（退按日枚举）: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 expect = None
             if expect is None:      # 兜底：expected_task_count 不可用时退回按日枚举
                 start = conf.get("start", "20160101")
@@ -978,7 +994,9 @@ def audit_gaps(verbose=True):
                     expect = None
                 else:
                     expect = [str(t) for t in tasks]
-            except Exception:
+            except Exception as exc:
+                print(f"[db.audit] expected_task_count 失败 {name}（应有数未知）: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 expect = None
 
         if expect is None:
@@ -1149,7 +1167,9 @@ def _read_code_set(name):
     out = set()
     try:
         import pyarrow.parquet as pq
-    except Exception:
+    except Exception as exc:
+        print(f"[db.audit] 导入 pyarrow 失败: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return None
     for f in os.listdir(d):
         if not f.endswith(".parquet"):
@@ -1161,7 +1181,9 @@ def _read_code_set(name):
                 return None
             t = pq.read_table(os.path.join(d, f), columns=[col])
             out |= {str(x) for x in t.column(col).to_pylist() if x is not None}
-        except Exception:
+        except Exception as exc:
+            print(f"[db.audit] 读代码集失败 {f}（整表放弃）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             return None
     return out
 

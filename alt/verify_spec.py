@@ -132,7 +132,9 @@ def can_parse_dates(s: pd.Series, min_ratio: float = 0.8) -> tuple:
         if ratio < 1.0:
             note = f"日期非空 {d.notna().sum()}/{len(d)}（{ratio:.0%}）"
         return bool(ok), sample, ratio, note
-    except Exception:
+    except Exception as exc:
+        print(f"[alt.verify_spec] 日期解析异常: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return False, "", 0.0, "解析异常"
 
 
@@ -207,7 +209,9 @@ def check_value_sanity(df: pd.DataFrame, skip_cols=None, core_cols=None,
                 work = (df.assign(**{"__ord__": _ord})
                           .sort_values("__ord__")
                           .drop(columns=["__ord__"]))
-        except Exception:
+        except Exception as exc:
+            print(f"[alt.verify_spec] 排序失败（按原序继续）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             work = df
 
     for c in work.columns:
@@ -608,7 +612,9 @@ def run(tier=None, only=None, full_enum=False, json_out=True):
                 old = raw.get("tables", {}) if isinstance(raw, dict) else {}
                 # 清理历史嵌套脏数据
                 old = {k: v for k, v in old.items() if isinstance(v, dict) and "func" in v}
-            except Exception:
+            except Exception as exc:
+                print(f"[alt.verify_spec] 读历史报告失败（按空处理）: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 old = {}
         for r in reports:
             old[r["table"]] = r

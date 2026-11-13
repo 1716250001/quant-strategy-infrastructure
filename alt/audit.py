@@ -196,7 +196,9 @@ def _load_known_gaps():
     try:
         v = json.load(open(KNOWN_GAPS_FILE, encoding="utf-8"))
         return v.get("confirmed", {}) if isinstance(v, dict) else {}
-    except Exception:
+    except Exception as exc:
+        print(f"[alt.audit] 读 known_gaps 失败（按无登记处理，可能少报豁免）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return {}
 
 
@@ -865,7 +867,9 @@ def _load_iso_log():
     try:
         v = json.load(open(ISO_LOG_FILE, encoding="utf-8"))
         return v if isinstance(v, list) else []
-    except Exception:
+    except Exception as exc:
+        print(f"[alt.audit] 读隔离日志失败（按空处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return []
 
 
@@ -994,7 +998,9 @@ def check_isolation(verbose=True):
     if os.path.exists(SNAPSHOT_FILE):
         try:
             base = json.load(open(SNAPSHOT_FILE, encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            print(f"[alt.audit] 读主库快照失败（隔离比对退化为无基线）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             base = None
     res = {"now": now, "base": base}
     if verbose:
@@ -1130,7 +1136,9 @@ def gen_report(path=None, verbose=True):
                             rng = f"{d.min():%Y%m%d} ~ {d.max():%Y%m%d}"
                             fresh = (f"{age}天前" if age <= sp.max_age_days
                                      else f"⚠陈旧{age}天")
-                except Exception:
+                except Exception as exc:
+                    print(f"[alt.audit] 新鲜度读取失败 {sp.name}: "
+                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
                     fresh = "读取失败"
             sub = sp.subset if isinstance(sp.subset, str) else (
                 "+".join(map(str, sp.subset)) if sp.subset else "—")
