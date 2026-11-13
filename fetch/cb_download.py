@@ -15,6 +15,7 @@ fetch/cb_download.py — 可转债数据下载器
 
 import argparse
 import os
+import sys
 import time
 from datetime import datetime, timedelta
 
@@ -56,7 +57,7 @@ class CBCheckpoint(Checkpoint):
         return super().is_done(self._API_NAME, ts_code)
 
     def mark_done(self, ts_code):
-        super().mark_done(self._API_NAME, ts_code)
+        return super().mark_done(self._API_NAME, ts_code)
 
     def get_completed_count(self):
         return super().get_completed_count(self._API_NAME)
@@ -162,7 +163,9 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
     try:
         from common import reader
         stored = set(reader.codes_from_store("cb_daily"))
-    except Exception:
+    except Exception as exc:
+        print(f"[fetch.cb_download] 取库内代码集失败（按空处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         stored = set()
     for c in all_codes:
         if checkpoint.is_done(c):

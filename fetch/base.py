@@ -341,11 +341,18 @@ class Checkpoint:
         return ds[0] if ds else None
 
     def is_done(self, api_name, ts_code, library=None, key_space=None):
-        """判断某个代码在某个API下是否已完成
+        """判断某个代码/日期键是否已完成。
 
-        P3-4：新增 `library`/`key_space` 两个**可选**参数（不传按 registry 推断），
-        现有调用点零改动。
+        P3-4／§451 B-1′：`library`/`key_space` 不再空转——**显式传入时**按
+        registry 解析域，本断点文件不负责该域则返回 None（= 不知道，勿当作
+        False）。⛔ 不传时保持旧行为：registry 无法区分同名多域表（如 daily
+        的 date8/code），按域拒绝会让现有调用点全变 False ⇒ 全量重拉。
         """
+        if library is not None or key_space is not None:
+            dom = self._domain_of(api_name, library=library, key_space=key_space)
+            if dom is not None and dom.file and \
+                    os.path.basename(dom.file) != os.path.basename(self.path):
+                return None            # 不是本文件管的域
         with self._lock:
             done_set = self.data.get(api_name, {}).get("completed", [])
             return ts_code in done_set
@@ -433,7 +440,9 @@ def _prev_date(date_str):
     try:
         dt = datetime.strptime(date_str, "%Y%m%d")
         return (dt - timedelta(days=1)).strftime("%Y%m%d")
-    except Exception:
+    except Exception as exc:
+        print(f"[fetch.base] 日期减一天失败（原样返回 {date_str}）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return date_str
 
 
@@ -660,7 +669,9 @@ def ts_fetch(pro, api_name, limiter, ts_code, max_rows=5000, extra_params=None,
     try:
         from config import ACCEPT_TRUNCATED_APIS
         _accept_trunc = api_name in ACCEPT_TRUNCATED_APIS
-    except Exception:
+    except Exception as exc:
+        print(f"[fetch.base] 导入 ACCEPT_TRUNCATED_APIS 失败（不启用接受截断）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         _accept_trunc = False
     if _accept_trunc and _is_possibly_truncated(len(df), max_rows):
         if verbose:
