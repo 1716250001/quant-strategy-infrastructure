@@ -212,6 +212,17 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
     if dry_run:
         print("[dry-run] 未发请求、未读写任何数据（仅解析代码清单）")
         return 2 if over else 0
+    # R10-2b-1（§453/§454/§455）：todo 为空的日子原先在下方提前 return，
+    # 日备分支永远到不了 ⇒ 日备时跑时不跑。此处只补「无到期表」这个缺口；
+    # 有 todo 的情况仍走下方原分支（有失败就不备，防备半截库）。
+    if not dry_run and not todo:
+        try:
+            from tools.data_backup import mirror
+            _rc = mirror()
+            print(f"[schedule] 日备 rc={_rc}")
+        except Exception as exc:
+            print(f"[schedule] 日备异常：{type(exc).__name__}: {exc}")
+
     if not todo:
         print("[schedule] 无到期表，退出")
         return 2 if over else 0

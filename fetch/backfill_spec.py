@@ -197,6 +197,24 @@ def month_list(start, end=None):
     return [m for m, _ in month_last_trade_dates(start, end)]
 
 
+def _drop_unfinished_month(dates, cur=None):
+    """剔除尚未走完的当月（A′，§455 T-3）。
+
+    月线数据月末才发布，当月请求必返空 ⇒ 每月白跑 1 个请求。
+    cur: 截止月（YYYYMM）；None = 当前真实月。build_tasks 用真实月，
+         expected_task_count 用快照日所在月，保持同口径。
+    ⛔ 不改 `month_last_trade_dates` 本体 —— `month_list()` 也在调它。
+    """
+    cur = cur or datetime.now().strftime("%Y%m")
+    return [d for d in dates if str(d)[:6] < cur]
+
+
+def _drop_unfinished_month_pairs(pairs, cur=None):
+    """同上，用于 by_month 的 `[(月份, 日期), ...]` 结构。"""
+    cur = cur or datetime.now().strftime("%Y%m")
+    return [p for p in pairs if str(p[0])[:6] < cur]
+
+
 def week_last_trade_dates(start, end=None, calendar="SSE", anchor="last_trade"):
     """每周的取样日。返回 ['20160108', '20160115', ...]
 
@@ -342,7 +360,8 @@ def build_tasks(name, conf, dry_run=False):
                 anchor=conf.get("week_anchor", "last_trade"))), "date"
         if freq == "month":
             return truncate_to_today(
-                [d for _, d in month_last_trade_dates(start, calendar=cal)]), "date"
+                _drop_unfinished_month(
+                    [d for _, d in month_last_trade_dates(start, calendar=cal)])), "date"
         return truncate_to_today(open_dates_by_market(cal, start_date=start)), "date"
 
     if mode == "by_range":
@@ -363,7 +382,8 @@ def build_tasks(name, conf, dry_run=False):
         codes = resolve_codes(conf.get("codes"))
         if codes is None:
             return None, "need_meta"
-        pairs = month_last_trade_dates(start, calendar=conf.get("calendar", "SSE"))
+        pairs = _drop_unfinished_month_pairs(
+            month_last_trade_dates(start, calendar=conf.get("calendar", "SSE")))
         if not codes:
             # broker_recommend 型: 只需月份
             return [(None, m) for m, _ in pairs], "month"
@@ -447,7 +467,9 @@ def expected_task_count(name, conf, today=None):
                 anchor=conf.get("week_anchor", "last_trade")), today=today), "date"
         if freq == "month":
             return truncate_to_today(
-                [d for _, d in month_last_trade_dates(start, end=today, calendar=cal)],
+                [d for _, d in _drop_unfinished_month_pairs(
+                    month_last_trade_dates(start, end=today, calendar=cal),
+                    cur=str(today)[:6])],
                 today=today), "date"
         return truncate_to_today(
             open_dates_by_market(cal, start_date=start, end_date=today),
@@ -480,8 +502,10 @@ def expected_task_count(name, conf, today=None):
         codes = resolve_codes(conf.get("codes"))
         if codes is None:
             return None, "need_meta"
-        pairs = month_last_trade_dates(
-            start, end=today, calendar=conf.get("calendar", "SSE"))
+        pairs = _drop_unfinished_month_pairs(
+            month_last_trade_dates(
+                start, end=today, calendar=conf.get("calendar", "SSE")),
+            cur=str(today)[:6])
         if not codes:
             return [f"None|{m}" for m, _ in pairs], "month"
         return [f"{c}|{d}" for c in codes for _, d in pairs], "month"

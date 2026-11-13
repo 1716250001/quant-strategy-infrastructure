@@ -390,6 +390,9 @@ def render(rows):
 
 
 def run(only=None, as_json=False, strict=False):
+    # K′（§455 T-5）：`_UNREADABLE` 是模块级 list，跨调用累积；
+    # `--only` 分批 / 多次调用时必须先清空，否则上一次的失败会算进本次。
+    _UNREADABLE.clear()
     try:
         rows = build_rows(only)
     except Exception as exc:
@@ -400,12 +403,16 @@ def run(only=None, as_json=False, strict=False):
             print(f"[freshness] 生成失败（默认仍 exit 0）: {exc!r}")
         return 0
     n_alert = sum(1 for r in rows if r["verdict"] in ("红", "黄"))
+    n_unread = len(_UNREADABLE)          # K′：读不出来的分片让结论不可信
     if as_json:
         print(json.dumps({"ok": True, "rows": rows,
-                          "n_alert": n_alert}, ensure_ascii=False, indent=1))
+                          "n_alert": n_alert, "n_unreadable": n_unread},
+                         ensure_ascii=False, indent=1))
     else:
         print(render(rows))
     _report_unreadable()
     if strict and n_alert:
         return 1
+    if strict and n_unread:              # K′：strict 下读不全不得报绿
+        return 3
     return 0
