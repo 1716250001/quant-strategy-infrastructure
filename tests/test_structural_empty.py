@@ -20,7 +20,8 @@ class _FakeCP:
     def __init__(self):
         self.done = []
 
-    def mark_done(self, name, key):
+    def mark_done(self, name, key, library=None, key_space=None):
+        # P3-4（§455）：签名与 Checkpoint 同步；本替身只记录，语义断言不变。
         self.done.append((name, key))
 
 

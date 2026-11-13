@@ -182,6 +182,33 @@ def _empty_as_done(name):
 #    （§418 F-1b：无差别豁免会把「当日锚点未发布」当成结构性空，掩盖真实延迟）。
 _T1_PUBLISH_TABLES = frozenset({"margin"})
 
+# P3-4（§455 T-1）：以下 5 张表的断点域**不在** `.backfill_checkpoint.json`
+# （fund_nav → .backfill_checkpoint_codes.json，hk_daily → .alt_checkpoint.json，
+#  其余 3 张 DEAD 零载体）。接线后 is_done 会返 None / mark_done 会拒写，
+# 表现为「断点永远记不上、每次重拉全量且不报错」⇒ 永不解域参数（保持旧行为）。
+_NON_LOCAL_DOMAIN_TABLES = frozenset({
+    "fund_nav", "hk_daily", "bc_bestotcqt", "report_rc", "stk_mins",
+})
+
+
+def _ks_for(name, kind):
+    """把 build_tasks 的 kind 映射成 registry 的 key_space（P3-4）。
+
+    返回 (library, key_space)；不接线时返回 (None, None)。
+    ⛔ `once` 必须传 `__whole__`（registry 没有 "once" 这个 key_space）。
+    ⛔ 5 张非本地域表必须豁免，否则断点永远记不上（见常量注释）。
+    """
+    if name in _NON_LOCAL_DOMAIN_TABLES:
+        return None, None
+    ks = {
+        "date": "date8", "code": "code", "range": "range8",
+        "period": "period", "month": "month6", "param": "param",
+        "paged": "page", "once": "__whole__",
+    }.get(kind)
+    if ks is None:                     # kind == "unknown"/"need_meta"：不接线
+        return None, None
+    return "market_data", ks
+
 
 def _is_structural_empty(name, dt):
     """「结构性空」豁免（2026-11-11 §417 F-1；§418 F-1a/F-1b 收窄）：可记 done 的空返回。
@@ -206,19 +233,22 @@ def _is_structural_empty(name, dt):
     return False
 
 
-def _resolve_empty_date(name, dt, cp, struct_ct):
+def _resolve_empty_date(name, dt, cp, struct_ct, kind=None):
     """by_date 空返回的处置：已登记空日/结构性空 ⇒ 记 done；否则留待续跑。
 
     抽成模块级函数是为了让处置分支可被 pytest 直接钉死（§418 F-1c），
     原来它内联在 run_target 的 on_result 闭包里，无法观测计数器。
 
+    P3-4（§455）：`kind` 由调用方透传，用于解析断点域；None = 不接线（旧行为）。
+
     返回处置标签: "registered" / "structural" / "pending"
     """
+    lib, ks = _ks_for(name, kind)
     if _is_registered_source_empty_date(name, dt) or _empty_as_done(name):
-        cp.mark_done(name, dt)
+        cp.mark_done(name, dt, library=lib, key_space=ks)
         return "registered"
     if _is_structural_empty(name, dt):
-        cp.mark_done(name, dt)
+        cp.mark_done(name, dt, library=lib, key_space=ks)
         struct_ct["n"] += 1
         return "structural"
     return "pending"
@@ -315,6 +345,8 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
     if ignore_checkpoint:
         return list(tasks), 0
 
+    lib, ks = _ks_for(name, kind)
+
     # force_listed 语义：完全忽略 checkpoint/present，清单内全计入 pending
     if force_listed:
         return list(tasks), 0
@@ -325,7 +357,8 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
         return list(tasks), 0
 
     if kind in ("month", "range"):
-        pending = [t for t in tasks if not cp.is_done(name, f"{t[0]}|{t[1]}")]
+        pending = [t for t in tasks
+                   if not cp.is_done(name, f"{t[0]}|{t[1]}", library=lib, key_space=ks)]
     elif kind == "code":
         pending = []
         if table_storage_layout(name) == "by_year":
@@ -337,25 +370,26 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
                       f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 present = set()
             for t in tasks:
-                if cp.is_done(name, str(t)):
+                if cp.is_done(name, str(t), library=lib, key_space=ks):
                     continue
                 if str(t) in present:
                     if not dry_run:
-                        cp.mark_done(name, str(t))
+                        cp.mark_done(name, str(t), library=lib, key_space=ks)
                     continue
                 pending.append(t)
         else:
             target_dir = os.path.join(BACKFILL_DIR_ROOT, name)
             for t in tasks:
-                if cp.is_done(name, str(t)):
+                if cp.is_done(name, str(t), library=lib, key_space=ks):
                     continue
                 if os.path.exists(os.path.join(target_dir, f"{t}.parquet")):
                     if not dry_run:
-                        cp.mark_done(name, str(t))
+                        cp.mark_done(name, str(t), library=lib, key_space=ks)
                     continue
                 pending.append(t)
     else:
-        pending = [t for t in tasks if not cp.is_done(name, str(t))]
+        pending = [t for t in tasks
+                   if not cp.is_done(name, str(t), library=lib, key_space=ks)]
     return pending, len(tasks) - len(pending)
 
 
@@ -407,6 +441,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
 
     # 过滤已完成: 断点已标记 或 (by_code) 目标文件已存在 → 跳过
     # ⭐ CLI-1：--force 的 ignore_checkpoint 也走 _compute_pending 的同一判断
+    lib, ks = _ks_for(name, kind)
     pending, skipped = _compute_pending(
         name, conf, tasks, kind, cp, dry_run=dry_run,
         force_listed=force_listed, ignore_checkpoint=ignore_checkpoint)
@@ -438,7 +473,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             and by_code_needs_batch(name, target_dir)):
         def _on_batch_flushed(keys):
             for _k in keys:
-                cp.mark_done(name, str(_k))
+                cp.mark_done(name, str(_k), library=lib, key_space=ks)
             cp.mark_fetched(name)   # CC-FIX-7：每次 flush 记一次表级拉取时间
 
         _batch = ByCodeBatchWriter(
@@ -486,7 +521,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                     except Exception as e:
                         print(f"  [ERROR] {name} {key} 落盘失败，不记断点: {str(e)[:70]}")
                     else:
-                        cp.mark_done(name, str(key))
+                        cp.mark_done(name, str(key), library=lib, key_space=ks)
                         cp.mark_fetched(name)   # CC-FIX-7：单码落盘成功（rows 未知）
             else:
                 # 无分区列 → 按标的单文件（仅 stock_company 这类静态元数据）
@@ -495,7 +530,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 except Exception as e:
                     print(f"  [ERROR] {name} {key} 写文件失败，不记断点: {str(e)[:70]}")
                 else:
-                    cp.mark_done(name, str(key))
+                    cp.mark_done(name, str(key), library=lib, key_space=ks)
                     cp.mark_fetched(name, rows=len(df))   # F3/R10 + CC-FIX-7 行数
         elif ok:
             # 调用成功但无数据（EE-FUND-4 G3 三级语义）:
@@ -510,7 +545,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 pass
             elif _table_source_empty_registry(name) is not None:
                 if _is_registered_source_empty(name, key):
-                    cp.mark_done(name, str(key))
+                    cp.mark_done(name, str(key), library=lib, key_space=ks)
                 # 未注册空码：不记断点
             else:
                 # ⛔ 2026-11-11 P3-8 A单：原为无条件 mark_done（"空即 done"）——
@@ -518,7 +553,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 #    现仅对显式标注 `empty_as_done` 的乙/丙档表保持原语义；
                 #    其余无注册表 ⇒ fail-closed：空码不记断点，留待续跑。
                 if _empty_as_done(name):
-                    cp.mark_done(name, str(key))
+                    cp.mark_done(name, str(key), library=lib, key_space=ks)
         done_ct["n"] += 1
         if done_ct["n"] % 200 == 0:
             cp.save()
@@ -552,7 +587,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         # 调用成功（含"确实返空"）才记断点
         # 该标记只作历史标记，**不用于跳过**（once 跳过由调度层 is_due 判定，
         # CC-FIX-16 §0.2；切勿据此提前 return，否则全量快照表永不刷新）
-        cp.mark_done(name, "once")
+        cp.mark_done(name, "once", library=lib, key_space=ks)
         cp.mark_fetched(name, rows=n)          # F3/R10 + CC-FIX-7 行数
         cp.save()
         return {"name": name, "est": est, "done": n}
@@ -595,7 +630,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 _save_df(target_dir, conf["api"], df, layout="by_year",
                          subset=conf.get("subset"), date_col=dc)
             if df is not None:      # 仅调用成功才记断点
-                cp.mark_done(name, per)
+                cp.mark_done(name, per, library=lib, key_space=ks)
                 n_ok += 1
             print(f"    {name} {i}/{len(pending)} | 报告期={per} | {len(df) if df is not None else 0}行")
         if n_ok:
@@ -648,7 +683,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 _save_df(target_dir, conf["api"], merged, layout="single",
                          subset=conf.get("subset"))
             if first_ok:                # 调用成功(含"确实无数据")→ 记断点
-                cp.mark_done(name, val)
+                cp.mark_done(name, val, library=lib, key_space=ks)
                 n_ok += 1
             flag = "  [警告] 页数触顶, 可能不完整" if truncated else ""
             print(f"    {name} {i}/{len(pending)} | {pn}={val} | "
@@ -708,7 +743,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 cp.save()
                 return {"name": name, "est": est, "done": 0}
         for k in done_pages:               # 落盘成功后统一记断点
-            cp.mark_done(name, k)
+            cp.mark_done(name, k, library=lib, key_space=ks)
         if n_ok:
             cp.mark_fetched(name)          # CC-FIX-7：至少一页调用成功即记拉取时间
         cp.save()
@@ -757,7 +792,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 #   → 会积累大量一次性条目（每年约 365 条/表）。
                 #   日更本身是幂等的（每天重算缺口、落盘按主键去重），不依赖断点。
                 if date_override is None:
-                    cp.mark_done(name, f"{s}|{e}")
+                    cp.mark_done(name, f"{s}|{e}", library=lib, key_space=ks)
             flag = "  [提示] 命中常见上限特征值, 疑似截断(已落盘)" if soft else ""
             print(f"    {name} {i}/{len(pending)} | {s}~{e} | {nrow}行{flag}")
         # ---- DB-R3 汇总（末尾一次性打，避免刷屏时被忽略）----
@@ -808,7 +843,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
 
         def _on_date_flushed(keys):
             for _k in keys:
-                cp.mark_done(name, _k)
+                cp.mark_done(name, _k, library=lib, key_space=ks)
             # CC-FIX-7：每次 flush 记一次拉取时间 + 本次落盘行数增量
             _n = writer.flushed_rows - _flushed_seen[0]
             _flushed_seen[0] = writer.flushed_rows
@@ -889,7 +924,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 #    "休市日"理由不成立；空返回更可能是限频/重试耗尽 ⇒ 仅**已登记空日**
                 #    （或显式 empty_as_done 的乙/丙档表）才记 done，其余留待续跑。
                 # ⭐ §417 F-1 / §418 F-1b：未来日、已实证 T+1 发布表的当日空算结构性空。
-                _resolve_empty_date(name, dt, cp, struct_ct)
+                _resolve_empty_date(name, dt, cp, struct_ct, kind=kind)
                 cp.mark_fetched(name, rows=0)   # CC-FIX-7：成功但返空也要记
             else:
                 # EE-FUND-9A: 过滤 market=O 场外码（仅 fund_daily 生效）
@@ -903,7 +938,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                         pass
                     df = df[_mask]
                 if df.empty:
-                    _resolve_empty_date(name, dt, cp, struct_ct)
+                    _resolve_empty_date(name, dt, cp, struct_ct, kind=kind)
                     cp.mark_fetched(name, rows=0)   # CC-FIX-7：过滤后为空同样记
                 else:
                     # R6-Final：白名单表按业务键去重（adj 保留 end_date 最大行）
@@ -967,7 +1002,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             _save_df(target_dir, conf["api"], df, layout="single",
                      subset=conf.get("subset"))
             if ok:                  # 仅调用成功才记断点
-                cp.mark_done(name, f"{pair[0]}|{pair[1]}")
+                cp.mark_done(name, f"{pair[0]}|{pair[1]}", library=lib, key_space=ks)
                 n_ok += 1
             done_ct["n"] += 1
             if done_ct["n"] % 50 == 0:

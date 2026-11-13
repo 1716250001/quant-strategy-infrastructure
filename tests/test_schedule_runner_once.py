@@ -16,10 +16,11 @@ class _Cp:
     def __init__(self, *a, **kw):
         self.data, self.done = {}, set()
 
-    def is_done(self, name, key):
+    def is_done(self, name, key, library=None, key_space=None):
+        # P3-4（§455）：签名与 Checkpoint 同步；断言不变。
         return (name, str(key)) in self.done
 
-    def mark_done(self, name, key):
+    def mark_done(self, name, key, library=None, key_space=None):
         self.done.add((name, str(key)))
 
     def mark_fetched(self, name, rows=None):

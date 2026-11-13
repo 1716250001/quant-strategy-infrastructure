@@ -86,10 +86,11 @@ class _FakeCp:
     def __init__(self, *a, **kw):
         self.data = {}
 
-    def is_done(self, name, key):
+    def is_done(self, name, key, library=None, key_space=None):
+        # P3-4（§455）：签名与 Checkpoint 同步；断言不变。
         return False            # CC-FIX-16：估算器不再吞异常，替身须补此接口
 
-    def mark_done(self, name, key):
+    def mark_done(self, name, key, library=None, key_space=None):
         pass
 
     def mark_fetched(self, name):
