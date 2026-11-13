@@ -217,9 +217,9 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
     # 有 todo 的情况仍走下方原分支（有失败就不备，防备半截库）。
     if not dry_run and not todo:
         try:
-            from tools.data_backup import mirror
+            from tools.data_backup import mirror, rc_desc
             _rc = mirror()
-            print(f"[schedule] 日备 rc={_rc}")
+            print(f"[schedule] 日备 rc={_rc}（{rc_desc(_rc)}）")
         except Exception as exc:
             print(f"[schedule] 日备异常：{type(exc).__name__}: {exc}")
 
@@ -250,9 +250,9 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
     # 重复调用安全，故此处不需要额外幂等判断。
     if not dry_run and not failed:
         try:
-            from tools.data_backup import mirror
+            from tools.data_backup import mirror, rc_desc
             _rc = mirror()
-            print(f"[schedule] 日备 rc={_rc}")
+            print(f"[schedule] 日备 rc={_rc}（{rc_desc(_rc)}）")
         except Exception as exc:
             # 备份失败不改变取数退出码（否则计划任务 LastTaskResult 会一直非 0）
             print(f"[schedule] 日备异常：{type(exc).__name__}: {exc}")

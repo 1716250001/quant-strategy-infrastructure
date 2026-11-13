@@ -50,6 +50,28 @@ DEFAULT_OUT = Path(config.PROJECT_DIR) / "备份" / "data-backup"
 MIRROR_ROOT = DEFAULT_ROOT / "_backup"      # 方案 A：与源同盘（仅防误删/写坏，不防盘坏）
 KEEP_DAILY, KEEP_WEEKLY = 7, 4
 
+# W-1（§458）：日备返回码三态化。此前 4 条路径全 return 1，消费方无法区分
+# 「今天已经备过」（正常）与「备份真的坏了」（失败）。
+RC_OK = 0          # 本次真生成了快照
+RC_EXISTS = 1      # 今日快照已存在（幂等跳过，非错误）
+RC_FAIL = 2        # 真失败（数据根不存在 / sha256 mismatch）
+RC_LOCKED = 3      # 已有备份在跑（并发跳过，非错误）
+
+
+def rc_desc(rc):
+    """返回码的语义说明（供 schedule 日志与命令行打印）。"""
+    return {
+        RC_OK: "成功",
+        RC_EXISTS: "今日已存在（幂等，非错误）",
+        RC_FAIL: "真失败",
+        RC_LOCKED: "已有备份在跑（并发跳过，非错误）",
+    }.get(rc, "未知")
+
+
+def cli_rc(rc):
+    """命令行归一口径：1（已存在）/3（锁）都不是错误 ⇒ 0；2 保持非零。"""
+    return 0 if rc in (RC_EXISTS, RC_LOCKED) else rc
+
 EXCLUDE_DIRS = {"__pycache__", ".git", "_backup"}   # _backup 自身不纳入备份（防递归）
 EXCLUDE_SUFFIX = {".tmp", ".pyc", ".lock"}
 
@@ -323,14 +345,14 @@ def mirror(src: Path = DEFAULT_ROOT, weekly: bool = True) -> int:
     """日备（方案 A）：`D:\\全量数据\\_backup\\daily\\YYYYMMDD`，7 版轮转＋周备 4 版。"""
     if not src.is_dir():
         print(f"[FAIL] 数据根不存在: {src}")
-        return 1
+        return RC_FAIL
     MIRROR_ROOT.mkdir(parents=True, exist_ok=True)
     lock = MIRROR_ROOT / ".backup.lock"
     try:
         fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
         print(f"[FAIL] 已有备份在跑（锁 {lock}）；确认无进程后可手动删除该文件再试")
-        return 1
+        return RC_LOCKED
     os.write(fd, str(os.getpid()).encode())
     os.close(fd)
     try:
@@ -339,7 +361,7 @@ def mirror(src: Path = DEFAULT_ROOT, weekly: bool = True) -> int:
         dst = daily_root / stamp
         if dst.exists():
             print(f"[FAIL] 今日快照已存在：{dst}（日备每日一次，不覆盖）")
-            return 1
+            return RC_EXISTS
         prevs = sorted([d for d in daily_root.iterdir()
                         if d.is_dir() and not d.name.startswith(".")]) if daily_root.is_dir() else []
         stage = daily_root / f".tmp-{stamp}"
@@ -353,7 +375,7 @@ def mirror(src: Path = DEFAULT_ROOT, weekly: bool = True) -> int:
             print(f"[FAIL] sha256 mismatch {len(bad)} 条（不静默，保留 {stage} 供排查）")
             for x in bad[:20]:
                 print(f"  [DIFF] {x}")
-            return 1
+            return RC_FAIL
         stage.rename(dst)
         with open(dst / "sha256.jsonl", "w", encoding="utf-8", newline="\n") as f:
             for e in entries:
@@ -375,7 +397,7 @@ def mirror(src: Path = DEFAULT_ROOT, weekly: bool = True) -> int:
         if removed:
             print(f"[i] 轮转滚出: {', '.join(removed)}")
         print("[OK] 备份成功，mismatch=0")
-        return 0
+        return RC_OK
     finally:
         try:
             os.remove(lock)
@@ -449,7 +471,7 @@ def main(argv: list[str] | None = None) -> int:
         root = Path(args.root) if args.root else DEFAULT_ROOT
         return make_manifest(root, Path(args.out), args.reason)
     if args.mirror:
-        return mirror(Path(args.root) if args.root else DEFAULT_ROOT)
+        return cli_rc(mirror(Path(args.root) if args.root else DEFAULT_ROOT))
     if args.package:
         return package()
     if args.verify:

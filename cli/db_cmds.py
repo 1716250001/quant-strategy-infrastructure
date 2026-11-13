@@ -35,8 +35,8 @@ def cmd_db_backup(args):
         print(f"    上一版: {st['latest'] or '无（首次全量）'}")
         print("    真跑: 加 --execute")
         return 0
-    from tools.data_backup import mirror
-    return mirror()
+    from tools.data_backup import cli_rc, mirror
+    return cli_rc(mirror())
 
 
 def cmd_db_clean(args):
