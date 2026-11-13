@@ -85,7 +85,9 @@ def ann_vol(d, skip_days=90, min_rows=100):
         r = s.set_index("dt")[col].pct_change().dropna()
         r = r[r.abs() < 0.25]
         return float(r.std() * np.sqrt(245)) if len(r) >= min_rows else np.nan
-    except Exception:
+    except Exception as exc:
+        print(f"[fund_pool_builder] 波动率计算失败（按 nan）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return np.nan
 
 
@@ -107,7 +109,9 @@ def detect_adj_break(d, cut="20260602"):
             return "unit" if r_u < r_n else "accum"
         a, b = who(bef), who(aft)
         return (a != b) and ("?" not in (a, b))
-    except Exception:
+    except Exception as exc:
+        print(f"[fund_pool_builder] 口径断层检测失败（按无断层）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return False
 
 
@@ -169,7 +173,9 @@ def build(data_dir=DEFAULT_DATA, out=None):
             dn = d.dropna(subset=["net_asset"])
             if not dn.empty:
                 sz[c] = float(dn.sort_values("nav_date").iloc[-1]["net_asset"]) / 1e8
-        except Exception:
+        except Exception as exc:
+            print(f"[fund_pool_builder] 规模提取失败 {c}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             continue
     s = s.copy()
     s["size_yi"] = s["ts_code"].map(sz)

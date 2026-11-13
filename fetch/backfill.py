@@ -121,7 +121,9 @@ def _load_known_gaps():
         try:
             with open(_p, encoding="utf-8") as _f:
                 _KNOWN_GAPS_CACHE = _json.load(_f)
-        except Exception:
+        except Exception as exc:
+            print(f"[fetch.backfill] 读 known_gaps 失败（按空处理）{_p}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             _KNOWN_GAPS_CACHE = {}
     return _KNOWN_GAPS_CACHE
 
@@ -330,7 +332,9 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
             from common import reader
             try:
                 present = set(reader.codes_from_store(name, root=BACKFILL_DIR_ROOT))
-            except Exception:
+            except Exception as exc:
+                print(f"[fetch.backfill] 取库内代码集失败 {name}（按空处理）: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 present = set()
             for t in tasks:
                 if cp.is_done(name, str(t)):
@@ -870,7 +874,9 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                     _fb_df = pd.read_parquet(_p_fb, columns=['ts_code', 'market'])
                     _fund_daily_o_codes = set(_fb_df[_fb_df['market'] == 'O']['ts_code'])
                     print(f"  [护栏] fund_daily market=O 过滤启用，共 {len(_fund_daily_o_codes)} 只场外码")
-                except Exception:
+                except Exception as exc:
+                    print(f"[fetch.backfill] 读 fund_basic 失败（关护栏）: "
+                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
                     _fund_daily_o_codes = None
 
         struct_ct = {"n": 0}
@@ -1054,7 +1060,9 @@ def list_targets():
     if os.path.exists(cp_path):
         try:
             cp = _json.load(open(cp_path, encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            print(f"[fetch.backfill] 读断点失败（按空处理）{cp_path}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             cp = {}
 
     _banner("backfill 补数目标清单")
@@ -1071,7 +1079,9 @@ def list_targets():
         mode = conf.get("mode", "?")
         try:
             layout = table_storage_layout(name)
-        except Exception:
+        except Exception as exc:
+            print(f"[fetch.backfill] 布局探测失败 {name}（显示 ?）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             layout = "?"
         done = len(cp.get(name, {}).get("completed", []))
         # 每日更新归属（语义要区分"不适用"与"漏登"）

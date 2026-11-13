@@ -22,6 +22,7 @@ tools/manager_profile.py — 基金经理风格画像（唯一保留的分析能
 import argparse
 import json
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -97,7 +98,9 @@ def load_nav(code):
     try:
         fb = pd.read_parquet(os.path.join(DATA, "metadata", "fund_basic.parquet"))
         m = fb[fb["ts_code"].astype(str).str.startswith(code)]["ts_code"]
-    except Exception:
+    except Exception as exc:
+        print(f"[manager_profile] 读 fund_basic 失败（按无匹配处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         m = []
     if len(m) == 0:
         return None, code

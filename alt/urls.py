@@ -182,7 +182,9 @@ def _main(argv=None):
         try:
             src = inspect.getsource(fn)
             whole = open(inspect.getsourcefile(fn), encoding="utf-8").read()
-        except Exception:
+        except Exception as exc:
+            print(f"[alt.urls] 读取函数源码失败 {sp.name}（跳过 URL 校验）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             continue
         urls = set(url_pat.findall(src)) or set(url_pat.findall(whole))
         hosts = sorted({re.sub(r"^https?://", "", u).split("/")[0] for u in urls})

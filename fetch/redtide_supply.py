@@ -18,6 +18,7 @@ CLI入口: python main.py redtide-supply [--dry-run]
 """
 
 import os
+import sys
 from datetime import datetime
 
 import pandas as pd
@@ -178,7 +179,9 @@ def run_market_state(dry_run=False, start_year=None, years=None):
                 else:
                     existing = pd.DataFrame()
                     done_dates = set()
-            except Exception:
+            except Exception as exc:
+                print(f"[fetch.redtide_supply] 读已有数据失败 {year}（按空处理）: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 existing = pd.DataFrame()
                 done_dates = set()
         else:

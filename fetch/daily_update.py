@@ -52,6 +52,7 @@ main.py gap-update 现在直接调用本模块（命令名不变，定时任务�
 """
 import argparse
 import os
+import sys
 import time
 from datetime import datetime
 
@@ -492,7 +493,9 @@ def _report_permission_denied(dry_run=False):
     """
     try:
         from fetch.base import permission_denied_apis, permission_denied_count
-    except Exception:
+    except Exception as exc:
+        print(f"[fetch.daily_update] 导入权限拒绝记录失败（跳过告警）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return
 
     n = permission_denied_count()
@@ -502,7 +505,9 @@ def _report_permission_denied(dry_run=False):
     try:
         import config
         leaky_permissions = config.LEAKY_PERMISSIONS
-    except Exception:
+    except Exception as exc:
+        print(f"[fetch.daily_update] 读 LEAKY_PERMISSIONS 失败（按空处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         leaky_permissions = {}
 
     apis = permission_denied_apis()

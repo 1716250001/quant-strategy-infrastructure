@@ -116,7 +116,9 @@ class RotateState:
             try:
                 with open(path, encoding="utf-8") as f:
                     self.data = json.load(f)
-            except Exception:
+            except Exception as exc:
+                print(f"[alt.list_backfill] 断点文件加载失败（按空处理）{path}: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 self.data = {}
 
     def last_done(self, table, symbol):
@@ -211,7 +213,9 @@ class RotateState:
             dates.append(d)
             try:
                 age = (today - datetime.strptime(d, "%Y-%m-%d")).days
-            except Exception:
+            except Exception as exc:
+                print(f"[alt.list_backfill] 水位日期解析失败 {d!r}（按极老处理）: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 age = 10 ** 6
             if age <= rd:
                 fresh += 1
@@ -300,7 +304,9 @@ def parse_until(spec_str, now=None):
         hh, mm = int(hh), int(mm)
         if not (0 <= hh <= 23 and 0 <= mm <= 59):
             raise ValueError
-    except Exception:
+    except Exception as exc:
+        print(f"[alt.list_backfill] --until 解析失败 {spec_str!r}: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return None, f"--until 格式非法: {spec_str!r}（应为 HH:MM）"
     now = now or datetime.now()
     target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
@@ -670,7 +676,9 @@ def _official_partition_state(sp):
         try:
             rows = len(pd.read_parquet(p, columns=[sp.date_col]))
             state[f] = {"rows": rows, "sha256": _sha256_file(p)}
-        except Exception:
+        except Exception as exc:
+            print(f"[alt.list_backfill] 影子分片读取失败 {p}（保守按非空处理）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             state[f] = {"rows": -1, "sha256": ""}   # 读失败 ⇒ 保守按"非空"处理
     return state
 
@@ -1016,7 +1024,9 @@ def _ckpt_done_counts():
     """
     try:
         ck = AltCheckpoint()
-    except Exception:
+    except Exception as exc:
+        print(f"[alt.list_backfill] AltCheckpoint 初始化失败（按空处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return {}
     out = {}
     for t, rec in (ck.data or {}).items():

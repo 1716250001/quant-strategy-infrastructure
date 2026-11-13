@@ -41,6 +41,7 @@ common/reader.py — 全量库统一读取层（布局无关）
         ...
 """
 import os
+import sys
 
 import pandas as pd
 
@@ -469,11 +470,15 @@ def _read_one(path, columns=None, flt=None):
         return pd.read_parquet(path, columns=columns, filters=flt)
     except TypeError:
         return _read_one_manual(path, columns, flt)
-    except Exception:
+    except Exception as exc:
+        print(f"[common.reader] 谓词下推读取失败 {path}，改内存筛选: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         if flt:
             try:
                 return _read_one_manual(path, columns, flt)
-            except Exception:
+            except Exception as exc2:
+                print(f"[common.reader] 内存筛选也失败 {path}（返回空表）: "
+                      f"{type(exc2).__name__}: {exc2}", file=sys.stderr)
                 return pd.DataFrame()
         return pd.DataFrame()
 
@@ -655,7 +660,9 @@ def latest_date(table, date_col="trade_date", root=None):
                 s = pd.read_parquet(os.path.join(d, f), columns=[date_col])[date_col]
                 if len(s):
                     return str(s.max())
-            except Exception:
+            except Exception as exc:
+                print(f"[common.reader] 读日期列失败 {f}: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 continue
         return None
 
@@ -669,7 +676,9 @@ def latest_date(table, date_col="trade_date", root=None):
                     s = pd.read_parquet(p, columns=[date_col])[date_col]
                     if len(s):
                         return str(s.max())
-                except Exception:
+                except Exception as exc:
+                    print(f"[common.reader] 读样本代码日期失败 {p}: "
+                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
                     continue
     except Exception:
         pass
@@ -683,6 +692,8 @@ def latest_date(table, date_col="trade_date", root=None):
                 mx = str(s.max())
                 if best is None or mx > best:
                     best = mx
-        except Exception:
+        except Exception as exc:
+            print(f"[common.reader] 兜底扫描读日期失败 {f}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             continue
     return best

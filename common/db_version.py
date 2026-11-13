@@ -47,7 +47,9 @@ def _read(path):
         with open(path, encoding="utf-8") as f:
             d = json.load(f)
         return d if isinstance(d, dict) else {}
-    except Exception:
+    except Exception as exc:
+        print(f"[common.db_version] 读版本文件失败（按空处理）{path}: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return {}
 
 
@@ -59,7 +61,9 @@ def _checkpoint_rev(root=None):
             cp = json.load(f)
         return sum(len(v.get("completed", []))
                    for v in cp.values() if isinstance(v, dict))
-    except Exception:
+    except Exception as exc:
+        print(f"[common.db_version] 读断点计数失败（按 0 处理）{p}: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 0
 
 

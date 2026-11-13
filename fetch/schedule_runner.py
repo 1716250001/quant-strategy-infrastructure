@@ -89,7 +89,9 @@ def is_due(freq, last_fetch, today=None, name=None):
         return True
     try:
         lf = datetime.fromisoformat(str(last_fetch)).date()
-    except Exception:
+    except Exception as exc:
+        print(f"[fetch.schedule_runner] 时间戳不可解析 {last_fetch!r}"
+              f"（按到期处理）: {type(exc).__name__}: {exc}", file=sys.stderr)
         # 时间戳不可解析按到期（宁可多拉一次）
         return True
     if name in RELEASE_DAY:

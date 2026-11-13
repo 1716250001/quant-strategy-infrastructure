@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """cli.alt_cmds — alt 库命令（W7b 自 main.py 原样搬出）。"""
 
-
+import sys
 
 from cli._shared import _banner
 
@@ -16,7 +16,9 @@ def _alt_tier_choices():
     try:
         from alt.spec import TIERS
         return list(TIERS)
-    except Exception:
+    except Exception as exc:
+        print(f"[cli.alt_cmds] 导入 alt.spec.TIERS 失败（不限制取值）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 def cmd_alt_update(args):

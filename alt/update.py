@@ -62,7 +62,9 @@ def load_state():
     if os.path.exists(STATE_FILE):
         try:
             return json.load(open(STATE_FILE, encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            print(f"[alt.update] 状态文件读取失败（按空处理）{STATE_FILE}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             return {}
     return {}
 
@@ -82,7 +84,9 @@ def days_since(iso_str):
     try:
         t = datetime.fromisoformat(iso_str)
         return (datetime.now() - t).total_seconds() / 86400
-    except Exception:
+    except Exception as exc:
+        print(f"[alt.update] ISO 时间解析失败 {iso_str!r}（按极老处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 10 ** 6
 
 

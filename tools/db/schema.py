@@ -21,6 +21,7 @@ tools/db_schema.py — 数据库结构扫描器
 import argparse
 import json
 import os
+import sys
 from datetime import datetime
 
 import pandas as pd
@@ -187,7 +188,9 @@ def scan(root=None, verbose=True):
             if info["is_mixed"]:
                 layout = (f"mixed(年度{info['year_files']}+其他"
                           f"{info['files'] - info['year_files']})")
-        except Exception:
+        except Exception as exc:
+            print(f"[db.schema] 布局探测失败（标 unknown）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             layout, npart = "unknown", len(files)
 
         # 日期列与范围

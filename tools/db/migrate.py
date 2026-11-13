@@ -30,6 +30,7 @@ by_code 布局下，每日增量要给数千个文件各做一次 read→concat�
 import argparse
 import os
 import shutil
+import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -213,7 +214,9 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
     for f in files:
         try:
             rows_before += pq.ParquetFile(os.path.join(d, f)).metadata.num_rows
-        except Exception:
+        except Exception as exc:
+            print(f"[db.migrate] 文件不可读，计入坏文件 {f}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             bad_files.append(f)
     if verbose:
         print(f"  源总行数: {rows_before:,}" + (f" | ⚠ 无法读元数据 {len(bad_files)} 个" if bad_files else ""))

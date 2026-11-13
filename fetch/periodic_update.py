@@ -52,6 +52,7 @@ dividend 靠手动续命。危害形态 = 表内「无行」与「真无事件�
 import argparse
 import json
 import os
+import sys
 import time
 from datetime import datetime, timedelta
 
@@ -113,7 +114,9 @@ def _days(a, b):
     try:
         return (datetime.strptime(str(b), "%Y%m%d")
                 - datetime.strptime(str(a), "%Y%m%d")).days
-    except Exception:
+    except Exception as exc:
+        print(f"[fetch.periodic_update] 日期差解析失败 {a!r}/{b!r}: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
@@ -145,7 +148,9 @@ def data_recency(table, col, max_files=3):
     for f in files:
         try:
             s = pd.read_parquet(os.path.join(d, f), columns=[col])[col]
-        except Exception:
+        except Exception as exc:
+            print(f"[fetch.periodic_update] 读分片失败 {f}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             continue
         if not len(s):
             continue
@@ -317,7 +322,9 @@ def _completed_codes(name, filename=".backfill_checkpoint.json"):
             with open(p, encoding="utf-8") as f:
                 data = json.load(f)
             _CKPT_CACHE[filename] = data if isinstance(data, dict) else {}
-        except Exception:
+        except Exception as exc:
+            print(f"[fetch.periodic_update] 读断点失败（按空处理）{p}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             _CKPT_CACHE[filename] = {}
     return set((_CKPT_CACHE[filename].get(name) or {}).get("completed", []))
 

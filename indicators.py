@@ -17,6 +17,8 @@ indicators.py — 三层金字塔轮动策略 · 技术指标库
   - 布林带
 """
 
+import sys
+
 import numpy as np
 
 
@@ -54,7 +56,9 @@ def calc_vr(df, vol_col="vol", short=5, long=20):
         if vol_long == 0:
             return 1.0
         return vol_short / vol_long
-    except Exception:
+    except Exception as exc:
+        print(f"[indicators] 量比计算失败（按 nan）: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return np.nan
 
 

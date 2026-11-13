@@ -60,7 +60,9 @@ class AltCheckpoint:
         if os.path.exists(path):
             try:
                 self.data = json.load(open(path, encoding="utf-8"))
-            except Exception:
+            except Exception as exc:
+                print(f"[alt.backfill] 断点文件加载失败（按空处理）{path}: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 self.data = {}
 
     def is_done(self, table, key="__all__"):
@@ -524,7 +526,9 @@ def _trade_cal_frame():
         cal = cal[(cal["exchange"] == "SSE") & (cal["is_open"] == 1)]
         cal["cal_date"] = cal["cal_date"].astype(str)
         return cal
-    except Exception:
+    except Exception as exc:
+        print(f"[alt.backfill] 交易日历读取失败 {p}: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         return None
 
 
@@ -535,7 +539,9 @@ def is_trade_day(d):
         import pandas as pd
         try:
             return pd.Timestamp(str(d)).weekday() < 5
-        except Exception:
+        except Exception as exc:
+            print(f"[alt.backfill] 工作日回退判断失败 {d!r}（按交易日处理）: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             return True
     return bool((cal["cal_date"] == str(d)).any())
 
@@ -631,7 +637,9 @@ def _backfill_dates(sp, tdate):
     try:
         from common.calendar import recent_trade_dates
         ds = recent_trade_dates(sp.max_backfill_days, end_date=tdate)
-    except Exception:
+    except Exception as exc:
+        print(f"[alt.backfill] 取最近交易日失败（仅用当日）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         ds = []
     out = sorted({str(d) for d in ds}, reverse=True)
     return out or [tdate]

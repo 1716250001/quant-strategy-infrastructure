@@ -23,6 +23,7 @@ fetch/fund_nav_update.py — 基金净值增量更新 (fund_nav)
 
 import argparse
 import os
+import sys
 import time
 from datetime import datetime
 
@@ -306,7 +307,9 @@ def repair_incomplete(threshold=5, dry_run=False, limit=None):
             s = pd.read_parquet(path, columns=["ts_code"])["ts_code"]
             for code, n in s.value_counts().items():
                 counts[code] = counts.get(code, 0) + int(n)
-        except Exception:
+        except Exception as exc:
+            print(f"[fetch.fund_nav_update] 读分片失败 {path}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             continue
     print(f"  扫描完成: 库内 {len(counts)} 只基金")
 

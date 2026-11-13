@@ -11,6 +11,7 @@ common/parquet_store.py — 按代码分文件的 Parquet 增量存储
   - 列顺序与既有文件对齐，避免 Parquet schema 漂移
 """
 import os
+import sys
 
 import pandas as pd
 
@@ -34,7 +35,9 @@ def _invalidate_reader_cache(path_or_dir, table=None):
     """
     try:
         from common import reader
-    except Exception:
+    except Exception as exc:
+        print(f"[common.parquet_store] 延迟导入 reader 失败（不清缓存）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return
     try:
         if not table:
@@ -161,7 +164,9 @@ def _existing_schema(path):
     try:
         import pyarrow.parquet as pq
         return pq.read_schema(path)
-    except Exception:
+    except Exception as exc:
+        print(f"[common.parquet_store] 读既有 schema 失败 {path}: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
@@ -221,7 +226,9 @@ def _arrow_table_equal(a, b):
         import pyarrow as pa
         return bool(pa.Table.from_pandas(a, preserve_index=False)
                     .equals(pa.Table.from_pandas(b, preserve_index=False)))
-    except Exception:
+    except Exception as exc:
+        print(f"[common.parquet_store] Arrow 层比较失败（交回精判）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return False
 
 
@@ -320,7 +327,9 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
                 if not (pd.isna(e_hi) or pd.isna(n_lo)
                         or pd.isna(e_lo) or pd.isna(n_hi)):
                     _sep = bool(n_lo > e_hi) or bool(n_hi < e_lo)  # 追加 / 补历史
-            except Exception:
+            except Exception as exc:
+                print(f"[common.parquet_store] 区间比较失败（不启用快路径）: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
                 _sep = False           # 比较不可执行 ⇒ 不启用快路径
         # 既有去重基准（keep=keep 与合并路径的保留方向一致；行数两种 keep 相同）
         if keys is None:
@@ -485,7 +494,9 @@ def read_column(path, column):
     try:
         df = pd.read_parquet(path, columns=[column])
         return df[column]
-    except Exception:
+    except Exception as exc:
+        print(f"[common.parquet_store] 读列失败 {path}[{column}]: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 

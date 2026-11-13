@@ -22,6 +22,7 @@ fetch/full_download.py — 全市场数据下载器（并发版）
 import argparse
 import os
 import re
+import sys
 import time
 from datetime import datetime
 
@@ -83,7 +84,9 @@ def _guard_overwrite(path, new_df, min_rows_hint=None):
     if os.path.exists(path):
         try:
             old_n = len(pd.read_parquet(path))
-        except Exception:
+        except Exception as exc:
+            print(f"[fetch.full_download] 读旧文件行数失败（跳过比较）{path}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
             old_n = None
         if old_n is not None and len(new_df) < old_n:
             raise RuntimeError(
@@ -304,7 +307,9 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
     try:
         from common import reader
         stored = set(reader.codes_from_store(api_name))
-    except Exception:
+    except Exception as exc:
+        print(f"[fetch.full_download] 取库内代码集失败 {api_name}（按空处理）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         stored = set()
     _refresh = bool(refresh_existing)
     n_stored_in_pending = 0

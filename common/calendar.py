@@ -11,6 +11,7 @@ trade_cal.parquet 的唯一读取入口，替换此前 5 处重复实现
   - 所有区间函数默认升序；prev_trade_dates 返回倒序（最近在前）
 """
 import os
+import sys
 from datetime import datetime
 
 import pandas as pd
@@ -90,7 +91,9 @@ def _us_cal_path():
     try:
         import config
         market_data_dir = config.MARKET_DATA_DIR
-    except Exception:
+    except Exception as exc:
+        print(f"[common.calendar] 导入 config 失败（回退推导库根）: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         market_data_dir = os.path.dirname(os.path.dirname(META_DIR))
     return os.path.join(market_data_dir, _US_CAL_REL)
 
