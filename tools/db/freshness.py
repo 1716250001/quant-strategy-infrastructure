@@ -271,7 +271,13 @@ def _alt_rows(only=None):
         if only and name not in only:
             continue
         d = os.path.join(root, name)
-        as_of, how = _as_of(d, sp.date_col)
+        if not getattr(sp, "has_date", True):
+            # W-2（§458）：has_date=False ⇒ 静态快照，无日期维度，**不读日期列**
+            # （读了必报假警：us_universe 无 date、fund_aum_em 无 trade_date）。
+            # 判定由 build_rows 的 has_date 分支统一给出，此处只给哨兵值。
+            as_of, how = None, "静态快照（无日期维度）"
+        else:
+            as_of, how = _as_of(d, sp.date_col)
         rec = cp.get(name, {}) if isinstance(cp.get(name), dict) else {}
         rows.append({
             "lib": "alt", "table": name, "as_of": as_of, "last_pull": rec.get("last_attempt"),

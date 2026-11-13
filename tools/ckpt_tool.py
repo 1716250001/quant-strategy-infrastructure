@@ -54,6 +54,10 @@ BY_MONTH_COMPARE = {
     "broker_recommend": ("broker_recommend.parquet", "month", None, "None|"),
 }
 
+# W-3（§458）：读盘失败必须返回 None（= 不知道），不能与「确实空」的 set() 同形。
+# 键=表名，值=失败原因；由 _do_show 在入口 clear()，仅供本轮展示与计数。
+_READ_FAILED: dict[str, str] = {}
+
 
 def _load():
     if not os.path.exists(CKPT):
@@ -74,12 +78,24 @@ def _conf_of(name):
 
 
 def _disk_dates(name, date_col):
-    """磁盘上实际有数据的日期集合（用于 by_date/by_range 类）"""
+    """磁盘上实际有数据的日期集合（用于 by_date/by_range 类）。
+
+    W-3（§458）三态：set = 读到；None = 不知道（目录缺失或分片读取失败）；
+    set() = 确实空。⛔ 不许把「读失败」当「磁盘没数据」。
+    """
     d = os.path.join(MARKET_DATA_DIR, name)
     if not os.path.isdir(d) or not date_col:
         return None
     out = set()
-    for f in os.listdir(d):
+    failed = 0
+    last_err = ""
+    try:
+        files = os.listdir(d)
+    except Exception as exc:
+        _READ_FAILED[name] = f"{type(exc).__name__}: {exc}"
+        print(f"[warn] 列目录 {d} 失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+        return None
+    for f in files:
         if not f.endswith(".parquet"):
             continue
         try:
@@ -88,19 +104,28 @@ def _disk_dates(name, date_col):
         except Exception as exc:
             # G-2：⛔ 不许静默返空（读失败会被上层当成"磁盘没数据"⇒ 假红虚记）
             print(f"[warn] 读 {f} 失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+            failed += 1
+            last_err = f"{type(exc).__name__}: {exc}"
             continue
+    if failed:
+        _READ_FAILED[name] = f"{failed} 个分片读取失败（末条 {last_err}）"
+        return None        # ⛔ 不知道 ≠ 没有
     return out
 
 
 def _disk_codes(name):
-    """磁盘上实际有数据的代码集合（用于 by_code 类）"""
+    """磁盘上实际有数据的代码集合（用于 by_code 类）。
+
+    W-3（§458）：读取失败返回 None（不知道），不返回空集。
+    """
     from common import reader
     reader.clear_cache(name)
     try:
         return set(reader.codes_from_store(name, root=MARKET_DATA_DIR))
     except Exception as exc:
         print(f"[warn] {name} 码集读取失败：{type(exc).__name__}: {exc}", file=sys.stderr)
-        return set()
+        _READ_FAILED[name] = f"{type(exc).__name__}: {exc}"
+        return None
 
 
 def _recent_trade_dates(n=1):
@@ -139,6 +164,7 @@ def _tasks_of(name, conf):
 # --show：交叉核对
 # ============================================================
 def _do_show(tables=None, verbose=True):
+    _READ_FAILED.clear()       # W-3：按轮隔离，防多次调用累积
     cp = _load()
     names = tables or sorted(cp.keys())
     names = [n for n in names if n in BACKFILL_TARGETS or n in DAILY_UPDATE_EXTRA]
@@ -153,6 +179,7 @@ def _do_show(tables=None, verbose=True):
 
     rows = []
     bm_failed = []      # G-1：by_month 未能核对的表（读盘失败/文件缺失）
+    read_failed = []    # W-3：分片读取失败 ⇒ 未核对（不是磁盘没数据）
     for name in names:
         conf = _conf_of(name)
         if not conf:
@@ -177,6 +204,9 @@ def _do_show(tables=None, verbose=True):
 
         fake = stale = None
         note = ""
+        if disk is None and name in _READ_FAILED:
+            note = "⛔ 未核对（分片读取失败）"
+            read_failed.append({"name": name, "err": _READ_FAILED[name]})
         recent = _recent_trade_dates(1)      # 排除 T 日（数据源可能未发布）
         if disk is not None and exp:
             if mode == "by_code":
@@ -225,6 +255,10 @@ def _do_show(tables=None, verbose=True):
             # G-1：⛔「没报」不等于「没问题」——这 N 张根本没读到盘
             detail = "、".join(f"{x['name']}（{x['err']}）" for x in bm_failed)
             print(f"  ⛔ by_month 读盘失败 {len(bm_failed)} 张（**未核对**，不是没问题）: {detail}")
+        if read_failed:
+            # W-3：读失败 ≠ 磁盘无数据；必须单列，否则会虚增「疑似虚记」
+            detail = "、".join(f"{x['name']}（{x['err']}）" for x in read_failed)
+            print(f"  ⛔ 分片读取失败 {len(read_failed)} 张（**未核对**，不是磁盘没数据）: {detail}")
 
         # 未覆盖模式汇总（避免"没报=没问题"的误解 —— I5）
         unc = {}
