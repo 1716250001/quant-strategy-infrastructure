@@ -360,7 +360,7 @@ def mirror(src: Path = DEFAULT_ROOT, weekly: bool = True) -> int:
         daily_root = MIRROR_ROOT / "daily"
         dst = daily_root / stamp
         if dst.exists():
-            print(f"[FAIL] 今日快照已存在：{dst}（日备每日一次，不覆盖）")
+            print(f"[SKIP] 今日快照已存在：{dst}（幂等，非错误）")
             return RC_EXISTS
         prevs = sorted([d for d in daily_root.iterdir()
                         if d.is_dir() and not d.name.startswith(".")]) if daily_root.is_dir() else []

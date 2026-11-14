@@ -263,6 +263,86 @@ def _add_db_freshness_args(p):
     _add_json(p, help_text="输出新鲜度 JSON（不打印表格）")
     p.set_defaults(func=cmd_db_freshness)
 
+
+def cmd_db_scale_check(args):
+    """数值域量级锚体检（只读；≠ db audit --section scale 的目录/字节规模）。"""
+    from config.scale_anchors import SCALE_ANCHORS
+    from tools.db.scale_check import main as _main
+    argv = []
+    if args.report:
+        argv.append("--report")
+    if args.stats:
+        argv.append("--stats")
+    if args.tables:
+        names = {x.strip() for x in args.tables.split(",") if x.strip()}
+        if not (names & set(SCALE_ANCHORS)):
+            print(f"[db scale-check] 未匹配任何锚点表: {sorted(names)[:5]}")
+            raise SystemExit(2)
+        argv += ["--tables", args.tables]
+    if args.json:
+        argv += ["--json", args.json]
+    if args.out:
+        argv += ["--out", args.out]
+    raise SystemExit(int(_main(argv)))
+
+
+def _add_db_scale_check_args(p):
+    p.add_argument("--report", action="store_true", help="L1+L2+L3 全跑（默认）")
+    p.add_argument("--stats", action="store_true", help="复算 0.1/99.9 分位分片包络")
+    p.add_argument("--tables", default=None,
+                   help="仅指定表（逗号分隔，完整相对路径）；未匹配任何锚点表 ⇒ RC=2")
+    p.add_argument("--json", default=None, metavar="PATH",
+                   help="--stats 结果另存 JSON 文件")
+    p.add_argument("--out", default=None, help="--report 结果另存 Markdown")
+    p.set_defaults(func=cmd_db_scale_check)
+
+
+def cmd_db_schema_align(args):
+    """跨年度分区 schema 漂移扫描/修复（≠ db schema 的建表定义校验）。"""
+    from tools.db.schema_align import main as _main
+    argv = [args.action, *(args.tables or [])]
+    if args.all:
+        argv.append("--all")
+    raise SystemExit(int(_main(argv)))
+
+
+def _add_db_schema_align_args(p):
+    p.add_argument("action", choices=["scan", "fix"],
+                   help="scan=只扫描；fix=修复漂移")
+    p.add_argument("tables", nargs="*", help="表名（缺省＝全库扫描）")
+    p.add_argument("--all", action="store_true", help="fix：修复全部有漂移的表")
+    p.set_defaults(func=cmd_db_schema_align)
+
+
+def cmd_db_fingerprint(args):
+    """全库指纹门禁（独立门禁，不与 db audit 合并）。"""
+    from tools.db.fingerprint import main as _main
+    argv = []
+    for flag, on in (("--build", args.build), ("--verify", args.verify),
+                     ("--report", args.report), ("--deep", args.deep),
+                     ("--allow-added", args.allow_added)):
+        if on:
+            argv.append(flag)
+    if not (args.build or args.verify or args.report):
+        argv.append("--report")      # 默认报告模式（RC 恒 0，便于日常接线）
+    if args.root:
+        argv += ["--root", args.root]
+    if args.baseline:
+        argv += ["--baseline", args.baseline]
+    raise SystemExit(int(_main(argv)))
+
+
+def _add_db_fingerprint_args(p):
+    p.add_argument("--build", action="store_true", help="生成/覆盖基线")
+    p.add_argument("--verify", action="store_true", help="校验当前库")
+    p.add_argument("--report", action="store_true",
+                   help="报告模式（等价 --verify，RC 恒 0）")
+    p.add_argument("--deep", action="store_true", help="深度档：重算 sha256")
+    p.add_argument("--allow-added", action="store_true", help="--verify 时容忍新增文件")
+    p.add_argument("--root", default=None, help="库根目录")
+    p.add_argument("--baseline", default=None, help="基线路径")
+    p.set_defaults(func=cmd_db_fingerprint)
+
 def _add_db_migrate_args(p):
     p.add_argument("--tables", default=None, help="指定表, 逗号分隔")
     p.add_argument("--all", action="store_true", help="迁移全部待迁移表")
@@ -282,5 +362,11 @@ _DB_FAMILY = (
     ("report", "db-report", _add_db_report_args, "数据库结构报告（从 schema JSON 生成 Markdown）"),
     ("migrate", "db-migrate", _add_db_migrate_args, "存储布局迁移（by_code → by_year）"),
     ("freshness", "db-freshness", _add_db_freshness_args, "表级数据新鲜度（只读，恒 exit 0）"),
+    ("scale-check", "db-scale-check", _add_db_scale_check_args,
+     "数值域量级锚体检（≠ db audit --section scale 的目录/字节规模）"),
+    ("schema-align", "db-schema-align", _add_db_schema_align_args,
+     "跨年度分区 schema 漂移扫描/修复（≠ db schema 的建表定义校验）"),
+    ("fingerprint", "db-fingerprint", _add_db_fingerprint_args,
+     "全库指纹门禁（独立，不与 db audit 合并）"),
     ("ckpt", "ckpt", _add_ckpt_args, "断点管理（查看/交叉核对/回填/清虚记）"),
 )
