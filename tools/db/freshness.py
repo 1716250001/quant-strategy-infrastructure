@@ -356,19 +356,34 @@ def build_rows(only=None):
 def render(rows):
     head = (f"{'库':6s} {'表':24s} {'最新数据日':10s} {'ds':>4s} {'dw':>4s} "
             f"{'最近拉取':20s} {'诊断':18s} {'档':9s} 判定")
-    lines = [head, "-" * 110]
+
+    def _eff(r):
+        """展示判定：ds<0（表内有未来日期）不计入「正常」，按「未知」单列。"""
+        return "未知" if (r["ds"] is not None and r["ds"] < 0) else r["verdict"]
+
+    lines = [
+        f"[说明] v4.10 起默认展示全部 {len(rows)} 张表"
+        f"（旧版默认 18 张核心表）；用 --only 收窄。",
+        head, "-" * 110,
+    ]
     for r in rows:
         _note = f"  ({r['note']})" if r.get("note") else ""
+        _future = r["ds"] is not None and r["ds"] < 0
+        if _future:
+            _note = "  (含未来数据)" + _note
+        _ds = ("-" if r["ds"] is None else
+               (f"{r['ds']}（含未来数据）" if _future else r["ds"]))
         lines.append(
             f"{r['lib']:6s} {r['table']:24s} {r['as_of_date'] or '-'!s:10s} "
-            f"{('-' if r['ds'] is None else r['ds']):>4} {('-' if r['dw'] is None else r['dw']):>4} "
+            f"{_ds!s:>4} {('-' if r['dw'] is None else r['dw']):>4} "
             f"{r['last_pull'] or '未知'!s:20s} {r.get('diag') or '':18s} "
-            f"{r['tier']:9s} {r['verdict']}{_note}")
-    n_red = sum(1 for r in rows if r["verdict"] == "红")
-    n_yel = sum(1 for r in rows if r["verdict"] == "黄")
-    n_unk = sum(1 for r in rows if r["verdict"] == "未知")
-    n_stale = sum(1 for r in rows if r["verdict"] == "已停更")
-    n_pend = sum(1 for r in rows if r["verdict"] == "待补拉")
+            f"{r['tier']:9s} {_eff(r)}{_note}")
+    n_red = sum(1 for r in rows if _eff(r) == "红")
+    n_yel = sum(1 for r in rows if _eff(r) == "黄")
+    n_unk = sum(1 for r in rows if _eff(r) == "未知")
+    n_stale = sum(1 for r in rows if _eff(r) == "已停更")
+    n_pend = sum(1 for r in rows if _eff(r) == "待补拉")
+    n_future = sum(1 for r in rows if r["ds"] is not None and r["ds"] < 0)
     lines.append("-" * 110)
     lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk - n_stale - n_pend} | "
                  f"待补拉 {n_pend} | 黄 {n_yel} | 红 {n_red} | 已停更 {n_stale} | 未知 {n_unk}")
@@ -389,7 +404,11 @@ def render(rows):
     if n_stale:
         lines.append("已停更: " + ", ".join(
             f"{r['table']}({STALE_BY_DESIGN.get(r['table'], {}).get('since', '源端停更')})"
-            for r in rows if r["verdict"] == "已停更"))
+            for r in rows if _eff(r) == "已停更"))
+    if n_future:
+        lines.append("含未来数据: " + ", ".join(
+            f"{r['table']}(ds={r['ds']})" for r in rows
+            if r["ds"] is not None and r["ds"] < 0))
     lines.append("说明: ds=内容最新日期距今天数, dw=文件最新 mtime 距今天数; dw≤7 视为刚写过→绿")
     lines.append("      默认恒 exit 0；--strict 时存在红/黄才非零")
     return "\n".join(lines)

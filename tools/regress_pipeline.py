@@ -314,7 +314,7 @@ def _run_all():
         任何其它测试发现 —— 单独逐一 --help 验证。
         """
         specs = {
-            "freshness": ("--all", "--stale"),
+            "freshness": ("--all", "--stale", "--json"),
             "peek": ("--code", "--date", "--rows", "--cols"),
             "doctor": ("--network", "--json"),
             "ckpt": ("--show", "--fix", "--clear", "--table",

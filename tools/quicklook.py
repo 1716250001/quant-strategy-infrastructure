@@ -25,10 +25,8 @@ tools/quicklook.py — 数据速查（freshness / peek）
 import argparse
 import os
 import sys
-from datetime import datetime
 
 from common import reader
-from common.calendar import open_dates
 from config import MARKET_DATA_DIR
 
 # 核心表（日常最常看）
@@ -100,85 +98,32 @@ def _latest(table):
 # ============================================================
 def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
                   as_json=False):
-    """各表最新日期一览。
+    """[DEPRECATED v4.10] 旧版单条件实现，已降级为 tools.db.freshness 的透传代理。
 
-    stale_days: 只显示落后超过 N 个交易日的表（None=全显示）
-    as_json: stdout 输出机器可读 JSON（CLI --json；2026-09-30 P3 统一）
+    ⚠ **同名不同义（必须读）**：
+      - 旧版：默认 18 张核心表；`stale_days` = 落后超过 N 个**交易日**。
+      - 新版：默认全部 208 张表；`stale_days` = ds（内容落后**自然日**）≥ N。
+    口径已切到新版自然日双条件；新增调用一律走 `tools.db.freshness.run()`。
+    保留签名是为了 `main()`（本文件）与历史调用点不炸。
     """
-    names = tables or (_all_tables() if show_all else list(CORE_TABLES))
-    names = [n for n in names if os.path.isdir(os.path.join(MARKET_DATA_DIR, n))]
-    if not names:
-        if as_json:
-            from common.jsonio import print_json
-            print_json({"base": None, "n_tables": 0, "n_stale": 0, "tables": []})
-        else:
-            print("  无可查的表")
-        return []
+    from tools.db import freshness as _f
 
-    # 基准日 = 最近已收盘交易日
-    # ⚠ 两个易错点（2026-09-19 代码审查修复）:
-    #   ① 起点不可写死年份。原实现写 start_date="20260101"，跨年后若交易日历
-    #      尚未含当年数据，ds 会退化到上一年末 → 全表误报"落后 N 天"。
-    #      改为按 today 动态回溯两年（一年至少 240 个交易日，必然覆盖）。
-    #   ② 盘中（15:05 前）今日尚未收盘，T 日数据源必然未发布。若仍把今天当
-    #      基准日，全表都会显示"差1天" —— 每天盘中固定出现的假报警
-    #      （"狼来了"效应，真落后反而被淹没）。
-    from datetime import time as _time
-    now = datetime.now()
-    today = now.strftime("%Y%m%d")
-    ds = [d for d in open_dates(start_date=f"{int(today[:4]) - 1}0101")
-          if d <= today]
-    if ds and ds[-1] == today and now.time() < _time(15, 5):
-        ds = ds[:-1]
-    base = ds[-1] if ds else today
-
-    rows = []
-    for n in names:
-        dt = _latest(n)
-        if dt is None:
-            rows.append((n, None, None))
-            continue
-        lag = len([d for d in ds if str(dt) < d <= base])
-        rows.append((n, dt, lag))
-
+    _f._UNREADABLE.clear()              # K′：按轮隔离，防跨调用累积
+    only = set(tables) if tables else None
+    rows = _f.build_rows(only)
     if stale_days is not None:
-        rows = [x for x in rows if x[2] is None or x[2] >= stale_days]
-
+        # v4.10：ds（自然日）≥ N；ds 为 None（无日期）不满足「落后 N 天」⇒ 不显示
+        rows = [r for r in rows
+                if r["ds"] is not None and r["ds"] >= stale_days]
+    n_unread = len(_f._UNREADABLE)
     if as_json:
         from common.jsonio import print_json
-        n_stale = sum(1 for _, d, lagv in rows if lagv is not None and lagv > 3)
-        print_json({
-            "base": base,
-            "n_tables": len(rows),
-            "n_stale": n_stale,
-            "tables": [{"table": n, "latest": (str(dt) if dt else None), "lag": lagv}
-                       for n, dt, lagv in rows],
-        }, indent=1)
-        return rows
-
-    if verbose:
-        print("=" * 88)
-        print(f"  数据新鲜度（基准交易日 {base}）")
-        print("=" * 88)
-        print(f"  {'表名':18s} {'最新日期':>10s} {'落后':>6s}  状态")
-        print("-" * 88)
-        for n, dt, lag in rows:
-            if dt is None:
-                print(f"  {n:18s} {'无数据':>10s} {'—':>6s}")
-                continue
-            if lag == 0:
-                st = "✓ 最新"
-            elif lag == 1:
-                st = "· 差1天（T日数据源可能未发布）"
-            elif lag <= 3:
-                st = f"· 差{lag}天"
-            else:
-                st = f"⚠ 差{lag}天（偏旧）"
-            print(f"  {n:18s} {dt!s:>10s} {lag:6d}  {st}")
-        print("-" * 88)
-        n_stale = sum(1 for _, d, lagv in rows if lagv is not None and lagv > 3)
-        print(f"  共 {len(rows)} 张表" +
-              (f"，其中 {n_stale} 张偏旧（>3 个交易日）" if n_stale else "，全部新鲜"))
+        n_alert = sum(1 for r in rows if r["verdict"] in ("红", "黄"))
+        print_json({"ok": True, "rows": rows, "n_alert": n_alert,
+                    "n_unreadable": n_unread}, indent=1)
+    else:
+        print(_f.render(rows))
+    _f._report_unreadable()
     return rows
 
 

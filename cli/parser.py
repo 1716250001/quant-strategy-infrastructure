@@ -294,12 +294,12 @@ def build_parser():
 
     # ── 数据速查 ──
     p = sub.add_parser("freshness",
-                       help="数据新鲜度速查（旧版单条件；建议用 db freshness 双条件版）")
+                       help="数据新鲜度速查（v4.10 起＝新版自然日双条件；旧版交易日口径已废弃）")
     p.add_argument("tables", nargs="?", default=None,
-                   help="逗号分隔的表名（默认核心表）")
-    p.add_argument("--all", action="store_true", help="显示全部表")
+                   help="逗号分隔的表名（默认全部 208 张，不是旧版 18 张核心表）")
+    p.add_argument("--all", action="store_true", help="[兼容保留] 显示全部表（现为默认行为）")
     p.add_argument("--stale", type=int, default=None,
-                   help="只显示落后超过N个交易日的表")
+                   help="只显示 ds（内容落后自然日数）≥ N 的表（⚠ 旧版是交易日，已改口径）")
     _add_json(p, help_text="输出新鲜度 JSON（机器可读；不打印横幅）")
     p.set_defaults(func=cmd_freshness)
 
