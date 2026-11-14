@@ -70,6 +70,17 @@ FORWARD_LOOKING = frozenset({
 })
 
 
+def total_registered():
+    """登记在册表数 = 主库 targets + alt spec（零扫盘，约 0ms）。
+
+    F-7（§465.2）：`--only` 时不能用「本次扫到的行数」当分母；也不许调
+    `build_rows(None)` 全量扫（4.08s vs 0.11s）。本函数与 `len(build_rows(None))`
+    同源，单测固化该等式。
+    """
+    from alt.spec import BY_NAME as _ALT
+    return len(BACKFILL_TARGETS) + len(_ALT)
+
+
 def _pick_date_col(table_dir, preferred):
     """优先用权威定义；未登记则读 parquet schema 探一个日期列。"""
     if preferred:
@@ -315,6 +326,15 @@ def build_rows(only=None):
         #   按表名全局匹配会把 alt.hibor 误标「已停更」（首跑实证）。
         r["note"] = ""
         name = r["table"]
+        # F-8（§465.3）：ds<0 的豁免必须**垫底**（可被下方更具体判定推翻），
+        #   不能压顶。只豁免前置日历白名单；非白名单未来数据判「未知」并显式提示。
+        if r["ds"] is not None and r["ds"] < 0:
+            if name in FORWARD_LOOKING:
+                r["verdict"] = "正常"
+                r["note"] = "前置日历"
+            else:
+                r["verdict"] = "未知"
+                r["note"] = "含未来数据（未登记前置日历）"
         if r["lib"] == "market" and name in STALE_BY_DESIGN:
             r["verdict"] = "已停更"
             r["note"] = f"自 {STALE_BY_DESIGN[name]['since']} 停更"
@@ -357,16 +377,6 @@ def build_rows(only=None):
             _pr = PENDING_REFRESH[name]
             r["verdict"] = "待补拉"
             r["note"] = f"补拉计划: {_pr['plan']}（{_pr['decided']} 决定）"
-        # §462 F-2：ds<0 必须分类，不得统一降级。
-        #   前置日历/计划/发布日（白名单）⇒ 正常（前置日历），设计如此；
-        #   其余 ⇒ 未登记的未来数据，判「未知」并显式提示（真脏数据不能被噪音淹没）。
-        if r["ds"] is not None and r["ds"] < 0:
-            if name in FORWARD_LOOKING:
-                r["verdict"] = "正常"
-                r["note"] = "前置日历"
-            else:
-                r["verdict"] = "未知"
-                r["note"] = "含未来数据（未登记前置日历）"
         r["diag"] = _diag(r)          # CC-FIX-7：诊断列（不参与 verdict）
     return rows
 
@@ -374,10 +384,10 @@ def build_rows(only=None):
 def render(rows, n_total=None):
     """渲染新鲜度表。
 
-    n_total: 未经过滤的总表数（F-4：--stale 过滤不应改变「全部 N 张」的说明）；
-             None ⇒ 用当前 rows 行数（db freshness 无过滤路径）。
+    n_total: 未经过滤的总表数；None ⇒ total_registered()（登记总数，不随
+             --only/--stale 变化）。
     """
-    n_total = len(rows) if n_total is None else n_total
+    n_total = total_registered() if n_total is None else n_total
     head = (f"{'库':6s} {'表':24s} {'最新数据日':10s} {'ds':>4s} {'dw':>4s} "
             f"{'最近拉取':20s} {'诊断':18s} {'档':9s} 判定")
     lines = [
@@ -418,6 +428,12 @@ def render(rows, n_total=None):
         lines.append("已停更: " + ", ".join(
             f"{r['table']}({STALE_BY_DESIGN.get(r['table'], {}).get('since', '源端停更')})"
             for r in rows if r["verdict"] == "已停更"))
+    n_future = sum(1 for r in rows if r["ds"] is not None and r["ds"] < 0)
+    if n_future:
+        # F-6（§465.5）：信息展示，**不参与五档计数**；按传入 rows（含 --stale 过滤后）算。
+        lines.append("含未来数据: " + ", ".join(
+            f"{r['table']}(ds={r['ds']})" for r in rows
+            if r["ds"] is not None and r["ds"] < 0))
     lines.append("说明: ds=内容最新日期距今天数, dw=文件最新 mtime 距今天数; dw≤7 视为刚写过→绿")
     lines.append("      默认恒 exit 0；--strict 时存在红/黄才非零")
     return "\n".join(lines)

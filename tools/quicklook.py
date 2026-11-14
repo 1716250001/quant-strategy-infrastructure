@@ -110,9 +110,7 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
 
     _f._UNREADABLE.clear()              # K′：按轮隔离，防跨调用累积
     only = set(tables) if tables else None
-    all_rows = _f.build_rows(only)
-    n_total = len(all_rows)             # F-4：未经过滤总数，不随 --stale 变化
-    rows = all_rows
+    rows = _f.build_rows(only)
     if stale_days is not None:
         # v4.10：ds（自然日）≥ N；ds 为 None（无日期）不满足「落后 N 天」⇒ 不显示
         rows = [r for r in rows
@@ -124,7 +122,7 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
         print_json({"ok": True, "rows": rows, "n_alert": n_alert,
                     "n_unreadable": n_unread}, indent=1)
     else:
-        print(_f.render(rows, n_total=n_total))
+        print(_f.render(rows))
     _f._report_unreadable()
     return rows
 
