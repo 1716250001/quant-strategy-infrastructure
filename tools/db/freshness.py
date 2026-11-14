@@ -61,6 +61,14 @@ _DATE_COL_CANDIDATES = ("trade_date", "ann_date", "end_date", "date", "month",
 # 日更表名单（两组并集）
 _DAILY_TABLES = set(DAILY_UPDATE_GROUPS) | set(DAILY_UPDATE_EXTRA)
 
+# §462 F-2：前置日历/计划/发布日表 —— `ds<0` 是设计如此（源端本就提供未来日期），
+# 判「正常（前置日历）」，不计异常。⛔ 只豁免这 12 张；新表须逐张核实后加入。
+FORWARD_LOOKING = frozenset({
+    "fut_trade_cal", "cn_schedule", "broker_recommend",
+    "macro_uk_cpi", "macro_jp_cpi", "macro_de_cpi", "macro_ca_cpi", "macro_au_cpi",
+    "macro_ca_gdp", "macro_uk_unemp", "macro_jp_unemp", "macro_au_unemp",
+})
+
 
 def _pick_date_col(table_dir, preferred):
     """优先用权威定义；未登记则读 parquet schema 探一个日期列。"""
@@ -349,41 +357,46 @@ def build_rows(only=None):
             _pr = PENDING_REFRESH[name]
             r["verdict"] = "待补拉"
             r["note"] = f"补拉计划: {_pr['plan']}（{_pr['decided']} 决定）"
+        # §462 F-2：ds<0 必须分类，不得统一降级。
+        #   前置日历/计划/发布日（白名单）⇒ 正常（前置日历），设计如此；
+        #   其余 ⇒ 未登记的未来数据，判「未知」并显式提示（真脏数据不能被噪音淹没）。
+        if r["ds"] is not None and r["ds"] < 0:
+            if name in FORWARD_LOOKING:
+                r["verdict"] = "正常"
+                r["note"] = "前置日历"
+            else:
+                r["verdict"] = "未知"
+                r["note"] = "含未来数据（未登记前置日历）"
         r["diag"] = _diag(r)          # CC-FIX-7：诊断列（不参与 verdict）
     return rows
 
 
-def render(rows):
+def render(rows, n_total=None):
+    """渲染新鲜度表。
+
+    n_total: 未经过滤的总表数（F-4：--stale 过滤不应改变「全部 N 张」的说明）；
+             None ⇒ 用当前 rows 行数（db freshness 无过滤路径）。
+    """
+    n_total = len(rows) if n_total is None else n_total
     head = (f"{'库':6s} {'表':24s} {'最新数据日':10s} {'ds':>4s} {'dw':>4s} "
             f"{'最近拉取':20s} {'诊断':18s} {'档':9s} 判定")
-
-    def _eff(r):
-        """展示判定：ds<0（表内有未来日期）不计入「正常」，按「未知」单列。"""
-        return "未知" if (r["ds"] is not None and r["ds"] < 0) else r["verdict"]
-
     lines = [
-        f"[说明] v4.10 起默认展示全部 {len(rows)} 张表"
+        f"[说明] v4.10 起默认展示全部 {n_total} 张表"
         f"（旧版默认 18 张核心表）；用 --only 收窄。",
         head, "-" * 110,
     ]
     for r in rows:
         _note = f"  ({r['note']})" if r.get("note") else ""
-        _future = r["ds"] is not None and r["ds"] < 0
-        if _future:
-            _note = "  (含未来数据)" + _note
-        _ds = ("-" if r["ds"] is None else
-               (f"{r['ds']}（含未来数据）" if _future else r["ds"]))
         lines.append(
             f"{r['lib']:6s} {r['table']:24s} {r['as_of_date'] or '-'!s:10s} "
-            f"{_ds!s:>4} {('-' if r['dw'] is None else r['dw']):>4} "
+            f"{('-' if r['ds'] is None else r['ds']):>4} {('-' if r['dw'] is None else r['dw']):>4} "
             f"{r['last_pull'] or '未知'!s:20s} {r.get('diag') or '':18s} "
-            f"{r['tier']:9s} {_eff(r)}{_note}")
-    n_red = sum(1 for r in rows if _eff(r) == "红")
-    n_yel = sum(1 for r in rows if _eff(r) == "黄")
-    n_unk = sum(1 for r in rows if _eff(r) == "未知")
-    n_stale = sum(1 for r in rows if _eff(r) == "已停更")
-    n_pend = sum(1 for r in rows if _eff(r) == "待补拉")
-    n_future = sum(1 for r in rows if r["ds"] is not None and r["ds"] < 0)
+            f"{r['tier']:9s} {r['verdict']}{_note}")
+    n_red = sum(1 for r in rows if r["verdict"] == "红")
+    n_yel = sum(1 for r in rows if r["verdict"] == "黄")
+    n_unk = sum(1 for r in rows if r["verdict"] == "未知")
+    n_stale = sum(1 for r in rows if r["verdict"] == "已停更")
+    n_pend = sum(1 for r in rows if r["verdict"] == "待补拉")
     lines.append("-" * 110)
     lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk - n_stale - n_pend} | "
                  f"待补拉 {n_pend} | 黄 {n_yel} | 红 {n_red} | 已停更 {n_stale} | 未知 {n_unk}")
@@ -404,11 +417,7 @@ def render(rows):
     if n_stale:
         lines.append("已停更: " + ", ".join(
             f"{r['table']}({STALE_BY_DESIGN.get(r['table'], {}).get('since', '源端停更')})"
-            for r in rows if _eff(r) == "已停更"))
-    if n_future:
-        lines.append("含未来数据: " + ", ".join(
-            f"{r['table']}(ds={r['ds']})" for r in rows
-            if r["ds"] is not None and r["ds"] < 0))
+            for r in rows if r["verdict"] == "已停更"))
     lines.append("说明: ds=内容最新日期距今天数, dw=文件最新 mtime 距今天数; dw≤7 视为刚写过→绿")
     lines.append("      默认恒 exit 0；--strict 时存在红/黄才非零")
     return "\n".join(lines)
