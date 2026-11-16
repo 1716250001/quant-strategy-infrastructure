@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """config.backfill — 补数执行配置（起点 / 指数清单 / 分页 / 批量落盘）。"""
 
+import os
+
 # ============================================================
 # 7b. 补数目标清单 (backfill) — 2026-09-15 新增
 # ============================================================
@@ -62,6 +64,20 @@ BACKFILL_INDEX_CODES = [
     "930927.CSI", "930928.CSI", "930939.CSI", "930955.CSI", "930965.CSI",
     "930967.CSI", "930986.CSI", "930997.CSI",
 ]
+
+# ── R1 补数池（2026-11-16，赤潮 §488/§489）────────────────────────────
+# 背景：原 71 个只覆盖 index_major；研究线要的 441 个实际跟踪指数里
+#       382 个从未被纳入。清单外置 txt，避免 382 行硬编码污染本文件。
+# 约束：① 文件缺失时静默跳过（原有 71 个照常工作）
+#       ② 不改 index_weight 的 layout（btf 硬编码 SINGLE）
+#       ③ 清单已逐个核过后缀（不含 .SI）
+_extra_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "index_weight_extra_codes.txt")
+if os.path.exists(_extra_path):
+    with open(_extra_path, encoding="utf-8") as _f:
+        _extra = [ln.strip() for ln in _f
+                  if ln.strip() and not ln.strip().startswith("#")]
+    BACKFILL_INDEX_CODES = list(BACKFILL_INDEX_CODES) + _extra
 
 # index_monthly 专用码清单（2026-11-04 §306 G4b）:
 # index_monthly 只服务交易所指数 + 少量 CSI，实测 71 个码里仅这 13 个有月线
