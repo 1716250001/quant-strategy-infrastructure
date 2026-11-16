@@ -252,6 +252,82 @@ class ByCodeBatchWriter:
         return {"frames": self.flushed_frames, "rows": self.flushed_rows}
 
 
+class SingleBatchWriter:
+    """`layout="single"`（单文件）的批量落盘器。
+
+    为什么需要（2026-11-16 实测）：
+      by_month 模式每个 (code, month) 调用一次 save_df(layout="single")，
+      merge_append 每次都 读全文件→concat→全列去重→排序→写回。
+      index_weight 单文件 1,268,297 行/4.0MB：单次 0.507s；
+      补完约 677 万行/21MB：单次约 3.5s；全程平均 1.5s。
+      49,660 次 ⇒ 落盘 28 小时，而限频只要 4.9 小时。
+
+    断点纪律（与 ByCodeBatchWriter 同语义，但修正了「先清空」的隐患）：
+      ① 落盘**成功后**才触发 on_flushed，调用方在此记断点
+      ② 落盘失败**不清空 buffer、不触发 on_flushed**，数据留在内存等下次重试
+      ③ 空结果由调用方直接走 on_flushed([key])，不经缓冲
+    """
+
+    def __init__(self, path, subset=None, sort_by=None,
+                 flush_frames=500, flush_rows=500_000,
+                 on_flushed=None, on_error=None):
+        self.path = path
+        self.subset = subset
+        self.sort_by = sort_by
+        self.flush_frames = max(int(flush_frames), 1)
+        self.flush_rows = max(int(flush_rows), 1)
+        self.on_flushed = on_flushed
+        self.on_error = on_error
+        self._buf = []
+        self._keys = []
+        self._nrows = 0
+        self.flushed_frames = 0
+        self.flushed_rows = 0
+
+    def _do_flush(self):
+        if not self._buf:
+            return
+        try:
+            merged = pd.concat(self._buf, ignore_index=True)
+            merge_append(self.path, merged, subset=self.subset,
+                         sort_by=self.sort_by)
+        except Exception as e:
+            # ⛔ 落盘失败：保留 buffer，不触发 on_flushed（断点不记）
+            if self.on_error is not None:
+                self.on_error(None, e)
+            else:
+                print(f"  [ERROR] 单文件批量落盘失败: {str(e)[:80]}")
+            return
+        # ✅ 落盘成功后才清空
+        keys = self._keys
+        self._buf, self._keys, self._nrows = [], [], 0
+        self.flushed_frames += 1
+        self.flushed_rows += len(merged)
+        if self.on_flushed is not None and keys:
+            self.on_flushed(keys)
+
+    def add(self, df, key):
+        """累积一条 (code, month) 的结果；达到阈值则自动落盘。
+
+        df 为 None / 空 ⇒ 不缓冲，调用方应自行 on_flushed([key]) 记断点。
+        """
+        if df is None or len(df) == 0:
+            return
+        self._buf.append(df)
+        self._keys.append(key)
+        self._nrows += len(df)
+        if (len(self._keys) >= self.flush_frames
+                or self._nrows >= self.flush_rows):
+            self._do_flush()
+
+    def flush(self):
+        """收尾：落盘剩余缓冲。⛔ 必须在 fetch 结束后无条件调用。"""
+        self._do_flush()
+
+    def stat(self):
+        return {"frames": self.flushed_frames, "rows": self.flushed_rows}
+
+
 # ============================================================
 # 1. 分页拉取
 # ============================================================

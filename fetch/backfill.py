@@ -62,6 +62,7 @@ from config import (
 from fetch.backfill_io import (  # noqa: F401
     BY_CODE_BATCH_THRESHOLD_MB,
     ByCodeBatchWriter,
+    SingleBatchWriter,
     _ensure_meta,
     _pick_sort_col,
     _save_df,
@@ -997,13 +998,34 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
 
         n_ok = 0
 
-        def on_result_month(pair, df, ok):
+        def _on_flushed(keys):
+            """落盘成功后才记断点 + 计数。"""
             nonlocal n_ok
-            _save_df(target_dir, conf["api"], df, layout="single",
-                     subset=conf.get("subset"))
-            if ok:                  # 仅调用成功才记断点
-                cp.mark_done(name, f"{pair[0]}|{pair[1]}", library=lib, key_space=ks)
+            for k in keys:
+                cp.mark_done(name, k, library=lib, key_space=ks)
                 n_ok += 1
+
+        ensure_dir(target_dir)
+        writer = SingleBatchWriter(
+            path=os.path.join(target_dir, f"{conf['api']}.parquet"),
+            subset=conf.get("subset"),
+            sort_by=None,
+            flush_frames=500,
+            flush_rows=500_000,
+            on_flushed=_on_flushed,
+            on_error=lambda _k, e: print(
+                f"  [ERROR] {name} 落盘失败: {str(e)[:70]}"),
+        )
+
+        def on_result_month(pair, df, ok):
+            key = f"{pair[0]}|{pair[1]}"
+            if not ok:
+                done_ct["n"] += 1
+                return                          # 调用失败：不缓冲、不记断点
+            if df is None or len(df) == 0:
+                _on_flushed([key])              # 空结果：仍记断点（三态纪律）
+            else:
+                writer.add(df, key)
             done_ct["n"] += 1
             if done_ct["n"] % 50 == 0:
                 cp.save()
@@ -1012,6 +1034,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                                     fetch_fn=fetch_fn, max_workers=workers,
                                     on_result=on_result_month, progress=progress,
                                     progress_every=50, verbose=verbose)
+        writer.flush()          # ⛔ 收尾必须 flush，否则尾部数据全丢
         if n_ok:
             cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
