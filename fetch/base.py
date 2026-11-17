@@ -304,6 +304,63 @@ class RateLimiter:
 
 
 # ============================================================
+# 跨进程互斥
+# ============================================================
+class FileLock:
+    """跨进程互斥锁：`O_CREAT|O_EXCL` 建锁文件；异常退出留残锁，需人工确认。
+
+    ⚠ 为什么需要（2026-11-16 index_weight 校准批 P0 实证）：
+      `run_backfill` 的两处写入都**没有跨进程保护**（现有 4 处
+      `threading.Lock` 只在单进程内有效）：
+        ① 断点写 `cp.save()` = **全量覆盖** `json.dump(self.data)`
+        ② 数据写 `merge_append` = **全文件读改写**
+      两个 backfill 实例并跑时，后写者读到的是旧文件 ⇒ 前者整批数据被
+      静默覆盖丢失；而断点两边各自 mark_done，后 save 时已看见前者 ⇒
+      键数翻倍。最终表现为「断点说完成、数据没有」，且 `--dry-run`
+      报「待跑=0」＝**假绿**。
+      实测 2026-11-16 22:34 一次 `--limit 520`：断点 +1,040（8 指数×130），
+      数据只落 4 个指数，另一批 17.9 万行丢失，全程零 ERROR。
+      `schedule_runner` 早已有同类锁（`.schedule.lock`），backfill 缺这一道。
+      ⛔ 不加锁时任何「我以为是单开」的假设都不成立。
+
+    设计：与 `fetch/schedule_runner.py` 的 FileLock 同语义（O_EXCL +
+          残留需人工删），但放在 base 层——backfill 不能 import
+          schedule_runner（后者反向 import 本模块，会循环）。
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self.held = False
+
+    def acquire(self):
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            raise SystemExit(
+                f"[backfill] ⛔ 已有实例在跑（锁文件 {self.path}）；"
+                f"确认无进程后手动删除该文件再试（删前先看 tasklist 有无 python）") from None
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(f"{os.getpid()} {datetime.now().isoformat(timespec='seconds')}")
+        self.held = True
+
+    def release(self):
+        if self.held:
+            try:
+                os.remove(self.path)
+            except OSError:
+                pass
+            self.held = False
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+        return False
+
+
+# ============================================================
 # 断点管理
 # ============================================================
 class Checkpoint:

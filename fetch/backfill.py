@@ -91,6 +91,7 @@ from fetch.backfill_spec import (  # noqa: F401
 )
 from fetch.base import (
     Checkpoint,
+    FileLock,
     RateLimiter,
     fetch_codes_parallel,  # ts_fetch: DB-R10 R10-1d
     fetch_paged_by_code,  # CC-FIX-4：by_code offset 翻页
@@ -105,8 +106,10 @@ BACKFILL_DIR_ROOT = MARKET_DATA_DIR          # 各 target 在 market_data 下建
 # codes-file 模式专用独立断点（不污染主 .backfill_checkpoint.json）
 CODES_CHECKPOINT_FILE = ".backfill_checkpoint_codes.json"
 
-# ts_code 格式校验：6~7 位数字 + .SH/.SZ
-_TS_CODE_RE = re.compile(r"^\d{6,7}\.(SH|SZ)$")
+# ts_code 格式校验：6~7 位数字 + .SH/.SZ/.BJ
+# ⭐ 2026-11-17 增补 BJ：北交所在 express 等 by_code 表里也有源端数据
+#    （实证 874901.BJ 源端 1 行、库内缺），原收紧为 SH|SZ 导致该码无法补拉。
+_TS_CODE_RE = re.compile(r"^\d{6,7}\.(SH|SZ|BJ)$")
 
 # known_gaps.json 读取缓存（EE-FUND-4 G3：source_empty 注册表 fail-closed）
 _KNOWN_GAPS_CACHE = None
@@ -258,7 +261,7 @@ def _resolve_empty_date(name, dt, cp, struct_ct, kind=None):
 def _load_codes_file(path):
     r"""读取 --codes-file 清单（UTF-8 文本，一行一个 ts_code，# 注释，空行忽略）。
 
-    格式非法（非 ^\d{6,7}\.(SH|SZ)$）fail-closed：报错并给出行号，返回 None（调用方
+    格式非法（非 ^\d{6,7}\.(SH|SZ|BJ)$）fail-closed：报错并给出行号，返回 None（调用方
     负责 sys.exit）。
     文件不存在 → 友好错误，返回 None。
     """
@@ -273,7 +276,7 @@ def _load_codes_file(path):
                 continue
             if not _TS_CODE_RE.match(line):
                 print(f"  [FATAL] codes-file 第 {i} 行格式非法: {line!r} "
-                      f"(需匹配 ^\\d{{6,7}}\\.(SH|SZ)$)")
+                      f"(需匹配 ^\\d{{6,7}}\\.(SH|SZ|BJ)$)")
                 return None
             codes.append(line)
     print(f"  [codes-file] {path}: {len(codes)} 只")
@@ -1276,47 +1279,54 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
               f"{max((r[5] for r in rows), default=0):.0f} 分钟约束")
         return
 
-    pro = get_pro()
-    print("\n[OK] Tushare Pro API 已连接")
-    cp = Checkpoint(MARKET_DATA_DIR, filename=cp_filename)
+    # ── 跨进程互斥（2026-11-16 P0 后加）──
+    # 断点写是 cp.save() 全量覆盖，数据写是 merge_append 全文件读改写，
+    # 两者都无跨进程保护（现有 threading.Lock 仅进程内有效）。双开时后写者
+    # 读到旧文件 ⇒ 前者整批数据被静默覆盖，而断点两边各记 ⇒ 键数翻倍、
+    # dry-run 报「待跑=0」假绿。详见 fetch/base.py:FileLock 的实证记录。
+    _lock = FileLock(os.path.join(MARKET_DATA_DIR, ".backfill.lock"))
+    with _lock:
+        pro = get_pro()
+        print("\n[OK] Tushare Pro API 已连接")
+        cp = Checkpoint(MARKET_DATA_DIR, filename=cp_filename)
 
-    results = []
-    t_all = time.time()
-    try:
-        if parallel_targets and parallel_targets > 1:
-            # 多接口并行: 每个 target 一个外层线程, target 内部再开 workers 个线程
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            print(f"\n[并行模式] {parallel_targets} 个接口同时拉取"
-                  + (f" | 每接口限量 {limit}" if limit else "") + "\n")
-            with ThreadPoolExecutor(max_workers=parallel_targets) as ex:
-                futs = {ex.submit(run_target, pro, n, c, cp, workers, False, verbose, limit,
-                                  None, force, listed_codes, force_listed): n
-                        for n, c in sel}
-                for fut in as_completed(futs):
-                    n = futs[fut]
+        results = []
+        t_all = time.time()
+        try:
+            if parallel_targets and parallel_targets > 1:
+                # 多接口并行: 每个 target 一个外层线程, target 内部再开 workers 个线程
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                print(f"\n[并行模式] {parallel_targets} 个接口同时拉取"
+                      + (f" | 每接口限量 {limit}" if limit else "") + "\n")
+                with ThreadPoolExecutor(max_workers=parallel_targets) as ex:
+                    futs = {ex.submit(run_target, pro, n, c, cp, workers, False, verbose, limit,
+                                      None, force, listed_codes, force_listed): n
+                            for n, c in sel}
+                    for fut in as_completed(futs):
+                        n = futs[fut]
+                        try:
+                            r = fut.result()
+                            if r:
+                                results.append(r)
+                        except Exception as e:
+                            print(f"  [ERROR] {n}: {str(e)[:120]}")
+            else:
+                for name, conf in sel:
                     try:
-                        r = fut.result()
+                        r = run_target(pro, name, conf, cp, workers,
+                                       dry_run=False, verbose=verbose, limit=limit,
+                                       ignore_checkpoint=force,
+                                       listed_codes=listed_codes, force_listed=force_listed)
                         if r:
                             results.append(r)
+                    except KeyboardInterrupt:
+                        raise
                     except Exception as e:
-                        print(f"  [ERROR] {n}: {str(e)[:120]}")
-        else:
-            for name, conf in sel:
-                try:
-                    r = run_target(pro, name, conf, cp, workers,
-                                   dry_run=False, verbose=verbose, limit=limit,
-                                   ignore_checkpoint=force,
-                                   listed_codes=listed_codes, force_listed=force_listed)
-                    if r:
-                        results.append(r)
-                except KeyboardInterrupt:
-                    raise
-                except Exception as e:
-                    print(f"  [ERROR] {name}: {str(e)[:120]}")
-    except KeyboardInterrupt:
-        print("\n  [中断] 已保存断点, 下次可续跑")
-    finally:
-        cp.save()
+                        print(f"  [ERROR] {name}: {str(e)[:120]}")
+        except KeyboardInterrupt:
+            print("\n  [中断] 已保存断点, 下次可续跑")
+        finally:
+            cp.save()
 
     _banner("补数完成 — 汇总")
     print(f"  总耗时: {(time.time()-t_all)/60:.1f} 分钟")
