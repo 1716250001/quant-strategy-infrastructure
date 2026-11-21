@@ -12,9 +12,9 @@
   4 源缺失（rc=2 / stderr [error] AGENTS.md）
   5 `--update` 缺 reason（rc=2 / 基线不落盘）
   6 重冻结留痕（rc=0×2 / previous 长度 1 且旧 sha256 留痕）
-  7 `--update` 与 `--out` 互斥（rc=2 / 两者均不落盘）
-  8 基线 schema 严格校验（缺 size_bytes / 非法 sha256 → rc=2）
-  9 原子写无残留（`*.tmp` 为空且正式基线可解析）
+  7 `--update` + `--out` 互斥（rc=2 / 基线/--out 均不落盘）
+  8 基线 schema 严格（缺 size_bytes 或 sha256 非 64hex → rc=2）
+  9 原子写无残留（*.tmp 为空 / 正式基线可解析）
 """
 from __future__ import annotations
 
