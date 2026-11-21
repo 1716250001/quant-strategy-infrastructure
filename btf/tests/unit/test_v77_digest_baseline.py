@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-"""**R37′（N43，19 号 §97.9）**：v77 三档 digest 基线文件结构守卫。
+"""**R37′（N43，19 号 §97.9）**：v77 三档 digest 基线文件结构守卫（历史）。
 
-基线真源＝`tools/v77_digest_baseline.json`（新口径冻结值 ＋ 旧值留痕）；
-逐档复跑校验见 `tools/check_v77_digest.py`（不进单测——三档全跑属 L4 级）。
+基线文件＝`tools/v77_digest_baseline.json`（新口径冻结值 ＋ 旧值留痕）。
+逐档复跑已随 v7.7 资产（规则镜像/策略源码）退役不可执行（REQ-20261121-01/03）；
+本用例仅保留文件结构守卫，断言零改动。现行校验对象为 `赤潮/AGENTS.md`，
+基线 `tools/agents_digest_baseline.json`（REQ-20261121-01）。
 """
 from __future__ import annotations
 

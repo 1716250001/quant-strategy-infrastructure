@@ -446,7 +446,7 @@ def package(out: Path | None = None) -> int:
     proj = Path(config.PROJECT_DIR)
     with tarfile.open(tar, "w:xz") as tf:
         tf.add(proj / "代码" / "config", arcname="config", filter=_keep)
-        tf.add(proj / "代码" / "tools" / "known_gaps.json", arcname="known_gaps.json")
+        tf.add(proj / "代码" / "tools" / "db" / "data" / "known_gaps.json", arcname="known_gaps.json")
         tf.add(inv_path, arcname=inv_path.name)
         for f in small:
             tf.add(f, arcname="small/" + f.relative_to(DEFAULT_ROOT).as_posix())

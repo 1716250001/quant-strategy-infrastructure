@@ -116,12 +116,12 @@ _KNOWN_GAPS_CACHE = None
 
 
 def _load_known_gaps():
-    """读取 tools/known_gaps.json（进程内缓存）。缺失/损坏返回 {}。"""
+    """读取 tools/db/data/known_gaps.json（进程内缓存）。缺失/损坏返回 {}。"""
     global _KNOWN_GAPS_CACHE
     if _KNOWN_GAPS_CACHE is None:
         import json as _json
         _p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                          "tools", "known_gaps.json")
+                          "tools", "db", "data", "known_gaps.json")
         try:
             with open(_p, encoding="utf-8") as _f:
                 _KNOWN_GAPS_CACHE = _json.load(_f)

@@ -1,0 +1,10 @@
+{
+  "schema": "agents-digest-baseline/v1",
+  "target": "赤潮/AGENTS.md",
+  "frozen_at": "2026-11-21T12:02:00+08:00",
+  "reason": "初始冻结：赤潮 v7.8 单一规则源 AGENTS.md（REQ-20261121-01）",
+  "sha256": "sha256:52cf3305415d7c508d8545688fd9b6fcfbd64c503195d3bd4ccffce978490ddc",
+  "size_bytes": 87836,
+  "line_count": 522,
+  "previous": []
+}

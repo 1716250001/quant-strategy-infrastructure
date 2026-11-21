@@ -35,7 +35,7 @@ from fetch.base import Checkpoint, get_pro
 LOCK_PATH = os.path.join(MARKET_DATA_DIR, ".schedule.lock")
 CKPT_NAME = ".backfill_checkpoint.json"
 KG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "tools", "known_gaps.json")
+                       "tools", "db", "data", "known_gaps.json")
 FREQS = ("D", "W", "M", "Q")
 DEFAULT_BUDGET = 2000
 REFRESH_COST = "D 5,994／M 9,320／Q 35,634／W 33,377（合计 84,325）"

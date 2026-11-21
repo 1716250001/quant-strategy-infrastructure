@@ -96,9 +96,20 @@ SOURCE_EMPTY_FLOOR = {
     # 2026-11-12 下调（数据侧清登记，逐码验过库内已有数据）：
     #   fund_daily 173→171 / fund_adj 180→178（180107.SZ、508605.SH 已到数）
     #   fund_nav   61→59 （562710.SH、588560.SH 已到数）
+    # 2026-11-18 两次下调（老大批准）：
+    #   ① 2336→2330：6 个码（001228/001233/001259/301176/301237.SZ、601916.SH）
+    #      库内均已有数据（2026 年各 1–3 行），源端由空变有数、登记该清。
+    #   ② 2330→2327：本轮补数写入 301658.SZ/688665.SH/688835.SH（3/1/2 行）后
+    #      登记过期，同步清理（备份 备份/归档文件/known-gaps-pledge-clean-*）。
+    #   fund_share 保持 131（清 3 个后实际 134，仍高于下限，无需改）。
+    # 2026-11-18 补数后批量下调（老大批准，逐表按「登记∩磁盘」实清）：
+    #   repurchase 2280→2228（清 38）｜pledge_stat 1458→1440（清 12）
+    #   stk_holdertrade 611→310（清 214）｜share_float 352→347（清 5）
+    #   均因本轮补数把源端有数的码写进库，登记过期；备份见
+    #   备份/归档文件/known-gaps-stale-clean-20261118-190329/
     "fund_daily": 171, "fund_nav": 59, "fund_adj": 178, "fund_share": 131,
-    "pledge_detail": 2336, "repurchase": 2280, "express": 1562,
-    "pledge_stat": 1458, "stk_holdertrade": 611, "share_float": 352,
+    "pledge_detail": 2327, "repurchase": 2228, "express": 1562,
+    "pledge_stat": 1440, "stk_holdertrade": 310, "share_float": 347,
 }
 SOURCE_EMPTY_DATES_FLOOR = {
     "block_trade": 356, "ggt_top10": 134, "hsgt_top10": 102, "hk_hold": 72,
@@ -1534,7 +1545,7 @@ def _run_all():
     def r17():
         """check_fund_history 必须正确跑 fund_daily × 场内基金，并与 known_gaps 完全对账。
 
-        基线外置：tools/known_gaps.json。
+        基线外置：tools/db/data/known_gaps.json。
         一次调用覆盖 strict 与 detail，避免四表扫描两次（O-6）。
         scope=fund_daily：只对账 fund_daily 一表，避免 fund_nav/adj/share 存量缺口干扰。
 
@@ -1553,7 +1564,7 @@ def _run_all():
         from tools.check_coverage import check_fund_history
 
         # 读 known_gaps.json 基线
-        _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
+        _kg_path = _os.path.join(_os.path.dirname(__file__), "db", "data", "known_gaps.json")
         with open(_kg_path, encoding="utf-8") as _f:
             _kg = _json.load(_f)
         fd_expected = _kg["fund_daily"]["A"]
@@ -1756,7 +1767,7 @@ def _run_all():
 
         from tools.check_coverage import check_fund_history
 
-        _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
+        _kg_path = _os.path.join(_os.path.dirname(__file__), "db", "data", "known_gaps.json")
         with open(_kg_path, encoding="utf-8") as _f:
             _kg = _json.load(_f)
 
@@ -1847,7 +1858,7 @@ def _run_all():
             assert _n == 0, f"{_t} parquet 残留 {_n} 行 7 位码"
 
         # ③ 注册表 0 残留 + ④ count 声明一致 + ⑤ evidence 校验（§37 G-B3）+ ⑥ market_e_count 一致
-        _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
+        _kg_path = _os.path.join(_os.path.dirname(__file__), "db", "data", "known_gaps.json")
         with open(_kg_path, encoding="utf-8") as _f:
             _kg = _json.load(_f)
         # fund_basic status 字典（evidence 断言用；统一 nan/"<NA>"→"nan"）
@@ -2015,7 +2026,7 @@ def _run_all():
                         (_patch["status"].astype(str).isin(
                             ["", "nan", "<NA>", "None"])))
             _na_set = {str(c) for c in _patch.loc[_na_mask, "ts_code"]}
-            _kg_path = _os.path.join(_os.path.dirname(__file__), "known_gaps.json")
+            _kg_path = _os.path.join(_os.path.dirname(__file__), "db", "data", "known_gaps.json")
             with open(_kg_path, encoding="utf-8") as _f:
                 _kg = _json.load(_f)
             _exp = {str(c) for c in _kg.get("fund_basic_status_nan", [])}

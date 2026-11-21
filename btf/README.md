@@ -120,7 +120,7 @@ run:
 | `0 个交易日` / `n_fills=0` | feed 是否选错（见 §5）；产物里 `data_version.tables` 是否含预期表 |
 | 指标是 `null` | 零成交或零交易日时，基准相对项**按设计不输出**（不是缺 bug） |
 | 数字与旧 run 对不上 | 先核 `manifest.data_version.content_hash` 与 `rules_version`，再核 `run.price_view` |
-| 门禁红 | `bt check` 会逐项给原因；日志在 `_scratch/bt_check_logs/` |
+| 门禁红 | `bt check` 会逐项给原因；日志在 `logs/bt_check/` |
 
 ---
 

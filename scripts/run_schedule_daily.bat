@@ -12,7 +12,7 @@ setlocal
 cd /d "%~dp0.."
 set "ROOT=%CD%"
 set "PY=%ROOT%\_venv\Scripts\python.exe"
-set "LOGDIR=%ROOT%\_scratch\schedule_logs"
+set "LOGDIR=%ROOT%\logs\schedule"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%"
 set "DAY=%DATE:~0,4%%DATE:~5,2%%DATE:~8,2%"
 "%PY%" main.py schedule --apply >> "%LOGDIR%\%DAY%.log" 2>&1

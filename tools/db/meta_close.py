@@ -31,7 +31,7 @@ from config import MARKET_DATA_DIR, META_DIR, PROJECT_DIR
 
 TABLES = ("fund_daily", "fund_nav", "fund_adj", "fund_share")
 _HERE = os.path.dirname(os.path.abspath(__file__))          # tools/db
-KG_PATH = os.path.join(os.path.dirname(_HERE), "known_gaps.json")
+KG_PATH = os.path.join(_HERE, "data", "known_gaps.json")
 CODE_ROOT = os.path.dirname(os.path.dirname(_HERE))         # 代码/
 PATCH_PATH = os.path.join(MARKET_DATA_DIR, "derived", "fund_basic_patch.parquet")
 PATCH_COLS = ["ts_code", "name", "fund_type", "list_date", "first_trade_date",

@@ -38,6 +38,7 @@
   "notes": [
     "v77 三档口径（19 号 §62.3 / 20 号纪律二）：preRC＝零摩擦；delivered＝0.1% 滑点＋5% VPP；stress＝0.3% 滑点＋5% VPP。",
     "digest 由 `btf.experiment.manifest.metrics_digest_of(res.metrics)` 计算（与落盘 manifest.metrics_digest 同式）。",
-    "复跑：`python tools/check_v77_digest.py`（本 JSON 为唯一基线真源；比对失败退出码 1）。"
+    "历史基线（v7.7）：三档复跑已随规则镜像/策略源码退役不可执行；现行校验见 tools/agents_digest_baseline.json（REQ-20261121-01）。",
+    "历史留痕（2026-11-21，REQ-20261121-01/03）：v77 回测资产已退役；本文件不再被校验工具读取，仅余结构守卫测试（tests/unit/test_v77_digest_baseline.py）读取。"
   ]
 }

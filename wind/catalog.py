@@ -96,16 +96,34 @@ def _probe_raw():
             "schema_missing_core": [],
             "schema_extra_unknown": [],
             "raw_error": None,
+            "raw_empty": False,      # ⭐ 源端无数据（有列无行），非错误
+            "source_message": None,  # ⭐ 源端明确拒绝时的原文
         }
         try:
             with open(fp, encoding="utf-8") as f:
                 data = json.load(f)
             # Wind MCP 双层嵌套：result.content[0].text 才是真正数据 JSON 字符串
             text = None
+            res_obj = None
             try:
-                text = data["result"]["content"][0]["text"]
+                res_obj = data["result"]
+                text = res_obj["content"][0]["text"]
             except (KeyError, TypeError, IndexError):
                 text = None
+
+            # ⭐ 2026-11-18：源端**明确拒绝**单独归类。实证 exp_8882563.json：
+            #   {"result": {..., "isError": true}}，text=
+            #   "未识别到有效的金融标的:8882563.WI；相近证券：…(退市)…"
+            #   原实现因 text 不是 JSON 落到 json_decode 分支，被当成"文件损坏"。
+            if isinstance(res_obj, dict) and res_obj.get("isError"):
+                entry["raw_error"] = "source_rejected"
+                entry["source_message"] = str(text or "")[:200]
+                raw_errors.append((wc, "source_rejected"))
+                # ⚠ 必须手动入表：`results.append(entry)` 在 try 之后，
+                #   直接 continue 会让该 windcode 从 catalog 消失（总数 4157→4156，
+                #   被 --build 的门槛校验当场拦下）。
+                results.append(entry)
+                continue
 
             if text:
                 inner = json.loads(text)
@@ -135,9 +153,18 @@ def _probe_raw():
             else:
                 rows = []
 
-            if not rows or not cols:
-                entry["raw_error"] = "empty_rows_or_no_cols"
+            # ⭐ 2026-11-18：区分「源端无数据」与「格式损坏」。
+            #   · cols 有值、rows 为空 ⇒ Wind 正常空响应（标的无行情/未上市），
+            #     实测 9 个 634B 文件均带完整 columns 定义、rows=[]，属数据事实。
+            #   · cols 为空 ⇒ 才是真的解析异常。
+            #   原判据把两者都记成 empty_rows_or_no_cols，令审计长期挂 9 条假阳性。
+            if not cols:
+                entry["raw_error"] = "no_columns"
                 raw_errors.append((wc, entry["raw_error"]))
+            elif not rows:
+                entry["raw_empty"] = True
+                entry["raw_cols"] = cols
+                entry["schema_ncols"] = len(cols)
             else:
                 entry["valid"] = True
                 entry["raw_rows"] = len(rows)
@@ -253,6 +280,10 @@ def _build(raw_results, series_results):
             "schema_missing_core": ",".join(r.get("schema_missing_core", [])),
             "schema_extra_unknown": ",".join(r.get("schema_extra_unknown", [])),
             "raw_error": r.get("raw_error"),
+            # ⭐ 2026-11-18：区分「源端无数据」（有列无行，正常）与真解析失败；
+            #   source_message 保留源端拒绝原文（如"标的已退市"），便于复核。
+            "raw_empty": r.get("raw_empty", False),
+            "source_message": r.get("source_message"),
             "raw_path": r.get("raw_path"),
             # series 侧
             "series_present": s.get("series_present", False),

@@ -11,9 +11,9 @@ tools/clean_scratch.py — `_scratch/` 定期清理（一次性探针/临时产�
      "探针当天用完当天删"仍是首选纪律，本脚本是**兜底**，不替代纪律。
   3. 保护区（永不删，精确名匹配）：
        `wind-研究暂存/`  Wind 研究剥离期代码（含明文 key，禁外发）
-       `backups/`         数据表改动前的原始快照（不可重建，TMP-03 加入）
-       `bt_check_logs/`   btf `bt check` 历史门禁输出（追溯用，TMP-03 加入）
        `README.md`        本区保留策略说明（TMP-03 加入，否则会被本脚本自删）
+     （2026-11-21 迁出：`backups/` → `备份\归档文件\scratch-backups-历史快照-20261121\`；
+       `bt_check_logs/` → `代码\logs\bt_check\`；`schedule_logs/` → `代码\logs\schedule\`）
      另有 `--keep` 可追加名字/前缀豁免（可多次）。
   4. 默认 **干跑**：只打印清单；`--apply` 才真删。
 
@@ -37,9 +37,10 @@ from pathlib import Path
 SCRATCH = Path(__file__).resolve().parents[1] / "_scratch"
 
 #: 保护区：名字（顶层项，精确匹配）——永不删，只统计
-#: 2026-11-04 TMP-03：补齐 2026-11-04 清理裁定的三处保留项 + W1 契约文件
+#: 2026-11-21：`backups/`、`bt_check_logs/` 已迁出（前者归档、后者移 `代码/logs/bt_check/`），
+#:   保护区收缩为契约文件 + Wind 研究暂存
 #:   改这里必须同步 `_scratch/README.md` §三（保留区定义），否则契约与实现再次脱节
-PROTECTED = {"wind-研究暂存", "backups", "bt_check_logs", "README.md"}
+PROTECTED = {"wind-研究暂存", "README.md"}
 
 
 def entry_size(p: Path) -> int:

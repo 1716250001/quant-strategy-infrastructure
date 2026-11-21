@@ -238,7 +238,7 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
     print("=" * 70)
 
     # 读「已核验源端空」注册表（§25：逃生口撤销后的唯一豁免通道，逐码登记）
-    _kg_path = os.path.join(os.path.dirname(__file__), "known_gaps.json")
+    _kg_path = os.path.join(os.path.dirname(__file__), "db", "data", "known_gaps.json")
     import json as _json
     try:
         with open(_kg_path, encoding="utf-8") as _f:

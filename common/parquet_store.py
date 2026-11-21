@@ -541,6 +541,16 @@ def upsert_by_year(df, dir_path, date_col="trade_date", subset=None,
         raise KeyError(f"按年分区需要列 '{date_col}', 实际列: {list(df.columns)[:8]}")
 
     work = df.copy()
+    # ⛔ 2026-11-18（P0）：空日期必须 fail-loud，不得静默丢弃。
+    #   实证因果链（cb_issue 125009.SZ）：ann_date=None → astype(str) 得 NaN
+    #   （实测不是字符串 "None"）→ groupby("_year") 默认 dropna=True ⇒ 分组数 0、
+    #   循环体一次都不执行 → 返回 {partitions:0, rows:N, fail:0}；调用方只看
+    #   fail==0 便 cp.mark_done ⇒ 数据永久消失且零 ERROR。
+    n_nodate = int(pd.isna(work[date_col]).sum())
+    if n_nodate:
+        raise ValueError(
+            f"日期列 '{date_col}' 有 {n_nodate}/{len(df)} 行为空，无法确定年份分区；"
+            f"拒绝静默丢弃（调用方不得据此记断点）")
     # 年份: 兼容 YYYYMMDD 与 YYYY-MM-DD
     years = work[date_col].astype(str).str.replace("-", "", regex=False).str[:4]
     work = work.assign(_year=years)

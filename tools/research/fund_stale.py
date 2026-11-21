@@ -15,7 +15,7 @@ import shutil
 
 import config
 
-KG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "known_gaps.json")
+KG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "db", "data", "known_gaps.json")
 TABLES = ("fund_daily", "fund_nav", "fund_adj", "fund_share")
 
 

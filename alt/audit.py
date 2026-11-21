@@ -139,7 +139,23 @@ def check_checkpoint(verbose=True):
             else:
                 state, note = "异常", "断点显示已完成但目录无任何 parquet（疑似写失败被吞）"
         elif files and not has_ck:
-            state, note = "异常", f"有 {len(files)} 个文件但断点无记录（断点丢失，会重复拉取）"
+            # ⭐ 2026-11-18：两类表**本就不写主断点**，属设计而非"丢失"——
+            #   ① 派生表：`func="derived:<源表>"`（如 us_daily_universe 由 us_daily_raw 派生），
+            #      不拉取，自然没有主断点记录。
+            #   ② 专用引擎表：断点独立落在 `_meta/oversize_<表>_checkpoint.json`
+            #      （如 hk_val_pct 由 alt/oversize_fetch.py 多请求引擎拉取）。
+            #   原判据一律报「异常」，导致审计长期挂 2 条假阳性；
+            #   实证：hk_val_pct 的 oversize 断点 done=2,785 = 全部标的，并无丢失。
+            _func = str(getattr(sp, "func", "") or "")
+            _oversize_ck = os.path.join(
+                ALT_META_DIR, f"oversize_{name}_checkpoint.json")
+            if _func.startswith("derived:"):
+                state, note = "正常", f"派生表（{_func}），不拉取、无需主断点"
+            elif os.path.exists(_oversize_ck):
+                state, note = "正常", "专用引擎独立断点（oversize_*_checkpoint.json）"
+            else:
+                state, note = "异常", (f"有 {len(files)} 个文件但断点无记录"
+                                      f"（断点丢失，会重复拉取）")
         elif not files and not has_ck:
             state, note = "未建", "尚未建库"
 

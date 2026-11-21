@@ -39,7 +39,7 @@ pytestmark = [pytest.mark.l2]
 #: `tests/integration/x.py` ⇒ [0]=integration、[1]=tests、[2]=btf、[3]=代码（§110.2 固定定位）
 _HERE = Path(__file__).resolve()
 BTF_ROOT = _HERE.parents[2]
-DOC_DIR = _HERE.parents[3] / "代码架构" / "回测工具架构"
+DOC_DIR = _HERE.parents[3] / "docs" / "代码架构" / "回测工具架构"
 CHANGELOG = BTF_ROOT / "CHANGELOG.md"
 
 #: 被测「现状文档」组（T-A/T-B/T-C；19 号只作 T-C 的完成清单源头）
@@ -51,8 +51,13 @@ CURRENT_DOCS = (
     "11-演进路线风险与PoC.md",
     "16-架构评审与验收标准.md",
 )
-USAGE_DOC = "20-回测平台使用指引.md"
-DOC_19 = "19-架构审查与重构演进记录.md"
+USAGE_DOC = "18-回测平台使用指引.md"
+#: 旧 19 号演进记录已于 2026-11-20 归档（`备份\归档文件\架构账本归档-20261120\`）；
+#: T-C 的完成清单源头改读归档件，缺失则跳过——守卫不再依赖活目录中的已退役文档。
+DOC_19_ARCHIVED = (
+    DOC_DIR.parents[3] / "备份" / "归档文件" / "架构账本归档-20261120"
+    / "回测工具架构-19-架构审查与重构演进记录.md"
+)
 
 
 def _read(name: str) -> list[str]:
@@ -217,8 +222,10 @@ _WAIT_PAT = re.compile(r"待\s*(R\d+′)")
 
 
 def _done_units() -> set[str]:
+    if not DOC_19_ARCHIVED.is_file():
+        pytest.skip(f"19 号归档件缺失，T-C 扫描器无源头：{DOC_19_ARCHIVED}")
     units: set[str] = set()
-    for ln in _read(DOC_19):
+    for ln in DOC_19_ARCHIVED.read_text(encoding="utf-8").splitlines():
         if any(m in ln for m in _DONE_MARKERS):
             units.update(re.findall(r"R\d+′", ln))
     return units

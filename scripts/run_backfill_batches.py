@@ -51,10 +51,15 @@ def main():
     ap.add_argument("--batch", type=int, default=1300, help="每批任务数（1300 = 10 指数）")
     ap.add_argument("--max-batches", type=int, default=60)
     ap.add_argument("--stall-limit", type=int, default=3, help="连续 N 批待跑不降则退出")
+    # ⭐ 2026-11-18 P1：补拉场景下额外校验"清单内每个码是否真落盘"。
+    #    引擎的「成功=N」不可信（cb_issue 实证：成功=1 但库内 0 行）。
+    ap.add_argument("--codes-file", default=None,
+                    help="给出则每批后额外跑 verify_landed 校验清单落盘")
     a = ap.parse_args()
 
     os.makedirs(LOG_DIR, exist_ok=True)
     checker = os.path.join(_ROOT, "scripts", "check_backfill_coverage.py")
+    verifier = os.path.join(_ROOT, "scripts", "verify_landed.py")
     prev_pend, stall = None, 0
 
     for i in range(1, a.max_batches + 1):
@@ -67,9 +72,13 @@ def main():
             print("  [FATAL] 快照失败，停止", flush=True)
             return 2
 
-        rc, out = _run([PY, os.path.join(_ROOT, "main.py"), "backfill",
-                        "--only", a.table, "--limit", str(a.batch)],
-                       os.path.join(LOG_DIR, f"batch_{i:02d}.log"))
+        cmd = [PY, os.path.join(_ROOT, "main.py"), "backfill",
+               "--only", a.table, "--limit", str(a.batch)]
+        if a.codes_file:
+            # 按清单补拉：不加 --force-listed，让断点生效——已成功的不重跑，
+            # 未落盘的（如空日期被拒）下批自然重试。
+            cmd += ["--codes-file", a.codes_file]
+        rc, out = _run(cmd, os.path.join(LOG_DIR, f"batch_{i:02d}.log"))
         # ⭐ 2026-11-17 收尾 bug：待跑=0 时 backfill 不打「成功=N」进度行（直接
         #    跳过），原逻辑 RE_OK 匹配不到就误报 rc=2。先从跳过数判完成。
         skip_pre = RE_SKIP.findall(out)
@@ -109,6 +118,18 @@ def main():
         if vrc != 0:
             print(f"  ⛔ 自检失败，停在 BATCH {i}（断点已保存，可重跑同命令续跑）", flush=True)
             return 1
+
+        # P1（2026-11-18）：清单落盘校验——引擎的「成功=N」不可信
+        if a.codes_file:
+            lrc, lout = _run([PY, verifier, "--table", a.table,
+                              "--codes-file", a.codes_file],
+                             os.path.join(LOG_DIR, f"landed_{i:02d}.log"))
+            for line in lout.strip().splitlines():
+                if line.startswith("[落盘校验]") or "未落盘" in line or "✅" in line:
+                    print("  " + line, flush=True)
+            if lrc != 0:
+                print(f"  ⛔ 落盘校验未过，停在 BATCH {i}", flush=True)
+                return 1
 
         if remain == 0:
             print("\n✅ 真实待跑=0，补数完成", flush=True)

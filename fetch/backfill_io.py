@@ -219,8 +219,12 @@ class ByCodeBatchWriter:
         # ⚠ 2026-09-22 修复（P0）: upsert_by_year 对"某个年份分区写失败"是
         #   **不抛异常、只返回 fail 计数** → 原实现忽略它，部分年份没写进去
         #   却照样触发 on_flushed，断点被标记为完成，数据永不重拉。
-        if r.get("fail"):
-            msg = f"{r['fail']} 个年份分区写入失败（partitions={r.get('partitions')}）"
+        # ⛔ 2026-11-18（P0 纵深防御）：除 fail 外，还要拦 `rows>0 且 partitions==0`
+        #   ——「有数据但一条没写」。源头 upsert_by_year 已对空日期 fail-loud，
+        #   此处再兜一道，防止未来出现别的"该写没写"路径时又静默记断点。
+        if r.get("fail") or (r.get("rows") and not r.get("partitions")):
+            msg = (f"批量落盘异常: fail={r.get('fail')} "
+                   f"partitions={r.get('partitions')} rows={r.get('rows')}")
             if self.on_error is not None:
                 self.on_error(None, RuntimeError(msg))
             else:
@@ -439,6 +443,11 @@ def save_df(target_dir, key, df, layout="single", subset=None, sort_by=None,
             try:
                 r = upsert_by_year(df, target_dir, date_col=dc,
                                    subset=sub, sort_by=srt_pref)
+            except ValueError:
+                # ⛔ 2026-11-18（P0）：数据缺陷（如日期列全空）必须上抛，
+                #   不得回退单文件——回退会在按年目录里写出单文件造成混合布局，
+                #   且把"数据有问题"掩盖成"布局切换"，调用方照样记断点。
+                raise
             except Exception as e:
                 print(f"  [WARN] 按年分区失败, 回退单文件: {str(e)[:70]}")
                 layout = "single"
@@ -448,11 +457,14 @@ def save_df(target_dir, key, df, layout="single", subset=None, sort_by=None,
                 #   调用方据此记断点，导致该批数据永不重拉。
                 #   fail>0 时**不回退单文件**（回退会在年度目录里写出 {api}.parquet
                 #   造成混合布局），直接抛出让调用方跳过断点标记。
-                if r.get("fail"):
+                # ⛔ 2026-11-18（P0）补第二个洞：`rows>0 且 partitions==0` 同样是
+                #   "有数据但一条没写"，原实现只看 fail 就放过（cb_issue 实证）。
+                if r.get("fail") or (r.get("rows") and not r.get("partitions")):
                     raise RuntimeError(
-                        f"按年分区 {r['fail']} 个年份写入失败"
-                        f"（partitions={r.get('partitions')}），"
-                        f"未回退单文件（避免混合布局）")
+                        f"按年分区异常：fail={r.get('fail')} "
+                        f"partitions={r.get('partitions')} rows={r.get('rows')}"
+                        f"（有数据却 0 分区写入，日期列可能全空），"
+                        f"未回退单文件（避免混合布局）；调用方不得记断点")
                 return r["partitions"]
         else:
             layout = "single"       # 无分区列, 回退

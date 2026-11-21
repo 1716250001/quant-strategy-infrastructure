@@ -30,7 +30,7 @@
       bt check                （**同一脚本的 CLI 收编入口**，退出码一致：[btf/cli/main.py
                                的 `_cmd_check` → `btf.app.run_gate_check` → 本脚本]，
                                判定逻辑只有这一份——CLI 审查报告-20260930 P0）
-逐项输出落盘（**N4 加固**，2026-10-06）：默认 `代码/_scratch/bt_check_logs/<时间戳>/`
+逐项输出落盘（**N4 加固**，2026-10-06）：默认 `代码/logs/bt_check/<时间戳>/`
      （`BTFTOOL_CHECK_LOG_DIR` 可覆盖；每项每尝试一个 `.log`）；第 3 项**冷启动偶发假红**
      自动复跑一次并**显式标注**"首次失败/复跑通过"（不隐藏偶发；其余项失败＝真失败）。
      **N4 根因修复（2026-10-06，§66.10 收口批）**：第 3 项显式 `--basetemp` 指**项目内**
@@ -64,7 +64,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 #: —— 治"偶发假红无日志可归因"（上一轮两次假红均因无失败日志而无法定论）。
 #: 变量名 `BTFTOOL_` 前缀（**N7**：`BTF_` 前缀＝配置覆盖命名空间 ⇒ 配置校验失败）。
 LOG_DIR = Path(os.environ.get(
-    "BTFTOOL_CHECK_LOG_DIR", ROOT.parent / "_scratch" / "bt_check_logs"))
+    "BTFTOOL_CHECK_LOG_DIR", ROOT.parent / "logs" / "bt_check"))
 RUN_STAMP = time.strftime("%Y%m%d-%H%M%S")
 #: ③ **仅在"已知偶发"项上**允许自动复跑一次，且**显式标注**（"首次失败/复跑通过"）——
 #: **不隐藏**偶发；未列此项的失败一律按真失败处置。

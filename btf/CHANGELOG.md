@@ -32,6 +32,17 @@
   与 `_file_stem()`；`_fund_meta` 按完整 `ts_code` 索引（19 号 §262；`7a5ec33`）
 - **T-56 补 2 例负向测试**（`config-check` 失败态不得印 `[ok]`）＋ 摘要函数去未用参数
   （19 号 §258；`c96e7f2`）
+- **`check_v77_digest.py` 校验对象改 `AGENTS.md`**：v7.7 规则镜像/策略资产退役后，
+  改为校验赤潮 v7.8 单一规则源整文件 digest（CRLF→LF 归一化 sha256；新基线
+  `tools/agents_digest_baseline.json`，`--update --reason` 显式重冻结；删
+  `--tiers`/`--runs-dir`/`--smoke`）；smoke 测试保持单函数、扩为 6 子例
+  （REQ-20261121-01）
+- **v7.7 退役残留表述清理**：04 §8.3.7 / 18 §4.1/§9 / 09 §14.6/§14.7 / 旧 digest 基线 notes /
+  unit docstring 统一标注镜像退役，移除现行态死链绝对路径；无代码行为变更（REQ-20261121-03）
+- **`check_v77_digest.py` 低风险加固**：`--update` 与 `--out` 互斥（同用 exit 2）；基线 schema
+  严格校验（必填辅助字段 ＋ `sha256:64hex` ＋ `previous` 条目结构）；基线/`--out` 写入改
+  临时文件＋`os.replace` 原子替换；smoke 扩子例 7–9，正常路径 digest 与 0/1/2 退出码不变
+  （REQ-20261121-04）
 
 ## [7.0.0] — 2026-10-27（**R 类停牌口径 ＋ P14 CC-7 送转检查器 ＋ 工具落点治理**；19 号 §172–§177）
 

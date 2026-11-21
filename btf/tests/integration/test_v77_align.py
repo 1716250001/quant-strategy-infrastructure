@@ -10,6 +10,7 @@
     - md_core（赤潮）不可用/异常 → 仅跑 btf 侧自洽断言，对比项 skip；
     - ROE 口径差异（md_core 建库视角 vs btf 真 PIT）已显式留痕，
       对账以"当日"为准（同一交易日两者应一致，历史回测日可能分化）。
+A3/A4 依赖的 v7.7 镜像已退役；类级 skipif 保留历史用例（REQ-20261121-02）。
 """
 from __future__ import annotations
 
@@ -29,6 +30,10 @@ pytestmark = [pytest.mark.l4]
 
 ROOT = Path(MARKET_DATA_DIR)
 MIRROR_JSON = RULES_MIRROR
+#: v7.7 规则镜像已退役（REQ-20261121-01/02）；类级 skipif 按文件存在性动态判定
+_MIRROR_RETIRED = not MIRROR_JSON.is_file()
+_MIRROR_RETIRED_REASON = (
+    f"v7.7 规则镜像已退役（REQ-20261121-01/02）：{MIRROR_JSON}")
 TRADE_DATE = "20260923"
 
 VALID_STATES = {NORMAL, WATCH, CRISIS, RECOVERY}
@@ -185,6 +190,7 @@ class TestA2Liq:
             f"A2 状态不一致：btf={btf_state.status} md_core={md_status}")
 
 
+@pytest.mark.skipif(_MIRROR_RETIRED, reason=_MIRROR_RETIRED_REASON)
 class TestA3RuleSourceConsistency:
     """A3（09 §14.7）：override 为空 → 参数逐项等于镜像 JSON；指纹可复核。"""
 
@@ -205,6 +211,7 @@ class TestA3RuleSourceConsistency:
         assert provider.rules_version().startswith("v7.7@sha256:")
 
 
+@pytest.mark.skipif(_MIRROR_RETIRED, reason=_MIRROR_RETIRED_REASON)
 class TestA4UpgradeRegression:
     """A4（09 §14.7）：v7.7→v7.8 单参数变更（pe_max 30→25）→ diff 受控。"""
 
