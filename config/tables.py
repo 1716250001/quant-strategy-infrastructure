@@ -27,15 +27,23 @@
 #   （实测分歧 0 处）。35 张表无顶层映射者多为静态/无日期列表，属设计内。
 TABLE_DATE_COL = {
     # 行情（按交易日）
-    "daily": "trade_date", "daily_basic": "trade_date",
-    "fund_daily": "trade_date", "cb_daily": "trade_date",
-    "index_daily": "trade_date", "index_dailybasic": "trade_date",
+    "daily": "trade_date",
+    "daily_basic": "trade_date",
+    "fund_daily": "trade_date",
+    "cb_daily": "trade_date",
+    "index_daily": "trade_date",
+    "index_dailybasic": "trade_date",
     "index_global": "trade_date",
-    "adj_factor": "trade_date", "stk_limit": "trade_date",
-    "moneyflow": "trade_date", "margin": "trade_date",
-    "margin_detail": "trade_date", "margin_secs": "trade_date",
-    "hk_hold": "trade_date", "suspend_d": "trade_date",
-    "fut_daily": "trade_date", "fut_mapping": "trade_date",
+    "adj_factor": "trade_date",
+    "stk_limit": "trade_date",
+    "moneyflow": "trade_date",
+    "margin": "trade_date",
+    "margin_detail": "trade_date",
+    "margin_secs": "trade_date",
+    "hk_hold": "trade_date",
+    "suspend_d": "trade_date",
+    "fut_daily": "trade_date",
+    "fut_mapping": "trade_date",
     "fut_settle": "trade_date",
     # ---- 2026-09-21 新增: 4 张 tier C 表首次建库后登记 ----
     # ⚠ 这 4 张 mode=by_date，此前从未建库、也未登记日期列 →
@@ -43,39 +51,64 @@ TABLE_DATE_COL = {
     #   与实际落盘（by_date 分支 → by_year）冲突。补库建库后由 R9 抓到；
     #   若不登记，后续日更/续拉会按 by_code 写出 `{code}.parquet`，
     #   重新制造混合布局（第 5 种静默失效）。
-    "fut_holding": "trade_date", "fut_wsr": "trade_date",
-    "opt_daily": "trade_date", "repo_daily": "trade_date",
-    "sge_daily": "trade_date", "daily_info": "trade_date",
+    "fut_holding": "trade_date",
+    "fut_wsr": "trade_date",
+    "opt_daily": "trade_date",
+    "repo_daily": "trade_date",
+    "sge_daily": "trade_date",
+    "daily_info": "trade_date",
     "sz_daily_info": "trade_date",
-    "weekly": "trade_date", "monthly": "trade_date",
-    "index_weekly": "trade_date", "index_monthly": "trade_date",
+    "weekly": "trade_date",
+    "monthly": "trade_date",
+    "index_weekly": "trade_date",
+    "index_monthly": "trade_date",
     "top_list": "trade_date",
-    "top_inst": "trade_date", "block_trade": "trade_date",
-    "hsgt_top10": "trade_date", "ggt_top10": "trade_date",
+    "top_inst": "trade_date",
+    "block_trade": "trade_date",
+    "hsgt_top10": "trade_date",
+    "ggt_top10": "trade_date",
     # ---- 2026-10-28 DB-R2：沪深港通资金流向两表（by_range，单日一行）----
     "moneyflow_hsgt": "trade_date",
-    "ggt_daily":      "trade_date",
+    "ggt_daily": "trade_date",
     # 基金
-    "fund_nav": "nav_date", "fund_adj": "trade_date",
-    "fund_share": "trade_date", "fx_daily": "trade_date",
+    "fund_nav": "nav_date",
+    "fund_adj": "trade_date",
+    "fund_share": "trade_date",
+    "fx_daily": "trade_date",
     # 财务（报告期）
-    "income": "end_date", "balancesheet": "end_date",
-    "cashflow": "end_date", "fina_indicator": "end_date",
-    "fina_audit": "end_date", "fina_mainbz": "end_date",
+    "income": "end_date",
+    "balancesheet": "end_date",
+    "cashflow": "end_date",
+    "fina_indicator": "end_date",
+    "fina_audit": "end_date",
+    "fina_mainbz": "end_date",
     # 事件面
-    "dividend": "end_date", "forecast": "ann_date",
-    "stk_holdernumber": "end_date", "stk_holdertrade": "ann_date",
-    "pledge_stat": "end_date", "share_float": "ann_date",
-    "repurchase": "ann_date", "namechange": "start_date",
-    "cb_issue": "ann_date", "cb_rating": "rating_date",
+    "dividend": "end_date",
+    "forecast": "ann_date",
+    "stk_holdernumber": "end_date",
+    "stk_holdertrade": "ann_date",
+    "pledge_stat": "end_date",
+    "share_float": "ann_date",
+    "repurchase": "ann_date",
+    "namechange": "start_date",
+    "cb_issue": "ann_date",
+    "cb_rating": "rating_date",
     "cb_share": "end_date",
-    "stk_managers": "ann_date", "express": "ann_date",
+    "stk_managers": "ann_date",
+    "express": "ann_date",
     "pledge_detail": "ann_date",
-    "stk_rewards": "ann_date", "fund_div": "ann_date",
+    "stk_rewards": "ann_date",
+    "fund_div": "ann_date",
     # 其他
-    "disclosure_date": "end_date", "index_weight": "trade_date",
-    "new_share": "ipo_date", "shibor": "date", "us_tycr": "date",
-    "us_trycr": "date", "us_tbr": "date", "us_tltr": "date", "us_trltr": "date",
+    "disclosure_date": "end_date",
+    "index_weight": "trade_date",
+    "new_share": "ipo_date",
+    "shibor": "date",
+    "us_tycr": "date",
+    "us_trycr": "date",
+    "us_tbr": "date",
+    "us_tltr": "date",
+    "us_trltr": "date",
     "eco_cal": "date",
     # ⚠ bc_otcqt 源端已于 2026-10 改版：日期字段由大写 TRADE_DATE 改为小写 trade_date
     #   （DB-R10 R10-2 / R10a-1）。此处为全库权威索引，必须与
@@ -86,7 +119,7 @@ TABLE_DATE_COL = {
     #   stk_seasoned/stk_account/shibor_lpr）由 mode 决定落单文件，不列在此。
     "fut_index_daily": "trade_date",
     "etf_limit": "trade_date",
-    "top10_holders": "end_date",          # period 是入参名, 返回列是 end_date
+    "top10_holders": "end_date",  # period 是入参名, 返回列是 end_date
     "top10_floatholders": "end_date",
     "stk_weekly_monthly": "trade_date",
     "stk_week_month_adj": "trade_date",
@@ -115,32 +148,32 @@ TABLE_DATE_COL = {
 #   而 partition 列 ann_date 的实测最小值是 19980730。
 SOURCE_START_BASELINE = {
     "index_dailybasic": "20040102",
-    "fund_adj":         "19991022",
-    "fund_share":       "19980327",
-    "fx_daily":         "20070521",
-    "index_weekly":     "19910705",
-    "index_monthly":    "19910731",
-    "dividend":         "19901231",
-    "stk_managers":     "19890201",
+    "fund_adj": "19991022",
+    "fund_share": "19980327",
+    "fx_daily": "20070521",
+    "index_weekly": "19910705",
+    "index_monthly": "19910731",
+    "dividend": "19901231",
+    "stk_managers": "19890201",
     # 19000908 → 19920113（2026-11-08 R10/F2）：原基线来自 1900.parquet 的
     # 3 行垃圾（end_date 全空，源端脏记录），已归档至
     # 备份/归档文件/marketdata-f2-cleanup-20261108/。剔后实测最小 end_date
     # = 19920113（21 行真实历史）。**只改基线值，判据方向与强度不变**。
     "stk_holdernumber": "19920113",
-    "stk_holdertrade":  "19940810",
-    "stk_rewards":      "19920526",
-    "pledge_stat":      "20140307",
-    "pledge_detail":    "20030402",
-    "share_float":      "20050809",
-    "repurchase":       "20050625",
-    "namechange":       "19901201",
-    "fina_mainbz":      "20001231",
-    "fina_audit":       "19971231",
-    "express":          "20050108",
-    "forecast":         "19981231",
-    "cb_issue":         "19980730",
-    "cb_rating":        "20010501",
-    "cb_share":         "20000630",
+    "stk_holdertrade": "19940810",
+    "stk_rewards": "19920526",
+    "pledge_stat": "20140307",
+    "pledge_detail": "20030402",
+    "share_float": "20050809",
+    "repurchase": "20050625",
+    "namechange": "19901201",
+    "fina_mainbz": "20001231",
+    "fina_audit": "19971231",
+    "express": "20050108",
+    "forecast": "19981231",
+    "cb_issue": "19980730",
+    "cb_rating": "20010501",
+    "cb_share": "20000630",
 }
 
 # 基线"测量列"绑定 — 2026-11-03 审查 §283（T1b）
@@ -181,7 +214,7 @@ SOURCE_START_BASELINE_COL = {
 #   回填断点 14,141 项（2026-09-25 22:04，备份 .bak_20260925_220428），账实对齐。
 #   ⚠ 教训：by_date 表纳入日更组前，先 ckpt --fix 消账，否则 audit_gaps 会把
 #     by_code 时代的数据全算成"缺口"，误导回补（当日实证：按日拉历史日期全空烧 3600 次）。
-HISTORY_BACKFILL_PENDING = set()      # 例: {"margin", "moneyflow"}
+HISTORY_BACKFILL_PENDING = set()  # 例: {"margin", "moneyflow"}
 
 # ============================================================
 # 7c. 数据清理目标 (db-clean) — 2026-09-16 新增
@@ -207,10 +240,22 @@ DB_CLEAN_TARGETS = {
         "key": ["ts_code", "end_date"],
         "date_col": "end_date",
         "strategy": "keep_first_nonnull",
-        "watch": ["fcff", "fcfe", "fcff_ps", "fcfe_ps", "cash_ratio", "eps",
-                  "dt_eps", "assets_turn", "networking_capital", "ca_turn"],
-        "note": ("Tushare 后续补充自由现金流字段后二次拉取未按主键去重、直接追加; "
-                 "实测 33.4% 整行相同, 且存在 '两版都有值且不同' 的错误值组"),
+        "watch": [
+            "fcff",
+            "fcfe",
+            "fcff_ps",
+            "fcfe_ps",
+            "cash_ratio",
+            "eps",
+            "dt_eps",
+            "assets_turn",
+            "networking_capital",
+            "ca_turn",
+        ],
+        "note": (
+            "Tushare 后续补充自由现金流字段后二次拉取未按主键去重、直接追加; "
+            "实测 33.4% 整行相同, 且存在 '两版都有值且不同' 的错误值组"
+        ),
     },
 }
 
@@ -224,42 +269,45 @@ DB_CLEAN_TARGETS = {
 #       按年分区的大表必须含标的列, 否则同一天全市场都会被判重复。
 # 值说明:
 #   ["ts_code","trade_date"] 等列表 = 复合主键
-#   None = 跳过重复检查(无合适主键的接口)
+#   None = 不做主键判重，改做整行判重（>10 文件时抽样 10 个；与
+#          tools/db/audit.py 的 None 分支同口径）
 DB_AUDIT_PKEYS = {
     # --- backfill 新增(按年分区) ---
-    "margin":           ["trade_date", "exchange_id"],
-    "margin_detail":    ["trade_date", "ts_code"],
-    "margin_secs":      ["trade_date", "ts_code"],
-    "moneyflow":        ["trade_date", "ts_code"],
-    "top_list":         None,
-    "top_inst":         None,
-    "block_trade":      None,
-    "hsgt_top10":       ["trade_date", "ts_code"],
-    "ggt_top10":        None,
+    "margin": ["trade_date", "exchange_id"],
+    "margin_detail": ["trade_date", "ts_code"],
+    "margin_secs": ["trade_date", "ts_code"],
+    "moneyflow": ["trade_date", "ts_code"],
+    "top_list": None,
+    "top_inst": None,
+    "block_trade": None,
+    "hsgt_top10": ["trade_date", "ts_code"],
+    "ggt_top10": None,
     # ---- 2026-10-28 DB-R2：沪深港通资金流向两表 ----
-    "moneyflow_hsgt":   ["trade_date"],
-    "ggt_daily":        ["trade_date"],
-    "hk_hold":          ["trade_date", "code"],
+    "moneyflow_hsgt": ["trade_date"],
+    "ggt_daily": ["trade_date"],
+    "hk_hold": ["trade_date", "code"],
     # CC-FIX-8（2026-11-09，§369/§372）：同日同股可同时有 S（停牌）与 R（复牌），
     #   实证 89 组同键多行（全在 2011–2015 分区）；键加 suspend_type 后潜在
     #   折叠损失 0（640,675 行不变）。BACKFILL_TARGETS["subset"] 同步改同一键。
-    "suspend_d":        ["trade_date", "ts_code", "suspend_type"],
-    "fut_daily":        ["trade_date", "ts_code"],
-    "fut_mapping":      ["trade_date", "ts_code"],
-    "disclosure_date":  ["ts_code", "end_date"],
-    "index_weight":     ["index_code", "con_code", "trade_date"],
+    "suspend_d": ["trade_date", "ts_code", "suspend_type"],
+    "fut_daily": ["trade_date", "ts_code"],
+    "fut_mapping": ["trade_date", "ts_code"],
+    "disclosure_date": ["ts_code", "end_date"],
+    "index_weight": ["index_code", "con_code", "trade_date"],
     # --- backfill 新增(按标的/单文件) ---
-    "dividend":         ["ts_code", "end_date", "ann_date", "div_proc"],
-    "forecast":         ["ts_code", "ann_date", "end_date"],
+    "dividend": ["ts_code", "end_date", "ann_date", "div_proc"],
+    "forecast": ["ts_code", "ann_date", "end_date"],
     "index_dailybasic": ["ts_code", "trade_date"],
-    "fund_adj":         ["ts_code", "trade_date"],
-    "fund_share":       ["ts_code", "trade_date"],
-    "fx_daily":         ["ts_code", "trade_date"],
+    "fund_adj": ["ts_code", "trade_date"],
+    "fund_share": ["ts_code", "trade_date"],
+    "fx_daily": ["ts_code", "trade_date"],
     # R9a：stk_holdernumber 补 ann_date（同报告期可多次公告）；stk_holdertrade 不改键
     #   —— 同日多笔属合法多行（不同 holder_name/变动量），键已含 holder_name。
     "stk_holdernumber": ["ts_code", "end_date", "ann_date"],
-    "stk_holdertrade":  ["ts_code", "ann_date", "holder_name"],
-    "pledge_stat":      ["ts_code", "end_date"],
+    # D5（2026-11-21）：同键 69,258 组、整行完全相同 0 ⇒ 同一持有人同日多笔
+    # 变动属业务多行，无覆盖源端的自然键 ⇒ None（全列判重兜底）。
+    "stk_holdertrade": None,
+    "pledge_stat": ["ts_code", "end_date"],
     # R9a：share_float 补 ann_date（同 float_date+holder_name 可多次公告）
     # CC-FIX-5（2026-11-09，§362）：原 4 键会把「同人同日同类型多笔解禁」
     #   误报为主键重复；加 share_type（5 键）后实测仍有 127 组合法多行
@@ -267,124 +315,129 @@ DB_AUDIT_PKEYS = {
     #   口径＝duplicated() 默认 keep='first'（即审计输出口径）：
     #   4 键 211 行/206 组，5 键 131 行/127 组（CC-FIX-7，§370 四.2 更正）
     #   ⇒ 本表无覆盖源端的业务键，改 None（跳过键式判重，由全列判重兜底）。
-    "share_float":      None,
-    "repurchase":       ["ts_code", "ann_date", "proc"],
-    "namechange":       ["ts_code", "start_date"],
-    "fina_mainbz":      ["ts_code", "end_date", "bz_item"],
-    "fina_audit":       ["ts_code", "end_date"],
-    "stock_company":    ["ts_code"],
-    "cb_issue":         ["ts_code"],
+    "share_float": None,
+    "repurchase": None,  # D5：2,765 组同键、整行相同 0 ⇒ 同日多笔回购属业务多行
+    "namechange": ["ts_code", "start_date"],
+    "fina_mainbz": None,  # D5：85,195 组同键、整行相同 0 ⇒ 主营构成多行（无覆盖源端的自然键）
+    "fina_audit": None,  # D5：340 组同键、整行相同 0 ⇒ 审计意见多次公告/多机构
+    "stock_company": ["ts_code"],
+    "cb_issue": ["ts_code"],
     # R9a：cb_share 补 end_date（同公告日可含多个报告期）
-    "cb_share":         ["ts_code", "publish_date", "end_date"],
-    "cb_rating":        ["ts_code", "rating_date"],
-    "new_share":        ["ts_code"],
+    "cb_share": ["ts_code", "publish_date", "end_date"],
+    "cb_rating": ["ts_code", "rating_date"],
+    "new_share": ["ts_code"],
     "broker_recommend": None,
-    "shibor":           ["date"],
-    "us_tycr":          ["date"],
-    "us_trycr":         ["date"],
-    "us_tbr":           ["date"],
-    "us_tltr":          ["date"],
-    "us_trltr":         ["date"],
-    "fut_basic":        ["ts_code"],
-    "opt_basic":        ["ts_code"],
-    "stk_rewards":      ["ts_code", "ann_date", "name", "title", "end_date"],
+    "shibor": ["date"],
+    "us_tycr": ["date"],
+    "us_trycr": ["date"],
+    "us_tbr": ["date"],
+    "us_tltr": ["date"],
+    "us_trltr": ["date"],
+    "fut_basic": ["ts_code"],
+    "opt_basic": ["ts_code"],
+    "stk_rewards": ["ts_code", "ann_date", "name", "title", "end_date"],
     # bc_otcqt：源端已无 ID 列（R10-2），改全列判重，与 BACKFILL_TARGETS.subset="*" 对齐
-    "bc_otcqt":         None,
-    "fund_div":         ["ts_code", "ann_date", "div_proc", "record_date"],
-    "sge_daily":        ["ts_code", "trade_date"],
-    "daily_info":       ["trade_date", "ts_code"],
-    "sz_daily_info":    ["trade_date", "ts_code"],
-    "eco_cal":          None,
-    "fut_settle":       ["ts_code", "trade_date"],
-    "fut_trade_cal":    ["exchange", "cal_date"],
-    "shibor_quote":     ["date", "bank"],
-    "hibor":            ["date"],
-    "hk_tradecal":      ["cal_date"],
-    "stk_managers":     ["ts_code", "ann_date", "name", "title"],
-    "express":          ["ts_code", "ann_date", "end_date"],
+    "bc_otcqt": None,
+    "fund_div": ["ts_code", "ann_date", "div_proc", "record_date"],
+    "sge_daily": ["ts_code", "trade_date"],
+    "daily_info": ["trade_date", "ts_code"],
+    "sz_daily_info": ["trade_date", "ts_code"],
+    "eco_cal": None,
+    "fut_settle": ["ts_code", "trade_date"],
+    "fut_trade_cal": ["exchange", "cal_date"],
+    "shibor_quote": ["date", "bank"],
+    "hibor": ["date"],
+    "hk_tradecal": ["cal_date"],
+    "stk_managers": ["ts_code", "ann_date", "name", "title"],
+    "express": ["ts_code", "ann_date", "end_date"],
     # R9a：**不改键** —— 同日多笔质押属合法多行（不同 holder_name/质押量）
-    "pledge_detail":    ["ts_code", "ann_date", "holder_name", "pledge_amount"],
-    "weekly":           ["ts_code", "trade_date"],
-    "monthly":          ["ts_code", "trade_date"],
-    "index_weekly":     ["ts_code", "trade_date"],
-    "index_monthly":    ["ts_code", "trade_date"],
-    "index_global":     ["ts_code", "trade_date"],
+    # D5（2026-11-21）：75,796 组同键、整行相同 0 ⇒ 上述「合法多行」判断成立，
+    # 但已含 holder_name+pledge_amount 仍重复 ⇒ 无覆盖源端的自然键，改 None。
+    "pledge_detail": None,
+    "weekly": ["ts_code", "trade_date"],
+    "monthly": ["ts_code", "trade_date"],
+    "index_weekly": ["ts_code", "trade_date"],
+    "index_monthly": ["ts_code", "trade_date"],
+    "index_global": ["ts_code", "trade_date"],
     "index_member_all": ["ts_code"],
     "index_member_hist": ["index_code", "con_code", "in_date"],  # 2026-10-22 EE-FUND-13 新增
-    "hs_const":         ["ts_code", "hs_type"],
+    "hs_const": ["ts_code", "hs_type"],
     # --- 尚未入库/已废弃的表（2026-09-19 补：R11 要求每张表都有归宿）---
-    #     配 None = 跳过重复检查（结构未实测，宁可不查也不误报）
-    "opt_daily":        ["ts_code", "trade_date"],
-    "repo_daily":       ["trade_date", "ts_code"],
-    "hk_daily":         ["ts_code", "trade_date"],
-    "stk_mins":         ["ts_code", "trade_date"],
-    "fut_holding":      None,   # 单日多会员多合约，主键未实测
-    "fut_wsr":          None,   # 仓单日报，主键未实测
+    #     配 None = 不做主键判重，改做整行判重（结构未实测，宁可不查也不误报）
+    "opt_daily": ["ts_code", "trade_date"],
+    "repo_daily": ["trade_date", "ts_code"],
+    "hk_daily": ["ts_code", "trade_date"],
+    "stk_mins": ["ts_code", "trade_date"],
+    "fut_holding": None,  # 单日多会员多合约，主键未实测
+    "fut_wsr": None,  # 仓单日报，主键未实测
     # ⚠ 2026-09-22 修复（P1-3）: 此处原有 "fut_weekly_detail": None，
     #   与文件末尾的 "fut_weekly_detail": ["exchange","prd","week"] 构成
     #   **字典重复键**（后写者生效，前面的 None 被静默覆盖，且注释"已停更"
     #   与实际"已建库"相矛盾）。已删除本处条目，保留末尾的正确版本。
-    "report_rc":        None,   # 研报，限频死结
-    "bc_bestotcqt":     None,   # 死结：无日期列，无法成历史
-    "gz_index":         None,   # tier C 未拉（民间利率，已被 shibor 覆盖）
-    "wz_index":         None,   # 同上
-    "us_basic":         None,   # 美股: ts_code 不唯一(55处业务多行) → 全列判重
-    "us_tradecal":      ["cal_date"],
+    "report_rc": None,  # 研报，限频死结
+    "bc_bestotcqt": None,  # 死结：无日期列，无法成历史
+    "gz_index": None,  # tier C 未拉（民间利率，已被 shibor 覆盖）
+    "wz_index": None,  # 同上
+    "us_basic": None,  # 美股: ts_code 不唯一(55处业务多行) → 全列判重
+    "us_tradecal": ["cal_date"],
     # 基金公司: 原配 ['ts_code'] 但该表**无此列** → 判重静默失效（2026-09-19 修正）。
     # ⚠ 不可改用 credit_code—— 实测 207 行仅 154 个唯一值，重复是公司更名
     #   业务事实（如 91310000717880594D = 浦银安盛/浦银基金，同一法人的两个名字），
     #   用它做主键会产生 53 行“重复”误报，据此去重还会丢掉更名历史。
     #   name / (name,setup_date) 实测均唯一，取更稳的复合键。
-    "fund_company":     ["name", "setup_date"],
-    "fund_manager":     None,
-    "slb_len_mm":       None,
-    "bse_mapping":      ["o_code"],
-    "hk_basic":         ["ts_code"],
-    "cn_cpi":           None,
-    "cn_ppi":           None,
-    "cn_m":             None,
-    "cn_pmi":           None,
-    "cn_gdp":           None,
-    "sf_month":         None,
+    "fund_company": ["name", "setup_date"],
+    "fund_manager": None,
+    "slb_len_mm": None,
+    "bse_mapping": ["o_code"],
+    "hk_basic": ["ts_code"],
+    "cn_cpi": None,
+    "cn_ppi": None,
+    "cn_m": None,
+    "cn_pmi": None,
+    "cn_gdp": None,
+    "sf_month": None,
     # --- 原有核心目录 ---
-    "daily":            ["ts_code", "trade_date"],
-    "daily_basic":      ["ts_code", "trade_date"],
-    "fund_daily":       ["ts_code", "trade_date"],
-    "cb_daily":         ["ts_code", "trade_date"],
-    "index_daily":      ["ts_code", "trade_date"],
-    "adj_factor":       ["ts_code", "trade_date"],
-    "stk_limit":        ["ts_code", "trade_date"],
-    "fund_nav":         ["ts_code", "nav_date"],
+    "daily": ["ts_code", "trade_date"],
+    "daily_basic": ["ts_code", "trade_date"],
+    "fund_daily": ["ts_code", "trade_date"],
+    "cb_daily": ["ts_code", "trade_date"],
+    "index_daily": ["ts_code", "trade_date"],
+    "adj_factor": ["ts_code", "trade_date"],
+    "stk_limit": ["ts_code", "trade_date"],
+    "fund_nav": ["ts_code", "nav_date"],
     # R9a（2026-11-08）：财报三表补 update_flag —— 同一 (ts_code,end_date,report_type)
     #   存在 update_flag=1/2 的多版本行（更正前/更正后），属业务多行而非重复。
     #   只改审计判重口径，写入端不动。
-    "income":           ["ts_code", "end_date", "report_type", "update_flag"],
-    "balancesheet":     ["ts_code", "end_date", "report_type", "update_flag"],
-    "cashflow":         ["ts_code", "end_date", "report_type", "update_flag"],
-    "fina_indicator":   ["ts_code", "end_date"],
+    "income": ["ts_code", "end_date", "report_type", "update_flag"],
+    "balancesheet": ["ts_code", "end_date", "report_type", "update_flag"],
+    "cashflow": ["ts_code", "end_date", "report_type", "update_flag"],
+    "fina_indicator": ["ts_code", "end_date"],
     # ---- 2026-09-19 接口审查补充 ----
     # 判重口径遵循项目"二分"原则（真重复 vs 业务多行），全部用复合键或全列：
-    "fut_index_daily":     ["ts_code", "trade_date"],
-    "etf_limit":           ["ts_code", "trade_date"],
-    "top10_holders":       ["ts_code", "end_date", "holder_name"],
-    "top10_floatholders":  ["ts_code", "end_date", "holder_name"],
-    "index_classify":      ["index_code"],
+    "fut_index_daily": ["ts_code", "trade_date"],
+    "etf_limit": ["ts_code", "trade_date"],
+    # D5：同 (ts_code,end_date,holder_name) 存在多公告日/多持有人类型 ⇒ 扩键
+    "top10_holders": ["ts_code", "end_date", "holder_name", "ann_date", "holder_type"],
+    "top10_floatholders": ["ts_code", "end_date", "holder_name", "ann_date", "holder_type"],
+    # D5：同一 index_code 有 L1/L2/L3 多层级 + 多来源 ⇒ 扩 level/src
+    "index_classify": ["index_code", "level", "src"],
     # R9a：补 freq —— 同一 trade_date 下周线/月线两套行并存属业务多行
-    "stk_weekly_monthly":  ["ts_code", "trade_date", "freq"],
-    "stk_week_month_adj":  ["ts_code", "trade_date", "freq"],
-    "fut_weekly_monthly":  ["ts_code", "trade_date"],
-    "shibor_lpr":          ["date"],
-    "cn_schedule":         None,   # 日程表，无天然主键，跳过判重
-    "stk_seasoned":        None,   # IPO 明细，同一 ts_code 可多次公告，跳过
-    "stk_account":         ["date"],
-    "us_daily":            ["ts_code", "trade_date"],
+    "stk_weekly_monthly": ["ts_code", "trade_date", "freq"],
+    "stk_week_month_adj": ["ts_code", "trade_date", "freq"],
+    # D5：同一 trade_date 下 freq=W/M 两套行并存属业务多行（与 stk_* 同口径）
+    "fut_weekly_monthly": ["ts_code", "trade_date", "freq"],
+    "shibor_lpr": ["date"],
+    "cn_schedule": None,  # 日程表，无天然主键，跳过判重
+    "stk_seasoned": None,  # IPO 明细，同一 ts_code 可多次公告，跳过
+    "stk_account": ["date"],
+    "us_daily": ["ts_code", "trade_date"],
     # --- 2026-09-20 fut_weekly_detail 建库（由 tier X 改为 tier D/paged）---
     #   注：源端数据已于 2020-04-24 停更，本表为**历史归档**，非日更表。
     # ⚠ 判重键**不能用 week_date**：实测 154 行 week_date 缺失（NaN），
     #    这些行是 week=201553（2015 年第 53 周，ISO 跨年周，源端未给日期），
     #    会导致按 [exchange,prd,week_date] 误判 98 行"重复"。
     #    改用 week（周次，无缺失）→ 实测 20,653 行**零重复**。
-    "fut_weekly_detail":   ["exchange", "prd", "week"],
+    "fut_weekly_detail": ["exchange", "prd", "week"],
 }
 
 # ============================================================
@@ -402,8 +455,8 @@ KEY_NARROW_ACK = {
         "decided": "2026-11-09",
         "reason": "行情修订／补值：同一指数同日被重拉后部分字段更新，keep='last' 取最新快照",
         "evidence": "131 组同键多行（全在 2026 分区），整行完全相同 0；"
-                    "差异 vol 97 / low 19 / swing 18 / close 15 / change 15 / high 14 / pct_chg 12 / open 1；"
-                    "非空方向：后版更多 71 / 相同 60 / 更少 0",
+        "差异 vol 97 / low 19 / swing 18 / close 15 / change 15 / high 14 / pct_chg 12 / open 1；"
+        "非空方向：后版更多 71 / 相同 60 / 更少 0",
         "baseline_dup": 131,
         "alarm_ratio": 1.5,
     },
@@ -417,53 +470,87 @@ KEY_NARROW_ACK = {
 #   `--strict` 也不因它非零。
 # ⚠ 新增项必须带 decided（裁定日期）+ reason（依据），**不许把红表改配置改绿**。
 STALE_BY_DESIGN = {
-    "gz_index":     {"since": "2019-03-04", "decided": "2026-09-19",
-                     "reason": "源端停更（民间利率，已被 shibor 覆盖）"},
-    "shibor_quote": {"since": "2016-12-30", "decided": "2026-09-23",
-                     "reason": "老大决策 SHELVED，维持 2016 现状，不补不删"},
-    "hibor":        {"since": "2016-12-30", "decided": "2026-11-09",
-                     "reason": "market 侧未补（限频 1 次/小时，补 11 年≈11.2h）；"
-                               "港股资金面改引用 alt.hibor（实测 2026-11-06 正常）"},
-    "stk_account":  {"since": "2019-02-22", "decided": "2026-09-19",
-                     "reason": "源端停更，192 行仅存档"},
-    "slb_len_mm":   {"since": "2025-07-25", "decided": "2026-11-09",
-                     "reason": "源端停更（API 实证单次返 5,000 行，最新 20250725）"},
+    "gz_index": {
+        "since": "2019-03-04",
+        "decided": "2026-09-19",
+        "reason": "源端停更（民间利率，已被 shibor 覆盖）",
+    },
+    "shibor_quote": {
+        "since": "2016-12-30",
+        "decided": "2026-09-23",
+        "reason": "老大决策 SHELVED，维持 2016 现状，不补不删",
+    },
+    "hibor": {
+        "since": "2016-12-30",
+        "decided": "2026-11-09",
+        "reason": "market 侧未补（限频 1 次/小时，补 11 年≈11.2h）；"
+        "港股资金面改引用 alt.hibor（实测 2026-11-06 正常）",
+    },
+    "stk_account": {
+        "since": "2019-02-22",
+        "decided": "2026-09-19",
+        "reason": "源端停更，192 行仅存档",
+    },
+    "slb_len_mm": {
+        "since": "2025-07-25",
+        "decided": "2026-11-09",
+        "reason": "源端停更（API 实证单次返 5,000 行，最新 20250725）",
+    },
     # ---- CC-FIX-12（2026-11-10，§378）：24 张「未知」定性后的停更/改引用登记 ----
-    "hs_const":     {"since": "2019-12-27", "decided": "2026-11-10",
-                     "reason": "源端冻结（§203.2 实证：库内零缺口、无消费方、tier C）；"
-                               "§369 裁定「只登记不修复」"},
-    "fut_weekly_detail": {"since": "2020-04-24", "decided": "2026-11-10",
-                          "reason": "源端停更（API 实证：SHFE／DCE 各拉 4,000 行，"
-                                    "week_date 最新均 20200424，与库内止点逐字吻合）"},
-    "hk_daily":     {"since": "2026-11-10", "decided": "2026-11-10",
-                     "reason": "market 侧未建（enabled=False、tier X、断点无记录）；"
-                               "港股日线改引用 alt.hk_daily（实测 2026-11-06 正常，"
-                               "856.7 万行／135 MB），照 hibor 先例"},
+    "hs_const": {
+        "since": "2019-12-27",
+        "decided": "2026-11-10",
+        "reason": "源端冻结（§203.2 实证：库内零缺口、无消费方、tier C）；"
+        "§369 裁定「只登记不修复」",
+    },
+    "fut_weekly_detail": {
+        "since": "2020-04-24",
+        "decided": "2026-11-10",
+        "reason": "源端停更（API 实证：SHFE／DCE 各拉 4,000 行，"
+        "week_date 最新均 20200424，与库内止点逐字吻合）",
+    },
+    "hk_daily": {
+        "since": "2026-11-10",
+        "decided": "2026-11-10",
+        "reason": "market 侧未建（enabled=False、tier X、断点无记录）；"
+        "港股日线改引用 alt.hk_daily（实测 2026-11-06 正常，"
+        "856.7 万行／135 MB），照 hibor 先例",
+    },
 }
 
 # 静态名录表：无「内容日期」语义，只判「文件存在 + 行数 ≥ 下限」。
 STATIC_TABLES = {
-    "fund_company": {"min_rows": 200,
-                     "reason": "207 行公司名录；date_col 探到常量 end_date=20091229，"
-                               "真实 setup_date 最大 20250116 ⇒ 内容日期判据不适用"},
+    "fund_company": {
+        "min_rows": 200,
+        "reason": "207 行公司名录；date_col 探到常量 end_date=20091229，"
+        "真实 setup_date 最大 20250116 ⇒ 内容日期判据不适用",
+    },
     # ---- CC-FIX-12（2026-11-10，§378）：一次性名录／关系快照（无「内容日期」语义）----
     # 共同依据：均为 mode=once / by_param / paged 的一次性建库，BACKFILL_TARGETS 无周期
     #   更新通道，断点只有 {'completed': ['once'...]}（从无 last_fetch）；库内日期列是
     #   **业务生效日**（list_date/in_date/out_date/month），不是数据新鲜度。
     #   ⇒ 与 fund_company 同类：判「目录存在且有 parquet」，行数下限本版不校验。
-    "hk_basic":          {"min_rows": 2000,
-                          "reason": "港股标的名录（2,785 行；list_date 最新 20260909 是上市日）"},
-    "fut_basic":         {"min_rows": 5000, "reason": "期货合约名录（11,275 行）"},
-    "opt_basic":         {"min_rows": 10000, "reason": "期权合约名录（30,730 行）"},
-    "us_basic":          {"min_rows": 10000, "reason": "美股标的名录（24,255 行）"},
-    "bse_mapping":       {"min_rows": 100, "reason": "北交所旧码→新码映射（248 行）"},
-    "index_classify":    {"min_rows": 500, "reason": "申万行业分类（856 行，无日期列）"},
-    "index_member_hist": {"min_rows": 10000,
-                          "reason": "指数历史成分（23,460 行；in_date/out_date 为纳入/剔除生效日）"},
-    "index_member_all":  {"min_rows": 2000,
-                          "reason": "指数成分全量关系（5,211 行；in_date 为生效日）"},
-    "cn_schedule":       {"min_rows": 100,
-                          "reason": "财报披露日程（176 行；month 覆盖 202601-202612 未来日期）"},
+    "hk_basic": {
+        "min_rows": 2000,
+        "reason": "港股标的名录（2,785 行；list_date 最新 20260909 是上市日）",
+    },
+    "fut_basic": {"min_rows": 5000, "reason": "期货合约名录（11,275 行）"},
+    "opt_basic": {"min_rows": 10000, "reason": "期权合约名录（30,730 行）"},
+    "us_basic": {"min_rows": 10000, "reason": "美股标的名录（24,255 行）"},
+    "bse_mapping": {"min_rows": 100, "reason": "北交所旧码→新码映射（248 行）"},
+    "index_classify": {"min_rows": 500, "reason": "申万行业分类（856 行，无日期列）"},
+    "index_member_hist": {
+        "min_rows": 10000,
+        "reason": "指数历史成分（23,460 行；in_date/out_date 为纳入/剔除生效日）",
+    },
+    "index_member_all": {
+        "min_rows": 2000,
+        "reason": "指数成分全量关系（5,211 行；in_date 为生效日）",
+    },
+    "cn_schedule": {
+        "min_rows": 100,
+        "reason": "财报披露日程（176 行；month 覆盖 202601-202612 未来日期）",
+    },
 }
 
 # ============================================================
@@ -475,29 +562,40 @@ STATIC_TABLES = {
 #   「正常」「红」「已停更」「未知」一律不受本登记影响。
 # 依据：CC-FIX-12 回执 §九/§十（赤潮 §379 批准），老大 §380 裁定「都做」。
 PENDING_REFRESH = {
-    "cn_ppi":    {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
-    "cn_m":      {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
+    "cn_ppi": {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
+    "cn_m": {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
     # CC-FIX-15 §二（老大选 C 挂账不动）：保留登记，仅改 plan 注记；
     # ⛔ 不得为「待补拉归零」删登记或改判定词（freshness 仍显示「待补拉 1」）。
-    "cn_pmi":    {"plan": "挂账不动：源端列集变更（59 vs 65 列），待裁定 A/B/C（§381）",
-                  "decided": "2026-11-10"},
-    "cn_gdp":    {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
-    "sf_month":  {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
+    "cn_pmi": {
+        "plan": "挂账不动：源端列集变更（59 vs 65 列），待裁定 A/B/C（§381）",
+        "decided": "2026-11-10",
+    },
+    "cn_gdp": {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
+    "sf_month": {"plan": "once 补拉至源端止点", "decided": "2026-11-10"},
 }
 
 # 体检时用于缺口分析的 by_date 类接口(有明确交易日维度)
 DB_AUDIT_DATE_APIS = [
-    "margin", "margin_detail", "margin_secs", "moneyflow",
-    "top_list", "top_inst", "block_trade", "hsgt_top10", "ggt_top10",
-    "hk_hold", "suspend_d", "fut_daily",
+    "margin",
+    "margin_detail",
+    "margin_secs",
+    "moneyflow",
+    "top_list",
+    "top_inst",
+    "block_trade",
+    "hsgt_top10",
+    "ggt_top10",
+    "hk_hold",
+    "suspend_d",
+    "fut_daily",
 ]
 
 # 断点键名 → 实际目录名 的别名映射
 # 背景: .checkpoint.json 里部分键带 _full 后缀(旧命名), 实际落盘目录无后缀。
 #       不做映射会被误报成"断点有记录但目录不存在"。
 DB_AUDIT_CKPT_ALIASES = {
-    "fund_daily_full":  "fund_daily",
-    "fund_nav_full":    "fund_nav",
+    "fund_daily_full": "fund_daily",
+    "fund_nav_full": "fund_nav",
     "index_daily_full": "index_daily",
 }
 
@@ -506,7 +604,9 @@ DB_AUDIT_CKPT_ALIASES = {
 #       download-full 的接口清单里没有它们, 故断点为 0 属正常。
 #       这类"有文件但断点为0"应降级为提示, 不算异常。
 DB_AUDIT_CKPT_EXTERNAL = {
-    "adj_factor", "stk_limit", "market_state",
+    "adj_factor",
+    "stk_limit",
+    "market_state",
 }
 
 # 上游数据源本身含重复行的接口
@@ -514,7 +614,7 @@ DB_AUDIT_CKPT_EXTERNAL = {
 #       本地落盘已做全列去重(本地重复数通常少于现拉), 剩余重复属数据源原貌。
 #       体检时标注为提示, 不做清理(量小且保留原貌)。
 DB_AUDIT_UPSTREAM_DUP = {
-    "top_list",     # 实测: 20160202 现拉42行含1条重复, 与本地一致
+    "top_list",  # 实测: 20160202 现拉42行含1条重复, 与本地一致
     "block_trade",  # 实测: 20161102 现拉231行含24条重复(本地已去重至4)
     # CC-FIX-10（2026-11-10，§373）：无主键表，整行相同 14 行（2024:2／2025:12／2026:0）；
     #   源端实测同一年整行返回两次（20240522/2305248.BC/09:50:20 逐列相同）⇒ 上游重复。

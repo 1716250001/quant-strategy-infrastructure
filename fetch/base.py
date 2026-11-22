@@ -30,6 +30,14 @@ import pandas as pd
 import tushare as ts
 
 from common.codes import etf_to_ts_code, stock_to_ts_code
+from common.concurrency import (
+    FileLock,
+    LockTimeout,
+    cleanup_pid_tmp,
+    file_lock,
+    pid_tmp_path,
+    replace_with_retry,
+)
 from common.paths import ensure_dir
 from config import (
     API_RATE_LIMIT,
@@ -68,7 +76,7 @@ from config import (
 #   · 记入 _PERMISSION_DENIED，供日更/体检读取并告警
 # 这与 config_alt 的"越界尝试计数器"是同一模式：
 #   把"推断"补强为**可直接观测的证据**。
-_PERMISSION_DENIED = []          # [{api, params, err, at}, ...]
+_PERMISSION_DENIED = []  # [{api, params, err, at}, ...]
 
 # 判据：Tushare 的实际文案是
 #   "抱歉，您没有接口(fund_portfolio)访问权限，权限的具体详情访问：..."
@@ -84,12 +92,14 @@ def _is_permission_error(err_str):
 
 def _record_permission_denied(api_name, params, err_str):
     """记录一次权限拒绝（供日更/体检读取）"""
-    _PERMISSION_DENIED.append({
-        "api": api_name,
-        "params": dict(params) if params else {},
-        "err": str(err_str)[:200],
-        "at": datetime.now().isoformat(timespec="seconds"),
-    })
+    _PERMISSION_DENIED.append(
+        {
+            "api": api_name,
+            "params": dict(params) if params else {},
+            "err": str(err_str)[:200],
+            "at": datetime.now().isoformat(timespec="seconds"),
+        }
+    )
 
 
 def permission_denied_records():
@@ -121,6 +131,7 @@ def permission_denied_apis():
 # 全局Tushare连接 (单例)
 # ============================================================
 _pro = None
+
 
 def get_pro():
     """获取全局唯一的Tushare Pro API实例"""
@@ -177,8 +188,10 @@ def is_trading_day(date_str=None):
     # 回退：以「最近交易日是否等于目标日」近似判断
     latest = get_latest_trade_date(target)
     ok = str(latest) == str(target)
-    reason = (f"回退判断(无 trade_cal): 最近交易日={latest}，目标日={target}"
-              f" → {'交易日' if ok else '非交易日或数据未更新'}")
+    reason = (
+        f"回退判断(无 trade_cal): 最近交易日={latest}，目标日={target}"
+        f" → {'交易日' if ok else '非交易日或数据未更新'}"
+    )
     return ok, reason
 
 
@@ -195,12 +208,18 @@ def safe_fetch(func, name, **kwargs):
 # 此处 re-export 以保持历史 import 路径（from fetch.base import ...）可用。
 __all__ = [
     "Checkpoint",
+    "FileLock",
+    "LockTimeout",
     "RateLimiter",
+    "cleanup_pid_tmp",
     "ensure_dir",
     "etf_to_ts_code",
     "fetch_codes_parallel",
+    "file_lock",
     "get_latest_trade_date",
     "get_pro",
+    "pid_tmp_path",
+    "replace_with_retry",
     "safe_fetch",
     "stock_to_ts_code",
     "ts_call_with_retry",
@@ -233,9 +252,9 @@ class RateLimiter:
         self.min_interval = 60.0 / rate_per_min
         self.daily_limit = daily_limit
         self.last_request_time = 0.0
-        self.daily_counts = {}   # {api_name: count}
+        self.daily_counts = {}  # {api_name: count}
         self.total_requests = 0
-        self._buckets = {}       # {api_name: {"interval": float, "next_at": float}}
+        self._buckets = {}  # {api_name: {"interval": float, "next_at": float}}
         self._lock = threading.Lock()
 
     # ---------- 内部 ----------
@@ -304,69 +323,201 @@ class RateLimiter:
 
 
 # ============================================================
-# 跨进程互斥
+# 跨进程互斥（D3：实现已移至 common/concurrency.py）
 # ============================================================
-class FileLock:
-    """跨进程互斥锁：`O_CREAT|O_EXCL` 建锁文件；异常退出留残锁，需人工确认。
-
-    ⚠ 为什么需要（2026-11-16 index_weight 校准批 P0 实证）：
-      `run_backfill` 的两处写入都**没有跨进程保护**（现有 4 处
-      `threading.Lock` 只在单进程内有效）：
-        ① 断点写 `cp.save()` = **全量覆盖** `json.dump(self.data)`
-        ② 数据写 `merge_append` = **全文件读改写**
-      两个 backfill 实例并跑时，后写者读到的是旧文件 ⇒ 前者整批数据被
-      静默覆盖丢失；而断点两边各自 mark_done，后 save 时已看见前者 ⇒
-      键数翻倍。最终表现为「断点说完成、数据没有」，且 `--dry-run`
-      报「待跑=0」＝**假绿**。
-      实测 2026-11-16 22:34 一次 `--limit 520`：断点 +1,040（8 指数×130），
-      数据只落 4 个指数，另一批 17.9 万行丢失，全程零 ERROR。
-      `schedule_runner` 早已有同类锁（`.schedule.lock`），backfill 缺这一道。
-      ⛔ 不加锁时任何「我以为是单开」的假设都不成立。
-
-    设计：与 `fetch/schedule_runner.py` 的 FileLock 同语义（O_EXCL +
-          残留需人工删），但放在 base 层——backfill 不能 import
-          schedule_runner（后者反向 import 本模块，会循环）。
-    """
-
-    def __init__(self, path):
-        self.path = path
-        self.held = False
-
-    def acquire(self):
-        try:
-            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            raise SystemExit(
-                f"[backfill] ⛔ 已有实例在跑（锁文件 {self.path}）；"
-                f"确认无进程后手动删除该文件再试（删前先看 tasklist 有无 python）") from None
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(f"{os.getpid()} {datetime.now().isoformat(timespec='seconds')}")
-        self.held = True
-
-    def release(self):
-        if self.held:
-            try:
-                os.remove(self.path)
-            except OSError:
-                pass
-            self.held = False
-
-    def __enter__(self):
-        self.acquire()
-        return self
-
-    def __exit__(self, *exc):
-        self.release()
-        return False
+# `FileLock` / `LockTimeout` / `file_lock` 由 common.concurrency 提供，
+# 本模块保留同名 re-export（`from fetch.base import FileLock` 兼容）。
+# 语义变化：冲突时不再立即 SystemExit，而是等待 `timeout` 后抛
+# `LockTimeout`（信息含持锁 PID）；backfill 入口自行转换为 SystemExit。
 
 
 # ============================================================
 # 断点管理
 # ============================================================
+_CHECKPOINT_LOCK_TIMEOUT = 30.0  # 秒；03 §五 D3
+
+
+def _as_key_list(value):
+    """断点键集合字段归一化为 list（旧文件缺失/类型异常 ⇒ 空）。"""
+    return list(value) if isinstance(value, (list, tuple)) else []
+
+
+def _dedup(values):
+    seen, out = set(), []
+    for v in values:
+        if v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+
+def _newer_ts(a, b):
+    """取较新的 ISO 时间戳；可解析侧优先，都不可解析时取 b（本地）。"""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    try:
+        ta, tb = datetime.fromisoformat(str(a)), datetime.fromisoformat(str(b))
+        return a if ta >= tb else b
+    except (TypeError, ValueError):
+        return b
+
+
+def _is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+_TS_EPOCH = "1970-01-01T00:00:00"
+_EXPLICIT_STATUSES = ("failed", "source_empty")
+
+
+def _now_ts():
+    """断点内部时间戳（微秒级，用于键级 partial/completed 冲突裁决）。"""
+    return datetime.now().isoformat(timespec="microseconds")
+
+
+def _ts_of(mapping, key):
+    """从 {key: ts} 取时间戳；缺失按 1970（旧 schema 无时间戳）。"""
+    if isinstance(mapping, dict) and key in mapping:
+        return str(mapping.get(key) or _TS_EPOCH)
+    return _TS_EPOCH
+
+
+def _merge_record(disk, local):
+    """按表合并两条断点记录（D4：键级时间戳，partial 可撤销 completed）。
+
+    规则：
+      - 同一键在 completed / partial 两侧都有时，比较 `completed_ts` /
+        `partial_ts`（缺失按 1970），较新者胜；相等时 **partial 胜**
+        （宁可重拉，不跳过不完整数据）。这修正 D3 §8.4-1：重拉后的截断键
+        不会被磁盘旧 `completed` 复活；
+      - 仅一侧存在的键按存在侧归入 completed / partial；
+      - `last_fetch` / `last_attempt` 取较新；计数类数值在两次不同拉取
+        事件时相加（同 `last_fetch` 取本地，避免重复保存累加）；
+      - `status` 取较新 `status_ts`；显式 `failed` / `source_empty` 保留，
+        其余按最终 partial/completed 重算（修正 §8.4-2：不会残留
+        「status=partial 但 partial=[]」）；
+      - 其余字段：本地优先，磁盘兜底。
+    """
+    disk = disk if isinstance(disk, dict) else {}
+    local = local if isinstance(local, dict) else {}
+
+    comp_disk = _as_key_list(disk.get("completed"))
+    comp_local = _as_key_list(local.get("completed"))
+    part_disk = _as_key_list(disk.get("partial"))
+    part_local = _as_key_list(local.get("partial"))
+    cts = {}
+    for rec in (disk, local):
+        m = rec.get("completed_ts")
+        if isinstance(m, dict):
+            cts.update(m)
+    pts = {}
+    for rec in (disk, local):
+        m = rec.get("partial_ts")
+        if isinstance(m, dict):
+            pts.update(m)
+
+    completed, partial = [], []
+    for key in _dedup(comp_disk + comp_local + part_disk + part_local):
+        in_c = key in comp_disk or key in comp_local
+        in_p = key in part_disk or key in part_local
+        if in_c and in_p:
+            if _ts_of(pts, key) >= _ts_of(cts, key):
+                partial.append(key)  # 时间相等也按 partial（安全）
+            else:
+                completed.append(key)
+        elif in_c:
+            completed.append(key)
+        else:
+            partial.append(key)
+
+    rec = {}
+    if completed or "completed" in disk or "completed" in local:
+        rec["completed"] = completed
+    if partial or "partial" in disk or "partial" in local:
+        rec["partial"] = partial
+    out_cts = {k: cts[k] for k in completed if k in cts}
+    out_pts = {k: pts[k] for k in partial if k in pts}
+    if out_cts:
+        rec["completed_ts"] = out_cts
+    if out_pts:
+        rec["partial_ts"] = out_pts
+    for field in ("last_fetch", "last_attempt"):
+        v = _newer_ts(disk.get(field), local.get(field))
+        if v is not None:
+            rec[field] = v
+
+    same_event = disk.get("last_fetch") is not None and disk.get("last_fetch") == local.get(
+        "last_fetch"
+    )
+    handled = {
+        "completed",
+        "partial",
+        "completed_ts",
+        "partial_ts",
+        "last_fetch",
+        "last_attempt",
+        "status",
+        "status_ts",
+    }
+    for key in set(disk) | set(local):
+        if key in handled:
+            continue
+        d_val, l_val = disk.get(key), local.get(key)
+        if (
+            key in disk
+            and key in local
+            and _is_number(d_val)
+            and _is_number(l_val)
+            and not same_event
+        ):
+            rec[key] = d_val + l_val
+        elif key in local:
+            rec[key] = l_val
+        else:
+            rec[key] = d_val
+
+    d_status, l_status = disk.get("status"), local.get("status")
+    d_sts = str(disk.get("status_ts") or _TS_EPOCH)
+    l_sts = str(local.get("status_ts") or _TS_EPOCH)
+    if l_status and (not d_status or l_sts >= d_sts):
+        status, status_ts = l_status, l_sts
+    elif d_status:
+        status, status_ts = d_status, d_sts
+    else:
+        status, status_ts = None, None
+    if status in _EXPLICIT_STATUSES:
+        rec["status"] = status  # failed / source_empty 显式保留
+        rec["status_ts"] = status_ts
+    elif completed or partial:
+        rec["status"] = "partial" if partial else "done"
+        rec["status_ts"] = _now_ts()
+    return rec
+
+
+def _merge_data(disk, local):
+    """逐表合并两份断点数据；非 dict 顶层键（如 codes 账的 'done'）原样保留。"""
+    disk = disk if isinstance(disk, dict) else {}
+    local = local if isinstance(local, dict) else {}
+    out = {}
+    for name in sorted(set(disk) | set(local)):
+        d_val, l_val = disk.get(name), local.get(name)
+        if isinstance(d_val, dict) and isinstance(l_val, dict):
+            out[name] = _merge_record(d_val, l_val)
+        elif name in local:
+            out[name] = l_val  # 非 dict（旧格式/脏键）：本地优先，不丢
+        else:
+            out[name] = d_val
+    return out
+
+
 class Checkpoint:
     """断点续跑管理器: 记录每个API已完成的代码列表
 
     线程安全: 多 target 并行补数时会被并发访问, 内部加锁。
+    D3：`save()` 为「持锁 → 重读磁盘 → 按表合并 → 原子写」，多入口并发
+    不再互相覆盖断点。
     """
 
     def __init__(self, data_root=MARKET_DATA_DIR, filename=".checkpoint.json"):
@@ -376,7 +527,8 @@ class Checkpoint:
         if os.path.exists(self.path):
             try:
                 with open(self.path, encoding="utf-8") as f:
-                    self.data = json.load(f)
+                    loaded = json.load(f)
+                self.data = loaded if isinstance(loaded, dict) else {}
                 print(f"[断点] 已加载: {self.path}")
             except Exception as e:
                 print(f"[断点] 文件损坏, 从头开始: {e}")
@@ -407,12 +559,36 @@ class Checkpoint:
         """
         if library is not None or key_space is not None:
             dom = self._domain_of(api_name, library=library, key_space=key_space)
-            if dom is not None and dom.file and \
-                    os.path.basename(dom.file) != os.path.basename(self.path):
-                return None            # 不是本文件管的域
+            if (
+                dom is not None
+                and dom.file
+                and os.path.basename(dom.file) != os.path.basename(self.path)
+            ):
+                return None  # 不是本文件管的域
         with self._lock:
             done_set = self.data.get(api_name, {}).get("completed", [])
             return ts_code in done_set
+
+    def is_partial(self, api_name, ts_code, library=None, key_space=None):
+        """该键是否被标记为 partial（下次视为未完成、重拉）。"""
+        if library is not None or key_space is not None:
+            dom = self._domain_of(api_name, library=library, key_space=key_space)
+            if (
+                dom is not None
+                and dom.file
+                and os.path.basename(dom.file) != os.path.basename(self.path)
+            ):
+                return None
+        with self._lock:
+            return ts_code in self.data.get(api_name, {}).get("partial", [])
+
+    def get_status(self, api_name):
+        """表级状态；旧文件无 `status` 字段按 `done`（有 partial 则为 partial）。"""
+        with self._lock:
+            rec = self.data.get(api_name) or {}
+            if rec.get("status"):
+                return rec["status"]
+            return "partial" if rec.get("partial") else "done"
 
     def mark_done(self, api_name, ts_code, library=None, key_space=None):
         """标记某个代码在某个API下已完成。
@@ -422,14 +598,89 @@ class Checkpoint:
         就凭空多一张表、永不报错（写侧静默建表＝假绿虚记）。
         """
         if self._domain_of(api_name, library=library, key_space=key_space) is None:
-            print(f"[断点] ⛔ 未登记表 {api_name}：拒绝写入完成键 {ts_code}"
-                  f"（先补 config/checkpoint_registry.py，勿凭空建表）", file=sys.stderr)
+            print(
+                f"[断点] ⛔ 未登记表 {api_name}：拒绝写入完成键 {ts_code}"
+                f"（先补 config/checkpoint_registry.py，勿凭空建表）",
+                file=sys.stderr,
+            )
             return False
         with self._lock:
-            if api_name not in self.data:
-                self.data[api_name] = {"completed": []}
-            if ts_code not in self.data[api_name]["completed"]:
-                self.data[api_name]["completed"].append(ts_code)
+            rec = self.data.setdefault(api_name, {"completed": []})
+            rec.setdefault("completed", [])
+            if ts_code not in rec["completed"]:
+                rec["completed"].append(ts_code)
+            part = rec.get("partial")
+            if isinstance(part, list) and ts_code in part:
+                part.remove(ts_code)
+            pts = rec.get("partial_ts")
+            if isinstance(pts, dict):
+                pts.pop(ts_code, None)
+            rec.setdefault("completed_ts", {})[ts_code] = _now_ts()
+            rec["status"] = "partial" if rec.get("partial") else "done"
+            rec["status_ts"] = _now_ts()
+        return True
+
+    def mark_partial(self, api_name, ts_code, library=None, key_space=None):
+        """标记键为 partial：**不写入 completed**，下次按未完成重拉（D4 使用）。
+
+        D4 §8.4-1：同时写 `partial_ts` 并移除 `completed`/`completed_ts`；
+        合并时按时间戳裁决，partial 能撤销磁盘上的旧完成键。
+        """
+        if self._domain_of(api_name, library=library, key_space=key_space) is None:
+            print(
+                f"[断点] ⛔ 未登记表 {api_name}：拒绝写入 partial 键 {ts_code}"
+                f"（先补 config/checkpoint_registry.py，勿凭空建表）",
+                file=sys.stderr,
+            )
+            return False
+        with self._lock:
+            rec = self.data.setdefault(api_name, {"completed": []})
+            rec.setdefault("completed", [])
+            partial = rec.setdefault("partial", [])
+            if ts_code not in partial:
+                partial.append(ts_code)
+            if ts_code in rec["completed"]:
+                rec["completed"].remove(ts_code)
+            cts = rec.get("completed_ts")
+            if isinstance(cts, dict):
+                cts.pop(ts_code, None)
+            rec.setdefault("partial_ts", {})[ts_code] = _now_ts()
+            rec["status"] = "partial"
+            rec["status_ts"] = _now_ts()
+        return True
+
+    def mark_failed(self, api_name, error=None, library=None, key_space=None):
+        """表级失败态（D4）：写 `status=failed` + `status_ts`，不区分键。"""
+        if self._domain_of(api_name, library=library, key_space=key_space) is None:
+            print(
+                f"[断点] ⛔ 未登记表 {api_name}：拒绝写入失败态"
+                f"（先补 config/checkpoint_registry.py）",
+                file=sys.stderr,
+            )
+            return False
+        with self._lock:
+            rec = self.data.setdefault(api_name, {"completed": []})
+            rec.setdefault("completed", [])
+            rec["status"] = "failed"
+            rec["status_ts"] = _now_ts()
+            if error is not None:
+                rec["last_error"] = str(error)[:300]
+        return True
+
+    def mark_source_empty(self, api_name, library=None, key_space=None):
+        """表级源端空返回（D4）：合法空，但必须显式标记而非默默 done。"""
+        if self._domain_of(api_name, library=library, key_space=key_space) is None:
+            print(
+                f"[断点] ⛔ 未登记表 {api_name}：拒绝写入 source_empty"
+                f"（先补 config/checkpoint_registry.py）",
+                file=sys.stderr,
+            )
+            return False
+        with self._lock:
+            rec = self.data.setdefault(api_name, {"completed": []})
+            rec.setdefault("completed", [])
+            rec["status"] = "source_empty"
+            rec["status_ts"] = _now_ts()
         return True
 
     def mark_fetched(self, api_name, rows=None):
@@ -453,24 +704,51 @@ class Checkpoint:
         with self._lock:
             return len(self.data.get(api_name, {}).get("completed", []))
 
-    def save(self):
-        """持久化断点到磁盘(原子写 + fsync: 断电也不丢断点/不写坏)。
+    def _read_disk(self):
+        """save 前重读磁盘（不存在/损坏 ⇒ 空 dict，由合并侧兜底）。"""
+        if not os.path.exists(self.path):
+            return {}
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                loaded = json.load(f)
+            return loaded if isinstance(loaded, dict) else {}
+        except Exception as e:
+            print(f"[断点] 合并前读取磁盘失败（按空处理）: {e}", file=sys.stderr)
+            return {}
 
-        E-05（2026-10-11 三轮架构审查）: 原实现只有 `os.replace` —— 原子写
-        保证的是**目录项换名**原子，数据可能仍在页缓存；断电后可能出现
-        "断点文件存在但内容为空/截断"。断点被读坏会退化为"从头开始"
-        （见 `__init__` 的损坏分支）—— 对 5,900 标的的表等于白拉一天。
-        故 flush + os.fsync 后再替换；目录项 fsync 为 best-effort（POSIX 需要，
-        Windows 不可用 ⇒ 降级不阻断）。
+    def save(self):
+        """持久化断点：持锁 → 重读磁盘 → 按表合并 → 原子写（fsync）。
+
+        E-05（2026-10-11）：`os.replace` 只保证目录项换名原子，数据可能仍在
+        页缓存；断点被读坏会退化为"从头开始"（对 5,900 标的的表等于白拉
+        一天）。故 tmp 写入后 flush + os.fsync，再 replace，目录 fsync 为
+        best-effort（Windows 不可用 ⇒ 降级不阻断）。
+
+        D3（2026-11-21）：原实现是全量覆盖 `json.dump(self.data)`，多入口
+        并发时后写者会把前者新记的键覆盖掉。现在：
+          1. 持 `<path>.lock` 跨进程互斥；
+          2. 重读磁盘，按表合并（见 `_merge_record`）；
+          3. 写 `{path}.{pid}.{uuid}.tmp` → fsync → `os.replace`（WinError 32/5 重试）。
         """
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         with self._lock:
-            os.makedirs(os.path.dirname(self.path), exist_ok=True)
-            tmp = self.path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, ensure_ascii=False, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, self.path)
+            with file_lock(self.path + ".lock", timeout=_CHECKPOINT_LOCK_TIMEOUT):
+                merged = _merge_data(self._read_disk(), self.data)
+                cleanup_pid_tmp(self.path)
+                tmp = pid_tmp_path(self.path)
+                try:
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        json.dump(merged, f, ensure_ascii=False, indent=2)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    replace_with_retry(tmp, self.path)
+                except Exception:
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
+                    raise
+                self.data = merged
             try:
                 dfd = os.open(os.path.dirname(os.path.abspath(self.path)), os.O_RDONLY)
                 try:
@@ -481,11 +759,13 @@ class Checkpoint:
                 pass
 
     def reset(self):
-        """清除断点"""
+        """清除断点（持锁删除，避免与并发 save 交叉）。"""
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         with self._lock:
             self.data = {}
-            if os.path.exists(self.path):
-                os.remove(self.path)
+            with file_lock(self.path + ".lock", timeout=_CHECKPOINT_LOCK_TIMEOUT):
+                if os.path.exists(self.path):
+                    os.remove(self.path)
         print("[断点] 已清除")
 
 
@@ -498,8 +778,10 @@ def _prev_date(date_str):
         dt = datetime.strptime(date_str, "%Y%m%d")
         return (dt - timedelta(days=1)).strftime("%Y%m%d")
     except Exception as exc:
-        print(f"[fetch.base] 日期减一天失败（原样返回 {date_str}）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fetch.base] 日期减一天失败（原样返回 {date_str}）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return date_str
 
 
@@ -515,8 +797,8 @@ def _norm_date(v):
     """
     s = str(v).strip()
     if len(s) >= 10 and s[4] == "-":
-        return s[:10].replace("-", "")      # "2014-05-23 ..." → "20140523"
-    return s[:8] if len(s) > 8 else s       # "20140523" 原样
+        return s[:10].replace("-", "")  # "2014-05-23 ..." → "20140523"
+    return s[:8] if len(s) > 8 else s  # "20140523" 原样
 
 
 # ── 截断检测（2026-09-19 加固）──────────────────────────────
@@ -577,18 +859,22 @@ def _is_possibly_truncated(n_rows, max_rows):
     return n_rows in SUSPECT_CAPS
 
 
-is_possibly_truncated = _is_possibly_truncated   # DB-R3: 供 fetch/backfill.py 复用
+is_possibly_truncated = _is_possibly_truncated  # DB-R3: 供 fetch/backfill.py 复用
 
 
 def _is_rate_limit_error(err_str):
     """判断是否为限频错误(429/频率超限)"""
     s = err_str.lower()
-    return ("429" in s) or ("频率超限" in err_str) or ("每分钟" in err_str and "限" in err_str) \
-        or ("rate" in s and "limit" in s) or ("频次" in err_str)
+    return (
+        ("429" in s)
+        or ("频率超限" in err_str)
+        or ("每分钟" in err_str and "限" in err_str)
+        or ("rate" in s and "limit" in s)
+        or ("频次" in err_str)
+    )
 
 
-def ts_call_with_retry(pro, api_name, limiter, params, max_retries=TS_MAX_RETRIES,
-                       verbose=True):
+def ts_call_with_retry(pro, api_name, limiter, params, max_retries=TS_MAX_RETRIES, verbose=True):
     """
     带重试的API调用, 返回DataFrame或None
 
@@ -615,9 +901,9 @@ def ts_call_with_retry(pro, api_name, limiter, params, max_retries=TS_MAX_RETRIE
         print(f"  [ERROR] API {api_name} 不存在")
         return None
 
-    err_retry = 0        # 普通错误重试计数
-    rate_retry = 0       # 限频重试计数
-    skip_wait = False    # 限频重试时跳过本地预约等待（见下）
+    err_retry = 0  # 普通错误重试计数
+    rate_retry = 0  # 限频重试计数
+    skip_wait = False  # 限频重试时跳过本地预约等待（见下）
 
     while True:
         # ⚠ 限频重试时跳过本地 wait（2026-09-20 修复）：
@@ -631,7 +917,9 @@ def ts_call_with_retry(pro, api_name, limiter, params, max_retries=TS_MAX_RETRIE
         skip_wait = False
 
         if not limiter.check_daily(api_name):
-            print(f"  [LIMIT] {api_name} 日配额已耗尽 ({limiter.daily_counts.get(api_name, 0)}/{limiter.daily_limit})")
+            print(
+                f"  [LIMIT] {api_name} 日配额已耗尽 ({limiter.daily_counts.get(api_name, 0)}/{limiter.daily_limit})"
+            )
             return None
 
         try:
@@ -655,16 +943,18 @@ def ts_call_with_retry(pro, api_name, limiter, params, max_retries=TS_MAX_RETRIE
                     hint = ""
                     try:
                         from config import LEAKY_PERMISSIONS
+
                         if api_name in LEAKY_PERMISSIONS:
-                            hint = (f"\n         ★ 该接口登记为「权限漏网」"
-                                    f"（官方门槛 {LEAKY_PERMISSIONS[api_name].get('claimed')}）"
-                                    f"——很可能是漏网已被平台收紧，"
-                                    f"请启用替代路径或升档："
-                                    f"{LEAKY_PERMISSIONS[api_name].get('alt', '（未登记替代）')}")
+                            hint = (
+                                f"\n         ★ 该接口登记为「权限漏网」"
+                                f"（官方门槛 {LEAKY_PERMISSIONS[api_name].get('claimed')}）"
+                                f"——很可能是漏网已被平台收紧，"
+                                f"请启用替代路径或升档："
+                                f"{LEAKY_PERMISSIONS[api_name].get('alt', '（未登记替代）')}"
+                            )
                     except Exception:
                         pass
-                    print(f"  [权限] {api_name} 无权限（永久性，不重试）: "
-                          f"{err_str[:60]}{hint}")
+                    print(f"  [权限] {api_name} 无权限（永久性，不重试）: {err_str[:60]}{hint}")
                 return None
 
             # ---- 限频: 短退避 ----
@@ -675,9 +965,9 @@ def ts_call_with_retry(pro, api_name, limiter, params, max_retries=TS_MAX_RETRIE
                     return None
                 delay = TS_RATE_BACKOFF[min(rate_retry, len(TS_RATE_BACKOFF) - 1)]
                 if verbose:
-                    print(f"  [限频] {api_name} 第{rate_retry+1}次重试, 等待{delay}s...")
+                    print(f"  [限频] {api_name} 第{rate_retry + 1}次重试, 等待{delay}s...")
                 rate_retry += 1
-                skip_wait = True        # 服务端已拒绝，勿再睡满一个 interval
+                skip_wait = True  # 服务端已拒绝，勿再睡满一个 interval
                 time.sleep(delay)
                 continue
 
@@ -691,12 +981,11 @@ def ts_call_with_retry(pro, api_name, limiter, params, max_retries=TS_MAX_RETRIE
                 continue
 
             if verbose:
-                print(f"  [FAIL] {api_name} 重试{err_retry+1}次仍失败: {err_str[:70]}")
+                print(f"  [FAIL] {api_name} 重试{err_retry + 1}次仍失败: {err_str[:70]}")
             return None
 
 
-def ts_fetch(pro, api_name, limiter, ts_code, max_rows=5000, extra_params=None,
-             verbose=True):
+def ts_fetch(pro, api_name, limiter, ts_code, max_rows=5000, extra_params=None, verbose=True):
     """
     调用 Tushare API (按ts_code), 包含:
     - 频率限制(按接口独立速率)
@@ -725,53 +1014,59 @@ def ts_fetch(pro, api_name, limiter, ts_code, max_rows=5000, extra_params=None,
     #   配置在 config.ACCEPT_TRUNCATED_APIS，理由见该处注释。
     try:
         from config import ACCEPT_TRUNCATED_APIS
+
         _accept_trunc = api_name in ACCEPT_TRUNCATED_APIS
     except Exception as exc:
-        print(f"[fetch.base] 导入 ACCEPT_TRUNCATED_APIS 失败（不启用接受截断）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fetch.base] 导入 ACCEPT_TRUNCATED_APIS 失败（不启用接受截断）: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         _accept_trunc = False
     if _accept_trunc and _is_possibly_truncated(len(df), max_rows):
         if verbose:
-            print(f"  [接受截断] {api_name} 返回 {len(df)} 行（命中上限属预期，"
-                  f"不续拉；理由见 config.ACCEPT_TRUNCATED_APIS）")
+            print(
+                f"  [接受截断] {api_name} 返回 {len(df)} 行（命中上限属预期，"
+                f"不续拉；理由见 config.ACCEPT_TRUNCATED_APIS）"
+            )
         return df, True
 
     if _is_possibly_truncated(len(df), max_rows):
         col = _pick_date_col(df)
         if col is None:
-            return df, True            # 无日期列 → 无法分段，保持原样
+            return df, True  # 无日期列 → 无法分段，保持原样
 
         rounds = 0
         while rounds < TRUNC_MAX_ROUNDS:
             earliest = _norm_date(df[col].min())
             p_early = dict(params)
             p_early["end_date"] = _prev_date(earliest)
-            df_early = ts_call_with_retry(pro, api_name, limiter, p_early,
-                                          verbose=verbose)
+            df_early = ts_call_with_retry(pro, api_name, limiter, p_early, verbose=verbose)
             rounds += 1
             if df_early is None or df_early.empty:
-                break                  # 源端确实没有更早的数据了
+                break  # 源端确实没有更早的数据了
 
             before = len(df)
             df = pd.concat([df_early, df], ignore_index=True).drop_duplicates()
             if verbose:
-                print(f"  [截断续拉] {ts_code} {api_name}: 第{rounds}轮 "
-                      f"end_date={p_early['end_date']} → {len(df_early)}行, "
-                      f"累计 {before}→{len(df)}行")
+                print(
+                    f"  [截断续拉] {ts_code} {api_name}: 第{rounds}轮 "
+                    f"end_date={p_early['end_date']} → {len(df_early)}行, "
+                    f"累计 {before}→{len(df)}行"
+                )
             if len(df) == before:
                 # 无新增行 → 该接口可能**忽略 end_date**（同类陷阱见 opt_basic），
                 # 再拉只会重复，必须跳出，否则死循环。
                 break
             if not _is_possibly_truncated(len(df_early), max_rows):
-                break                  # 本段不足上限 → 已覆盖到源端起点
+                break  # 本段不足上限 → 已覆盖到源端起点
 
             col = _pick_date_col(df_early) or col
 
     return df, True
 
 
-def fetch_paged_by_code(pro, api_name, limiter, ts_code,
-                        page=5000, max_pages=20, verbose=True):
+def fetch_paged_by_code(pro, api_name, limiter, ts_code, page=5000, max_pages=20, verbose=True):
     """按 ts_code + limit/offset 翻页拉全（share_float 等单码可超 6,000 行的接口）。
 
     为什么需要它（2026-11-09 CC-FIX-4）:
@@ -799,18 +1094,20 @@ def fetch_paged_by_code(pro, api_name, limiter, ts_code,
             params["offset"] = offset
         df = ts_call_with_retry(pro, api_name, limiter, params, verbose=verbose)
         pages += 1
-        if df is None:                 # 调用失败 → None（调用方不落盘、不记断点）
+        if df is None:  # 调用失败 → None（调用方不落盘、不记断点）
             return None
         n = len(df)
         if n == 0:
             break
         chunks.append(df)
         offset += n
-        if n < page:                   # 不足一页 = 本码已到末尾
+        if n < page:  # 不足一页 = 本码已到末尾
             break
     else:
-        print(f"  [警告] {api_name} {ts_code} 触顶 max_pages={max_pages}，"
-              f"已取 {sum(len(c) for c in chunks)} 行，可能仍不完整")
+        print(
+            f"  [警告] {api_name} {ts_code} 触顶 max_pages={max_pages}，"
+            f"已取 {sum(len(c) for c in chunks)} 行，可能仍不完整"
+        )
 
     if not chunks:
         return pd.DataFrame()
@@ -820,11 +1117,20 @@ def fetch_paged_by_code(pro, api_name, limiter, ts_code,
 # ============================================================
 # 并发批量拉取 (2026-09-15 新增)
 # ============================================================
-def fetch_codes_parallel(pro, api_name, codes, limiter,
-                         fetch_fn=None, max_workers=FETCH_MAX_WORKERS,
-                         max_rows=5000, on_result=None,
-                         progress=None, progress_every=100,
-                         stop_event=None, verbose=False):
+def fetch_codes_parallel(
+    pro,
+    api_name,
+    codes,
+    limiter,
+    fetch_fn=None,
+    max_workers=FETCH_MAX_WORKERS,
+    max_rows=5000,
+    on_result=None,
+    progress=None,
+    progress_every=100,
+    stop_event=None,
+    verbose=False,
+):
     """线程池并发拉取一组代码 (每接口默认 4 线程)。
 
     设计要点:
@@ -878,8 +1184,7 @@ def fetch_codes_parallel(pro, api_name, codes, limiter,
                 #        长期停留在"待补"却不被察觉。
                 #   与 on_result 的既有语义（df=None 不落盘不记断点）保持一致。
                 return code, df, df is not None
-            df, ok = ts_fetch(pro, api_name, limiter, code,
-                              max_rows=max_rows, verbose=verbose)
+            df, ok = ts_fetch(pro, api_name, limiter, code, max_rows=max_rows, verbose=verbose)
             return code, df, ok
         except Exception as e:
             if verbose:
@@ -929,7 +1234,9 @@ def _tally(stat, df, ok):
         stat["fail"] += 1
 
 
-def ts_fetch_by_date(pro, api_name, limiter, trade_date, extra_params=None, max_retries=TS_MAX_RETRIES):
+def ts_fetch_by_date(
+    pro, api_name, limiter, trade_date, extra_params=None, max_retries=TS_MAX_RETRIES
+):
     """
     按交易日批量拉取数据 (不指定ts_code, 用trade_date)
     适用于尾盘增量更新场景: 一次拉全市场当日数据

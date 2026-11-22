@@ -67,18 +67,26 @@ class CBCheckpoint(Checkpoint):
 # 截断续拉 (cb_daily专用, 2000行截断)
 # ============================================================
 def fetch_cb_daily(pro, limiter, ts_code):
-    """拉取单只可转债全历史日线，处理2000行截断"""
+    """拉取单只可转债全历史日线，处理2000行截断
+
+    ⚠ D10（G1 O1）：调用失败必须返回 **None**（不能折成空 DataFrame）。
+      `fetch_codes_parallel` 的判据是 `df is not None` —— 若把失败折成空表，
+      ok 会被判成 True，on_result 的「空返回」分支会 `mark_done`，
+      失败的债被永久跳过且不报错（与 2026-09-21 P0 同源）。
+    """
     df = ts_call_with_retry(pro, "cb_daily", limiter, {"ts_code": ts_code})
-    if df is None or df.empty:
-        return df if df is not None else pd.DataFrame()
+    if df is None:
+        return None
+    if df.empty:
+        return df
 
     # 截断检测
     if len(df) == CB_DAILY_MAX_ROWS:
         earliest = df["trade_date"].min()
         prev_date = (datetime.strptime(earliest, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
-        df_early = ts_call_with_retry(pro, "cb_daily", limiter, {
-            "ts_code": ts_code, "end_date": prev_date
-        })
+        df_early = ts_call_with_retry(
+            pro, "cb_daily", limiter, {"ts_code": ts_code, "end_date": prev_date}
+        )
         if df_early is not None and not df_early.empty:
             df = pd.concat([df_early, df], ignore_index=True).drop_duplicates()
             print(f"  [截断续拉] {ts_code}: 合并后{len(df)}行")
@@ -138,7 +146,14 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
             print(f"  在市: {len(listed)} | 已摘牌: {len(delisted)}")
     else:
         print("  [ERROR] 未获取到可转债基础信息!")
-        return
+        return {
+            "fail": 1,
+            "ok": 0,
+            "empty": 0,
+            "skipped": 0,
+            "dry_run": dry_run,
+            "error": "cb_basic_unavailable",
+        }
 
     # ── Phase 2: 可转债日线行情 (按代码遍历) ──
     print("\n" + "=" * 60)
@@ -162,10 +177,13 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
     skipped = 0
     try:
         from common import reader
+
         stored = set(reader.codes_from_store("cb_daily"))
     except Exception as exc:
-        print(f"[fetch.cb_download] 取库内代码集失败（按空处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fetch.cb_download] 取库内代码集失败（按空处理）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         stored = set()
     for c in all_codes:
         if checkpoint.is_done(c):
@@ -180,6 +198,7 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
 
     if dry_run:
         print(f"  [DRY-RUN] 待下载 {len(pending)} 只, 跳过 {skipped} 只")
+        success = empty = fail = 0
     else:
         counters = {"success": 0, "empty": 0, "fail": 0}
 
@@ -191,14 +210,19 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
             """
             if ok and df is not None and not df.empty:
                 try:
-                    _r = upsert_by_year(df, CB_DAILY_DIR, date_col="trade_date",
-                                        subset=["ts_code", "trade_date"],
-                                        sort_by="trade_date",
-                                        on_error=lambda y, e: print(f"  [ERROR] 分区 {y}: {e}"))
+                    _r = upsert_by_year(
+                        df,
+                        CB_DAILY_DIR,
+                        date_col="trade_date",
+                        subset=["ts_code", "trade_date"],
+                        sort_by="trade_date",
+                        on_error=lambda y, e: print(f"  [ERROR] 分区 {y}: {e}"),
+                    )
                     if _r.get("fail"):
                         raise RuntimeError(
                             f"按年分区 {_r['fail']} 个年份写入失败"
-                            f"（partitions={_r.get('partitions')}）")
+                            f"（partitions={_r.get('partitions')}）"
+                        )
                     counters["success"] += 1
                     checkpoint.mark_done(ts_code)
                 except Exception as e:
@@ -217,26 +241,35 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
         def progress(done_n, tot, stat, elapsed):
             rate = done_n / elapsed * 60 if elapsed > 0 else 0
             eta = (tot - done_n) / rate if rate > 0 else 0
-            print(f"  [{done_n}/{tot}] 成功={stat['ok']} 空={stat['empty']} "
-                  f"失败={stat['fail']} 跳过={skipped} | "
-                  f"速率={rate:.0f}/min | 剩余={eta:.0f}min | 总请求={limiter.total_requests}")
+            print(
+                f"  [{done_n}/{tot}] 成功={stat['ok']} 空={stat['empty']} "
+                f"失败={stat['fail']} 跳过={skipped} | "
+                f"速率={rate:.0f}/min | 剩余={eta:.0f}min | 总请求={limiter.total_requests}"
+            )
 
         stat = fetch_codes_parallel(
-            pro, "cb_daily", pending, limiter,
+            pro,
+            "cb_daily",
+            pending,
+            limiter,
             fetch_fn=fetch_cb_daily,
             max_workers=workers,
-            on_result=on_result, progress=progress, progress_every=50,
+            on_result=on_result,
+            progress=progress,
+            progress_every=50,
             verbose=False,
         )
         success = stat["ok"]
         empty = stat["empty"]
-        fail = stat["fail"]
+        fail = counters["fail"]  # 含取数失败 + 落盘失败（D4/F2）
         checkpoint.save()
 
         elapsed = time.time() - t_start
         rate = (stat["ok"] + stat["fail"] + stat["empty"]) / elapsed * 60 if elapsed > 0 else 0
-        print(f"\n  完成: 成功={success} 空={empty} 失败={fail} 跳过={skipped} | "
-              f"耗时={elapsed/60:.1f}min | 稳定速率={rate:.0f}/min")
+        print(
+            f"\n  完成: 成功={success} 空={empty} 失败={fail} 跳过={skipped} | "
+            f"耗时={elapsed / 60:.1f}min | 稳定速率={rate:.0f}/min"
+        )
 
     # ── 最终报告 ──
     print("\n" + "=" * 60)
@@ -250,24 +283,35 @@ def run_cb_download(reset=False, dry_run=False, workers=None):
     if os.path.isdir(CB_DAILY_DIR):
         files = [f for f in os.listdir(CB_DAILY_DIR) if f.endswith(".parquet")]
         total_size = sum(os.path.getsize(os.path.join(CB_DAILY_DIR, f)) for f in files)
-        print(f"  cb_daily:            {len(files)}文件 | {total_size/1024/1024:.1f}MB | 断点完成={checkpoint.get_completed_count()}")
+        print(
+            f"  cb_daily:            {len(files)}文件 | {total_size / 1024 / 1024:.1f}MB | 断点完成={checkpoint.get_completed_count()}"
+        )
     else:
         print("  cb_daily:            未下载")
 
     print(f"\n  总请求: {limiter.total_requests}")
     print("=" * 60)
+    return {
+        "fail": int(fail),
+        "ok": int(success),
+        "empty": int(empty),
+        "skipped": int(skipped),
+        "dry_run": dry_run,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description="可转债数据下载器（并发版）")
     parser.add_argument("--reset", action="store_true", help="清除断点, 从头开始")
     parser.add_argument("--dry-run", action="store_true", help="空跑, 只统计不下载")
-    parser.add_argument("--workers", type=int, default=None,
-                        help=f"并发线程数 (默认{FETCH_MAX_WORKERS}, 传1=串行)")
+    parser.add_argument(
+        "--workers", type=int, default=None, help=f"并发线程数 (默认{FETCH_MAX_WORKERS}, 传1=串行)"
+    )
     args = parser.parse_args()
 
-    run_cb_download(reset=args.reset, dry_run=args.dry_run, workers=args.workers)
+    result = run_cb_download(reset=args.reset, dry_run=args.dry_run, workers=args.workers)
+    return 1 if int((result or {}).get("fail") or 0) > 0 else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

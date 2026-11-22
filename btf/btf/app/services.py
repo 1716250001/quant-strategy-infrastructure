@@ -21,6 +21,7 @@ CLI **字节等价**（`api.py` 头部）→ 重复即分叉风险。
 grid）、日期 helper（runtime/store/state 各一）——二者与 R4 的
 `BTFRuntime` 拆分同一批，见 19 号 §41.5 结论。
 """
+
 from __future__ import annotations
 
 import json
@@ -106,11 +107,10 @@ def data_axis_problems(cfg: Mapping[str, Any]) -> tuple[list[str], list[str]]:
     universe = (cfg.get("run") or {}).get("universe") or {}
     source = str(universe.get("source") or "?")
     if source != "explicit":
-        return [], [f"[warn] feed↔标的 路由未校验"
-                    f"（universe.source={source}，需数据）"]
+        return [], [f"[warn] feed↔标的 路由未校验（universe.source={source}，需数据）"]
     return format_routing_conflicts(
-        routing_conflicts(universe.get("symbols") or [], caps),
-        feed_name, caps), []
+        routing_conflicts(universe.get("symbols") or [], caps), feed_name, caps
+    ), []
 
 
 def inject_strategy_paths(run_cfg: Mapping[str, Any]) -> list[Path]:
@@ -164,12 +164,15 @@ def run_data_quality(
         except ReaderError as exc:
             raise ValueError(f"{exc}（检查 --price-table/--limit-table）") from exc
         if not files:
-            raise ValueError(
-                f"表 {table} 在 {base} 下无分片"
-                f"（检查 --price-table/--limit-table）")
-    return run_checks(base, start_ymd, end_ymd, symbols=symbols,
-                      price_tables=tuple(price_tables),
-                      limit_tables=tuple(limit_tables))
+            raise ValueError(f"表 {table} 在 {base} 下无分片（检查 --price-table/--limit-table）")
+    return run_checks(
+        base,
+        start_ymd,
+        end_ymd,
+        symbols=symbols,
+        price_tables=tuple(price_tables),
+        limit_tables=tuple(limit_tables),
+    )
 
 
 def quality_blocking_findings(report: Any) -> int:
@@ -180,8 +183,7 @@ def quality_blocking_findings(report: Any) -> int:
     """
     from btf.data.quality import NON_BLOCKING_RULES
 
-    return sum(r.n_findings for r in report.rules
-               if r.rule not in NON_BLOCKING_RULES)
+    return sum(r.n_findings for r in report.rules if r.rule not in NON_BLOCKING_RULES)
 
 
 def parse_override_value(raw: str) -> Any:
@@ -229,16 +231,16 @@ def run_backtest(
     """
     from btf.runtime import BTFRuntime, make_store
 
-    rt = BTFRuntime().load_config(config, environ=filter_btf_env(environ),
-                                  overrides=overrides)
+    rt = BTFRuntime().load_config(config, environ=filter_btf_env(environ), overrides=overrides)
     rt.build()
     if dry_run:
         return RunOutcome(runtime=rt, result=None)
     return RunOutcome(runtime=rt, result=rt.run(store=make_store(out)))
 
 
-def freeze_payload(info: Mapping[str, Any], *, period: Mapping[str, str],
-                   root: str, created_at: str | None = None) -> dict[str, Any]:
+def freeze_payload(
+    info: Mapping[str, Any], *, period: Mapping[str, str], root: str, created_at: str | None = None
+) -> dict[str, Any]:
     """冻结清单载荷（**CL-4**，19 号 §72.5 S-2）——字段即契约：
 
     `anchor_date` / `tables`（**名 ＋ 行数**＋日期域）/ `content_hash` /
@@ -265,20 +267,20 @@ def freeze_payload(info: Mapping[str, Any], *, period: Mapping[str, str],
         "content_hash": info.get("content_hash"),
         "mode": info.get("mode"),
         "created_at": created_at or datetime.now().isoformat(timespec="seconds"),
-        "period": {"start": str(period.get("start", "")),
-                   "end": str(period.get("end", ""))},
+        "period": {"start": str(period.get("start", "")), "end": str(period.get("end", ""))},
         "root": str(root),
         "btf_version": __version__,
         "schema": "freeze.v1",
         "source": "BB-1 实算（btf.data.version.compute；与 RC-14 门禁同源）",
-        "validity": ("S-2 只冻结「表清单 ＋ content_hash ＋ anchor_date」，"
-                     "依赖原始库不被改写；原始库回填/重算后旧清单不可自证"
-                     "（有效边界见 08 号 / 20 号）"),
+        "validity": (
+            "S-2 只冻结「表清单 ＋ content_hash ＋ anchor_date」，"
+            "依赖原始库不被改写；原始库回填/重算后旧清单不可自证"
+            "（有效边界见 08 号 / 20 号）"
+        ),
     }
 
 
-def write_freeze_manifest(payload: Mapping[str, Any],
-                          out_dir: str | Path) -> dict[str, Any]:
+def write_freeze_manifest(payload: Mapping[str, Any], out_dir: str | Path) -> dict[str, Any]:
     """落盘冻结清单（**只读**；R3 幂等/冲突——不静默覆写）。
 
     返回 `{path, action, payload}`：`action` = `created`（新建）/
@@ -296,10 +298,12 @@ def write_freeze_manifest(payload: Mapping[str, Any],
         raise FileExistsError(
             f"冻结冲突：{path.name} 已存在且 content_hash 不一致——"
             f"旧 {old.get('content_hash')} / 新 {payload.get('content_hash')}；"
-            f"S-2 不静默覆写（R3：显式冲突报错），请先归档旧清单")
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2,
-                               sort_keys=True) + "\n", encoding="utf-8")
-    os.chmod(path, stat.S_IREAD)          # R3：落盘后置只读
+            f"S-2 不静默覆写（R3：显式冲突报错），请先归档旧清单"
+        )
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    os.chmod(path, stat.S_IREAD)  # R3：落盘后置只读
     return {"path": path, "action": "created", "payload": dict(payload)}
 
 
@@ -333,8 +337,7 @@ def freeze_dataset(
     ovr: dict[str, Any] = {k: v for k, v in (overrides or {}).items()}
     if mode:
         ovr.setdefault("data", {})["fingerprint_mode"] = mode
-    rt = BTFRuntime().load_config(config, environ=filter_btf_env(environ),
-                                  overrides=ovr or None)
+    rt = BTFRuntime().load_config(config, environ=filter_btf_env(environ), overrides=ovr or None)
     dataset_cfg = rt.config.setdefault("data", {}).setdefault("dataset", {})
     dataset_cfg.pop("expected_hash", None)
     dataset_cfg.pop("version", None)
@@ -343,9 +346,11 @@ def freeze_dataset(
     if str(info.get("mode")) == "in-memory":
         raise ValueError(
             "内存 Feed 无文件级指纹（mode=in-memory）——冻结清单只对文件主库"
-            "（tushare_parquet）有意义；不产出假清单（CL-4 / 铁律新 16）")
-    payload = freeze_payload(info, period=rt.config["run"]["period"],
-                             root=str(getattr(rt.feed, "root", "") or ""))
+            "（tushare_parquet）有意义；不产出假清单（CL-4 / 铁律新 16）"
+        )
+    payload = freeze_payload(
+        info, period=rt.config["run"]["period"], root=str(getattr(rt.feed, "root", "") or "")
+    )
     return write_freeze_manifest(payload, out or FREEZE_DIR)
 
 
@@ -364,8 +369,9 @@ def assemble_assumptions(store: Any, bundle: Any) -> Any:
     exec_cfg = cfg.get("execution") or {}
     slip_cfg = exec_cfg.get("slippage") or {}
     model = str(slip_cfg.get("model", "none"))
-    degraded = ("事件日志已采样（replay 不完整）"
-                if store.events_sampled(bundle.manifest.run_id) else "")
+    degraded = (
+        "事件日志已采样（replay 不完整）" if store.events_sampled(bundle.manifest.run_id) else ""
+    )
     return Assumptions(
         matching=format_matching(exec_cfg.get("handler", "next_open")),
         slippage=format_slippage(model, slip_cfg.get("params")),
@@ -441,8 +447,7 @@ def build_report_file(
     store = make_store(out_dir)
     bundle = BTFRuntime().load_run(run_id, store=store)
     html = ReportBuilder(bundle, assemble_assumptions(store, bundle)).build()
-    target = (Path(out) if out
-              else Path(store.run_dir(run_id)) / "report.html")
+    target = Path(out) if out else Path(store.run_dir(run_id)) / "report.html"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(html, encoding="utf-8")
     return target
@@ -465,19 +470,28 @@ def _trading_days_of(config: Mapping[str, Any]) -> list[Any]:
     start, end = str(period["start"]), str(period["end"])
     feed = None
     try:
-        feed = registry.create(registry.DATA_FEED, str(data_cfg.get("feed")),
-                               dict(data_cfg.get("feed_params") or {}))
-    except Exception:            # 构造失败 ≠ 静默：走 trade_cal（缺失即 fail-closed）
+        feed = registry.create(
+            registry.DATA_FEED, str(data_cfg.get("feed")), dict(data_cfg.get("feed_params") or {})
+        )
+    except Exception as exc:  # 构造失败 ≠ 静默：走 trade_cal（缺失即 fail-closed）
+        # B-P1-1 / G3/D7：打印 feed 名与参数，不吞异常类型/消息（仍回落）
+        print(
+            f"[WARN] feed 构造失败，回落 trade_cal：{type(exc).__name__}: {exc}"
+            f"（feed={data_cfg.get('feed')!r}，"
+            f"feed_params={dict(data_cfg.get('feed_params') or {})!r}）",
+            file=sys.stderr,
+        )
         feed = None
     dates = getattr(feed, "dates", None)
     if dates:
         return [d for d in dates if start <= d.to_ymd() <= end]
-    root = (dict(data_cfg.get("feed_params") or {}).get("root")
-            or MARKET_DATA_DIR)
+    root = dict(data_cfg.get("feed_params") or {}).get("root") or MARKET_DATA_DIR
     # `calendar_days` 的口径是 **YYYYMMDD**（与 runtime 质检同参——`start_ymd`），
     # 而 period 是 `YYYY-MM-DD`：不转换会得到**空日历**（证据脚本实测抓出）
-    return [TradingDate.from_ymd(d) for d in sorted(
-        calendar_days(root, start.replace("-", ""), end.replace("-", "")))]
+    return [
+        TradingDate.from_ymd(d)
+        for d in sorted(calendar_days(root, start.replace("-", ""), end.replace("-", "")))
+    ]
 
 
 def run_walk_forward(
@@ -512,20 +526,29 @@ def run_walk_forward(
         raise ValueError("须提供测试窗长（--test 或 --step）")
     if window is None or int(window) < 1:
         raise ValueError(f"--window（训练窗长）须 ≥ 1，得 {window!r}")
-    cfg = load_config(Path(config), environ=filter_btf_env(environ),
-                      overrides=dict(overrides or {}))
+    cfg = load_config(
+        Path(config), environ=filter_btf_env(environ), overrides=dict(overrides or {})
+    )
     days = _trading_days_of(cfg)
     report = _run_wf(
-        cfg, days, train=int(window), test=int(test_eff),
-        step=(int(step) if step is not None else None), mode=str(mode),
-        purge=int(purge), embargo=int(embargo), persist=bool(persist),
+        cfg,
+        days,
+        train=int(window),
+        test=int(test_eff),
+        step=(int(step) if step is not None else None),
+        mode=str(mode),
+        purge=int(purge),
+        embargo=int(embargo),
+        persist=bool(persist),
         store=(make_store(out_dir) if persist else None),
-        warmup=(None if warmup is None else int(warmup)))    # R58′：warm-up 透传
+        warmup=(None if warmup is None else int(warmup)),
+    )  # R58′：warm-up 透传
     if out:
         target = Path(out)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, ensure_ascii=False, indent=2,
-                                     default=str) + "\n", encoding="utf-8")
+        target.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8"
+        )
     return report
 
 
@@ -552,48 +575,69 @@ def run_mc(
         noise_baseline,
         permutation_pvalue,
     )
-    from btf.analytics.metrics import build_nav_series
+    from btf.analytics.metrics import DEFAULT_ANNUALIZATION, build_nav_series
     from btf.runtime import BTFRuntime, make_store
 
     store = make_store(out_dir)
     bundle = BTFRuntime().load_run(run_id, store=store)
     cfg = dict(bundle.manifest.config_effective or {})
-    ann = int((cfg.get("analysis") or {}).get("annualization_factor", 252))
+    ann = int((cfg.get("analysis") or {}).get("annualization_factor", DEFAULT_ANNUALIZATION))
     master = int((bundle.manifest.seed or {}).get("master", 0) or 0)
     seed_used = master if seed is None else int(seed)
     returns = list(build_nav_series(bundle.snapshots).effective_returns())
     if len(returns) < 3:
-        raise ValueError(
-            f"样本不足（有效日收益 {len(returns)} 个 < 3）——MC/置换不适用")
+        raise ValueError(f"样本不足（有效日收益 {len(returns)} 个 < 3）——MC/置换不适用")
     observed = {
         "sharpe": annualized_sharpe(returns, annualization=ann),
         "max_drawdown": max_drawdown(returns),
-        "metrics": {k: bundle.metrics.get(k) for k in (
-            "sharpe_ratio", "annualized_return", "total_return",
-            "max_drawdown", "information_ratio", "annualized_excess")
-            if k in bundle.metrics},
+        "metrics": {
+            k: bundle.metrics.get(k)
+            for k in (
+                "sharpe_ratio",
+                "annualized_return",
+                "total_return",
+                "max_drawdown",
+                "information_ratio",
+                "annualized_excess",
+            )
+            if k in bundle.metrics
+        },
     }
     report: dict[str, Any] = {
         "run_id": run_id,
-        "seed": {"master": master, "used": seed_used,
-                 "source": "manifest" if seed is None else "explicit"},
+        "seed": {
+            "master": master,
+            "used": seed_used,
+            "source": "manifest" if seed is None else "explicit",
+        },
         "n_periods": len(returns),
         "annualization": ann,
         "observed": observed,
-        "bootstrap": bootstrap_ci(returns, n_resamples=int(n_resamples),
-                                  seed=seed_used, annualization=ann),
+        "bootstrap": bootstrap_ci(
+            returns, n_resamples=int(n_resamples), seed=seed_used, annualization=ann
+        ),
         "permutation": {
             "sign_sharpe": permutation_pvalue(
-                returns, scheme="sign", statistic="sharpe",
-                n_permutations=int(n_permutations), seed=seed_used,
-                annualization=ann),
+                returns,
+                scheme="sign",
+                statistic="sharpe",
+                n_permutations=int(n_permutations),
+                seed=seed_used,
+                annualization=ann,
+            ),
             "order_max_drawdown": permutation_pvalue(
-                returns, scheme="order", statistic="max_drawdown",
-                n_permutations=int(n_permutations), seed=seed_used,
-                annualization=ann),
+                returns,
+                scheme="order",
+                statistic="max_drawdown",
+                n_permutations=int(n_permutations),
+                seed=seed_used,
+                annualization=ann,
+            ),
         },
-        "note": ("分布披露（p05/p50/p95 + 双侧 p 值）；只报数字不判定"
-                 "（ADR-13）；扰动在收益序列层，撮合规则逐位不变（09 #12）"),
+        "note": (
+            "分布披露（p05/p50/p95 + 双侧 p 值）；只报数字不判定"
+            "（ADR-13）；扰动在收益序列层，撮合规则逐位不变（09 #12）"
+        ),
     }
     # MM-6（19 号 §137 B ④）：多基准时噪声对照**只用主基准**（首个）——其余
     # 基准不参与（避免语义分叉：噪声基线是单一对照分布，混入第二个基准即
@@ -602,30 +646,34 @@ def run_mc(
 
     _symbols = benchmark_symbols(cfg.get("report") or {})
     bench = _symbols[0] if _symbols else None
-    n_hold = max(1, sum(1 for s in bundle.snapshots
-                        if getattr(s, "positions_qty", None)))
+    n_hold = max(1, sum(1 for s in bundle.snapshots if getattr(s, "positions_qty", None)))
     if bench:
         from btf.data.index_series import load_index_closes
 
         days = [str(s.date) for s in bundle.snapshots]
-        _days, closes = load_index_closes(
-            str(bench), days[0], days[-1], trading_days=days)
-        pool = [closes[i] / closes[i - 1] - 1.0
-                for i in range(1, len(closes)) if closes[i - 1]]
+        _days, closes = load_index_closes(str(bench), days[0], days[-1], trading_days=days)
+        pool = [closes[i] / closes[i - 1] - 1.0 for i in range(1, len(closes)) if closes[i - 1]]
         report["noise_baseline"] = noise_baseline(
-            pool, n_hold=n_hold, observed=observed["sharpe"],
-            n_draws=int(n_resamples), seed=seed_used, statistic="sharpe",
-            annualization=ann)
+            pool,
+            n_hold=n_hold,
+            observed=observed["sharpe"],
+            n_draws=int(n_resamples),
+            seed=seed_used,
+            statistic="sharpe",
+            annualization=ann,
+        )
     else:
         report["noise_baseline"] = None
         report["noise_note"] = (
             "无基准（report.benchmark 未配）⇒ 随机择时对照不可得——null 而非"
-            "伪造；配基准后可用（RC-16）")
+            "伪造；配基准后可用（RC-16）"
+        )
     if out:
         target = Path(out)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, ensure_ascii=False, indent=2,
-                                     default=str) + "\n", encoding="utf-8")
+        target.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8"
+        )
     return report
 
 
@@ -662,12 +710,12 @@ def scan_consolidation(
     if uni.get("source") != "explicit":
         raise ValueError(
             "scan-consolidation 需 run.universe.source='explicit'（ETF/LOF 池）"
-            "——全市场/指数宇宙无 ETF 分摊语义")
+            "——全市场/指数宇宙无 ETF 分摊语义"
+        )
     symbols = [str(s) for s in (uni.get("symbols") or [])]
     funds = [s for s in symbols if is_fund_code(s)]
     if not funds:
-        raise ValueError(
-            "scan-consolidation：显式宇宙内无 ETF/LOF 标的（is_fund_code 判定）")
+        raise ValueError("scan-consolidation：显式宇宙内无 ETF/LOF 标的（is_fund_code 判定）")
 
     start = TradingDate.from_ymd(start_s.replace("-", ""))
     end = TradingDate.from_ymd(end_s.replace("-", ""))
@@ -675,8 +723,8 @@ def scan_consolidation(
     # 交叉判别不可用——与 `trade_cal` 同强度降级：告警 ＋ 退出码 2，禁静默放行）。
     cross_state: dict[str, Any] = {}
     events, notes = scan_consolidations(
-        MARKET_DATA_DIR, funds, start, end, tolerance=tolerance,
-        cross_state=cross_state)
+        MARKET_DATA_DIR, funds, start, end, tolerance=tolerance, cross_state=cross_state
+    )
     # 顺延/回退提示也一并输出（扫描器只报折算；分红侧由 R32′ 装载时披露）
     # **R47′（N51，2026-10-08）**：`trade_cal` 缺失 ⇒ **降级为告警**（不得
     # 未捕获异常）——`n_trading_days` 不可算；CLI 以**退出码 2** 提示
@@ -687,23 +735,26 @@ def scan_consolidation(
     except FileNotFoundError as exc:
         cal = []
         degraded.append(
-            f"trade_cal 缺失 ⇒ `n_trading_days` 不可算（降级；扫描不依赖日历"
-            f"——R47′）：{exc}")
+            f"trade_cal 缺失 ⇒ `n_trading_days` 不可算（降级；扫描不依赖日历——R47′）：{exc}"
+        )
     if cross_state.get("disabled"):
         degraded.append(
             "交叉防线**不可用**（`fund_div` 表缺失/不可读）⇒ 折算候选**未经"
             "除息日判别**（幅度阈值单防线——N46 威胁面回归；R51′/N55）"
-            "——请补 `fund_div` 后重跑")
+            "——请补 `fund_div` 后重跑"
+        )
     n_fail = sum(1 for e in events if not e.get("ok"))
     report = {
         "schema": "btf.data.scan_consolidation.v1",
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "config": str(path),
         "tolerance": tolerance,
-        "start": start.to_ymd(), "end": end.to_ymd(),
+        "start": start.to_ymd(),
+        "end": end.to_ymd(),
         "n_symbols": len(funds),
         "n_trading_days": (len(cal) if cal else None),
-        "n_events": len(events), "n_fail_closed": n_fail,
+        "n_events": len(events),
+        "n_fail_closed": n_fail,
         "events": events,
         "notes": notes,
         "degraded": degraded,
@@ -714,8 +765,7 @@ def scan_consolidation(
     if out:
         target = Path(out)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, ensure_ascii=False, indent=2)
-                          + "\n", encoding="utf-8")
+        target.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return report
 
 
@@ -852,9 +902,9 @@ class RunSummary:
 
     run_id: str
     status: str
-    created: str                       # run 目录 mtime（本地时间）
+    created: str  # run 目录 mtime（本地时间）
     metrics: Mapping[str, float]
-    note: str = ""                     # manifest/metrics 不可读时的原因
+    note: str = ""  # manifest/metrics 不可读时的原因
 
 
 @dataclass(frozen=True)
@@ -900,15 +950,14 @@ def list_runs(
         directory = Path(store.run_dir(run_id))
         try:
             status, note = store.read_manifest(run_id).status, ""
-        except (OSError, ValueError) as exc:       # 缺失/坏 JSON/契约不兼容
+        except (OSError, ValueError) as exc:  # 缺失/坏 JSON/契约不兼容
             status, note = "?", f"{type(exc).__name__}: {exc}"
         try:
             metrics: dict[str, float] = dict(store.read_metrics(run_id))
         except (OSError, ValueError) as exc:
             metrics = {}
             note = note or f"{type(exc).__name__}: {exc}"
-        rows.append(RunSummary(run_id, status, _dir_time(directory), metrics,
-                               note))
+        rows.append(RunSummary(run_id, status, _dir_time(directory), metrics, note))
     rows.sort(key=lambda r: (r.created, r.run_id), reverse=True)
     return rows[:latest] if latest else rows
 
@@ -923,6 +972,9 @@ def run_detail(
 
     store = make_store(out_dir)
     manifest = store.read_manifest(run_id)
-    return RunDetail(run_id=manifest.run_id, directory=Path(store.run_dir(run_id)),
-                     manifest=manifest.to_dict(),
-                     metrics=dict(store.read_metrics(run_id)))
+    return RunDetail(
+        run_id=manifest.run_id,
+        directory=Path(store.run_dir(run_id)),
+        manifest=manifest.to_dict(),
+        metrics=dict(store.read_metrics(run_id)),
+    )

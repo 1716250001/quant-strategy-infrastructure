@@ -6,6 +6,7 @@
     - 语义等值：对抽样日 `precompute[ymd] == state_of(ymd, prev_statuses=历史)`
       逐字段相等（口径唯一实现 `liq._finalize`，手段差异由本测试钉住）
 """
+
 from __future__ import annotations
 
 import json
@@ -44,10 +45,14 @@ LIQ_HARD_LIMIT_SECONDS = 8.0
 #: 性能与状态覆盖的代表性失真（RECOVERY/CRISIS 触发频率差一个量级）。
 #: 今改为真值；镜像可用时由 `test_thresholds_match_mirror` 钉住不再漂移。
 THRESHOLDS = {
-    "sh_crisis": -5.0, "sh_watch": -3.0,
-    "small_crisis": -6.0, "small_watch": -4.0,
-    "down_crisis": 800, "down_watch": 300,
-    "ratio_crisis": 10.0, "ratio_watch": 5.0,
+    "sh_crisis": -5.0,
+    "sh_watch": -3.0,
+    "small_crisis": -6.0,
+    "small_watch": -4.0,
+    "down_crisis": 800,
+    "down_watch": 300,
+    "ratio_crisis": 10.0,
+    "ratio_watch": 5.0,
 }
 
 #: 生产镜像（可用时与 THRESHOLDS 对账；不可用时跳过而非放行）
@@ -74,10 +79,11 @@ def test_thresholds_match_mirror():
     liq = find(rules)
     assert liq, "镜像缺 L0_LIQ"
     assert {k: float(v) for k, v in liq.items() if k in THRESHOLDS} == {
-        k: float(v) for k, v in THRESHOLDS.items()}
+        k: float(v) for k, v in THRESHOLDS.items()
+    }
 
-requires_mainlib = pytest.mark.skipif(
-    not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
+
+requires_mainlib = pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
 
 
 @requires_mainlib
@@ -90,19 +96,30 @@ def test_decade_precompute_within_budget():
     **真正的回归守卫是机器无关的两条**：① 语义等值（`test_matches_state_of_on_sample`）；
     ② IO 精确性（`test_precompute_reuses_store_cache` 断言 `loads ≤ 40`）。
     """
-    t0 = time.perf_counter()
-    series = precompute_liq_series(*TEN_YEARS, THRESHOLDS)
-    elapsed = time.perf_counter() - t0
+    from tests.benchmark import _perf
+
+    def _measure() -> tuple[float, dict]:
+        t0 = time.perf_counter()
+        got = precompute_liq_series(*TEN_YEARS, THRESHOLDS)
+        return time.perf_counter() - t0, got
+
+    # **D8**：改走 `run_budget`（归一化墙钟；LIQ 硬门槛 8s 不变）。
+    elapsed, series = _perf.run_budget(
+        "LIQ",
+        _measure,
+        LIQ_HARD_LIMIT_SECONDS,
+        hint="回查 core 缓存/免排序/谓词下推是否退化",
+        seconds=lambda payload: payload[0],
+    )
     soft = elapsed <= DECADE_BUDGET_SECONDS
-    print(f"\nLIQ 十年预计算: {elapsed:.2f}s"
-          f"（软目标 {DECADE_BUDGET_SECONDS}s{'✓' if soft else '✗ 超软目标（负载？）'}｜"
-          f"硬门槛 {LIQ_HARD_LIMIT_SECONDS}s）"
-          f"| {len(series)} 交易日 | 加速 ≈{760.0 / elapsed:.0f}x"
-          f"（vs 历史逐日基线 760s）")
+    print(
+        f"\nLIQ 十年预计算: {elapsed:.2f}s"
+        f"（软目标 {DECADE_BUDGET_SECONDS}s{'✓' if soft else '✗ 超软目标（负载？）'}｜"
+        f"硬门槛 {LIQ_HARD_LIMIT_SECONDS}s，按归一化墙钟判定（D8））"
+        f"| {len(series)} 交易日 | 加速 ≈{760.0 / elapsed:.0f}x"
+        f"（vs 历史逐日基线 760s）"
+    )
     assert len(series) > 2300
-    assert elapsed < LIQ_HARD_LIMIT_SECONDS, (
-        f"预计算超标：{elapsed:.2f}s ≥ 硬门槛 {LIQ_HARD_LIMIT_SECONDS}s（软目标 "
-        f"{DECADE_BUDGET_SECONDS}s 的 1.6x）——回查 core 缓存/免排序/谓词下推是否退化")
 
 
 @requires_mainlib
@@ -127,8 +144,10 @@ def test_decade_recovery_bounded():
     if cur:
         runs.append(cur)
     share = recovery / len(days)
-    print(f"\nRECOVERY {recovery}/{len(days)} ({share:.1%}) | "
-          f"段数 {len(runs)} | 最长 {max(runs, default=0)} 日")
+    print(
+        f"\nRECOVERY {recovery}/{len(days)} ({share:.1%}) | "
+        f"段数 {len(runs)} | 最长 {max(runs, default=0)} 日"
+    )
     assert share < 0.05, f"RECOVERY 占比 {share:.1%}（自我维持回归？X-1）"
     assert max(runs, default=0) <= 6, f"RECOVERY 连续 {max(runs)} 日（窗口有界性）"
 
@@ -149,20 +168,35 @@ def test_matches_state_of_on_sample():
     sample = sorted(set(sample))
 
     sample_set = set(sample)
-    prev = None                    # 单步递推：用前一日**预计算结果**作 prev
+    prev = None  # 单步递推：用前一日**预计算结果**作 prev
     mismatches = []
     for day in days:
         if day in sample_set:
             ref = state_of(day, THRESHOLDS, prev=prev)
             got = series[day]
-            if (ref.status, ref.raw, ref.phase, ref.phase_days, ref.sh_pct,
-                    ref.small_pct, ref.down_cnt, ref.down_ratio,
-                    ref.triggers) != (
-                    got.status, got.raw, got.phase, got.phase_days, got.sh_pct,
-                    got.small_pct, got.down_cnt, got.down_ratio,
-                    got.triggers):
+            if (
+                ref.status,
+                ref.raw,
+                ref.phase,
+                ref.phase_days,
+                ref.sh_pct,
+                ref.small_pct,
+                ref.down_cnt,
+                ref.down_ratio,
+                ref.triggers,
+            ) != (
+                got.status,
+                got.raw,
+                got.phase,
+                got.phase_days,
+                got.sh_pct,
+                got.small_pct,
+                got.down_cnt,
+                got.down_ratio,
+                got.triggers,
+            ):
                 mismatches.append(day)
-        prev = series[day]                         # 与预计算同源推进状态
+        prev = series[day]  # 与预计算同源推进状态
     assert sample, "抽样为空（区间无交易日？）"
     assert not mismatches, f"抽样 {len(sample)} 日中有 {len(mismatches)} 日不等值"
 
@@ -173,7 +207,7 @@ def test_precompute_reuses_store_cache():
     （报告 §15.3；容量不足会触发 FIFO 淘汰重装载——本测试显式给定容量）。"""
     from btf.data.core import YearTableStore
 
-    store = YearTableStore(max_entries=48)       # ≥ 10 年 × 3 表 + 日索引年
+    store = YearTableStore(max_entries=48)  # ≥ 10 年 × 3 表 + 日索引年
     precompute_liq_series(*TEN_YEARS, THRESHOLDS, store=store)
     first = store.stats()["loads"]
     # 10 年 ×（stk_limit + daily 免排序 + index_daily 过滤 + days 日索引）= 40

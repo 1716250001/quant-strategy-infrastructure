@@ -10,12 +10,65 @@ common/parquet_store.py — 按代码分文件的 Parquet 增量存储
   - 合并时按 subset 去重，keep="last" 保证新数据覆盖旧数据
   - 列顺序与既有文件对齐，避免 Parquet schema 漂移
 """
+
 import os
 import sys
+import threading
+from contextlib import contextmanager
 
 import pandas as pd
 
+from common.concurrency import (
+    cleanup_pid_tmp,
+    file_lock,
+    pid_tmp_path,
+    replace_with_retry,
+)
 from common.paths import ensure_dir
+
+# 目录级写锁：一次 parquet 读改写可能持续数秒（年末大文件），给足等待时间。
+_WRITE_LOCK_TIMEOUT = 300.0
+_WRITE_LOCK_RETRY_MS = 15
+_WRITE_LOCK_NAME = ".write.lock"
+_TLS = threading.local()
+
+
+@contextmanager
+def _dir_write_lock(dir_path):
+    """目标目录级跨进程写锁（`<dir>/.write.lock`），同线程可重入。
+
+    为什么按目录而不是按文件：`upsert_by_year` / `upsert_grouped` 会连续
+    读改写同一目录下的多个 parquet；按文件加锁无法阻止两个实例交错
+    「读旧 → 写回」，目录级锁把整批写入串行化。
+
+    重入：`upsert_by_year` 持锁后调用 `merge_append`，后者不应再次
+    抢同一把锁（`O_EXCL` 会自己把自己锁死），故同线程深度计数跳过。
+    """
+    key = os.path.abspath(dir_path)
+    depth = getattr(_TLS, "depth", None)
+    if depth is None:
+        depth = _TLS.depth = {}
+    if depth.get(key, 0) > 0:
+        depth[key] += 1
+        try:
+            yield
+        finally:
+            depth[key] -= 1
+            if depth[key] <= 0:
+                depth.pop(key, None)
+        return
+
+    ensure_dir(dir_path)
+    with file_lock(
+        os.path.join(dir_path, _WRITE_LOCK_NAME),
+        timeout=_WRITE_LOCK_TIMEOUT,
+        retry_ms=_WRITE_LOCK_RETRY_MS,
+    ):
+        depth[key] = 1
+        try:
+            yield
+        finally:
+            depth.pop(key, None)
 
 
 def _invalidate_reader_cache(path_or_dir, table=None):
@@ -36,16 +89,18 @@ def _invalidate_reader_cache(path_or_dir, table=None):
     try:
         from common import reader
     except Exception as exc:
-        print(f"[common.parquet_store] 延迟导入 reader 失败（不清缓存）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[common.parquet_store] 延迟导入 reader 失败（不清缓存）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return
     try:
         if not table:
             p = str(path_or_dir).rstrip("\\/")
             if p.endswith(".parquet"):
-                table = os.path.basename(os.path.dirname(p))   # 文件 → 父目录名
+                table = os.path.basename(os.path.dirname(p))  # 文件 → 父目录名
             else:
-                table = os.path.basename(p)                    # 目录 → 目录名
+                table = os.path.basename(p)  # 目录 → 目录名
         if table:
             reader.clear_cache(table)
     except Exception:
@@ -108,8 +163,10 @@ def _fsync_warn_once(path, err):
     if _FSYNC_WARNED:
         return
     _FSYNC_WARNED = True
-    print(f"[WARN] fsync 降级: {os.path.basename(str(path))} "
-          f"errno={getattr(err, 'errno', '?')}（本进程仅提示一次）")
+    print(
+        f"[WARN] fsync 降级: {os.path.basename(str(path))} "
+        f"errno={getattr(err, 'errno', '?')}（本进程仅提示一次）"
+    )
 
 
 def _fsync_file(path):
@@ -132,7 +189,7 @@ def _fsync_file(path):
         fd = os.open(path, _FSYNC_WRITE_FLAGS)
     except OSError:
         try:
-            fd = os.open(path, os.O_RDONLY)   # POSIX 只读挂载兜底
+            fd = os.open(path, os.O_RDONLY)  # POSIX 只读挂载兜底
         except OSError:
             return False
     try:
@@ -163,10 +220,13 @@ def _existing_schema(path):
     """既有 parquet 的 arrow schema（读不到 ⇒ None）。"""
     try:
         import pyarrow.parquet as pq
+
         return pq.read_schema(path)
     except Exception as exc:
-        print(f"[common.parquet_store] 读既有 schema 失败 {path}: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[common.parquet_store] 读既有 schema 失败 {path}: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -186,7 +246,7 @@ def _write_aligned(df, path, schema):
 
     cols = list(schema.names)
     if set(cols) != set(df.columns):
-        return False                      # 列集合变化 ⇒ 交回默认写（由上层判结构）
+        return False  # 列集合变化 ⇒ 交回默认写（由上层判结构）
     try:
         table = pa.Table.from_pandas(df[cols], preserve_index=False)
         table = table.cast(schema)
@@ -198,37 +258,56 @@ def _write_aligned(df, path, schema):
 
 
 def _atomic_write_parquet(df, path, schema=None):
-    """原子写 parquet：先写 {path}.tmp，fsync，再 os.replace 覆盖目标。
+    """原子写 parquet：先写 `{path}.{pid}.{uuid}.tmp`，fsync，再 os.replace。
 
     为什么（2026-09-30 DB2）:
       to_parquet 直接覆盖原文件，写中途崩溃/断电会同时失去新旧数据 ——
       原文件已被截断且无法回退。原子写保证任一时刻磁盘上要么是旧文件、
-      要么是完整新文件。残留 .tmp 无害：list_parquet_files 按 .parquet
-      后缀过滤不会认到它；同目录同名 .tmp 重跑即被覆盖，幂等。
+      要么是完整新文件。
 
     E-05（2026-10-11）: 在 replace **之前**对 .tmp 做 fsync —— 否则
     "崩溃安全"只覆盖进程崩溃，不覆盖断电（数据仍在页缓存里）。
 
+    D3（2026-11-21）:
+      - tmp 名带 PID + uuid：原固定 `{path}.tmp` 会让两个进程互相覆盖
+        对方的半成品；
+      - `os.replace` 走 `replace_with_retry`（WinError 32/5，40×15ms）；
+      - 启动/失败时只清理**本进程**的 tmp（不删他人正在写的文件）。
+
     schema 参数（2026-10-11）: 传入既有文件的 arrow schema 时按其对
     列序/类型落盘（防跨分区漂移，见 `_write_aligned`）。
     """
-    tmp = f"{path}.tmp"
-    if schema is None or not _write_aligned(df, tmp, schema):
-        df.to_parquet(tmp, index=False)
-    _fsync_file(tmp)                # E-05: 数据先落盘，再换名
-    os.replace(tmp, path)
-    _fsync_dir(os.path.dirname(os.path.abspath(path)))   # E-05: 目录项（POSIX）
+    cleanup_pid_tmp(path)  # 上次本进程崩溃遗留的 tmp
+    tmp = pid_tmp_path(path)
+    try:
+        if schema is None or not _write_aligned(df, tmp, schema):
+            df.to_parquet(tmp, index=False)
+        _fsync_file(tmp)  # E-05: 数据先落盘，再换名
+        replace_with_retry(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    _fsync_dir(os.path.dirname(os.path.abspath(path)))  # E-05: 目录项（POSIX）
 
 
 def _arrow_table_equal(a, b):
     """Arrow 层逐缓冲比较。更严格（含 schema/dtype/行序）⇒ 为真必无变化，为假交回精判。"""
     try:
         import pyarrow as pa
-        return bool(pa.Table.from_pandas(a, preserve_index=False)
-                    .equals(pa.Table.from_pandas(b, preserve_index=False)))
+
+        return bool(
+            pa.Table.from_pandas(a, preserve_index=False).equals(
+                pa.Table.from_pandas(b, preserve_index=False)
+            )
+        )
     except Exception as exc:
-        print(f"[common.parquet_store] Arrow 层比较失败（交回精判）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[common.parquet_store] Arrow 层比较失败（交回精判）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return False
 
 
@@ -265,6 +344,7 @@ def _values_changed(existing, combined, keys):
         return True
     try:
         from pandas.testing import assert_frame_equal
+
         assert_frame_equal(old, new, check_dtype=False, check_names=False)
         return False
     except AssertionError:
@@ -294,10 +374,17 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
         return False, 0
 
     if subset in (None, "*"):
-        keys = None                      # pandas: subset=None → 全列判重
+        keys = None  # pandas: subset=None → 全列判重
     else:
         keys = [subset] if isinstance(subset, str) else list(subset)
 
+    # D3：同一目录的 parquet 读改写必须跨进程串行（否则两个实例各自
+    # 「读旧 → 写回」，后写者覆盖前者整批新增）；同线程由锁深度重入。
+    with _dir_write_lock(os.path.dirname(os.path.abspath(path))):
+        return _merge_append_locked(path, new_df, keys, sort_by, keep)
+
+
+def _merge_append_locked(path, new_df, keys, sort_by, keep):
     if os.path.exists(path):
         existing = pd.read_parquet(path)
         # schema 对齐基准（2026-10-11）：以**既有文件**的 arrow schema 为权威，
@@ -316,21 +403,27 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
         # 省掉第二次全列去重为**恒等变形**（实测 moneyflow −31.8% / daily −29.1%）。
         # 判据不成立（含 dtype 不一致导致比较不可执行）⇒ 走原路径，行为零变化。
         _sep = False
-        if (keys is not None and sort_by is not None
-                and sort_by in keys
-                and sort_by in existing.columns and sort_by in new_df.columns):
+        if (
+            keys is not None
+            and sort_by is not None
+            and sort_by in keys
+            and sort_by in existing.columns
+            and sort_by in new_df.columns
+        ):
             try:
                 e_hi = existing[sort_by].max()
                 e_lo = existing[sort_by].min()
                 n_lo = new_df[sort_by].min()
                 n_hi = new_df[sort_by].max()
-                if not (pd.isna(e_hi) or pd.isna(n_lo)
-                        or pd.isna(e_lo) or pd.isna(n_hi)):
+                if not (pd.isna(e_hi) or pd.isna(n_lo) or pd.isna(e_lo) or pd.isna(n_hi)):
                     _sep = bool(n_lo > e_hi) or bool(n_hi < e_lo)  # 追加 / 补历史
             except Exception as exc:
-                print(f"[common.parquet_store] 区间比较失败（不启用快路径）: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
-                _sep = False           # 比较不可执行 ⇒ 不启用快路径
+                print(
+                    f"[common.parquet_store] 区间比较失败（不启用快路径）: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
+                _sep = False  # 比较不可执行 ⇒ 不启用快路径
         # 既有去重基准（keep=keep 与合并路径的保留方向一致；行数两种 keep 相同）
         if keys is None:
             existing_uniq_df = existing.drop_duplicates()
@@ -350,7 +443,7 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
             combined = combined.sort_values(sort_by)
         combined = combined.reset_index(drop=True)
 
-        added = len(combined) - existing_uniq      # ← 改这一行（DB-R10b）
+        added = len(combined) - existing_uniq  # ← 改这一行（DB-R10b）
         if added <= 0:
             if keys is None:
                 # 全列判重：去重后行数不增 ⇒ 逐列必然相同（无需比较）
@@ -363,8 +456,10 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
             # 但 changed=True 让调用方的"已更新"计数如实反映）
             if n_existing_dup:
                 # R10b-1c：既有重复被顺手折叠 ⇒ 必须显式告知，不许静默删行
-                print(f"  [去重] {os.path.basename(path)}: 既有 {n_existing_dup:,} 行"
-                      f"重复已按 {keys} 折叠（本次新增 0 行）")
+                print(
+                    f"  [去重] {os.path.basename(path)}: 既有 {n_existing_dup:,} 行"
+                    f"重复已按 {keys} 折叠（本次新增 0 行）"
+                )
             if set(combined.columns) == set(existing.columns):
                 combined = combined[list(existing.columns)]
             _atomic_write_parquet(combined, path, schema=schema)
@@ -373,13 +468,15 @@ def merge_append(path, new_df, subset, sort_by=None, keep="last"):
 
         if n_existing_dup:
             # 本次写入会把既有重复行一并折叠 —— 必须显式告知，不许静默
-            print(f"  [去重] {os.path.basename(path)}: 既有 {n_existing_dup:,} 行"
-                  f"重复已按 {keys} 折叠（本次新增 {added:,} 行）")
+            print(
+                f"  [去重] {os.path.basename(path)}: 既有 {n_existing_dup:,} 行"
+                f"重复已按 {keys} 折叠（本次新增 {added:,} 行）"
+            )
         # 列顺序与既有文件对齐，保持文件结构稳定
         if set(combined.columns) == set(existing.columns):
             combined = combined[list(existing.columns)]
         _atomic_write_parquet(combined, path, schema=schema)
-        _invalidate_reader_cache(path)          # 写后失效读取缓存
+        _invalidate_reader_cache(path)  # 写后失效读取缓存
         return True, added
 
     # 新文件
@@ -424,8 +521,15 @@ def _assert_by_code_target(dir_path):
             )
 
 
-def upsert_grouped(df, dir_path, key_col="ts_code", subset="trade_date",
-                   sort_by="trade_date", on_error=None, allow_mixed=False):
+def upsert_grouped(
+    df,
+    dir_path,
+    key_col="ts_code",
+    subset="trade_date",
+    sort_by="trade_date",
+    on_error=None,
+    allow_mixed=False,
+):
     """按 key_col 分组，逐代码合并写入 dir_path/{code}.parquet。
 
     ⚠ 使用前先确认目标表的布局（2026-09-17 全库已统一为按年分区）：
@@ -450,8 +554,15 @@ def upsert_grouped(df, dir_path, key_col="ts_code", subset="trade_date",
          "fail": n, "added_rows": n, "codes": n}
     """
     if df is None or len(df) == 0:
-        return {"processed": 0, "updated": 0, "new": 0, "unchanged": 0,
-                "fail": 0, "added_rows": 0, "codes": 0}
+        return {
+            "processed": 0,
+            "updated": 0,
+            "new": 0,
+            "unchanged": 0,
+            "fail": 0,
+            "added_rows": 0,
+            "codes": 0,
+        }
 
     if not allow_mixed:
         _assert_by_code_target(dir_path)
@@ -459,31 +570,37 @@ def upsert_grouped(df, dir_path, key_col="ts_code", subset="trade_date",
     ensure_dir(dir_path)
     updated = new_files = fail = added_rows = 0
 
-    for code, group in df.groupby(key_col):
-        fpath = os.path.join(dir_path, f"{code}.parquet")
-        is_new = not os.path.exists(fpath)
-        try:
-            changed, added = merge_append(fpath, group, subset=subset, sort_by=sort_by)
-            if is_new:
-                new_files += 1
-            elif changed:
-                updated += 1
-            added_rows += added
-        except Exception as e:
-            fail += 1
-            if on_error is not None:
-                on_error(code, e)
-            else:
-                print(f"  [ERROR] {code}: {e}")
+    # D3：目录级锁覆盖整批代码文件，避免两个实例交错读改写。
+    with _dir_write_lock(dir_path):
+        for code, group in df.groupby(key_col):
+            fpath = os.path.join(dir_path, f"{code}.parquet")
+            is_new = not os.path.exists(fpath)
+            try:
+                changed, added = merge_append(fpath, group, subset=subset, sort_by=sort_by)
+                if is_new:
+                    new_files += 1
+                elif changed:
+                    updated += 1
+                added_rows += added
+            except Exception as e:
+                fail += 1
+                if on_error is not None:
+                    on_error(code, e)
+                else:
+                    print(f"  [ERROR] {code}: {e}")
 
     processed = updated + new_files + fail
     # unchanged = 处理成功但无新增行的既有文件
     total = int(df[key_col].nunique())
     unchanged = total - processed
     return {
-        "processed": processed, "updated": updated, "new": new_files,
-        "unchanged": max(unchanged, 0), "fail": fail,
-        "added_rows": added_rows, "codes": total,
+        "processed": processed,
+        "updated": updated,
+        "new": new_files,
+        "unchanged": max(unchanged, 0),
+        "fail": fail,
+        "added_rows": added_rows,
+        "codes": total,
     }
 
 
@@ -495,16 +612,17 @@ def read_column(path, column):
         df = pd.read_parquet(path, columns=[column])
         return df[column]
     except Exception as exc:
-        print(f"[common.parquet_store] 读列失败 {path}[{column}]: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[common.parquet_store] 读列失败 {path}[{column}]: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return None
 
 
 # ============================================================
 # 按年分区存储 (2026-09-16 新增)
 # ============================================================
-def upsert_by_year(df, dir_path, date_col="trade_date", subset=None,
-                   sort_by=None, on_error=None):
+def upsert_by_year(df, dir_path, date_col="trade_date", subset=None, sort_by=None, on_error=None):
     """按【年份】分区写入 dir_path/{YYYY}.parquet。
 
     为什么需要它:
@@ -550,38 +668,42 @@ def upsert_by_year(df, dir_path, date_col="trade_date", subset=None,
     if n_nodate:
         raise ValueError(
             f"日期列 '{date_col}' 有 {n_nodate}/{len(df)} 行为空，无法确定年份分区；"
-            f"拒绝静默丢弃（调用方不得据此记断点）")
+            f"拒绝静默丢弃（调用方不得据此记断点）"
+        )
     # 年份: 兼容 YYYYMMDD 与 YYYY-MM-DD
     years = work[date_col].astype(str).str.replace("-", "", regex=False).str[:4]
     work = work.assign(_year=years)
 
     n_part = added = fail = 0
-    for year, group in work.groupby("_year"):
-        group = group.drop(columns=["_year"])
-        path = os.path.join(dir_path, f"{year}.parquet")
-        try:
-            if subset == "*":
-                sub = list(group.columns)
-            else:
-                sub = subset or date_col
-            srt = sort_by or (sub[0] if isinstance(sub, list) else sub)
-            if srt not in group.columns:
-                srt = date_col
-            _, add = merge_append(path, group, subset=sub, sort_by=srt)
-            n_part += 1
-            added += add
-        except Exception as e:
-            fail += 1
-            if on_error is not None:
-                on_error(year, e)
-            else:
-                print(f"  [ERROR] 分区 {year}: {str(e)[:80]}")
+    # D3：目录级锁覆盖整批年份分区；merge_append 同线程重入不重复抢锁。
+    with _dir_write_lock(dir_path):
+        for year, group in work.groupby("_year"):
+            group = group.drop(columns=["_year"])
+            path = os.path.join(dir_path, f"{year}.parquet")
+            try:
+                if subset == "*":
+                    sub = list(group.columns)
+                else:
+                    sub = subset or date_col
+                srt = sort_by or (sub[0] if isinstance(sub, list) else sub)
+                if srt not in group.columns:
+                    srt = date_col
+                _, add = merge_append(path, group, subset=sub, sort_by=srt)
+                n_part += 1
+                added += add
+            except Exception as e:
+                fail += 1
+                if on_error is not None:
+                    on_error(year, e)
+                else:
+                    print(f"  [ERROR] 分区 {year}: {str(e)[:80]}")
 
     return {"partitions": n_part, "rows": len(df), "added": added, "fail": fail}
 
 
-def migrate_to_year_partitions(dir_path, date_col="trade_date", subset=None,
-                               key_col="ts_code", dry_run=False, backup=False):
+def migrate_to_year_partitions(
+    dir_path, date_col="trade_date", subset=None, key_col="ts_code", dry_run=False, backup=False
+):
     """把已按 key_col 拆分的小文件合并为按年分区大表。
 
     安全策略(默认无损):
@@ -602,16 +724,28 @@ def migrate_to_year_partitions(dir_path, date_col="trade_date", subset=None,
       回滚(保守设计, 宁可不动也不误删)。
     """
     if not os.path.isdir(dir_path):
-        return {"ok": False, "rows_before": 0, "rows_after": 0, "parts": [],
-                "files_removed": 0, "msg": "目录不存在"}
+        return {
+            "ok": False,
+            "rows_before": 0,
+            "rows_after": 0,
+            "parts": [],
+            "files_removed": 0,
+            "msg": "目录不存在",
+        }
 
     all_files = [f for f in os.listdir(dir_path) if f.endswith(".parquet")]
     # 分离: 已是年份分区文件 vs 待合并的小文件
     year_files = [f for f in all_files if len(f) == 12 and f[:4].isdigit()]
     small_files = [f for f in all_files if f not in year_files]
     if not small_files:
-        return {"ok": True, "rows_before": 0, "rows_after": 0, "parts": [f[:4] for f in year_files],
-                "files_removed": 0, "msg": "无待合并文件(已是年份分区)"}
+        return {
+            "ok": True,
+            "rows_before": 0,
+            "rows_after": 0,
+            "parts": [f[:4] for f in year_files],
+            "files_removed": 0,
+            "msg": "无待合并文件(已是年份分区)",
+        }
 
     frames = []
     rows_before = 0
@@ -628,30 +762,54 @@ def migrate_to_year_partitions(dir_path, date_col="trade_date", subset=None,
         except Exception as e:
             bad.append(f"{f}: {str(e)[:40]}")
     if bad:
-        return {"ok": False, "rows_before": rows_before, "rows_after": 0, "parts": [],
-                "files_removed": 0, "msg": f"读取失败 {len(bad)} 个: {bad[:3]}"}
+        return {
+            "ok": False,
+            "rows_before": rows_before,
+            "rows_after": 0,
+            "parts": [],
+            "files_removed": 0,
+            "msg": f"读取失败 {len(bad)} 个: {bad[:3]}",
+        }
     if not frames:
-        return {"ok": False, "rows_before": 0, "rows_after": 0, "parts": [],
-                "files_removed": 0, "msg": "无可读数据"}
+        return {
+            "ok": False,
+            "rows_before": 0,
+            "rows_after": 0,
+            "parts": [],
+            "files_removed": 0,
+            "msg": "无可读数据",
+        }
 
     merged = pd.concat(frames, ignore_index=True)
     if date_col not in merged.columns:
-        return {"ok": False, "rows_before": rows_before, "rows_after": 0, "parts": [],
-                "files_removed": 0,
-                "msg": f"缺少分区列 {date_col}, 实际列={list(merged.columns)[:8]}"}
+        return {
+            "ok": False,
+            "rows_before": rows_before,
+            "rows_after": 0,
+            "parts": [],
+            "files_removed": 0,
+            "msg": f"缺少分区列 {date_col}, 实际列={list(merged.columns)[:8]}",
+        }
 
     if dry_run:
         y = merged[date_col].astype(str).str[:4]
-        return {"ok": True, "rows_before": rows_before, "rows_after": rows_before,
-                "parts": sorted(y.unique().tolist()), "files_removed": 0,
-                "msg": f"[DRY-RUN] 将合并 {len(to_read)} 文件"
-                       f"(小文件{len(small_files)}+年份文件{len(year_files)}) "
-                       f"→ {y.nunique()} 个年份分区"}
+        return {
+            "ok": True,
+            "rows_before": rows_before,
+            "rows_after": rows_before,
+            "parts": sorted(y.unique().tolist()),
+            "files_removed": 0,
+            "msg": f"[DRY-RUN] 将合并 {len(to_read)} 文件"
+            f"(小文件{len(small_files)}+年份文件{len(year_files)}) "
+            f"→ {y.nunique()} 个年份分区",
+        }
 
     # 写入年份分区
     tmp_dir = dir_path + "__yearnew"
     ensure_dir(tmp_dir)
-    work = merged.assign(_year=merged[date_col].astype(str).str.replace("-", "", regex=False).str[:4])
+    work = merged.assign(
+        _year=merged[date_col].astype(str).str.replace("-", "", regex=False).str[:4]
+    )
     parts = []
     for year, g in work.groupby("_year"):
         g = g.drop(columns=["_year"])
@@ -671,13 +829,20 @@ def migrate_to_year_partitions(dir_path, date_col="trade_date", subset=None,
 
     if rows_after != rows_before:
         import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        return {"ok": False, "rows_before": rows_before, "rows_after": rows_after,
-                "parts": parts, "files_removed": 0,
-                "msg": f"行数校验失败! 原={rows_before:,} 新={rows_after:,} — 已回滚, 原文件保留"}
+        return {
+            "ok": False,
+            "rows_before": rows_before,
+            "rows_after": rows_after,
+            "parts": parts,
+            "files_removed": 0,
+            "msg": f"行数校验失败! 原={rows_before:,} 新={rows_after:,} — 已回滚, 原文件保留",
+        }
 
     # 校验通过 → 移动新文件到目标目录, 删除旧小文件
     import shutil
+
     for f in os.listdir(tmp_dir):
         shutil.move(os.path.join(tmp_dir, f), os.path.join(dir_path, f))
     shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -693,11 +858,16 @@ def migrate_to_year_partitions(dir_path, date_col="trade_date", subset=None,
     # 布局已改变（小文件→年度文件），必须失效 reader 缓存
     _invalidate_reader_cache(dir_path)
 
-    return {"ok": True, "rows_before": rows_before, "rows_after": rows_after,
-            "parts": sorted(parts), "files_removed": removed,
-            "msg": f"迁移成功: {len(to_read)}文件"
-                   f"(小文件{len(small_files)}+年份文件{len(year_files)}) "
-                   f"→ {len(parts)}年份分区, {rows_before:,} 行无损"}
+    return {
+        "ok": True,
+        "rows_before": rows_before,
+        "rows_after": rows_after,
+        "parts": sorted(parts),
+        "files_removed": removed,
+        "msg": f"迁移成功: {len(to_read)}文件"
+        f"(小文件{len(small_files)}+年份文件{len(year_files)}) "
+        f"→ {len(parts)}年份分区, {rows_before:,} 行无损",
+    }
 
 
 # ============================================================
@@ -724,15 +894,23 @@ class YearBatchWriter:
         w.flush()           # 收尾
 
     设计要点:
-      - on_flushed 回调在**每次 flush 成功后**触发, 传入本次已落盘的 key 列表。
-        调用方应在此回调里标记断点 —— 保证"先落盘、后记断点", 不会因
-        崩溃导致"断点说完成但数据没写"。
+      - on_flushed 回调在**每次 flush 成功后**触发, 传入
+        `(done_keys, partial_keys)`：`partial_keys` 是触顶/不完整的键，
+        调用方应 `mark_partial` 而非 `mark_done`（D4）。
       - 累积在内存中, 阈值按"天数"与"行数"双重控制, 避免单年缓冲过大。
     """
 
-    def __init__(self, dir_path, date_col="trade_date", subset=None, sort_by=None,
-                 flush_days=20, flush_rows=500_000,
-                 on_flushed=None, on_error=None):
+    def __init__(
+        self,
+        dir_path,
+        date_col="trade_date",
+        subset=None,
+        sort_by=None,
+        flush_days=20,
+        flush_rows=500_000,
+        on_flushed=None,
+        on_error=None,
+    ):
         self.dir_path = dir_path
         self.date_col = date_col
         self.subset = subset
@@ -741,11 +919,12 @@ class YearBatchWriter:
         self.flush_rows = max(int(flush_rows), 1)
         self.on_flushed = on_flushed
         self.on_error = on_error
-        self._buf = {}          # {年份: [df, ...]}
-        self._keys = {}         # {年份: [key, ...]}
-        self._nrows = {}        # {年份: 累积行数}
+        self._buf = {}  # {年份: [df, ...]}
+        self._keys = {}  # {年份: [(key, partial), ...]}
+        self._nrows = {}  # {年份: 累积行数}
         self.flushed_frames = 0
         self.flushed_rows = 0
+        self.write_fail = 0  # D4/R1：落盘失败计数（异常 + 分区 fail），供 run_target 传播
 
     # ---------- 内部 ----------
     def _year_of(self, df):
@@ -754,11 +933,15 @@ class YearBatchWriter:
         return u[0] if len(u) == 1 else None
 
     def _do_flush(self, year):
-        frames = self._buf.pop(year, [])
-        keys = self._keys.pop(year, [])
-        self._nrows.pop(year, None)
+        # D11：**成功后才清空**该年缓冲（与 `SingleBatchWriter` 统一失败语义）
+        # ——原实现在写前 pop，落盘失败即丢帧（虽不记断点，但重试窗口内的
+        # 数据只能靠下次全量重拉；三套写入器语义现已一致）。
+        frames = self._buf.get(year, [])
+        pairs = self._keys.get(year, [])
         if not frames:
             return
+        done_keys = [k for k, p in pairs if not p]
+        partial_keys = [k for k, p in pairs if p]
         merged = pd.concat(frames, ignore_index=True)
         # CC-PERF-1 C3（2026-11-03）· 有条件保留，**默认不改**：
         #   此处批内全列去重与下游 `merge_append` 的去重重复。实测评测
@@ -771,10 +954,16 @@ class YearBatchWriter:
         if len(frames) > 1:
             merged = merged.drop_duplicates().reset_index(drop=True)
         try:
-            r = upsert_by_year(merged, self.dir_path, date_col=self.date_col,
-                               subset=self.subset, sort_by=self.sort_by)
+            r = upsert_by_year(
+                merged,
+                self.dir_path,
+                date_col=self.date_col,
+                subset=self.subset,
+                sort_by=self.sort_by,
+            )
         except Exception as e:
             # 落盘失败 → 不触发 on_flushed, 断点也不记, 下次续跑重拉
+            self.write_fail += 1
             if self.on_error is not None:
                 self.on_error(year, e)
             else:
@@ -787,19 +976,28 @@ class YearBatchWriter:
         #   此处必须显式拦截: fail>0 一律视为整体失败。
         if r.get("fail"):
             msg = f"{r['fail']} 个年份分区写入失败（partitions={r.get('partitions')}）"
+            self.write_fail += int(r.get("fail") or 1)
             if self.on_error is not None:
                 self.on_error(year, RuntimeError(msg))
             else:
                 print(f"  [ERROR] 批量落盘部分失败 {year}: {msg}")
             return
+        # D11：落盘成功（含分区 fail=0）→ 清空该年缓冲
+        self._buf.pop(year, None)
+        self._keys.pop(year, None)
+        self._nrows.pop(year, None)
         self.flushed_frames += 1
         self.flushed_rows += len(merged)
-        if self.on_flushed is not None and keys:
-            self.on_flushed(keys)
+        if self.on_flushed is not None and (done_keys or partial_keys):
+            self.on_flushed(done_keys, partial_keys)
 
     # ---------- 对外 ----------
-    def add(self, df, key):
-        """累积一帧数据；达到阈值则自动 flush 对应年份。"""
+    def add(self, df, key, partial=False):
+        """累积一帧数据；达到阈值则自动 flush 对应年份。
+
+        partial=True：该键的数据不完整（分页触顶），落盘后由回调
+        `on_flushed(done_keys, partial_keys)` 记为 partial，下次重拉。
+        """
         if df is None or len(df) == 0:
             return
         if self.date_col not in df.columns:
@@ -808,46 +1006,59 @@ class YearBatchWriter:
             # ⚠ D-03（2026-10-11）订正：原注释写「直接走单次写入」与实现不符 ——
             #   本分支实际不会成功写入任何文件（除抛出外无副作用）。
             try:
-                r = upsert_by_year(df, self.dir_path, date_col=self.date_col,
-                                   subset=self.subset, sort_by=self.sort_by)
+                r = upsert_by_year(
+                    df,
+                    self.dir_path,
+                    date_col=self.date_col,
+                    subset=self.subset,
+                    sort_by=self.sort_by,
+                )
             except Exception as e:
+                self.write_fail += 1
                 if self.on_error is not None:
                     self.on_error(None, e)
                 return
             # fail>0 = 有分区没写进去 → 不得记断点（同 _do_flush 说明）
             if r.get("fail"):
+                self.write_fail += int(r.get("fail") or 1)
                 if self.on_error is not None:
                     self.on_error(None, RuntimeError(f"{r['fail']} 个年份分区写入失败"))
                 return
             if self.on_flushed is not None:
-                self.on_flushed([key])
+                self.on_flushed([] if partial else [key], [key] if partial else [])
             return
 
         year = self._year_of(df)
         if year is None:
             # 跨年数据(如区间拉取) → 不批, 直接写
             try:
-                r = upsert_by_year(df, self.dir_path, date_col=self.date_col,
-                                   subset=self.subset, sort_by=self.sort_by)
+                r = upsert_by_year(
+                    df,
+                    self.dir_path,
+                    date_col=self.date_col,
+                    subset=self.subset,
+                    sort_by=self.sort_by,
+                )
             except Exception as e:
+                self.write_fail += 1
                 if self.on_error is not None:
                     self.on_error(None, e)
                 return
             # fail>0 = 有分区没写进去 → 不得记断点（同 _do_flush 说明）
             if r.get("fail"):
+                self.write_fail += int(r.get("fail") or 1)
                 if self.on_error is not None:
                     self.on_error(None, RuntimeError(f"{r['fail']} 个年份分区写入失败"))
                 return
             if self.on_flushed is not None:
-                self.on_flushed([key])
+                self.on_flushed([] if partial else [key], [key] if partial else [])
             return
 
         self._buf.setdefault(year, []).append(df)
-        self._keys.setdefault(year, []).append(key)
+        self._keys.setdefault(year, []).append((key, bool(partial)))
         self._nrows[year] = self._nrows.get(year, 0) + len(df)
 
-        if (len(self._keys[year]) >= self.flush_days
-                or self._nrows[year] >= self.flush_rows):
+        if len(self._keys[year]) >= self.flush_days or self._nrows[year] >= self.flush_rows:
             self._do_flush(year)
 
     def flush(self):
@@ -856,4 +1067,8 @@ class YearBatchWriter:
             self._do_flush(year)
 
     def stat(self):
-        return {"frames": self.flushed_frames, "rows": self.flushed_rows}
+        return {
+            "frames": self.flushed_frames,
+            "rows": self.flushed_rows,
+            "write_fail": self.write_fail,
+        }

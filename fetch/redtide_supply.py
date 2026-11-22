@@ -44,6 +44,7 @@ from fetch.base import (
 # 工具函数
 # ============================================================
 
+
 def _get_trade_dates(start_date, end_date):
     """交易日列表（闭区间，升序）—— 统一走 common.calendar.open_dates"""
     return open_dates(start_date, end_date)
@@ -78,6 +79,7 @@ def _save_done_dates(checkpoint_name, done_dates_set):
 # Phase 1: adj_factor — 复权因子
 # ============================================================
 
+
 def run_adj_factor(dry_run=False, start_date="20050101"):
     """adj_factor 复权因子 —— 已改道至每日增量引擎。
 
@@ -93,13 +95,15 @@ def run_adj_factor(dry_run=False, start_date="20050101"):
     print("=" * 60)
     print("  ⚠ 按 ts_code 逐文件写入的旧路径已废弃（会打乱按年分区布局）")
     from fetch.daily_update import run_daily_update
-    run_daily_update(dry_run=dry_run, only=["adj_factor"],
-                     with_market_state=False)
+
+    res = run_daily_update(dry_run=dry_run, only=["adj_factor"], with_market_state=False)
+    return int((res or {}).get("fail") or 0)
 
 
 # ============================================================
 # Phase 3: stk_limit — 涨跌停价
 # ============================================================
+
 
 def run_stk_limit(dry_run=False, start_date="20080102"):
     """stk_limit 涨跌停价 —— 已改道至每日增量引擎（原因同 run_adj_factor）。"""
@@ -108,13 +112,15 @@ def run_stk_limit(dry_run=False, start_date="20080102"):
     print("=" * 60)
     print("  ⚠ 按 ts_code 逐文件写入的旧路径已废弃（会打乱按年分区布局）")
     from fetch.daily_update import run_daily_update
-    run_daily_update(dry_run=dry_run, only=["stk_limit"],
-                     with_market_state=False)
+
+    res = run_daily_update(dry_run=dry_run, only=["stk_limit"], with_market_state=False)
+    return int((res or {}).get("fail") or 0)
 
 
 # ============================================================
 # Phase 4: market_state — 跌停状态计算
 # ============================================================
+
 
 def run_market_state(dry_run=False, start_year=None, years=None):
     """
@@ -148,6 +154,7 @@ def run_market_state(dry_run=False, start_year=None, years=None):
 
     # 检查 stk_limit 是否存在（布局无关：只要目录内有 parquet 即可）
     from common.parquet_store import list_parquet_files
+
     if not list_parquet_files(STK_LIMIT_DIR):
         print("  [ERROR] stk_limit 目录为空，请先运行 stk_limit 拉取！")
         return
@@ -164,7 +171,7 @@ def run_market_state(dry_run=False, start_year=None, years=None):
         # 检查是否已存在
         # 历史年份: 文件存在即跳过（不可变）
         # 当前年份: 必须增量更新（stk_limit/daily 已补到最新，重算后合并去重）
-        is_current_year = (year == current_year)
+        is_current_year = year == current_year
         if os.path.exists(output_path) and not is_current_year:
             print(f"  {year}: 已存在，跳过（删除后可重跑）")
             continue
@@ -175,13 +182,18 @@ def run_market_state(dry_run=False, start_year=None, years=None):
                 existing = pd.read_parquet(output_path)
                 if not existing.empty and "trade_date" in existing.columns:
                     done_dates = set(existing["trade_date"].astype(str))
-                    print(f"  {year}: 已有 {len(done_dates)} 个交易日 (至 {max(done_dates)})，增量补算...")
+                    print(
+                        f"  {year}: 已有 {len(done_dates)} 个交易日 (至 {max(done_dates)})，增量补算..."
+                    )
                 else:
                     existing = pd.DataFrame()
                     done_dates = set()
             except Exception as exc:
-                print(f"[fetch.redtide_supply] 读已有数据失败 {year}（按空处理）: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                print(
+                    f"[fetch.redtide_supply] 读已有数据失败 {year}（按空处理）: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 existing = pd.DataFrame()
                 done_dates = set()
         else:
@@ -201,12 +213,13 @@ def run_market_state(dry_run=False, start_year=None, years=None):
         #   不截断会把未来交易日当成缺口（实测每天白算 69 个未来日、
         #   并因 stk_limit 无未来数据而报"无 stk_limit 数据"）。
         today = datetime.now().strftime("%Y%m%d")
-        pending_dates = [d for d in trade_dates
-                         if str(d) not in done_dates and str(d) <= today]
+        pending_dates = [d for d in trade_dates if str(d) not in done_dates and str(d) <= today]
         if not pending_dates:
             print(f"    {year}: 无缺失日期，跳过")
             continue
-        print(f"    待补算: {len(pending_dates)} 个交易日 ({pending_dates[0]} ~ {pending_dates[-1]})")
+        print(
+            f"    待补算: {len(pending_dates)} 个交易日 ({pending_dates[0]} ~ {pending_dates[-1]})"
+        )
 
         # 批量处理方式:
         # 一次性扫描 stk_limit 目录所有文件，过滤出该年数据
@@ -221,10 +234,14 @@ def run_market_state(dry_run=False, start_year=None, years=None):
         if stk_limit_year.empty:
             print(f"    [WARN] {year} 无 stk_limit 数据")
             continue
-        print(f"    stk_limit: {len(stk_limit_year)}行, {stk_limit_year['ts_code'].nunique()}个代码")
+        print(
+            f"    stk_limit: {len(stk_limit_year)}行, {stk_limit_year['ts_code'].nunique()}个代码"
+        )
 
         print(f"    加载 daily 数据 ({load_start} ~ {load_end})...")
-        daily_year = _load_year_data_from_dir(STOCK_DAILY_DIR, load_start, load_end, cols=["ts_code", "trade_date", "close"])
+        daily_year = _load_year_data_from_dir(
+            STOCK_DAILY_DIR, load_start, load_end, cols=["ts_code", "trade_date", "close"]
+        )
         if daily_year.empty:
             print(f"    [WARN] {year} 无 daily 数据")
             continue
@@ -274,13 +291,13 @@ def _load_year_data_from_dir(directory, start_date, end_date, cols=None):
       by_year 布局下只读命中的年份文件，且谓词下推到行组。
     """
     table = os.path.basename(str(directory).rstrip("\\/"))
-    return reader.read_range(table, columns=cols,
-                             start_date=start_date, end_date=end_date)
+    return reader.read_range(table, columns=cols, start_date=start_date, end_date=end_date)
 
 
 # ============================================================
 # 辅助函数 (保留旧的 stk_limit 单日函数)
 # ============================================================
+
 
 def update_stk_limit_one_date(pro, limiter, trade_date, dry_run=False):
     """按 trade_date 批量拉全市场 stk_limit，按**年份分区**写入。
@@ -304,8 +321,11 @@ def update_stk_limit_one_date(pro, limiter, trade_date, dry_run=False):
 
     before_files = set(list_parquet_files(STK_LIMIT_DIR))
     stat = upsert_by_year(
-        df, STK_LIMIT_DIR, date_col="trade_date",
-        subset=["ts_code", "trade_date"], sort_by="trade_date",
+        df,
+        STK_LIMIT_DIR,
+        date_col="trade_date",
+        subset=["ts_code", "trade_date"],
+        sort_by="trade_date",
         on_error=lambda year, e: print(f"  [ERROR] {year}: {e}"),
     )
     # 返回值换算口径（upsert_by_year 无 processed/new 字段）:

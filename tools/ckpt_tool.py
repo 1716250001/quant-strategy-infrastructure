@@ -24,6 +24,7 @@ tools/ckpt_tool.py — 断点管理
   python main.py ckpt --fix --table eco_cal --execute       # 执行
   python main.py ckpt --clear --table dividend --dry-run
 """
+
 import json
 import os
 import shutil
@@ -109,7 +110,7 @@ def _disk_dates(name, date_col):
             continue
     if failed:
         _READ_FAILED[name] = f"{failed} 个分片读取失败（末条 {last_err}）"
-        return None        # ⛔ 不知道 ≠ 没有
+        return None  # ⛔ 不知道 ≠ 没有
     return out
 
 
@@ -119,6 +120,7 @@ def _disk_codes(name):
     W-3（§458）：读取失败返回 None（不知道），不返回空集。
     """
     from common import reader
+
     reader.clear_cache(name)
     try:
         return set(reader.codes_from_store(name, root=MARKET_DATA_DIR))
@@ -137,6 +139,7 @@ def _recent_trade_dates(n=1):
     """
     try:
         from common.calendar import open_dates
+
         today = datetime.now().strftime("%Y%m%d")
         ds = [d for d in open_dates(start_date="20200101") if d <= today]
         return set(ds[-n:]) if ds else set()
@@ -164,7 +167,7 @@ def _tasks_of(name, conf):
 # --show：交叉核对
 # ============================================================
 def _do_show(tables=None, verbose=True):
-    _READ_FAILED.clear()       # W-3：按轮隔离，防多次调用累积
+    _READ_FAILED.clear()  # W-3：按轮隔离，防多次调用累积
     cp = _load()
     names = tables or sorted(cp.keys())
     names = [n for n in names if n in BACKFILL_TARGETS or n in DAILY_UPDATE_EXTRA]
@@ -173,19 +176,22 @@ def _do_show(tables=None, verbose=True):
         print("=" * 100)
         print(f"  断点 × 磁盘 交叉核对（{CKPT}）")
         print("=" * 100)
-        print(f"  {'表名':18s} {'模式':9s} {'断点':>8s} {'磁盘':>8s} "
-              f"{'虚记':>7s} {'滞后':>7s}  说明")
+        print(
+            f"  {'表名':18s} {'模式':9s} {'断点':>8s} {'磁盘':>8s} {'虚记':>7s} {'滞后':>7s}  说明"
+        )
         print("-" * 100)
 
     rows = []
-    bm_failed = []      # G-1：by_month 未能核对的表（读盘失败/文件缺失）
-    read_failed = []    # W-3：分片读取失败 ⇒ 未核对（不是磁盘没数据）
+    bm_failed = []  # G-1：by_month 未能核对的表（读盘失败/文件缺失）
+    read_failed = []  # W-3：分片读取失败 ⇒ 未核对（不是磁盘没数据）
     for name in names:
         conf = _conf_of(name)
         if not conf:
             continue
         mode = conf.get("mode")
-        done = set(str(x) for x in cp.get(name, {}).get("completed", []))
+        rec = cp.get(name, {}) if isinstance(cp.get(name), dict) else {}
+        done = set(str(x) for x in rec.get("completed", []))
+        partial = [str(x) for x in rec.get("partial", [])]
         dc = conf.get("date_col") or TABLE_DATE_COL.get(name) or "trade_date"
 
         # 磁盘口径
@@ -197,7 +203,7 @@ def _do_show(tables=None, verbose=True):
             # §423：by_month 两表旁路；G-1：三元组带失败原因
             disk, _key_desc, bm_err = _disk_by_month(name)
         else:
-            disk = None      # 其余模式无对应口径（见 COVERED_MODES 说明）
+            disk = None  # 其余模式无对应口径（见 COVERED_MODES 说明）
 
         # 应有任务
         exp, _kind = _tasks_of(name, conf)
@@ -207,7 +213,7 @@ def _do_show(tables=None, verbose=True):
         if disk is None and name in _READ_FAILED:
             note = "⛔ 未核对（分片读取失败）"
             read_failed.append({"name": name, "err": _READ_FAILED[name]})
-        recent = _recent_trade_dates(1)      # 排除 T 日（数据源可能未发布）
+        recent = _recent_trade_dates(1)  # 排除 T 日（数据源可能未发布）
         if disk is not None and exp:
             if mode == "by_code":
                 fake = len([x for x in exp if x not in disk and x in done])
@@ -215,8 +221,7 @@ def _do_show(tables=None, verbose=True):
             else:
                 known = exp
                 # 虚记：断点已记、应有任务、磁盘无数据 —— 但排除最近交易日
-                fake = len([x for x in known
-                            if x not in disk and x in done and x not in recent])
+                fake = len([x for x in known if x not in disk and x in done and x not in recent])
                 disk_in = {x for x in disk if x in known}
                 stale = len([x for x in disk_in if x not in done])
             if fake:
@@ -227,11 +232,15 @@ def _do_show(tables=None, verbose=True):
         #   若写在分支内则永远不会执行（实测踩过）。
         if mode not in COVERED_MODES and name not in BY_MONTH_COMPARE:
             note += ("  " if note else "") + "· 本工具不核对该模式"
+        if partial:
+            # D4：partial 不写完成、下次重拉；--show 必须显式暴露，否则
+            # 「断点说完成」的假绿会以另一种形态复发。
+            note += ("  " if note else "") + f"· partial {len(partial)}（最近 {partial[-3:]}）"
         # §423：by_month 报 fake（任务集口径）时，把「全虚记 done−disk」作为附注
         if name in BY_MONTH_COMPARE and disk is not None and fake is not None:
             n_all = len(done - disk)
             if n_all > fake:
-                note += (f"  · 全虚记 {n_all:,}（含 {n_all - fake:,} 个非任务集键记入断点）")
+                note += f"  · 全虚记 {n_all:,}（含 {n_all - fake:,} 个非任务集键记入断点）"
         # G-1：by_month 读盘失败/文件缺失必须亮红，⛔ 不许与「未核对」同形
         if name in BY_MONTH_COMPARE and disk is None and bm_err:
             note += ("  " if note else "") + f"⛔ 未核对（{bm_err}）"
@@ -241,16 +250,31 @@ def _do_show(tables=None, verbose=True):
         if verbose:
             f_show = f"{fake:,}" if fake is not None else "-"
             s_show = f"{stale:,}" if stale is not None else "-"
-            print(f"  {name:18s} {mode!s:9s} {len(done):8,d} "
-                  f"{n_disk if n_disk >= 0 else '—':>8} {f_show:>7s} {s_show:>7s}  {note}")
-        rows.append({"name": name, "mode": mode, "done": len(done),
-                     "disk": n_disk, "fake": fake, "stale": stale})
+            print(
+                f"  {name:18s} {mode!s:9s} {len(done):8,d} "
+                f"{n_disk if n_disk >= 0 else '—':>8} {f_show:>7s} {s_show:>7s}  {note}"
+            )
+        rows.append(
+            {
+                "name": name,
+                "mode": mode,
+                "done": len(done),
+                "disk": n_disk,
+                "fake": fake,
+                "stale": stale,
+                "partial": len(partial),
+                "partial_recent": partial[-3:],
+            }
+        )
 
     if verbose:
         tf = sum(x["fake"] for x in rows if x["fake"])
         ts = sum(x["stale"] for x in rows if x["stale"])
         print("-" * 100)
-        print(f"  合计: 疑似虚记 {tf:,} 项 | 断点滞后 {ts:,} 项")
+        print(
+            f"  合计: 疑似虚记 {tf:,} 项 | 断点滞后 {ts:,} 项 | "
+            f"partial {sum(x['partial'] for x in rows):,} 项"
+        )
         if bm_failed:
             # G-1：⛔「没报」不等于「没问题」——这 N 张根本没读到盘
             detail = "、".join(f"{x['name']}（{x['err']}）" for x in bm_failed)
@@ -258,7 +282,9 @@ def _do_show(tables=None, verbose=True):
         if read_failed:
             # W-3：读失败 ≠ 磁盘无数据；必须单列，否则会虚增「疑似虚记」
             detail = "、".join(f"{x['name']}（{x['err']}）" for x in read_failed)
-            print(f"  ⛔ 分片读取失败 {len(read_failed)} 张（**未核对**，不是磁盘没数据）: {detail}")
+            print(
+                f"  ⛔ 分片读取失败 {len(read_failed)} 张（**未核对**，不是磁盘没数据）: {detail}"
+            )
 
         # 未覆盖模式汇总（避免"没报=没问题"的误解 —— I5）
         unc = {}
@@ -269,14 +295,16 @@ def _do_show(tables=None, verbose=True):
             n_t = sum(len(v) for v in unc.values())
             print()
             print(f"  ⚠ 以下 {len(unc)} 种取数模式（共 {n_t} 张表）**本工具不做交叉核对**，")
-            print("     其\"—\"不代表正常，仅表示缺少比对口径（任务数少、代价低）：")
+            print('     其"—"不代表正常，仅表示缺少比对口径（任务数少、代价低）：')
             for m in sorted(unc, key=lambda x: str(x)):
                 names = unc[m]
-                print(f"       {m!s:10s} {len(names):3d} 张  {names[:4]}"
-                      + (" ..." if len(names) > 4 else ""))
+                print(
+                    f"       {m!s:10s} {len(names):3d} 张  {names[:4]}"
+                    + (" ..." if len(names) > 4 else "")
+                )
 
         print()
-        print("  ⚠ 关于\"疑似虚记\"：断点已记但磁盘无数据。**这不必然是故障** ——")
+        print('  ⚠ 关于"疑似虚记"：断点已记但磁盘无数据。**这不必然是故障** ——')
         print("     源端确实无数据的日期（如港股通休市日：耶稣受难日/圣诞/香港回归日）")
         print("     也符合该特征。实测 hk_hold 的 72 个差异日期现拉全部返 0 行，")
         print("     属三态纪律的正常设计行为。判定真伪需现拉核验。")
@@ -340,6 +368,7 @@ def _fix_disk_set(name, conf):
         STORAGE_SINGLE,
         table_storage_layout,
     )
+
     layout = table_storage_layout(name)
     mode = conf.get("mode")
     if layout == STORAGE_SINGLE:
@@ -375,8 +404,11 @@ def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
             diffs.append(f"{name}(mode={conf.get('mode')}/layout={_kind})")
             if verbose:
                 from fetch.backfill_io import table_storage_layout
-                print(f"  [口径差异] {name}: mode={conf.get('mode')} / "
-                      f"layout={table_storage_layout(name)}（按 layout 执行）")
+
+                print(
+                    f"  [口径差异] {name}: mode={conf.get('mode')} / "
+                    f"layout={table_storage_layout(name)}（按 layout 执行）"
+                )
         if not disk:
             if verbose and name in BY_MONTH_COMPARE:
                 # §423：--fix 只补「磁盘有→断点无」，by_month 的问题是反向虚记
@@ -388,13 +420,18 @@ def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
             continue
         total += len(add)
         if verbose:
-            print(f"\n  [{name}] 断点 {len(done):,} → 磁盘 {len(disk):,} "
-                  f"（补记 {len(add):,}）")
+            print(f"\n  [{name}] 断点 {len(done):,} → 磁盘 {len(disk):,} （补记 {len(add):,}）")
             print(f"      样例: {add[:5]}")
         if details_out is not None:
-            details_out.append({"table": name, "checkpoint": len(done),
-                                "disk": len(disk), "added": len(add),
-                                "samples": [str(x) for x in add[:5]]})
+            details_out.append(
+                {
+                    "table": name,
+                    "checkpoint": len(done),
+                    "disk": len(disk),
+                    "added": len(add),
+                    "samples": [str(x) for x in add[:5]],
+                }
+            )
         if execute:
             cp.setdefault(name, {})["completed"] = sorted(done | {str(x) for x in disk})
 
@@ -415,8 +452,10 @@ def _do_fix(tables=None, execute=False, verbose=True, details_out=None):
             print(f"  备份: {os.path.basename(bak)}")
         else:
             print(f"  [DRY-RUN] 将回填 {total:,} 项，未写入")
-            print("  执行: python main.py ckpt --fix --execute"
-                  + (f" --table {','.join(tables)}" if tables else ""))
+            print(
+                "  执行: python main.py ckpt --fix --execute"
+                + (f" --table {','.join(tables)}" if tables else "")
+            )
     return total
 
 
@@ -428,15 +467,16 @@ def _do_clear(tables=None, execute=False, verbose=True, details_out=None):
     names = tables or sorted(cp.keys())
     if verbose:
         print("=" * 100)
-        print(f"  清除疑似虚记（断点已记但磁盘无数据）| "
-              f"{'正式执行' if execute else 'DRY-RUN 预演'}")
+        print(
+            f"  清除疑似虚记（断点已记但磁盘无数据）| {'正式执行' if execute else 'DRY-RUN 预演'}"
+        )
         print("=" * 100)
         print("  说明: 清除后续跑会重拉这些任务以核验。若源端确实无数据，")
         print("        重拉会再次记断点（该流程幂等，但会消耗等量请求）。")
         print()
 
     total = 0
-    recent = _recent_trade_dates(1)          # 排除 T 日（数据源可能未发布）
+    recent = _recent_trade_dates(1)  # 排除 T 日（数据源可能未发布）
     for name in names:
         conf = _conf_of(name)
         if not conf:
@@ -457,8 +497,7 @@ def _do_clear(tables=None, execute=False, verbose=True, details_out=None):
             disk = _disk_dates(name, dc)
             if disk is None or not exp:
                 continue
-            fake = sorted(x for x in done
-                          if x in exp and x not in disk and x not in recent)
+            fake = sorted(x for x in done if x in exp and x not in disk and x not in recent)
         else:
             continue
 
@@ -469,9 +508,14 @@ def _do_clear(tables=None, execute=False, verbose=True, details_out=None):
             print(f"\n  [{name}] 清除 {len(fake):,} 项（断点 {len(done):,}）")
             print(f"      样例: {fake[:5]}")
         if details_out is not None:
-            details_out.append({"table": name, "cleared": len(fake),
-                                "checkpoint": len(done),
-                                "samples": [str(x) for x in fake[:5]]})
+            details_out.append(
+                {
+                    "table": name,
+                    "cleared": len(fake),
+                    "checkpoint": len(done),
+                    "samples": [str(x) for x in fake[:5]],
+                }
+            )
         if execute:
             cp.setdefault(name, {})["completed"] = sorted(done - set(fake))
 
@@ -486,23 +530,26 @@ def _do_clear(tables=None, execute=False, verbose=True, details_out=None):
             print(f"  备份: {os.path.basename(bak)}")
         else:
             print(f"  [DRY-RUN] 将清除 {total:,} 项，未写入")
-            print("  执行: python main.py ckpt --clear --execute"
-                  + (f" --table {','.join(tables)}" if tables else ""))
+            print(
+                "  执行: python main.py ckpt --clear --execute"
+                + (f" --table {','.join(tables)}" if tables else "")
+            )
     return total
 
 
 # ============================================================
 # 入口
 # ============================================================
-def run_ckpt(show=False, fix=False, clear=False, table=None,
-             dry_run=False, execute=False, as_json=False):
+def run_ckpt(
+    show=False, fix=False, clear=False, table=None, dry_run=False, execute=False, as_json=False
+):
     """断点管理（show=交叉核对, fix=回填, clear=清虚记）。
 
     as_json: stdout 输出结果 JSON（show 明细 + fix/clear 统计与明细）
     """
     tables = [x.strip() for x in table.split(",")] if table else None
     if not (show or fix or clear):
-        show = True                      # 默认展示
+        show = True  # 默认展示
 
     # --dry-run 显式给出时不写入；--execute 才写入
     do_write = bool(execute) and not dry_run
@@ -516,19 +563,26 @@ def run_ckpt(show=False, fix=False, clear=False, table=None,
         if did and not as_json:
             print()
         det = [] if as_json else None
-        fix_info = {"total": _do_fix(tables=tables, execute=do_write,
-                                     verbose=not as_json, details_out=det),
-                    "execute": do_write, "details": det or []}
+        fix_info = {
+            "total": _do_fix(tables=tables, execute=do_write, verbose=not as_json, details_out=det),
+            "execute": do_write,
+            "details": det or [],
+        }
         did = True
     if clear:
         if did and not as_json:
             print()
         det = [] if as_json else None
-        clear_info = {"total": _do_clear(tables=tables, execute=do_write,
-                                         verbose=not as_json, details_out=det),
-                      "execute": do_write, "details": det or []}
+        clear_info = {
+            "total": _do_clear(
+                tables=tables, execute=do_write, verbose=not as_json, details_out=det
+            ),
+            "execute": do_write,
+            "details": det or [],
+        }
     if as_json:
         from common.jsonio import print_json
+
         out = {"dry_run": not do_write}
         if show_rows is not None:
             out["show"] = show_rows

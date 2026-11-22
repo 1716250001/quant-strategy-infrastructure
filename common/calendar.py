@@ -10,6 +10,7 @@ trade_cal.parquet 的唯一读取入口，替换此前 5 处重复实现
   - 返回的日期均为 YYYYMMDD 字符串
   - 所有区间函数默认升序；prev_trade_dates 返回倒序（最近在前）
 """
+
 import os
 import sys
 from datetime import datetime
@@ -19,6 +20,31 @@ import pandas as pd
 from common.paths import META_DIR
 
 CAL_PATH = os.path.join(META_DIR, "trade_cal.parquet")
+
+
+class CalendarStaleError(RuntimeError):
+    """本地 trade_cal 未覆盖目标日 —— 必须 fail-loud，不得判「已是最新」。"""
+
+
+def check_coverage(target_date, exchange="SSE"):
+    """校验本地日历最大日期 >= target_date；不足抛 `CalendarStaleError`。
+
+    为什么（D4 D-P1-2）：`open_dates(end_date=target)` 在日历截断时只会返回
+    旧日期，`resolve_gaps` 看到「无缺口」便打印「已是最新」——数据永久停在
+    日历末尾且零告警。日更入口必须先证明「日历覆盖 target」。
+    """
+    target = str(target_date)
+    cal = load_trade_cal(exchange, only_open=False)
+    if cal.empty or "cal_date" not in cal.columns:
+        raise CalendarStaleError(
+            f"本地日历为空（exchange={exchange}），未覆盖 target={target}；请先更新 trade_cal"
+        )
+    max_date = str(cal["cal_date"].max())
+    if max_date < target:
+        raise CalendarStaleError(
+            f"本地日历未覆盖 target={target}（{exchange} 最大 {max_date}）；请先更新 trade_cal"
+        )
+    return max_date
 
 
 def load_trade_cal(exchange="SSE", only_open=True):
@@ -90,10 +116,13 @@ def _us_cal_path():
     """美股日历文件路径（在库目录下，非 metadata）。"""
     try:
         import config
+
         market_data_dir = config.MARKET_DATA_DIR
     except Exception as exc:
-        print(f"[common.calendar] 导入 config 失败（回退推导库根）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[common.calendar] 导入 config 失败（回退推导库根）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         market_data_dir = os.path.dirname(os.path.dirname(META_DIR))
     return os.path.join(market_data_dir, _US_CAL_REL)
 
@@ -103,8 +132,8 @@ def load_us_cal(only_open=True):
     p = _us_cal_path()
     if not os.path.exists(p):
         raise FileNotFoundError(
-            f"美股交易日历不存在: {p}"
-            f"（请先运行 python main.py backfill --only us_tradecal）")
+            f"美股交易日历不存在: {p}（请先运行 python main.py backfill --only us_tradecal）"
+        )
     cal = pd.read_parquet(p)
     if only_open and "is_open" in cal.columns:
         cal = cal[cal["is_open"] == 1]
@@ -135,5 +164,4 @@ def open_dates_by_market(calendar, start_date=None, end_date=None):
     """
     if str(calendar).lower() in ("us", "nasdaq", "nyse"):
         return us_open_dates(start_date, end_date)
-    return open_dates(start_date=start_date, end_date=end_date,
-                      exchange=calendar)
+    return open_dates(start_date=start_date, end_date=end_date, exchange=calendar)

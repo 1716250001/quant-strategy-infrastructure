@@ -12,14 +12,13 @@ wind_gate.py — Wind 唯一调用入口（WIND-LIB W-3）
 
 注：本 W-3 为轻量骨架，完整调用链需接 Wind API 密钥（已在 config_wind）。
 """
+
 import datetime as _dt
 import hashlib
 import json
 import os
-import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.parquet_store import _atomic_write_parquet
 from wind.config import (
     FORBIDDEN_WRITE_ROOTS,
@@ -40,7 +39,7 @@ class WindGateError(RuntimeError):
 
 # ── 内部状态 ───────────────────────────────────────────────────
 _LAST_CALL_TS = 0
-_CACHE = {}   # params_hash → {"data": ..., "expire_ts": ...}
+_CACHE = {}  # params_hash → {"data": ..., "expire_ts": ...}
 
 
 def _qid(topic, slot, **kwargs):
@@ -61,8 +60,9 @@ def _params_hash(params):
     return hashlib.sha256(s.encode()).hexdigest()[:24]
 
 
-def _budget_ledger_entry(qid, endpoint, tool, params_hash, rows, valid,
-                         cost_point, raw_path, elapsed, status):
+def _budget_ledger_entry(
+    qid, endpoint, tool, params_hash, rows, valid, cost_point, raw_path, elapsed, status
+):
     """记账行"""
     return {
         "ts": _dt.datetime.now().isoformat(timespec="seconds"),
@@ -121,9 +121,16 @@ def call(topic, slot, params=None, cache_ttl=3600):
         cached = _CACHE[phash]
         if cached["expire_ts"] > time.time():
             entry = _budget_ledger_entry(
-                qid=qid, endpoint="", tool="cache_hit", params_hash=phash,
-                rows=cached.get("rows", 0), valid=True, cost_point=0,
-                raw_path="", elapsed=0, status="cache_hit"
+                qid=qid,
+                endpoint="",
+                tool="cache_hit",
+                params_hash=phash,
+                rows=cached.get("rows", 0),
+                valid=True,
+                cost_point=0,
+                raw_path="",
+                elapsed=0,
+                status="cache_hit",
             )
             _append_ledger(entry)
             print(f"[gate] cache_hit qid={qid}")
@@ -133,15 +140,17 @@ def call(topic, slot, params=None, cache_ttl=3600):
 
     # 先存后解析（红线 4）
     raw_path = os.path.join(raw_subdir, f"{qid}__{phash[:8]}.json")
-    assert_writable(raw_path)   # 硬保护
+    assert_writable(raw_path)  # 硬保护
 
     start = time.time()
     _cooldown()
 
     # ── 实际调用（占位：接入 Wind API 时填充）─────────────
-    # 这里仅存骨架，等真实 Wind 客户端接入后替换
+    # 这里仅存骨架，等真实 Wind 客户端接入后替换。
+    # ⚠ 该 mock 返回值已**弃用**：仅保留调用链自检，不代表真实 Wind 数据。
     response_data = {
         "mock": True,
+        "deprecated": True,
         "topic": topic,
         "slot": slot,
         "qid": qid,
@@ -159,14 +168,21 @@ def call(topic, slot, params=None, cache_ttl=3600):
 
     # 解析（解析失败不影响原始留存）
     elapsed = time.time() - start
-    data = response_data   # 简化：直接返回原始
+    data = response_data  # 简化：直接返回原始
     if cache_ttl > 0:
         _CACHE[phash] = {"data": data, "rows": rows, "expire_ts": time.time() + cache_ttl}
 
     entry = _budget_ledger_entry(
-        qid=qid, endpoint="", tool=slot, params_hash=phash,
-        rows=rows, valid=valid, cost_point=cost_point,
-        raw_path=raw_path, elapsed=elapsed, status=status
+        qid=qid,
+        endpoint="",
+        tool=slot,
+        params_hash=phash,
+        rows=rows,
+        valid=valid,
+        cost_point=cost_point,
+        raw_path=raw_path,
+        elapsed=elapsed,
+        status=status,
     )
     _append_ledger(entry)
     print(f"[gate] {status} qid={qid} rows={rows} cost={cost_point} raw={raw_path}")
@@ -177,9 +193,8 @@ def call(topic, slot, params=None, cache_ttl=3600):
 def write_snap(topic, as_of, data, force=False):
     """写快照（norm/snap/{topic}/{as_of}.parquet）—— 不可覆盖。"""
     import pandas as pd
-    snap_root = os.path.join(
-        os.path.dirname(WIND_RAW_DIR), "norm", "snap", topic
-    )
+
+    snap_root = os.path.join(os.path.dirname(WIND_RAW_DIR), "norm", "snap", topic)
     os.makedirs(snap_root, exist_ok=True)
     snap_path = os.path.join(snap_root, f"{as_of}.parquet")
 
@@ -204,9 +219,7 @@ def _selfcheck_probe_path():
 
     S2 负控通过替换本函数返回「合法路径」来验证断言真的会失败。
     """
-    return os.path.join(
-        FORBIDDEN_WRITE_ROOTS[0], "selfcheck_never_written.parquet"
-    )
+    return os.path.join(FORBIDDEN_WRITE_ROOTS[0], "selfcheck_never_written.parquet")
 
 
 def _sc_file_snapshot(root):
@@ -241,8 +254,10 @@ def _selfcheck_cache(failures):
         failures.append(
             f"[1] 第二次调用改动了 raw 目录：{len(snap1)} → {len(snap2)} 个文件（或 mtime 变化）"
         )
-    print(f"  r1==r2: {r1 == r2}；raw 新增 {len(snap1) - len(snap0)} 个；"
-          f"二次调用零改动: {snap1 == snap2}")
+    print(
+        f"  r1==r2: {r1 == r2}；raw 新增 {len(snap1) - len(snap0)} 个；"
+        f"二次调用零改动: {snap1 == snap2}"
+    )
 
 
 def _selfcheck_snap(failures):

@@ -25,6 +25,7 @@ tools/db_fingerprint.py — L1 库指纹门禁（全文件类型）
 退出码: 0 = 零差异 / 1 = 有差异 / 2 = 用法或 IO 错误。
 ⚠ 不接 regress（§297 明确要求）—— 门禁由人工/定时调用，避免与回归互相绑架。
 """
+
 import argparse
 import hashlib
 import json
@@ -108,8 +109,15 @@ def _scan(root, deep, skip=None):
             rec["sha256"] = _sha256(p)
             t_hash += time.time() - th
         recs[rel] = rec
-    return recs, counts, {"walk_s": round(t_walk, 3), "hash_s": round(t_hash, 1),
-                          "total_s": round(time.time() - t0, 1)}
+    return (
+        recs,
+        counts,
+        {
+            "walk_s": round(t_walk, 3),
+            "hash_s": round(t_hash, 1),
+            "total_s": round(time.time() - t0, 1),
+        },
+    )
 
 
 def cmd_build(args):
@@ -119,14 +127,21 @@ def cmd_build(args):
         return 2
     print(f"[门禁] 建基线 root={root} deep=True")
     recs, counts, t = _scan(root, deep=True, skip=args.baseline)
-    base = {"root": root, "created_at": datetime.now().isoformat(timespec="seconds"),
-            "deep": True, "counts": counts, "files": recs}
+    base = {
+        "root": root,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "deep": True,
+        "counts": counts,
+        "files": recs,
+    }
     _atomic_write_json(base, args.baseline)
     total = sum(counts.values())
-    print(f"[门禁] 文件数三分类: parquet={counts['parquet']} state={counts['state']} "
-          f"other={counts['other']} 合计={total}")
+    print(
+        f"[门禁] 文件数三分类: parquet={counts['parquet']} state={counts['state']} "
+        f"other={counts['other']} 合计={total}"
+    )
     print(f"[门禁] 两档耗时: 扫描={t['walk_s']}s  sha256={t['hash_s']}s  合计={t['total_s']}s")
-    print(f"[门禁] 基线已写: {args.baseline} ({os.path.getsize(args.baseline)/1024:.0f} KB)")
+    print(f"[门禁] 基线已写: {args.baseline} ({os.path.getsize(args.baseline) / 1024:.0f} KB)")
     return 0
 
 
@@ -138,8 +153,10 @@ def cmd_verify(args):
         base = json.load(f)
     old = base.get("files", {})
     deep = args.deep
-    print(f"[门禁] 校验 root={args.root} 档位={'深度(sha256)' if deep else '快速(size+mtime)'} "
-          f"基线={base.get('created_at')}")
+    print(
+        f"[门禁] 校验 root={args.root} 档位={'深度(sha256)' if deep else '快速(size+mtime)'} "
+        f"基线={base.get('created_at')}"
+    )
     cur, counts, t = _scan(args.root, deep=deep, skip=args.baseline)
 
     added = sorted(set(cur) - set(old))
@@ -153,11 +170,15 @@ def cmd_verify(args):
             changed.append((rel, "sha256"))
 
     total = sum(counts.values())
-    print(f"[门禁] 文件数三分类: parquet={counts['parquet']} state={counts['state']} "
-          f"other={counts['other']} 合计={total}")
-    print(f"[门禁] 两档耗时: 扫描={t['walk_s']}s"
-          + (f"  sha256={t['hash_s']}s" if deep else "  (快速档未算 sha256)")
-          + f"  合计={t['total_s']}s")
+    print(
+        f"[门禁] 文件数三分类: parquet={counts['parquet']} state={counts['state']} "
+        f"other={counts['other']} 合计={total}"
+    )
+    print(
+        f"[门禁] 两档耗时: 扫描={t['walk_s']}s"
+        + (f"  sha256={t['hash_s']}s" if deep else "  (快速档未算 sha256)")
+        + f"  合计={t['total_s']}s"
+    )
     print(f"[门禁] 新增={len(added)} 删除={len(removed)} 变更={len(changed)}")
     for rel in added[:20]:
         print(f"  + [{cur[rel]['k']}] {rel}")
@@ -169,9 +190,11 @@ def cmd_verify(args):
     bad = bool(removed or changed or (added and not args.allow_added))
     if bad:
         if getattr(args, "report", False):
-            print("[门禁] ⚠ 有差异（--report 模式：退出码恒 0，供每日任务接线）")
-            return 0
-        print("[门禁] ⛔ 有差异（退出码 1）")
+            # D4（D-P1-10）：--report 不再把差异吞成 0；差异必须可被计划任务
+            # 观测（bat 第 6 步的 [WARN] 非阻断逻辑保持不变）。
+            print("[门禁] ⚠ 有差异（--report 模式仍返回 1，供每日任务判失败）")
+        else:
+            print("[门禁] ⛔ 有差异（退出码 1）")
         return 1
     if added:
         # §303 3.3：数与话必须一致 —— 容忍新增时不说"零差异"
@@ -185,13 +208,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="L1 库指纹门禁（全文件类型）")
     ap.add_argument("--build", action="store_true", help="生成/覆盖基线")
     ap.add_argument("--verify", action="store_true", help="校验当前库")
-    ap.add_argument("--report", action="store_true",
-                    help="报告模式：等价 --verify，但退出码恒 0（差异仍打印，供每日任务接线）")
+    ap.add_argument(
+        "--report",
+        action="store_true",
+        help="报告模式：等价 --verify（差异打印且返回 1，供每日任务判失败）",
+    )
     ap.add_argument("--deep", action="store_true", help="深度档：重算 sha256")
     ap.add_argument("--allow-added", action="store_true", help="--verify 时容忍新增文件")
     ap.add_argument("--root", default=DEFAULT_ROOT, help=f"库根目录（默认 {DEFAULT_ROOT}）")
-    ap.add_argument("--baseline", default=DEFAULT_BASELINE,
-                    help=f"基线路径（默认 {DEFAULT_BASELINE}）")
+    ap.add_argument(
+        "--baseline", default=DEFAULT_BASELINE, help=f"基线路径（默认 {DEFAULT_BASELINE}）"
+    )
     args = ap.parse_args(argv)
     if args.report:
         args.verify = True

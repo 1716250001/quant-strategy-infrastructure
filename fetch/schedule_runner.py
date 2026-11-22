@@ -17,10 +17,12 @@
 7. 红线：不改 `subset`、不碰 audit、不写任何取数参数。
 用法：python -m fetch.schedule_runner --dry-run｜--freq M --dry-run｜--freq W --apply
 """
+
 import argparse
 import json
 import os
 import sys
+import time
 from calendar import monthrange
 from datetime import date, datetime
 
@@ -34,8 +36,13 @@ from fetch.base import Checkpoint, get_pro
 
 LOCK_PATH = os.path.join(MARKET_DATA_DIR, ".schedule.lock")
 CKPT_NAME = ".backfill_checkpoint.json"
-KG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "tools", "db", "data", "known_gaps.json")
+KG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "tools",
+    "db",
+    "data",
+    "known_gaps.json",
+)
 FREQS = ("D", "W", "M", "Q")
 DEFAULT_BUDGET = 2000
 REFRESH_COST = "D 5,994／M 9,320／Q 35,634／W 33,377（合计 84,325）"
@@ -51,8 +58,9 @@ class _InstanceLock:
         try:
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError as exc:
-            raise SystemExit(f"[schedule] 已有实例在跑（锁文件 {self.path}）；"
-                             f"确认无进程后可手动删除该文件再试") from exc
+            raise SystemExit(
+                f"[schedule] 已有实例在跑（锁文件 {self.path}）；确认无进程后可手动删除该文件再试"
+            ) from exc
         os.write(fd, f"{os.getpid()} {datetime.now().isoformat(timespec='seconds')}".encode())
         os.close(fd)
         return self
@@ -64,19 +72,23 @@ class _InstanceLock:
             pass
         return False
 
+
 def daily_names():
     names = set(DAILY_UPDATE_EXTRA) | set(PERIODIC_UPDATE_TARGETS)
     for group in DAILY_UPDATE_GROUPS.values():
         names |= set(group)
     return names
 
+
 def _last_fetch(cp, name):
     rec = cp.data.get(name) if isinstance(cp.data, dict) else None
     return rec.get("last_fetch") if isinstance(rec, dict) else None
 
+
 def _last_dom(year, month):
     """当月最后一天（发布日超出月末时夹紧，如 2 月 30 日 → 28/29）。"""
     return monthrange(year, month)[1]
+
 
 def is_due(freq, last_fetch, today=None, name=None):
     """到期判定（CC-FIX-19 双条件）。
@@ -90,17 +102,21 @@ def is_due(freq, last_fetch, today=None, name=None):
     try:
         lf = datetime.fromisoformat(str(last_fetch)).date()
     except Exception as exc:
-        print(f"[fetch.schedule_runner] 时间戳不可解析 {last_fetch!r}"
-              f"（按到期处理）: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fetch.schedule_runner] 时间戳不可解析 {last_fetch!r}"
+            f"（按到期处理）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         # 时间戳不可解析按到期（宁可多拉一次）
         return True
     if name in RELEASE_DAY:
         day, months = RELEASE_DAY[name]
         if months and t.month not in months:
-            return False                      # 非发布月，不到期
+            return False  # 非发布月，不到期
         anchor = date(t.year, t.month, min(day, _last_dom(t.year, t.month)))
-        return t >= anchor and lf < anchor    # 已过本月发布日且上次早于锚点
+        return t >= anchor and lf < anchor  # 已过本月发布日且上次早于锚点
     return (t - lf).days >= FREQ_DAYS[freq]
+
 
 def _est_requests(name, conf, cp, refresh=False):
     """本次请求量＝待跑任务数（refresh 时按全量任务计；只读）。
@@ -116,6 +132,7 @@ def _est_requests(name, conf, cp, refresh=False):
     pending, _ = _compute_pending(name, conf, tasks, kind, cp, dry_run=True)
     return int(estimate_requests(pending, conf)) if pending else 0
 
+
 def select(freqs=None, only=None, cp=None, refresh=False, exclude=None):
     """[(table, freq, due, est, status)]；status ∈ ok/skip_daily/skip_fresh/
     skip_excluded/est_error。"""
@@ -127,13 +144,13 @@ def select(freqs=None, only=None, cp=None, refresh=False, exclude=None):
     for name, freq in SCHEDULE.items():
         if freq not in freqs or (only and name not in only):
             continue
-        if name in dn:                 # 互斥优先于配置存在性
+        if name in dn:  # 互斥优先于配置存在性
             out.append((name, freq, False, 0, "skip_daily"))
             continue
         conf = BACKFILL_TARGETS.get(name)
         if conf is None:
             continue
-        if name in exclude:            # R10 备份窗口互斥（§三.5，预留）
+        if name in exclude:  # R10 备份窗口互斥（§三.5，预留）
             out.append((name, freq, False, 0, "skip_excluded"))
             continue
         due = is_due(freq, _last_fetch(cp, name) if cp else None, name=name)
@@ -150,9 +167,10 @@ def select(freqs=None, only=None, cp=None, refresh=False, exclude=None):
         out.append((name, freq, due, est, "ok" if due else "skip_fresh"))
     return out
 
+
 def _rate(name):
-    return API_RATE_LIMIT.get((BACKFILL_TARGETS.get(name) or {}).get("api"),
-                              API_RATE_LIMIT_DEFAULT)
+    return API_RATE_LIMIT.get((BACKFILL_TARGETS.get(name) or {}).get("api"), API_RATE_LIMIT_DEFAULT)
+
 
 def _budget_split(rows, budget):
     """按 est 累加切分本轮：超预算的进 over（**不静默截断**，CC-FIX-16 §一.2）。"""
@@ -167,11 +185,13 @@ def _budget_split(rows, budget):
         todo.append(r)
     return todo, over
 
+
 def _mark_attempt(cp, name):
     rec = cp.data.setdefault(name, {"completed": []})
     rec.setdefault("completed", [])
     rec["last_attempt"] = datetime.now().isoformat(timespec="seconds")
     cp.save()
+
 
 def _kg_report(tables):
     """known_gaps **只读**对账；改写须显式走 `tools/db/meta_close.py --apply`
@@ -180,16 +200,28 @@ def _kg_report(tables):
         return
     kg = json.load(open(KG_PATH, encoding="utf-8"))
     for t in [t for t in tables if t in kg]:
-        print(f"  [known_gaps] {t}: A={kg[t].get('A')} B={kg[t].get('B')}"
-              f"（只读；改写走 tools/db/meta_close.py --apply）")
+        print(
+            f"  [known_gaps] {t}: A={kg[t].get('A')} B={kg[t].get('B')}"
+            f"（只读；改写走 tools/db/meta_close.py --apply）"
+        )
 
-def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=False,
-        exclude=None, budget=DEFAULT_BUDGET):
+
+def run(
+    freqs=None,
+    only=None,
+    dry_run=True,
+    workers=1,
+    limit=None,
+    refresh=False,
+    exclude=None,
+    budget=DEFAULT_BUDGET,
+):
+    t_run = time.time()
     if refresh and not freqs and not only:
         print(f"⛔ 裸 --refresh 已拒绝：全档成本 {REFRESH_COST} 次请求")
         print("   必须与 --freq <单档> 或 --only <表清单> 同用（--budget 默认 2,000）")
         return 1
-    cp = Checkpoint(MARKET_DATA_DIR, CKPT_NAME)      # 只读：仅 select 估待跑用
+    cp = Checkpoint(MARKET_DATA_DIR, CKPT_NAME)  # 只读：仅 select 估待跑用
     rows = select(freqs, only, cp, refresh, exclude)
     todo, over = _budget_split(rows, budget)
     est, peak = sum(r[3] for r in todo), max([_rate(r[0]) for r in todo], default=0)
@@ -199,8 +231,10 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
     for name, freq, due, e, status in rows:
         print(f"{name:22s} {freq:3s} {'是' if due else '-':4s} {e:5d} {_rate(name):7.2f} {status}")
     print("-" * 64)
-    print(f"在册 {len(rows)} 张｜本次待跑 {len(todo)} 张｜预计请求≈{est}｜峰值 {peak}/min"
-          f"｜预算 {budget}")
+    print(
+        f"在册 {len(rows)} 张｜本次待跑 {len(todo)} 张｜预计请求≈{est}｜峰值 {peak}/min"
+        f"｜预算 {budget}"
+    )
     if peak > 190:
         print(f"⚠ 峰值 {peak}/min 超过判据 2 上限 190/m")
     errs = [r[0] for r in rows if r[4] == "est_error"]
@@ -218,6 +252,7 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
     if not dry_run and not todo:
         try:
             from tools.data_backup import mirror, rc_desc
+
             _rc = mirror()
             print(f"[schedule] 日备 rc={_rc}（{rc_desc(_rc)}）")
         except Exception as exc:
@@ -230,12 +265,20 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
     pro, failed = get_pro(), []
     for name, _freq, _due, _est, _st in todo:
         try:
-            res = run_target(pro, name, BACKFILL_TARGETS[name], cp, workers=workers,
-                             dry_run=False, verbose=False, limit=limit,
-                             ignore_checkpoint=refresh)
+            res = run_target(
+                pro,
+                name,
+                BACKFILL_TARGETS[name],
+                cp,
+                workers=workers,
+                dry_run=False,
+                verbose=False,
+                limit=limit,
+                ignore_checkpoint=refresh,
+            )
             if res is None:
                 raise RuntimeError("run_target 返回 None（前置/配置不可用）")
-            cp.mark_fetched(name)          # 成功：补 last_fetch（run_target 内多已写）
+            cp.mark_fetched(name)  # 成功：补 last_fetch（run_target 内多已写）
             cp.save()
             print(f"[ok] {name} 完成={res.get('done')}")
         except Exception as exc:
@@ -251,38 +294,66 @@ def run(freqs=None, only=None, dry_run=True, workers=1, limit=None, refresh=Fals
     if not dry_run and not failed:
         try:
             from tools.data_backup import mirror, rc_desc
+
             _rc = mirror()
             print(f"[schedule] 日备 rc={_rc}（{rc_desc(_rc)}）")
         except Exception as exc:
             # 备份失败不改变取数退出码（否则计划任务 LastTaskResult 会一直非 0）
             print(f"[schedule] 日备异常：{type(exc).__name__}: {exc}")
     print(f"[schedule] 完成 {len(todo) - len(failed)}/{len(todo)}，失败 {len(failed)}")
+    try:
+        from common.logging_setup import log_event
+
+        log_event(
+            f"[schedule] dry_run={dry_run} todo={len(todo)} "
+            f"failed={sorted(failed)} elapsed_s={time.time() - t_run:.1f}"
+        )
+    except Exception:
+        pass
     if over:
         return 2
     return 1 if failed else 0
 
+
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="schedule_runner",
-                                description="周期调度执行器（默认 dry-run）")
+    p = argparse.ArgumentParser(
+        prog="schedule_runner", description="周期调度执行器（默认 dry-run）"
+    )
     p.add_argument("--freq", default=None, help="频率档，逗号分隔：D,W,M,Q（默认全档）")
     p.add_argument("--only", default=None, help="只跑指定表，逗号分隔")
     p.add_argument("--workers", type=int, default=1, help="每接口并发（默认 1）")
     p.add_argument("--limit", type=int, default=None, help="每表最多跑 N 个任务")
-    p.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
-                   help=f"单轮请求预算（默认 {DEFAULT_BUDGET}；超限 RC=2 并列跳过清单）")
+    p.add_argument(
+        "--budget",
+        type=int,
+        default=DEFAULT_BUDGET,
+        help=f"单轮请求预算（默认 {DEFAULT_BUDGET}；超限 RC=2 并列跳过清单）",
+    )
     p.add_argument("--apply", action="store_true", help="实际执行（不加则等同 --dry-run）")
     p.add_argument("--dry-run", action="store_true", help="只输出计划，不发请求（默认行为）")
-    p.add_argument("--refresh", action="store_true",
-                   help="忽略断点重拉（by_code 表增量只在 refresh 下才拉得到；"
-                        "等价单表 --force，灰度前须赤潮明示；裸跑直接拒绝）")
+    p.add_argument(
+        "--refresh",
+        action="store_true",
+        help="忽略断点重拉（by_code 表增量只在 refresh 下才拉得到；"
+        "等价单表 --force，灰度前须赤潮明示；裸跑直接拒绝）",
+    )
     p.add_argument("--exclude", default=None, help="R10 备份窗口互斥：跳过这些表（逗号分隔，预留）")
     a = p.parse_args(argv)
     freqs = [x.strip().upper() for x in a.freq.split(",")] if a.freq else None
     only = [x.strip() for x in a.only.split(",")] if a.only else None
     excl = [x.strip() for x in a.exclude.split(",")] if a.exclude else None
     with _InstanceLock():
-        return run(freqs, only, dry_run=not a.apply, workers=a.workers,
-                   limit=a.limit, refresh=a.refresh, exclude=excl, budget=a.budget)
+        return run(
+            freqs,
+            only,
+            dry_run=not a.apply,
+            workers=a.workers,
+            limit=a.limit,
+            refresh=a.refresh,
+            exclude=excl,
+            budget=a.budget,
+        )
+
 
 if __name__ == "__main__":
     sys.exit(main())

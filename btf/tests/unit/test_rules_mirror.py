@@ -9,6 +9,7 @@
        override 进 manifest（H2 覆盖即留痕）；
     4. `export_rules_mirror`：载荷幂等 + 指纹内容敏感 + 单位/别名声明。
 """
+
 from __future__ import annotations
 
 import json
@@ -28,17 +29,23 @@ pytestmark = [pytest.mark.l1]
 MIRROR_JSON = RULES_MIRROR
 
 V75 = {"pe_max": 30.0, "pb_max": 3.0, "roe_min": 5.0, "dv_min": 1.0}
-LIQ = {"sh_crisis": -5.0, "sh_watch": -3.0, "small_crisis": -6.0,
-       "small_watch": -4.0, "down_crisis": 800, "down_watch": 300,
-       "ratio_crisis": 10.0, "ratio_watch": 5.0}
+LIQ = {
+    "sh_crisis": -5.0,
+    "sh_watch": -3.0,
+    "small_crisis": -6.0,
+    "small_watch": -4.0,
+    "down_crisis": 800,
+    "down_watch": 300,
+    "ratio_crisis": 10.0,
+    "ratio_watch": 5.0,
+}
 
 
 @pytest.fixture()
 def mirror_path(tmp_path) -> Path:
     payload = exporter.build_payload(V75, LIQ)
     path = tmp_path / "rules_mirror_v77.json"
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
-                    encoding="utf-8")
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
 
@@ -71,12 +78,11 @@ class TestMirrorJsonRulesProvider:
 
     def test_units_declared(self, mirror_path):
         units = MirrorJsonRulesProvider(mirror_path).units()
-        assert units["roe_min"] == "percent"      # 百分数口径显式（防双口径）
+        assert units["roe_min"] == "percent"  # 百分数口径显式（防双口径）
         assert units["pe_max"] == "ratio"
 
     def test_rule_ids(self, mirror_path):
-        assert MirrorJsonRulesProvider(mirror_path).rule_ids == ["L0_LIQ",
-                                                                 "L2_filter"]
+        assert MirrorJsonRulesProvider(mirror_path).rule_ids == ["L0_LIQ", "L2_filter"]
 
     def test_missing_file(self, tmp_path):
         with pytest.raises(OSError):
@@ -93,27 +99,30 @@ class TestOverridesApplied:
 
     def test_override_applied(self, mirror_path):
         provider = MirrorJsonRulesProvider(
-            mirror_path,
-            overrides=({"rule_id": "L2_filter", "param": "pe_max",
-                        "value": 25},))
+            mirror_path, overrides=({"rule_id": "L2_filter", "param": "pe_max", "value": 25},)
+        )
         assert provider.get("L2_filter")["pe_max"] == 25
 
     def test_non_overridden_params_untouched(self, mirror_path):
         provider = MirrorJsonRulesProvider(
-            mirror_path,
-            overrides=({"rule_id": "L2_filter", "param": "pe_max",
-                        "value": 25},))
+            mirror_path, overrides=({"rule_id": "L2_filter", "param": "pe_max", "value": 25},)
+        )
         got = provider.get("L2_filter")
-        assert got["pb_max"] == V75["pb_max"] and got["roe_min"] == V75["roe_min"] \
+        assert (
+            got["pb_max"] == V75["pb_max"]
+            and got["roe_min"] == V75["roe_min"]
             and got["dv_min"] == V75["dv_min"]
-        assert provider.get("L0_LIQ") == LIQ          # 未触碰的规则整体不变
+        )
+        assert provider.get("L0_LIQ") == LIQ  # 未触碰的规则整体不变
 
     def test_overrides_property_equals_effective_set(self, mirror_path):
         """③ 留痕集＝生效集：规范化条目（规范名）与实际应用逐条一致（G4）。"""
-        entries = ({"rule_id": "L0_LIQ", "param": "ratio_crisis", "value": 12},
-                   {"rule_id": "L2_filter", "param": "pe_max", "value": 25})
+        entries = (
+            {"rule_id": "L0_LIQ", "param": "ratio_crisis", "value": 12},
+            {"rule_id": "L2_filter", "param": "pe_max", "value": 25},
+        )
         provider = MirrorJsonRulesProvider(mirror_path, overrides=entries)
-        assert provider.overrides == entries           # 规范名输入 ⇒ 恒等
+        assert provider.overrides == entries  # 规范名输入 ⇒ 恒等
         assert provider.get("L0_LIQ")["ratio_crisis"] == 12
         assert provider.get("L2_filter")["pe_max"] == 25
 
@@ -121,24 +130,23 @@ class TestOverridesApplied:
         """④ 别名键（文档名）override 生效；留痕落**规范名**（pe_ttm_max→pe_max）。"""
         provider = MirrorJsonRulesProvider(
             mirror_path,
-            overrides=({"rule": "L2_filter", "param": "pe_ttm_max",
-                        "value": 20, "override": True},))
+            overrides=(
+                {"rule": "L2_filter", "param": "pe_ttm_max", "value": 20, "override": True},
+            ),
+        )
         assert provider.get("L2_filter")["pe_max"] == 20
-        assert provider.overrides == (
-            {"rule_id": "L2_filter", "param": "pe_max", "value": 20},)
+        assert provider.overrides == ({"rule_id": "L2_filter", "param": "pe_max", "value": 20},)
 
     def test_unknown_rule_fails_closed(self, mirror_path):
         """⑤ 未登记规则 ⇒ 构造期 ValueError（禁静默 no-op——P-NEW-1 教训）。"""
         with pytest.raises(ValueError, match="未登记规则"):
             MirrorJsonRulesProvider(
-                mirror_path,
-                overrides=({"rule_id": "L9_unknown", "param": "x",
-                            "value": 1},))
+                mirror_path, overrides=({"rule_id": "L9_unknown", "param": "x", "value": 1},)
+            )
 
     def test_malformed_entry_fails_closed(self, mirror_path):
         with pytest.raises(ValueError, match="override 条目"):
-            MirrorJsonRulesProvider(
-                mirror_path, overrides=({"rule_id": "L2_filter"},))
+            MirrorJsonRulesProvider(mirror_path, overrides=({"rule_id": "L2_filter"},))
 
     def test_empty_overrides_zero_side_effect(self, mirror_path):
         """⑥ 空 overrides（默认）⇒ 与镜像原文逐键相等（G2 红线的单元面）。"""
@@ -154,11 +162,12 @@ class TestRegistry:
         assert "mirror_json" in registry.available(RULES_PROVIDER)
         assert "static" in registry.available(RULES_PROVIDER)
 
-    def test_create_and_contract(self, mirror_path):
-        provider = registry.create(RULES_PROVIDER, "mirror_json",
-                                   {"path": str(mirror_path)})
-        assert isinstance(provider, MirrorJsonRulesProvider)
-        assert provider.contract_version == "1.0"
+    def test_mirror_json_retired(self, mirror_path):
+        """G3/D7：v7.7 资产退役 ⇒ 名字保留但工厂显式 ConfigError（不静默）。"""
+        from btf.config.validation import ConfigError
+
+        with pytest.raises(ConfigError, match=r"mirror_json 已随 v7\.7 资产退役"):
+            registry.create(RULES_PROVIDER, "mirror_json", {"path": str(mirror_path)})
 
     def test_unknown_source(self):
         with pytest.raises(registry.RegistryError, match="未知插件名"):
@@ -170,11 +179,13 @@ class TestRuntimeWiring:
 
     CONFIG: ClassVar[dict] = {
         "schema_version": "backtest.v1",
-        "run": {"strategy": "tests.fixtures.buyhold:ConfigBuyHold",
-                "params": {"symbol": "000001.SZ", "weight": 0.9},
-                "universe": {"source": "explicit", "symbols": ["000001.SZ"]},
-                "period": {"start": "2015-01-05", "end": "2015-01-09"},
-                "initial_cash": 1_000_000},
+        "run": {
+            "strategy": "tests.fixtures.buyhold:ConfigBuyHold",
+            "params": {"symbol": "000001.SZ", "weight": 0.9},
+            "universe": {"source": "explicit", "symbols": ["000001.SZ"]},
+            "period": {"start": "2015-01-05", "end": "2015-01-09"},
+            "initial_cash": 1_000_000,
+        },
         "data": {"feed": "memory"},
         # X-7（Q1=A）：显式声明无风控裸奔（默认层已拒绝空链）
         "risk": {"rules": [], "allow_empty_chain": True},
@@ -196,17 +207,16 @@ class TestRuntimeWiring:
         name = "rules_mirror_feed"
         if name not in registry.available(registry.DATA_FEED):
             registry.register(registry.DATA_FEED, name, factory)
-        self.CONFIG = {**TestRuntimeWiring.CONFIG,
-                       "data": {"feed": name}}
+        self.CONFIG = {**TestRuntimeWiring.CONFIG, "data": {"feed": name}}
 
     def test_mirror_json_assembled(self, mirror_path):
+        """G3/D7：mirror_json 已退役 ⇒ 装配期显式 ConfigError（不再构造 provider）。"""
+        from btf.config.validation import ConfigError
         from btf.runtime import BTFRuntime
 
-        cfg = {**self.CONFIG,
-               "rules": {"source": "mirror_json", "path": str(mirror_path)}}
-        rt = BTFRuntime().load_config(cfg).build()
-        assert isinstance(rt.rules_provider, MirrorJsonRulesProvider)
-        assert rt.rules_provider.rules_version().startswith("v7.7@")
+        cfg = {**self.CONFIG, "rules": {"source": "mirror_json", "path": str(mirror_path)}}
+        with pytest.raises(ConfigError, match=r"mirror_json 已随 v7\.7 资产退役"):
+            BTFRuntime().load_config(cfg).build()
 
     def test_missing_path_rejected(self):
         from btf.config.validation import ConfigError
@@ -228,7 +238,7 @@ class TestExportPayload:
     def test_payload_idempotent(self):
         a = exporter.build_payload(V75, LIQ)
         b = exporter.build_payload(V75, LIQ)
-        assert a == b                                  # 不含时间戳 → 幂等
+        assert a == b  # 不含时间戳 → 幂等
 
     def test_fingerprint_changes_with_content(self):
         base = exporter.build_payload(V75, LIQ)["rules_version"]
@@ -244,5 +254,4 @@ class TestExportPayload:
     def test_digest_is_deterministic_and_sensitive(self):
         rules = exporter.build_payload(V75, LIQ)["rules"]
         assert exporter.digest_of(rules) == exporter.digest_of(rules)
-        assert exporter.digest_of(rules) != exporter.digest_of(
-            {"L2_filter": V75})
+        assert exporter.digest_of(rules) != exporter.digest_of({"L2_filter": V75})

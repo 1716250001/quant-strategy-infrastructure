@@ -47,6 +47,10 @@ from fetch.base import (
     ts_fetch,
 )
 
+# D4：单日分页上限（全市场 1.5 万+ 条 / 5000 一页，正常 4 页左右；
+# 触顶说明数据量异常或接口忽略 offset，必须 partial 重拉而非记完成）。
+FUND_NAV_MAX_PAGES = 20
+
 
 def _known_codes(recent_years=2):
     """库内近 N 年出现过的基金代码（轻量：只读最近几个年份文件的 ts_code 列）。
@@ -59,8 +63,7 @@ def _known_codes(recent_years=2):
     codes = set()
     for f in files:
         try:
-            s = pd.read_parquet(os.path.join(FUND_NAV_DIR, f),
-                                columns=["ts_code"])["ts_code"]
+            s = pd.read_parquet(os.path.join(FUND_NAV_DIR, f), columns=["ts_code"])["ts_code"]
             codes.update(s.dropna().unique().tolist())
         except Exception:
             pass
@@ -70,6 +73,7 @@ def _known_codes(recent_years=2):
 # ============================================================
 # 交易日历
 # ============================================================
+
 
 def get_recent_trade_dates(n, end_date=None):
     """
@@ -87,13 +91,28 @@ def get_recent_trade_dates(n, end_date=None):
 # 分页拉取
 # ============================================================
 
-def fetch_nav_by_date(pro, limiter, nav_date, page_size=FUND_NAV_PAGE_SIZE):
-    """按 nav_date 分页拉取全市场净值 (单次上限5000行)"""
+
+def fetch_nav_by_date(pro, limiter, nav_date, page_size=FUND_NAV_PAGE_SIZE, max_pages=20):
+    """按 nav_date 分页拉取全市场净值（单次上限 5000 行）。
+
+    返回 ``(df, pages, truncated, first_ok)``：
+      - `df is None`：**首页调用失败**（限频/网络/无权限）；
+      - `df` 为空 DataFrame：调用成功但源端无数据；
+      - `truncated=True`：达到 `max_pages` 仍满页 ⇒ 该日不完整，调用方
+        不得记完成（D4：截断 → partial/failed，下次重拉）。
+
+    `first_ok` 用于区分「首页失败」与「成功但空」，避免把两者都当无数据。
+    """
     chunks = []
     offset = 0
-    while True:
+    pages = 0
+    first_ok = False
+    while pages < max(int(max_pages), 1):
         params = {"nav_date": nav_date, "limit": page_size, "offset": offset}
         df = ts_call_with_retry(pro, "fund_nav", limiter, params)
+        pages += 1
+        if pages == 1:
+            first_ok = df is not None
         if df is None or df.empty:
             break
         chunks.append(df)
@@ -101,9 +120,10 @@ def fetch_nav_by_date(pro, limiter, nav_date, page_size=FUND_NAV_PAGE_SIZE):
             break
         offset += page_size
 
+    truncated = bool(chunks) and pages >= max(int(max_pages), 1) and len(chunks[-1]) >= page_size
     if not chunks:
-        return pd.DataFrame()
-    return pd.concat(chunks, ignore_index=True)
+        return (pd.DataFrame() if first_ok else None), pages, False, first_ok
+    return (pd.concat(chunks, ignore_index=True), pages, truncated, True)
 
 
 def fetch_nav_full_history(pro, limiter, ts_code, max_rows=FUND_NAV_PAGE_SIZE):
@@ -153,6 +173,7 @@ def _in_scope(ts_code, allowed_of):
 # 主流程
 # ============================================================
 
+
 def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
     """
     fund_nav 增量更新主流程。
@@ -163,7 +184,9 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
         end_date: 回溯截止日 YYYYMMDD (默认: 最新)
 
     返回:
-        (updated_files, new_rows)
+        dict：`{"fail", "ok", "failed_days", "partial_days", "day_status",
+        "rows", "partitions", "dry_run"}`；`fail>0` 由 CLI 转 rc=1（D4/F1）。
+        `failed_days` = 交易日 None/空返回；`partial_days` = 分页触顶。
     """
     if lookback_days is None:
         lookback_days = FUND_NAV_LOOKBACK_DAYS
@@ -181,7 +204,17 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
     dates = get_recent_trade_dates(lookback_days, end_date)
     if not dates:
         print("  [ERROR] 未取到交易日，请检查 metadata/trade_cal.parquet")
-        return 0, 0
+        return {
+            "fail": 1,
+            "ok": 0,
+            "failed_days": [],
+            "partial_days": [],
+            "day_status": {},
+            "rows": 0,
+            "partitions": 0,
+            "dry_run": dry_run,
+            "error": "no_trade_dates",
+        }
     print(f"  回溯窗口: 最近 {len(dates)} 个交易日 ({dates[0]} ~ {dates[-1]})")
 
     pro = get_pro()
@@ -190,21 +223,50 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
         daily_limit=90000,
     )
 
-    # ---- 拉取回溯窗口内所有净值 ----
+    # ---- 拉取回溯窗口内所有净值（D4：逐日状态 + max_pages）----
     chunks = []
+    day_status = {}
+    failed_days, partial_days = [], []
     for i, d in enumerate(dates):
-        df = fetch_nav_by_date(pro, limiter, d)
+        df, pages, truncated, first_ok = fetch_nav_by_date(
+            pro, limiter, d, max_pages=FUND_NAV_MAX_PAGES
+        )
         if df is None or df.empty:
-            print(f"  [{i+1}/{len(dates)}] {d}: 无数据")
+            reason = "调用失败" if not first_ok else "空返回"
+            day_status[d] = "failed"
+            failed_days.append(d)
+            print(f"  [{i + 1}/{len(dates)}] {d}: failed（{reason}，pages={pages}）")
             continue
-        codes = df["ts_code"].fillna("")
-        n_of = int(codes.str.endswith(".OF").sum())
-        print(f"  [{i+1}/{len(dates)}] {d}: {len(df)}行 (场外{n_of} / 场内{len(df)-n_of})")
+        if truncated:
+            day_status[d] = "partial"
+            partial_days.append(d)
+            print(
+                f"  [{i + 1}/{len(dates)}] {d}: {len(df)}行 "
+                f"（⚠ 分页触顶 max_pages={FUND_NAV_MAX_PAGES}，下次重拉）"
+            )
+        else:
+            day_status[d] = "ok"
+            codes = df["ts_code"].fillna("")
+            n_of = int(codes.str.endswith(".OF").sum())
+            print(
+                f"  [{i + 1}/{len(dates)}] {d}: {len(df)}行 "
+                f"(场外{n_of} / 场内{len(df) - n_of}，pages={pages})"
+            )
         chunks.append(df)
 
     if not chunks:
         print("\n  [WARN] 回溯窗口内未拉取到任何净值数据")
-        return 0, 0
+        fail = len(failed_days) + len(partial_days)
+        return {
+            "fail": fail,
+            "ok": 0,
+            "failed_days": failed_days,
+            "partial_days": partial_days,
+            "day_status": day_status,
+            "rows": 0,
+            "partitions": 0,
+            "dry_run": dry_run,
+        }
 
     alldf = pd.concat(chunks, ignore_index=True)
     alldf = alldf.drop_duplicates(subset=["ts_code", "nav_date"], keep="last")
@@ -218,7 +280,9 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
         dropped = before - len(alldf)
         if dropped:
             n_of = int(alldf["ts_code"].str.endswith(".OF").sum())
-            print(f"  口径过滤: 剔除 {dropped} 行 (场外非股票型/混合型) | 保留 场外{n_of} / 场内{len(alldf)-n_of}")
+            print(
+                f"  口径过滤: 剔除 {dropped} 行 (场外非股票型/混合型) | 保留 场外{n_of} / 场内{len(alldf) - n_of}"
+            )
 
     n_codes = alldf["ts_code"].nunique()
     print(f"\n  合计: {len(alldf)}行 | {n_codes}只基金")
@@ -226,7 +290,16 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
 
     if dry_run:
         print("\n  [DRY-RUN] 跳过写入")
-        return 0, 0
+        return {
+            "fail": len(failed_days) + len(partial_days),
+            "ok": len(day_status) - len(failed_days) - len(partial_days),
+            "failed_days": failed_days,
+            "partial_days": partial_days,
+            "day_status": day_status,
+            "rows": 0,
+            "partitions": 0,
+            "dry_run": True,
+        }
 
     # ---- 落盘：按年分区写入 ----
     # fund_nav 已迁移为 by_year 布局，不能再按 ts_code 拆文件
@@ -242,7 +315,7 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
         hist_frames = []
         for i, code in enumerate(new_codes):
             if (i + 1) % 200 == 0:
-                print(f"    [{i+1}/{len(new_codes)}] 已补 {len(hist_frames)} 只")
+                print(f"    [{i + 1}/{len(new_codes)}] 已补 {len(hist_frames)} 只")
             hist = fetch_nav_full_history(pro, limiter, code)
             if hist is not None and not hist.empty:
                 hist_frames.append(hist)
@@ -250,32 +323,58 @@ def run_fund_nav_update(dry_run=False, lookback_days=None, end_date=None):
             alldf = pd.concat([alldf, *hist_frames], ignore_index=True)
             alldf = alldf.drop_duplicates(subset=["ts_code", "nav_date"], keep="last")
 
-    stat = upsert_by_year(alldf, FUND_NAV_DIR, date_col="nav_date",
-                          subset=["ts_code", "nav_date"], sort_by="nav_date",
-                          on_error=lambda y, e: print(f"    [ERROR] 分区 {y}: {e}"))
+    stat = upsert_by_year(
+        alldf,
+        FUND_NAV_DIR,
+        date_col="nav_date",
+        subset=["ts_code", "nav_date"],
+        sort_by="nav_date",
+        on_error=lambda y, e: print(f"    [ERROR] 分区 {y}: {e}"),
+    )
     elapsed = time.time() - t0
     new_rows = stat["added"]
     updated = stat["partitions"]
     new_files = len(new_codes)
-    fail = stat["fail"]
+    part_fail = stat["fail"]
+    fail = len(failed_days) + len(partial_days) + part_fail
     print(f"\n{'=' * 60}")
     print("  基金净值更新完成 — 统计报告")
     print(f"{'=' * 60}")
     print(f"  回溯窗口:       {dates[0]} ~ {dates[-1]} ({len(dates)}个交易日)")
     print(f"  拉取数据:       {len(alldf)}行 / {n_codes}只")
     print(f"  写入年份分区:   {updated} 个 (首次收录 {new_files} 只)")
-    print(f"  失败分区:       {fail}")
+    print(
+        f"  失败日:         {len(failed_days) + len(partial_days)}"
+        f"（失败={len(failed_days)} 截断={len(partial_days)}）"
+    )
+    if failed_days:
+        print(f"    失败日: {failed_days[:5]}")
+    if partial_days:
+        print(f"    截断日: {partial_days[:5]}")
+    print(f"  失败分区:       {part_fail}")
     print(f"  新增行数:       {new_rows}")
     print(f"  总请求:         {limiter.total_requests}")
     print(f"  耗时:           {elapsed:.1f}s")
     print(f"{'=' * 60}")
 
-    return updated, new_rows
+    return {
+        "fail": fail,
+        "ok": len(dates) - len(failed_days) - len(partial_days),
+        "failed_days": failed_days,
+        "partial_days": partial_days,
+        "day_status": day_status,
+        "rows": new_rows,
+        "partitions": updated,
+        "partition_fail": part_fail,
+        "new_codes": new_files,
+        "dry_run": False,
+    }
 
 
 # ============================================================
 # 历史回补 (repair)
 # ============================================================
+
 
 def repair_incomplete(threshold=5, dry_run=False, limit=None):
     """
@@ -289,7 +388,8 @@ def repair_incomplete(threshold=5, dry_run=False, limit=None):
         limit: 限制本次处理数量 (调试用)
 
     返回:
-        (fixed_count, added_rows)
+        dict：`{"fail", "fixed", "rows", "targets", "dry_run"}`；`fail>0`
+        由 CLI 转 rc=1（D4/F1）。
     """
     print("=" * 60)
     print("  基金净值历史回补 (repair)")
@@ -308,19 +408,20 @@ def repair_incomplete(threshold=5, dry_run=False, limit=None):
             for code, n in s.value_counts().items():
                 counts[code] = counts.get(code, 0) + int(n)
         except Exception as exc:
-            print(f"[fetch.fund_nav_update] 读分片失败 {path}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[fetch.fund_nav_update] 读分片失败 {path}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             continue
     print(f"  扫描完成: 库内 {len(counts)} 只基金")
 
     allowed_of = load_of_scope()
-    targets = sorted(c for c, n in counts.items()
-                     if n <= threshold and _in_scope(c, allowed_of))
+    targets = sorted(c for c, n in counts.items() if n <= threshold and _in_scope(c, allowed_of))
 
     print(f"  待回补: {len(targets)} 只")
     if not targets:
         print("  无需回补")
-        return 0, 0
+        return {"fail": 0, "fixed": 0, "rows": 0, "targets": 0, "dry_run": dry_run}
 
     if limit:
         targets = targets[:limit]
@@ -328,7 +429,7 @@ def repair_incomplete(threshold=5, dry_run=False, limit=None):
 
     if dry_run:
         print(f"  [DRY-RUN] 预计请求 {len(targets)} 次")
-        return 0, 0
+        return {"fail": 0, "fixed": 0, "rows": 0, "targets": len(targets), "dry_run": True}
 
     pro = get_pro()
     limiter = RateLimiter(
@@ -342,7 +443,9 @@ def repair_incomplete(threshold=5, dry_run=False, limit=None):
     added = 0
     for i, ts_code in enumerate(targets):
         if (i + 1) % 200 == 0 or i == 0:
-            print(f"    [{i+1}/{len(targets)}] 已回补={fixed} 新增行={added} | {time.time()-t0:.0f}s")
+            print(
+                f"    [{i + 1}/{len(targets)}] 已回补={fixed} 新增行={added} | {time.time() - t0:.0f}s"
+            )
 
         hist = fetch_nav_full_history(pro, limiter, ts_code)
         if hist is None or hist.empty:
@@ -350,9 +453,16 @@ def repair_incomplete(threshold=5, dry_run=False, limit=None):
             continue
 
         try:
-            stat = upsert_by_year(hist, FUND_NAV_DIR, date_col="nav_date",
-                                  subset=["ts_code", "nav_date"], sort_by="nav_date",
-                                  on_error=lambda y, e: print(f"    [ERROR] {y}: {e}"))
+            stat = upsert_by_year(
+                hist,
+                FUND_NAV_DIR,
+                date_col="nav_date",
+                subset=["ts_code", "nav_date"],
+                sort_by="nav_date",
+                on_error=lambda y, e: print(f"    [ERROR] {y}: {e}"),
+            )
+            # D4/R2：分区写失败必须计入 fail（成功分区照常计 added/fixed）
+            fail += int(stat.get("fail") or 0)
             if stat["added"] > 0:
                 added += stat["added"]
                 fixed += 1
@@ -368,44 +478,43 @@ def repair_incomplete(threshold=5, dry_run=False, limit=None):
     print(f"  失败:       {fail}")
     print(f"  新增历史行: {added}")
     print(f"  总请求:     {limiter.total_requests}")
-    print(f"  耗时:       {elapsed/60:.1f}min")
+    print(f"  耗时:       {elapsed / 60:.1f}min")
     print(f"{'=' * 60}")
 
-    return fixed, added
+    return {"fail": fail, "fixed": fixed, "rows": added, "targets": len(targets), "dry_run": False}
 
 
 # ============================================================
 # CLI入口
 # ============================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="基金净值增量更新 (回溯最近N个交易日，自动补漏)")
+    parser = argparse.ArgumentParser(description="基金净值增量更新 (回溯最近N个交易日，自动补漏)")
     parser.add_argument("--days", type=int, default=None, help="回溯交易日数 (默认5)")
     parser.add_argument("--date", default=None, help="回溯截止日 YYYYMMDD (默认最新)")
     parser.add_argument("--dry-run", action="store_true", help="空跑模式，只统计不写入")
-    parser.add_argument("--repair", action="store_true",
-                        help="历史回补模式: 对行数过少的文件按代码补拉全历史")
-    parser.add_argument("--repair-threshold", type=int, default=5,
-                        help="回补阈值(行数)，默认5")
-    parser.add_argument("--limit", type=int, default=None,
-                        help="限制处理数量 (调试/分批用)")
+    parser.add_argument(
+        "--repair", action="store_true", help="历史回补模式: 对行数过少的文件按代码补拉全历史"
+    )
+    parser.add_argument("--repair-threshold", type=int, default=5, help="回补阈值(行数)，默认5")
+    parser.add_argument("--limit", type=int, default=None, help="限制处理数量 (调试/分批用)")
     args = parser.parse_args()
 
     if args.repair:
-        repair_incomplete(
+        result = repair_incomplete(
             threshold=args.repair_threshold,
             dry_run=args.dry_run,
             limit=args.limit,
         )
-        return
-
-    run_fund_nav_update(
-        dry_run=args.dry_run,
-        lookback_days=args.days,
-        end_date=args.date.replace("-", "") if args.date else None,
-    )
+    else:
+        result = run_fund_nav_update(
+            dry_run=args.dry_run,
+            lookback_days=args.days,
+            end_date=args.date.replace("-", "") if args.date else None,
+        )
+    return 1 if int((result or {}).get("fail") or 0) > 0 else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

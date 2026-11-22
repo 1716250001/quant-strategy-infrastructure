@@ -18,6 +18,7 @@
 纪律：优化器**只编排不承载业务**（铁律 5）；worker 为模块级函数
 （Windows spawn 可 pickle）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,8 +38,17 @@ __all__ = ["GridSearchOptimizer", "deep_set"]
 logger = logging.getLogger(__name__)
 
 #: P-7：`daily` 的 9 列（与 feed.COLUMNS 逐字同序；键含列序）
-_DAILY_COLS = ("ts_code", "trade_date", "open", "high", "low", "close",
-               "pre_close", "vol", "amount")
+_DAILY_COLS = (
+    "ts_code",
+    "trade_date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "pre_close",
+    "vol",
+    "amount",
+)
 #: P-7b（19 号 §236）：shm 共享表规格（表 → 列集；**列序取主调用方口径**）。
 #: `daily` 9 列与 `feed.COLUMNS` 逐字同序；`adj_factor`/`fund_adj` 与质检
 #: `_table_slice`／`read_codes` 的请求同序。读层 `_read` 对"列集为规格子集"的
@@ -59,16 +69,14 @@ _SHM_MIN_YEARS = 8
 _SHM_MIN_BYTES = 700 * 1024 * 1024
 
 
-def deep_set(config: dict[str, Any], path: Sequence[str],
-             value: Any) -> dict[str, Any]:
+def deep_set(config: dict[str, Any], path: Sequence[str], value: Any) -> dict[str, Any]:
     """复制式深层写入（不变异输入）：`path` 逐级下钻建副本。"""
     out = dict(config)
     if len(path) == 1:
         out[path[0]] = value
         return out
     child = out.get(path[0])
-    out[path[0]] = deep_set(child if isinstance(child, dict) else {},
-                            path[1:], value)
+    out[path[0]] = deep_set(child if isinstance(child, dict) else {}, path[1:], value)
     return out
 
 
@@ -93,12 +101,12 @@ def _worker_warm(payload: tuple[str, str, str]) -> None:
     from btf.domain.types import TradingDate
 
     feed = TushareParquetFeed(root)
-    feed.corporate_actions(TradingDate.from_ymd(start_ymd),
-                           TradingDate.from_ymd(end_ymd))
+    feed.corporate_actions(TradingDate.from_ymd(start_ymd), TradingDate.from_ymd(end_ymd))
 
 
-def _worker_setup(warm: tuple[str, str, str] | None,
-                  shm_spec: Mapping[str, Any] | None = None) -> None:
+def _worker_setup(
+    warm: tuple[str, str, str] | None, shm_spec: Mapping[str, Any] | None = None
+) -> None:
     """worker initializer（**无条件执行**）：预算 + 可选预热 +（P-7）shm attach。
 
     P1″-7（19 号 §219-C/§220-B）：`READ_CACHE_MB=256` 必须在这里无条件设置。
@@ -109,9 +117,9 @@ def _worker_setup(warm: tuple[str, str, str] | None,
     """
     os.environ["READ_CACHE_MB"] = "256"
     if warm:
-        _worker_warm(warm)                        # 原预热逻辑一字不动
+        _worker_warm(warm)  # 原预热逻辑一字不动
     if shm_spec:
-        _worker_attach_shm(shm_spec)               # P-7：失败即降级（不抛出）
+        _worker_attach_shm(shm_spec)  # P-7：失败即降级（不抛出）
 
 
 class _ShmSentinel:
@@ -160,18 +168,16 @@ def _worker_attach_shm(spec: Mapping[str, Any]) -> None:
             shm = shared_memory.SharedMemory(name=str(item["name"]))
             buf = pa.py_buffer(shm.buf)
             table = ipc.open_stream(buf).read_all()
-            pr.register_shm_table(root / table_name / f"{year}.parquet",
-                                  cols, table)
+            pr.register_shm_table(root / table_name / f"{year}.parquet", cols, table)
             _SHM_KEPT.append((shm, buf, table))
         if _SHM_FINALIZER is None:
             _SHM_FINALIZER = weakref.finalize(_SHM_SENTINEL, _release_shm_tables)
-    except Exception as exc:                      # 整体降级：清掉半成品
+    except Exception as exc:  # 整体降级：清掉半成品
         _release_shm_tables()
         logger.warning("shm attach 失败 → 降级本地缓存：%s", exc)
 
 
-def _run_single(payload: tuple[dict[str, Any], dict[str, Any]]
-                ) -> dict[str, Any]:
+def _run_single(payload: tuple[dict[str, Any], dict[str, Any]]) -> dict[str, Any]:
     """worker：单组合回测（模块级——spawn 可 pickle；与单跑同链路）。
 
     payload = (已注入网格参数的配置 dict, 参数组合)；组合经 tuple 回传
@@ -182,18 +188,22 @@ def _run_single(payload: tuple[dict[str, Any], dict[str, Any]]
     from btf.runtime import BTFRuntime
 
     config, params = payload
-    rt = BTFRuntime().load_config(config).build()
+    # D8：网格每组合 `persist=False`，质检只对落盘产物有意义 —— 跳过装配期
+    # CC-1..CC-5（原每组合 ≈3.4s；对齐「装配期只做回测必需的事」纪律）。
+    rt = BTFRuntime().load_config(config).build(quality=False)
     result = rt.run(persist=False)
     # R4 剩余：与 run()/verify_run() 共用同一指标计算单点；**RC-08
     # （2026-10-05）**：`extras` 与 `bt run` 同口径（`_benchmark_metrics`）
     # ——配了 `report.benchmark` ⇒ 每组合含 IR/超额；未配 ⇒ extras 返回空
     # （不报错、不新增字段，与既有行为逐位一致）。
-    metrics = compute_run_metrics(result.snapshots, result.fills,
-                                  rt._analysis_config(),
-                                  extras=rt._benchmark_metrics,
-                                  # R61′（N63）：逐笔口径与落盘路径同源
-                                  consolidations=normalize_consolidations(
-                                      getattr(result, "consolidations", ())))
+    metrics = compute_run_metrics(
+        result.snapshots,
+        result.fills,
+        rt._analysis_config(),
+        extras=rt._benchmark_metrics,
+        # R61′（N63）：逐笔口径与落盘路径同源
+        consolidations=normalize_consolidations(getattr(result, "consolidations", ())),
+    )
     # RC-06（2026-10-05）：推断层输入——日收益的 `(T, 单期夏普, 偏度, 峰度)`
     # （纯统计，供 PSR/DSR；样本 < 3 或方差为 0 ⇒ None，**不阻断**网格）。
     returns_stats: dict[str, Any] | None = None
@@ -203,8 +213,7 @@ def _run_single(payload: tuple[dict[str, Any], dict[str, Any]]
 
         series = build_nav_series(result.snapshots, result.fills)
         n, sr_period, skew, kurt = sharpe_moments(series.effective_returns())
-        returns_stats = {"n_periods": n, "sr_period": sr_period,
-                         "skew": skew, "kurt": kurt}
+        returns_stats = {"n_periods": n, "sr_period": sr_period, "skew": skew, "kurt": kurt}
     except (ValueError, ZeroDivisionError, KeyError):
         returns_stats = None
     return {
@@ -252,8 +261,7 @@ def _shm_plan(config: Mapping[str, Any]) -> tuple[Path, list[int]] | None:
     y0, y1 = int(str(start)[:4]) - 1, int(str(end)[:4])
     years = list(range(y0, y1 + 1))
     if len(years) > _SHM_MAX_TOTAL_YEARS:
-        logger.warning("shm：年份数 %d > %d → 降级", len(years),
-                       _SHM_MAX_TOTAL_YEARS)
+        logger.warning("shm：年份数 %d > %d → 降级", len(years), _SHM_MAX_TOTAL_YEARS)
         return None
     # P-7″（19 号 §224-B）：小配置启用 shm 是**净损失**（父进程预读+序列化
     # 0.6 s > 省下的读盘；ETF 实测 +19%/+3.4 GB）。两道门槛同时满足才启用：
@@ -273,8 +281,12 @@ def _shm_plan(config: Mapping[str, Any]) -> tuple[Path, list[int]] | None:
             if p.is_file():
                 est += int(pq.read_metadata(p).num_rows) * per_row
     if est <= _SHM_MIN_BYTES:
-        logger.warning("shm：跳过（年份 %d、预计 %.0f MB < %d MB）",
-                       len(years), est / 1024**2, _SHM_MIN_BYTES // 1024**2)
+        logger.warning(
+            "shm：跳过（年份 %d、预计 %.0f MB < %d MB）",
+            len(years),
+            est / 1024**2,
+            _SHM_MIN_BYTES // 1024**2,
+        )
         return None
     return root, years
 
@@ -319,8 +331,7 @@ def _shm_create(config: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[
                 break
             rows.append(y)
         if too_big is not None:
-            logger.warning("shm：%s/%d 预估 >200 MB → 该表跳过（其它表照常）",
-                           table, too_big)
+            logger.warning("shm：%s/%d 预估 >200 MB → 该表跳过（其它表照常）", table, too_big)
             continue
         if not rows:
             continue
@@ -330,7 +341,7 @@ def _shm_create(config: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[
                 path = root / table / f"{year}.parquet"
                 table_obj = pq.read_table(path, columns=list(cols))
                 # 先预演一次得到精确字节数（shm 段尺寸必须给定）；再原地直写
-                #（预演与直写逐字节一致：同一 schema 与同一表）
+                # （预演与直写逐字节一致：同一 schema 与同一表）
                 pre = pa.BufferOutputStream()
                 with ipc.new_stream(pre, table_obj.schema) as w:
                     w.write_table(table_obj)
@@ -342,9 +353,9 @@ def _shm_create(config: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[
                 with ipc.new_stream(writer, table_obj.schema) as w:
                     w.write_table(table_obj)
                 segs.append(shm)
-                spec["tables"].append({"table": table, "year": year,
-                                       "name": name, "size": size,
-                                       "cols": list(cols)})
+                spec["tables"].append(
+                    {"table": table, "year": year, "name": name, "size": size, "cols": list(cols)}
+                )
         except Exception as exc:
             logger.warning("shm：%s 创建失败 → 该表降级：%s", table, exc)
             _drop(segs)
@@ -359,9 +370,11 @@ def _shm_create(config: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[
         by_table[it["table"]] = by_table.get(it["table"], 0) + 1
     logger.warning(
         "shm：启用 —— 共享 %d 表 / %d 段 / %.1f MB（%s；只读零拷贝）",
-        len(by_table), len(spec["tables"]),
+        len(by_table),
+        len(spec["tables"]),
         sum(it["size"] for it in spec["tables"]) / 1024**2,
-        "、".join(f"{k} {v} 年" for k, v in by_table.items()))
+        "、".join(f"{k} {v} 年" for k, v in by_table.items()),
+    )
     return spec, kept
 
 
@@ -404,7 +417,8 @@ def _execute_payloads(
 
 
 def _perturb_points(
-    params: Mapping[str, Any], deltas: Sequence[float],
+    params: Mapping[str, Any],
+    deltas: Sequence[float],
 ) -> list[tuple[str, int | float]]:
     """top1 参数 → 邻域扰动点（RC-07）：每参数每 δ 生成 `p×(1−δ)`/`p×(1+δ)`。
 
@@ -420,8 +434,7 @@ def _perturb_points(
             continue
         for delta in deltas:
             for raw in (value * (1.0 - delta), value * (1.0 + delta)):
-                cand: int | float = (round(raw) if isinstance(value, int)
-                                     else float(raw))
+                cand: int | float = round(raw) if isinstance(value, int) else float(raw)
                 if cand == value or (path, cand) in seen:
                     continue
                 seen.add((path, cand))
@@ -489,10 +502,7 @@ class GridSearchOptimizer:
         if any(not values for values in value_lists):
             raise ValueError("grid 参数取值列表不得为空")
 
-        combos = [
-            dict(zip(paths, values, strict=True))
-            for values in product(*value_lists)
-        ]
+        combos = [dict(zip(paths, values, strict=True)) for values in product(*value_lists)]
         payloads = []
         for combo in combos:
             cfg = dict(config)
@@ -529,11 +539,19 @@ class GridSearchOptimizer:
                 continue
             n_periods = int(stats["n_periods"])
             item["psr"] = probabilistic_sharpe(
-                stats["sr_period"], sr0=0.0, n_periods=n_periods,
-                skew=stats["skew"], kurt=stats["kurt"])
+                stats["sr_period"],
+                sr0=0.0,
+                n_periods=n_periods,
+                skew=stats["skew"],
+                kurt=stats["kurt"],
+            )
             item["dsr"] = deflated_sharpe(
-                stats["sr_period"], n_periods=n_periods, skew=stats["skew"],
-                kurt=stats["kurt"], n_trials=n_trials)
+                stats["sr_period"],
+                n_periods=n_periods,
+                skew=stats["skew"],
+                kurt=stats["kurt"],
+                n_trials=n_trials,
+            )
 
         # RC-07（2026-10-05）：参数邻域扫描——只对 **top1 的数值型参数**做
         # `p×(1±δ)`（复用同一 deep_set + worker 链路）。产物只报**数字**
@@ -544,8 +562,7 @@ class GridSearchOptimizer:
             for raw_delta in perturb:
                 delta = float(raw_delta)
                 if not 0.0 < delta < 1.0:
-                    raise ValueError(
-                        f"perturb δ 须在 (0, 1)，得 {raw_delta!r}")
+                    raise ValueError(f"perturb δ 须在 (0, 1)，得 {raw_delta!r}")
                 deltas.append(delta)
             top_item = ranked[0]
             base = objective_of(top_item)
@@ -559,28 +576,26 @@ class GridSearchOptimizer:
                     perturb_payloads.append((cfg, {path: cand}))
                 block_points = [
                     {"params": dict(r["params"]), "value": objective_of(r)}
-                    for r in _execute_payloads(perturb_payloads, n_workers,
-                                               config)
+                    for r in _execute_payloads(perturb_payloads, n_workers, config)
                 ]
-            values = [p["value"] for p in block_points
-                      if p["value"] != float("-inf")]
+            values = [p["value"] for p in block_points if p["value"] != float("-inf")]
             if points and values and base != float("-inf"):
                 vmin, vmax = min(values), max(values)
                 mean = sum(values) / len(values)
-                std = (sum((v - mean) ** 2 for v in values)
-                       / len(values)) ** 0.5
+                std = (sum((v - mean) ** 2 for v in values) / len(values)) ** 0.5
                 # 相对退化率 = 邻域最差值相对 top1 的跌幅（≥0；top1 本身
                 # 可能被邻域点反超 ⇒ 截断为 0）。base ≈ 0 时不可定义 ⇒ None。
-                degradation = (max(0.0, base - vmin) / abs(base)
-                               if abs(base) > 1e-12 else None)
+                degradation = max(0.0, base - vmin) / abs(base) if abs(base) > 1e-12 else None
                 note = None
                 sensitive = degradation is not None and degradation > 0.5
             else:
                 vmin = vmax = mean = std = degradation = None
                 sensitive = None
-                note = ("top1 无数值型参数（或扰动量与原值相同）→ 未做邻域扫描"
-                        if not points else
-                        "邻域点无可比 objective（NaN/缺失）→ 未判定敏感")
+                note = (
+                    "top1 无数值型参数（或扰动量与原值相同）→ 未做邻域扫描"
+                    if not points
+                    else "邻域点无可比 objective（NaN/缺失）→ 未判定敏感"
+                )
             perturbation = {
                 "deltas": deltas,
                 "base_params": dict(top_item["params"]),
@@ -605,16 +620,18 @@ class GridSearchOptimizer:
             "n_trading_days": int(results[0]["n_days"]) if results else 0,
             "n_trials_declared": max(0, int(n_trials_declared)),
             "n_trials": n_trials,
-            "adjustment_note": (
-                f"N={n_trials} 未校正 —— 阈值应 ≤ 0.05/N = "
-                f"{0.05 / n_trials:.4g}"),
+            "adjustment_note": (f"N={n_trials} 未校正 —— 阈值应 ≤ 0.05/N = {0.05 / n_trials:.4g}"),
             "workers": n_workers,
-            "perturbation": perturbation,     # RC-07（未传 ⇒ None）
-            "results": results,               # 网格顺序（含 rank / psr / dsr）
+            "perturbation": perturbation,  # RC-07（未传 ⇒ None）
+            "results": results,  # 网格顺序（含 rank / psr / dsr）
             "top": [
-                {"rank": item["rank"], "params": item["params"],
-                 "value": objective_of(item),
-                 "psr": item.get("psr"), "dsr": item.get("dsr")}
+                {
+                    "rank": item["rank"],
+                    "params": item["params"],
+                    "value": objective_of(item),
+                    "psr": item.get("psr"),
+                    "dsr": item.get("dsr"),
+                }
                 for item in ranked[:10]
             ],
         }

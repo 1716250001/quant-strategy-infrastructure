@@ -19,10 +19,11 @@ dependencies = [
     "akshare",
     "scipy",
     "pyarrow",   # parquet 读写核心（common/parquet_store、reader 等 7 处引用），原漏声明
+    "openpyxl",  # 运行时读取/导出 Excel（alt/compat.py、tools/export/export_lof.py），原仅列 dev extra
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "openpyxl"]
+dev = ["pytest"]
 
 [project.scripts]
 # 控制台短命令（2026-09-30 CLI 审查 P1-2）：pip install -e . 后即可 `pyramid gap-update`

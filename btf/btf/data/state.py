@@ -14,6 +14,7 @@
 
 设计：年度文件级缓存 + 按需列裁剪；同参数调用可重复（DataFeed 纪律）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
@@ -23,8 +24,14 @@ from pathlib import Path
 import pyarrow.compute as pc
 
 from btf.config.paths import MARKET_DATA_DIR
-from btf.data.tables_meta import TABLES as _TABLES
-from btf.data.tables_meta import daily_table_of
+from btf.data.tables_meta import (
+    DAILY_CLOSE_COLUMNS,
+    DAILY_ENGINE_COLUMNS,
+    daily_table_of,
+)
+from btf.data.tables_meta import (
+    TABLES as _TABLES,
+)
 from btf.domain.market import TradingState, touch_limit_down, touch_limit_up
 from btf.domain.types import AssetClass, Instrument, TradingDate, parse_trading_date, rule_for
 
@@ -49,7 +56,7 @@ def _ymd_to_date(s: str | None) -> _date | None:
     try:
         return parse_trading_date(s).iso
     except (TypeError, ValueError):
-        return None      # 主库脏日期（位数异常/非数字）→ 按缺值处理（既有语义）
+        return None  # 主库脏日期（位数异常/非数字）→ 按缺值处理（既有语义）
 
 
 class StateSynthesizer:
@@ -74,7 +81,8 @@ class StateSynthesizer:
             dict[tuple[str, str], tuple[float | None, float | None]],
         ] = {}
         self._pre_close_cache: dict[
-            tuple[int, frozenset[str] | None], dict[tuple[str, str], float],
+            tuple[int, frozenset[str] | None],
+            dict[tuple[str, str], float],
         ] = {}
         #: E3 披露：限价回退发生日（etf_limit 未覆盖区间由 BoardRule 计算）
         self.fallback_limit_dates: set[str] = set()
@@ -97,8 +105,7 @@ class StateSynthesizer:
         # ── IO-5（P1-3a）：daily 收盘价**年表 + 按日索引**（原逐日整表读）──
         self._close_tables: dict[int, object | None] = {}
         self._close_date_idx: dict[int, dict[str, tuple[int, int]]] = {}
-        self._close_day_cache: dict[
-            tuple[int, str], dict[str, float]] = {}
+        self._close_day_cache: dict[tuple[int, str], dict[str, float]] = {}
         # ── PF-5（P1-3c）：ST 区间**事件时间线**（原逐日线性扫全部区间）──
         self._st_timeline: tuple[list[_date], list[frozenset[str]]] | None = None
         # ── PF-4（P2-7）：淘汰只在**年切换**时触发（原每 bar 全键扫描）──
@@ -121,8 +128,12 @@ class StateSynthesizer:
         """
         self._evict_scans += 1
         floor = year - self._YEAR_CACHE + 1
-        for store in (self._limit_cache, self._etf_limit_cache,
-                      self._pre_close_cache, self._limit_day_cache):
+        for store in (
+            self._limit_cache,
+            self._etf_limit_cache,
+            self._pre_close_cache,
+            self._limit_day_cache,
+        ):
             stale = [key for key in store if key[0] < floor]
             for key in stale:
                 del store[key]
@@ -158,13 +169,15 @@ class StateSynthesizer:
         """
         if year not in self._limit_tables:
             self._limit_tables[year] = self._store.read_file(
-                "stk_limit", year=year,
-                columns=["ts_code", "trade_date", "up_limit", "down_limit"])
+                "stk_limit", year=year, columns=["ts_code", "trade_date", "up_limit", "down_limit"]
+            )
         return self._limit_tables[year]
 
     # ── stk_limit：(year, wanted) → {(code, ymd): (up, down)} ──
     def _limits(
-        self, year: int, wanted: Sequence[str] | None = None,
+        self,
+        year: int,
+        wanted: Sequence[str] | None = None,
     ) -> dict[tuple[str, str], tuple[float | None, float | None]]:
         """年度 limit 表查询（B2 优化：子集过滤 + (year, 集合) 结果缓存）。
 
@@ -186,24 +199,34 @@ class StateSynthesizer:
                 t = self._limit_table(year)
                 if t is not None and t.num_rows:
                     if key[1] is not None:
-                        mask = pc.is_in(t.column("ts_code"),
-                                        value_set=pa.array(sorted(key[1]),
-                                                           type=t.schema.field(
-                                                               "ts_code").type))
+                        mask = pc.is_in(
+                            t.column("ts_code"),
+                            value_set=pa.array(sorted(key[1]), type=t.schema.field("ts_code").type),
+                        )
                         t = t.filter(mask)
                     if t.num_rows:
-                        table = dict(zip(
-                            zip(t.column("ts_code").to_pylist(),
-                                t.column("trade_date").to_pylist(), strict=True),
-                            zip(t.column("up_limit").to_pylist(),
-                                t.column("down_limit").to_pylist(), strict=True),
-                            strict=True))
+                        table = dict(
+                            zip(
+                                zip(
+                                    t.column("ts_code").to_pylist(),
+                                    t.column("trade_date").to_pylist(),
+                                    strict=True,
+                                ),
+                                zip(
+                                    t.column("up_limit").to_pylist(),
+                                    t.column("down_limit").to_pylist(),
+                                    strict=True,
+                                ),
+                                strict=True,
+                            )
+                        )
             self._limit_cache[key] = table
         return self._limit_cache[key]
 
     # ── stk_limit 按日切片（B3 十年尺度第三刀；CP1 性能专项 2026-09-27）──
     def _limit_date_index(
-        self, year: int,
+        self,
+        year: int,
     ) -> tuple[object | None, dict[str, tuple[int, int]]]:
         """年表按 trade_date 排序一次 + {ymd: (lo, hi)} 行区间索引（年度缓存）。
 
@@ -221,20 +244,20 @@ class StateSynthesizer:
             from btf.data.core import sort_by_date_int32  # A-3（§181 D-3 唯一实现）
 
             t = sort_by_date_int32(t)
-            self._limit_tables[year] = t           # 排序后表替换缓存（同 year 键）
-            grouped = t.group_by("trade_date").aggregate([("ts_code", "count")])
-            ordered = grouped.sort_by("trade_date")
-            start = 0
-            for day, count in zip(ordered.column("trade_date").to_pylist(),
-                                  ordered.column("ts_code_count").to_pylist(),
-                                  strict=True):
-                index[day] = (start, start + count)
-                start += count
+            self._limit_tables[year] = t  # 排序后表替换缓存（同 year 键）
+            # D11：日索引改线性实现（`core.day_index` 的 Arrow 游程路径），
+            # 去掉 Arrow `group_by + sort_by`（实测 73ms → 18ms/年，1.29M 行）
+            from btf.data.core import day_index
+
+            index = day_index(t.column("trade_date"))
         self._limit_date_idx[year] = index
         return t, index
 
     def _limit_day(
-        self, year: int, ymd: str, wanted: Sequence[str] | None = None,
+        self,
+        year: int,
+        ymd: str,
+        wanted: Sequence[str] | None = None,
     ) -> dict[tuple[str, str], tuple[float | None, float | None]]:
         """单日 limit 截面（(year, ymd, wanted) 缓存；语义与 `_limits` 全量口径一致）。
 
@@ -256,18 +279,27 @@ class StateSynthesizer:
                 if key[2] is not None:
                     import pyarrow as pa
 
-                    mask = pc.is_in(day.column("ts_code"),
-                                    value_set=pa.array(
-                                        sorted(key[2]),
-                                        type=t.schema.field("ts_code").type))
+                    mask = pc.is_in(
+                        day.column("ts_code"),
+                        value_set=pa.array(sorted(key[2]), type=t.schema.field("ts_code").type),
+                    )
                     day = day.filter(mask)
                 if day.num_rows:
-                    rows = dict(zip(
-                        zip(day.column("ts_code").to_pylist(),
-                            day.column("trade_date").to_pylist(), strict=True),
-                        zip(day.column("up_limit").to_pylist(),
-                            day.column("down_limit").to_pylist(), strict=True),
-                        strict=True))
+                    rows = dict(
+                        zip(
+                            zip(
+                                day.column("ts_code").to_pylist(),
+                                day.column("trade_date").to_pylist(),
+                                strict=True,
+                            ),
+                            zip(
+                                day.column("up_limit").to_pylist(),
+                                day.column("down_limit").to_pylist(),
+                                strict=True,
+                            ),
+                            strict=True,
+                        )
+                    )
             self._limit_day_cache[key] = rows
         return rows
 
@@ -282,16 +314,19 @@ class StateSynthesizer:
         """
         if year not in self._suspend_cache:
             t = self._store.read_file(
-                "suspend_d", year=year,
-                columns=["ts_code", "trade_date", "suspend_type",
-                         "suspend_timing"])
+                "suspend_d",
+                year=year,
+                columns=["ts_code", "trade_date", "suspend_type", "suspend_timing"],
+            )
             s: set[tuple[str, str]] = set()
             if t is not None:
                 for code, day, typ, timing in zip(
-                        t.column("ts_code").to_pylist(),
-                        t.column("trade_date").to_pylist(),
-                        t.column("suspend_type").to_pylist(),
-                        t.column("suspend_timing").to_pylist(), strict=True):
+                    t.column("ts_code").to_pylist(),
+                    t.column("trade_date").to_pylist(),
+                    t.column("suspend_type").to_pylist(),
+                    t.column("suspend_timing").to_pylist(),
+                    strict=True,
+                ):
                     if typ == "S" and not timing:
                         s.add((code, day))
             self._suspend_cache[year] = s
@@ -355,7 +390,7 @@ class StateSynthesizer:
         if self._st_timeline is None:
             self._st_timeline = self._st_timeline_index()
         days, snaps = self._st_timeline
-        idx = bisect_right(days, d) - 1        # 最后一个 ≤ d 的事件日
+        idx = bisect_right(days, d) - 1  # 最后一个 ≤ d 的事件日
         return set(snaps[idx]) if idx >= 0 else set()
 
     # ── 公开接口（批 9 / DD-1：给数据不变量校验 CC-2 供 ST 名单）──
@@ -367,18 +402,23 @@ class StateSynthesizer:
         """
         try:
             intervals = self._st_intervals()
-        except Exception:                      # 源表缺失/损坏
+        except Exception:  # 源表缺失/损坏
             return "unavailable"
         if not intervals:
             # 空区间可能是"确实无 ST"，也可能是源表缺失——以**文件存在性**判定
             base = self.root / "namechange"
-            exists = (base.is_dir() and any(base.glob("*.parquet")))
+            exists = base.is_dir() and any(base.glob("*.parquet"))
             return "namechange" if exists else "unavailable"
         return "namechange"
 
-    def st_pairs(self, start_ymd: str, end_ymd: str,
-                 symbols: Sequence[str] | None = None, *,
-                 cal: Collection[str]) -> set[tuple[str, str]]:
+    def st_pairs(
+        self,
+        start_ymd: str,
+        end_ymd: str,
+        symbols: Sequence[str] | None = None,
+        *,
+        cal: Collection[str],
+    ) -> set[tuple[str, str]]:
         """区间内「(symbol, ymd) 当日为 ST」集合（CC-2 的 5% 上限依据）。
 
         为什么是公开接口（§44.2 形态 A）：CC-2 的 ST 分支此前**从未接线**——
@@ -392,8 +432,7 @@ class StateSynthesizer:
           O(交易日 × log)，装配期**只算一次**。
         """
         if not cal:
-            raise ValueError(
-                "st_pairs 须传入 cal（交易日序列，与 CC-2 的 trade_cal 同源）")
+            raise ValueError("st_pairs 须传入 cal（交易日序列，与 CC-2 的 trade_cal 同源）")
         want = set(symbols) if symbols is not None else None
         out: set[tuple[str, str]] = set()
         for day in cal:
@@ -420,7 +459,8 @@ class StateSynthesizer:
 
     # ── daily：某日收盘价（涨跌停触及判定）──
     def _close_date_index(
-        self, year: int,
+        self,
+        year: int,
     ) -> tuple[object | None, dict[str, tuple[int, int]]]:
         """daily 年表按 trade_date 排序一次 + {ymd: (lo, hi)} 行区间（IO-5）。
 
@@ -436,23 +476,24 @@ class StateSynthesizer:
             from btf.data.core import sort_by_date_int32  # A-3（§181 D-3 唯一实现）
 
             t = sort_by_date_int32(t)
-            self._close_tables[year] = t        # 排序后表替换缓存（同 year 键）
-            grouped = t.group_by("trade_date").aggregate([("ts_code", "count")])
-            ordered = grouped.sort_by("trade_date")
-            start = 0
-            for day, count in zip(ordered.column("trade_date").to_pylist(),
-                                  ordered.column("ts_code_count").to_pylist(),
-                                  strict=True):
-                index[day] = (start, start + count)
-                start += count
+            self._close_tables[year] = t  # 排序后表替换缓存（同 year 键）
+            # D11：同 `_limit_date_index`——线性游程索引，去掉 Arrow group_by
+            from btf.data.core import day_index
+
+            index = day_index(t.column("trade_date"))
         self._close_date_idx[year] = index
         return t, index
 
     def _close_table(self, year: int):
-        """daily 年表（ts_code/trade_date/close）——年装载一次（IO-5/P1-3a）。"""
+        """daily 年表（ts_code/trade_date/close）——年装载一次（IO-5/P1-3a）。
+
+        D11：按**引擎同一列集**（`DAILY_ENGINE_COLUMNS`）读取，再 `select` 出
+        状态侧 3 列——同一按年文件在 `btf.data.parquet_reader` 的只读缓存中
+        只解码一次（引擎 9 列 + 状态 3 列原为两次独立解码）。
+        """
         if year not in self._close_tables:
-            self._close_tables[year] = self._store.read_file(
-                "daily", year=year, columns=["ts_code", "trade_date", "close"])
+            t = self._store.read_file("daily", year=year, columns=list(DAILY_ENGINE_COLUMNS))
+            self._close_tables[year] = None if t is None else t.select(list(DAILY_CLOSE_COLUMNS))
         return self._close_tables[year]
 
     def _closes_on(self, ymd: str) -> dict[str, float]:
@@ -467,8 +508,13 @@ class StateSynthesizer:
             if span:
                 lo, hi = span
                 day = t.slice(lo, hi - lo)
-                rows = dict(zip(day.column("ts_code").to_pylist(),
-                                day.column("close").to_pylist(), strict=True))
+                rows = dict(
+                    zip(
+                        day.column("ts_code").to_pylist(),
+                        day.column("close").to_pylist(),
+                        strict=True,
+                    )
+                )
             self._close_day_cache[key] = rows
         return rows
 
@@ -477,12 +523,14 @@ class StateSynthesizer:
         """etf_limit 年 Table（read_table 一次）。"""
         if year not in self._etf_limit_tables:
             self._etf_limit_tables[year] = self._store.read_file(
-                "etf_limit", year=year,
-                columns=["ts_code", "trade_date", "up_limit", "down_limit"])
+                "etf_limit", year=year, columns=["ts_code", "trade_date", "up_limit", "down_limit"]
+            )
         return self._etf_limit_tables[year]
 
     def _etf_limits(
-        self, year: int, wanted: Sequence[str] | None = None,
+        self,
+        year: int,
+        wanted: Sequence[str] | None = None,
     ) -> dict[tuple[str, str], tuple[float | None, float | None]]:
         """etf_limit 查询（(year, 标的集合) 结果缓存；口径同 `_limits`）。"""
         import pyarrow as pa
@@ -490,27 +538,41 @@ class StateSynthesizer:
         key = (year, None if wanted is None else frozenset(wanted))
         if key not in self._etf_limit_cache:
             table: dict[tuple[str, str], tuple[float | None, float | None]] = {}
-            if key[1] is None or key[1]:        # 空集合 → 空结果（同上）
+            if key[1] is None or key[1]:  # 空集合 → 空结果（同上）
                 t = self._etf_limit_table(year)
                 if t is not None and t.num_rows:
                     if key[1] is not None:
-                        t = t.filter(pc.is_in(
-                            t.column("ts_code"),
-                            value_set=pa.array(
-                                sorted(key[1]),
-                                type=t.schema.field("ts_code").type)))
+                        t = t.filter(
+                            pc.is_in(
+                                t.column("ts_code"),
+                                value_set=pa.array(
+                                    sorted(key[1]), type=t.schema.field("ts_code").type
+                                ),
+                            )
+                        )
                     if t.num_rows:
-                        table = dict(zip(
-                            zip(t.column("ts_code").to_pylist(),
-                                t.column("trade_date").to_pylist(), strict=True),
-                            zip(t.column("up_limit").to_pylist(),
-                                t.column("down_limit").to_pylist(), strict=True),
-                            strict=True))
+                        table = dict(
+                            zip(
+                                zip(
+                                    t.column("ts_code").to_pylist(),
+                                    t.column("trade_date").to_pylist(),
+                                    strict=True,
+                                ),
+                                zip(
+                                    t.column("up_limit").to_pylist(),
+                                    t.column("down_limit").to_pylist(),
+                                    strict=True,
+                                ),
+                                strict=True,
+                            )
+                        )
             self._etf_limit_cache[key] = table
         return self._etf_limit_cache[key]
 
     def _etf_pre_closes(
-        self, year: int, wanted: Sequence[str],
+        self,
+        year: int,
+        wanted: Sequence[str],
     ) -> dict[tuple[str, str], float]:
         """fund_daily 的 pre_close（限价回退输入；按 (year, 集合) 缓存）。"""
         import pyarrow as pa
@@ -518,28 +580,39 @@ class StateSynthesizer:
         key = (year, frozenset(wanted))
         if key not in self._pre_close_cache:
             table: dict[tuple[str, str], float] = {}
-            t = (self._store.read_file(
-                "fund_daily", year=year,
-                columns=["ts_code", "trade_date", "pre_close"])
-                if wanted else None)            # 空集合 → 空结果（同上）
+            t = (
+                self._store.read_file(
+                    "fund_daily", year=year, columns=["ts_code", "trade_date", "pre_close"]
+                )
+                if wanted
+                else None
+            )  # 空集合 → 空结果（同上）
             if t is not None:
-                t = t.filter(pc.is_in(
-                    t.column("ts_code"),
-                    value_set=pa.array(sorted(wanted),
-                                       type=t.schema.field("ts_code").type)))
+                t = t.filter(
+                    pc.is_in(
+                        t.column("ts_code"),
+                        value_set=pa.array(sorted(wanted), type=t.schema.field("ts_code").type),
+                    )
+                )
                 table = {
                     (code, day): float(value)
                     for code, day, value in zip(
                         t.column("ts_code").to_pylist(),
                         t.column("trade_date").to_pylist(),
-                        t.column("pre_close").to_pylist(), strict=True)
+                        t.column("pre_close").to_pylist(),
+                        strict=True,
+                    )
                     if value is not None
                 }
             self._pre_close_cache[key] = table
         return self._pre_close_cache[key]
 
     def _etf_limit_fallback(
-        self, code: str, ymd: str, year: int, symbols: Sequence[str] | None,
+        self,
+        code: str,
+        ymd: str,
+        year: int,
+        symbols: Sequence[str] | None,
     ) -> tuple[float | None, float | None]:
         """E3 回退：etf_limit 未覆盖（起点之前）→ BoardRule 涨跌幅依 pre_close 计算。
 
@@ -566,19 +639,24 @@ class StateSynthesizer:
             days = sorted(self.fallback_limit_dates)
             notes.append(
                 "ETF 限价回退（etf_limit 起点 2019-06-26 之前）："
-                f"{len(days)} 个交易日（{days[0]}–{days[-1]}）由 BoardRule ±10% 计算")
+                f"{len(days)} 个交易日（{days[0]}–{days[-1]}）由 BoardRule ±10% 计算"
+            )
         if self.stock_limit_missing_dates:
             days = sorted(self.stock_limit_missing_dates)
             notes.append(
                 f"股票涨跌停缺失（stk_limit 起点 {_STK_LIMIT_START} 之前）："
                 f"{len(days)} 个交易日（{days[0]}–{days[-1]}）——"
-                "涨跌停约束失效，成交偏乐观（19 号 P1-11/P2-9）")
+                "涨跌停约束失效，成交偏乐观（19 号 P1-11/P2-9）"
+            )
         return tuple(notes)
 
     # ── 公共 API ──
     def states(
-        self, date: TradingDate, symbols: Sequence[str] | None = None,
-        *, with_touch_flags: bool = True,
+        self,
+        date: TradingDate,
+        symbols: Sequence[str] | None = None,
+        *,
+        with_touch_flags: bool = True,
     ) -> Mapping[str, TradingState]:
         """某交易日状态面板截面。
 
@@ -592,7 +670,7 @@ class StateSynthesizer:
         year = int(ymd[:4])
         d = date.iso
 
-        self._maybe_evict(year)               # 年度缓存上限（PF-4：年切换才扫描）
+        self._maybe_evict(year)  # 年度缓存上限（PF-4：年切换才扫描）
         if symbols is None:
             # 全市场口径：当日全量切片（B3 十年第三刀；~10ms/日）
             limits = self._limit_day(year, ymd)
@@ -613,20 +691,18 @@ class StateSynthesizer:
             universe = {code for (code, day) in limits if day == ymd}
             universe |= {code for (code, day) in suspended if day == ymd}
 
-        etf_limits: (dict[tuple[str, str], tuple[float | None, float | None]]
-                     | None) = None
+        etf_limits: dict[tuple[str, str], tuple[float | None, float | None]] | None = None
         out: dict[str, TradingState] = {}
         for code in sorted(universe):
             up, down = limits.get((code, ymd), (None, None))
             is_stock = daily_table_of(code) == "daily"
             if up is None and down is None and not is_stock:
-                if etf_limits is None:            # 懒加载：无 ETF 标的时零成本
+                if etf_limits is None:  # 懒加载：无 ETF 标的时零成本
                     etf_limits = self._etf_limits(year, symbols)
                 up, down = etf_limits.get((code, ymd), (None, None))
                 if up is None and down is None:
                     up, down = self._etf_limit_fallback(code, ymd, year, symbols)
-            elif (up is None and down is None and is_stock
-                    and ymd < _STK_LIMIT_START):
+            elif up is None and down is None and is_stock and ymd < _STK_LIMIT_START:
                 # P2-9 披露对称：股票限价缺失登记（原实现零披露）
                 self.stock_limit_missing_dates.add(ymd)
             close = closes.get(code)
@@ -638,9 +714,7 @@ class StateSynthesizer:
                 is_suspended=(code, ymd) in suspended,
                 is_st=code in st_codes,
                 is_delisted=(delist.get(code) is not None and delist[code] <= d),
-                is_limit_up=(touch_limit_up(close, up)
-                             if close is not None else False),
-                is_limit_down=(touch_limit_down(close, down)
-                               if close is not None else False),
+                is_limit_up=(touch_limit_up(close, up) if close is not None else False),
+                is_limit_down=(touch_limit_down(close, down) if close is not None else False),
             )
         return out

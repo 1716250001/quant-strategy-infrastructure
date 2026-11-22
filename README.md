@@ -20,7 +20,7 @@ A股三层轮动金字塔策略的**全部代码 + 架构文档 + 自带运行�
 | 工程 | 入口 | 版本 | 说明 |
 |---|---|---|---|
 | **主工程**（本层） | `python main.py <cmd>`（安装后亦可 `pyramid <cmd>`） | 7.0.0 | 数据维护 / 全量库体检 / 因子与指数分析 / 推送。**30 个可见顶层命令**（含 `db` 命令族入口）＋ **10 个隐藏兼容别名**（`db-audit`/`ckpt` 等旧平铺名，`help=SUPPRESS`），**注册表实测 40 项**（2026-11-20）＋ `db` 下 **7 个子命令** |
-| **回测工具子系统** | `btf\`（`bt <cmd>`） | btf 7.0.0 | 独立工程（自带 `pyproject.toml` / `CHANGELOG.md` / **十项质量门**）；**13 条命令族** + `adhoc` + `--version` |
+| **回测工具子系统** | `btf\`（`bt <cmd>`） | btf 7.0.0 | 独立工程（自带 `pyproject.toml` / `CHANGELOG.md` / **十项质量门**）；**14 条命令族**（含 `adhoc`，保留）+ `--version` |
 
 两者的 venv 是同一个：`代码\_venv\Scripts\python.exe`。
 

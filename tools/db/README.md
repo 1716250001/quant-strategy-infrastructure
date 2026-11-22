@@ -1,6 +1,6 @@
 # tools/db — 全量数据库治理子包（体检 · 结构 · 迁移 · 断点 · 新鲜度 · 指纹）
 
-> 事实锚点：2026-11-21 ｜ 模块数：12 ｜ 调用方式：`python main.py db <子命令>`（旧平铺名 `db-audit` 等为隐藏别名，等价）
+> 事实锚点：2026-11-22 ｜ 模块数：13 ｜ 调用方式：`python main.py db <子命令>`（旧平铺名 `db-audit` 等为隐藏别名，等价）
 
 ## 职责
 
@@ -25,6 +25,7 @@
 | `scale_check.py` | L1 量级锚 / L2 跨表勾稽 / L3 月度稳定性，只读 | `db scale-check --report / --stats` |
 | `gen_report.py` | 由 `db_schema.json` 生成 Markdown 结构报告 | `db report` → `run()` |
 | `checkpoint_registry.py` | 断点登记只读门面 `get/timestamp/describe/domains_of` | 仅 import |
+| `known_gaps_patch.py` | 非 fund 表残余缺口补丁：校验、去重合并、备份＋原子写，默认干跑 | `python -m tools.db.known_gaps_patch --patch <json> [--apply]` |
 
 ### 数据目录：`tools/db/data/known_gaps.json`
 
@@ -32,6 +33,19 @@
 - 用途：主库「源端空返回」登记表；读方 6 处——`check_coverage`、`regress_pipeline`（R17/R18）、`meta_close`、`fund_stale`、`fetch/backfill.py`、`fetch/schedule_runner.py`。
 - 写入纪律：日常**只读对账**，禁止手改或脚本直写；改写须走 `python main.py db meta-close --apply`（自动备份＋整跑 regress）并单独批准。
 - 另一受控写入口为 `db stale-fix --apply`（只清 stale 并同步 `evidence`/`count`，写前自备份）；两者之外无写权限。
+
+### 非 fund 表残余缺口补丁（`known_gaps_patch.py`）
+
+```text
+python tools/db/known_gaps_patch.py --patch <json>          # 干跑，只打印统计
+python tools/db/known_gaps_patch.py --patch <json> --apply  # 写盘（需单独批准）
+```
+
+- 补丁结构：`{"patch": {<table>: {source_empty_ranges, source_empty_evidence, note, real_gap_backfill}}}`，只增不减。
+- 校验：表名须在 `config` 表集合（`DB_AUDIT_PKEYS ∪ TABLE_DATE_COL`）内；`code` 匹配 `^\d{6,7}\.(SH|SZ|BJ)$`；`from/to` 为合法 8 位日期；`keys` 为正整数。
+- 合并：既有 dict 字段原样保留；range 按 `(code, from, to)` 去重追加；evidence 逐码合并（既有 `probe_rows` ≥ 新值时不覆盖）；`note` 追加；`real_gap_backfill` 整体写入。
+- `--apply` 先把目标复制为同目录 `.bak-known-gaps-<YYYYmmdd_HHMMSS>`，再以临时文件 `+ os.replace` 原子写入（UTF-8 无 BOM、1 空格缩进）。
+- **边界**：`adj_factor` / `daily_basic` / `stk_limit` / `fund_adj` 为 by_date 表，本次只登记「码+区间」残余键；`fetch/backfill.py` 现有 schema 只认 `source_empty`（码级）/`source_empty_dates`（日期级），**不改其判定**，pair 级消费待 D10（允许改 `fetch/**` 后实施）。
 
 ## 与 CLI 的对应关系
 

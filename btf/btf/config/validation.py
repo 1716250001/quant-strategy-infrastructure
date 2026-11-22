@@ -8,15 +8,18 @@
 每条 = JSON 路径 + 消息 + 违例值（截断 repr）；H2（rules 段字面量
 拒绝）由 Schema additionalProperties:false 落地，报错原文含键名。
 """
+
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-_SCHEMA_ROOT = Path(__file__).resolve().parents[2] / "schemas"
+from btf.config.paths import PACKAGE_ROOT
+
+#: G3/D7：schema 随包分发（btf/btf/schemas/），非 editable 安装同样可路由
+_SCHEMA_ROOT = PACKAGE_ROOT / "schemas"
 
 _KNOWN = {"backtest.v1"}
 
@@ -60,8 +63,7 @@ def validate(config: Mapping[str, object]) -> None:
         raise ConfigError(["schema_version 缺失（四层合并后仍无值——默认层被显式置空？）"])
     schema_path = _SCHEMA_ROOT / f"{version}.json"
     if not schema_path.exists():
-        raise ConfigError([
-            f"schema_version: 未知契约版本 {version!r}（可用: {sorted(_KNOWN)}）"])
+        raise ConfigError([f"schema_version: 未知契约版本 {version!r}（可用: {sorted(_KNOWN)}）"])
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     validator = Draft202012Validator(schema)
     problems = [

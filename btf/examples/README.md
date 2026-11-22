@@ -15,12 +15,15 @@ DXP 瘦身后取代 Cookiecutter 模板——终审轻微 3）。
    from btf.domain.contracts import CONTRACT_VERSION
    from btf.strategy.base import StrategyBase
 
+
    class MaCross(StrategyBase):
-       contract_version = CONTRACT_VERSION      # 协商闸门：未声明 → 装配期拒载
+       contract_version = CONTRACT_VERSION  # 协商闸门：未声明 → 装配期拒载
+
        def __init__(self, fast: int = 5, slow: int = 20, **_params):
-           super().__init__(); self.fast, self.slow = fast, slow
-       def on_close(self, ctx, date) -> None:
-           ...                                  # ctx.data / ctx.submit_order ...
+           super().__init__()
+           self.fast, self.slow = fast, slow
+
+       def on_close(self, ctx, date) -> None: ...  # ctx.data / ctx.submit_order ...
    ```
 
 2. **放进 import 路径**：`run.strategy` 只接受**点分模块名**（schema 正则禁止

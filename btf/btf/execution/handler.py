@@ -26,13 +26,14 @@ VPP（Volume Participation，v0.5 V5-6；14 号 §24「成交量 × 5% 参与率
 铁律 2（引擎四模块不互相 import）：本模块不 import portfolio——
 依赖面以 PortfolioView 协议声明（结构化类型，engine 组装时注入）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from btf.domain.contracts import CONTRACT_VERSION
-from btf.domain.market import Bar, TradingState
+from btf.domain.market import LIMIT_PRICE_TOL, Bar, TradingState
 from btf.domain.orders import (
     Fill,
     Order,
@@ -43,8 +44,8 @@ from btf.domain.orders import (
 from btf.domain.types import AssetClass, Instrument, TradingDate, rule_for
 from btf.execution.cost import CostModel, NoSlippage, SlippageModel, ZeroCostModel
 
-#: 涨跌停判定浮点容差（计划 2.4 验收：1e-4）
-LIMIT_PRICE_TOL = 1e-4
+#: 涨跌停判定浮点容差：**单一定义在 `domain.market.LIMIT_PRICE_TOL`**（D11 去重；
+#: 原此处同名常量与 domain 各一份，改一处不会同步另一处）。
 
 
 class PortfolioView(Protocol):
@@ -84,8 +85,7 @@ class NextOpenHandler:
         self._instruments = dict(instruments or {})
         self._fill_seq = fill_seq_start
         if volume_participation is not None and not 0 < volume_participation <= 1:
-            raise ValueError(
-                f"volume_participation 须 ∈ (0,1]，得 {volume_participation!r}")
+            raise ValueError(f"volume_participation 须 ∈ (0,1]，得 {volume_participation!r}")
         self._vpp = volume_participation
         #: VPP 披露统计（报告假设章节消费）：部分成交笔数 / 未成交余量（股）
         self.vpp_stats = {"partial_fills": 0, "unfilled_qty": 0}
@@ -145,10 +145,14 @@ class NextOpenHandler:
         if self._vpp is not None:
             cap = self._capped_qty(order, bar)
             if cap <= 0:
-                return Rejection(RejectCode.VOLUME_CAP, (
-                    f"VPP 上限不足一手：vol={bar.volume:.0f}×"
-                    f"{self._vpp:g}={bar.volume * self._vpp:.0f} < lot="
-                    f"{self._lot_size(order.symbol)}"))
+                return Rejection(
+                    RejectCode.VOLUME_CAP,
+                    (
+                        f"VPP 上限不足一手：vol={bar.volume:.0f}×"
+                        f"{self._vpp:g}={bar.volume * self._vpp:.0f} < lot="
+                        f"{self._lot_size(order.symbol)}"
+                    ),
+                )
 
         # ⑥ T+N 可卖数量
         if order.side is OrderSide.SELL:
@@ -163,8 +167,7 @@ class NextOpenHandler:
         if order.side is OrderSide.BUY:
             qty = self._capped_qty(order, bar) if self._vpp is not None else order.qty
             price = self._slip.apply(order, bar.open, state, bar)
-            fee = self._cost.fees(order.symbol, OrderSide.BUY, qty,
-                                  price, date)
+            fee = self._cost.fees(order.symbol, OrderSide.BUY, qty, price, date)
             need = price * qty + fee.total
             if need > portfolio.cash + 1e-9:
                 return Rejection(
@@ -183,18 +186,21 @@ class NextOpenHandler:
         return min(order.qty, cap)
 
     # ── 成交构造 ──
-    def _fill(self, order: Order, date: TradingDate,
-              data: Mapping[str, Bar],
-              states: Mapping[str, TradingState]) -> Fill:
+    def _fill(
+        self,
+        order: Order,
+        date: TradingDate,
+        data: Mapping[str, Bar],
+        states: Mapping[str, TradingState],
+    ) -> Fill:
         bar = data[order.symbol]
         state = states[order.symbol]
         qty = self._capped_qty(order, bar) if self._vpp is not None else order.qty
-        if qty < order.qty:                     # 部分成交：余量当日取消（披露）
+        if qty < order.qty:  # 部分成交：余量当日取消（披露）
             self.vpp_stats["partial_fills"] += 1
             self.vpp_stats["unfilled_qty"] += order.qty - qty
         price = self._slip.apply(order, bar.open, state, bar)
-        fee = self._cost.fees(order.symbol, order.side, qty,
-                              price, date)
+        fee = self._cost.fees(order.symbol, order.side, qty, price, date)
         self._fill_seq += 1
         return Fill(
             fill_id=f"F{self._fill_seq:08d}",

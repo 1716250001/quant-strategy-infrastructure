@@ -10,6 +10,7 @@ B1 语义（PoC-1 剖析证据 2026-09-26 落定）：
     [硬门槛] readiness < 10s；
     [证据]   全量物化耗时记录（不设 10s 门槛，B3 阶段统一验收）。
 """
+
 from __future__ import annotations
 
 import time
@@ -38,23 +39,40 @@ def feed() -> TushareParquetFeed:
 
 @pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason="主库不可用")
 def test_b1_readiness_hard_gate(feed):
-    """B1 硬门槛：10 年数据就绪（迭代全部交易日、不触发截面物化）< 10s。"""
-    t0 = time.perf_counter()
-    n_days = 0
-    for _td, _cross in feed.bars(
-        None, TradingDate(date(2015, 1, 1)), TradingDate(date(2024, 12, 31))
-    ):
-        n_days += 1  # 仅推进迭代（截面懒对象不访问）
-    elapsed = time.perf_counter() - t0
-    band = ("软目标内" if elapsed <= B1_READY_LIMIT_SECONDS
-            else f"超软目标 {B1_READY_LIMIT_SECONDS}s（负载？）")
-    print(f"\nB1-readiness: {n_days} 交易日就绪 {elapsed:.2f}s（{band}；"
-          f"硬门槛 {B1_READY_HARD_LIMIT_SECONDS}s）")
-    assert n_days > 2300
-    assert elapsed < B1_READY_HARD_LIMIT_SECONDS, (
-        f"B1 就绪超标：{elapsed:.2f}s ≥ 硬门槛 {B1_READY_HARD_LIMIT_SECONDS}s——"
-        f"回 ADR-2 复查（CP1）"
+    """B1 硬门槛：10 年数据就绪（迭代全部交易日、不触发截面物化）< 10s。
+
+    **D8**：改走 `_perf.run_budget`（归一化墙钟，与 B2/B3/B4 同一判定器）。
+    """
+    from tests.benchmark import _perf
+
+    def _measure() -> tuple[float, int]:
+        t0 = time.perf_counter()
+        n = 0
+        for _td, _cross in feed.bars(
+            None,
+            TradingDate(date(2015, 1, 1)),
+            TradingDate(date(2024, 12, 31)),
+        ):
+            n += 1  # 仅推进迭代（截面懒对象不访问）
+        return time.perf_counter() - t0, n
+
+    elapsed, n_days = _perf.run_budget(
+        "B1",
+        _measure,
+        B1_READY_HARD_LIMIT_SECONDS,
+        hint="回 ADR-2 复查（CP1）：年表装载/排序/日期索引是否退化",
+        seconds=lambda payload: payload[0],
     )
+    band = (
+        "软目标内"
+        if elapsed <= B1_READY_LIMIT_SECONDS
+        else f"超软目标 {B1_READY_LIMIT_SECONDS}s（负载？）"
+    )
+    print(
+        f"\nB1-readiness: {n_days} 交易日就绪 {elapsed:.2f}s（{band}；"
+        f"硬门槛 {B1_READY_HARD_LIMIT_SECONDS}s，按归一化墙钟判定（D8））"
+    )
+    assert n_days > 2300
 
 
 @pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason="主库不可用")
@@ -70,7 +88,9 @@ def test_b1_full_materialization_evidence(feed):
         n_days += 1
         n_bars += len(cross)  # len() 触发当日物化
     elapsed = time.perf_counter() - t0
-    print(f"B1-materialize: {n_days} 日 × {n_bars:,} Bars 全量物化 {elapsed:.2f}s"
-          f"（≈{n_bars / max(n_days, 1):.0f} Bars/日）")
+    print(
+        f"B1-materialize: {n_days} 日 × {n_bars:,} Bars 全量物化 {elapsed:.2f}s"
+        f"（≈{n_bars / max(n_days, 1):.0f} Bars/日）"
+    )
     assert n_bars > 8_000_000, "全市场 Bar 总量数量级异常（实测约 948 万）"
     assert elapsed < 60.0, "物化超过 B3 总预算量级——需架构复查"

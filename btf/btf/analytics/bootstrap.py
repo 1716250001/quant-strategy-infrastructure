@@ -15,12 +15,15 @@
     annualized_return = (∏(1+r))^(annualization/n) − 1（几何年化）
     max_drawdown      = min(nav/peak − 1)（≤ 0；路径敏感——`order` 置换对其有意义）
 """
+
 from __future__ import annotations
 
 import math
 import random
 from collections.abc import Sequence
 from typing import Any
+
+from btf.analytics.metrics import DEFAULT_ANNUALIZATION
 
 __all__ = [
     "annualized_return",
@@ -52,8 +55,9 @@ def percentile(values: Sequence[float], q: float) -> float:
     return vals[idx]
 
 
-def annualized_sharpe(returns: Sequence[float], *,
-                      annualization: int = 252) -> float:
+def annualized_sharpe(
+    returns: Sequence[float], *, annualization: int = DEFAULT_ANNUALIZATION
+) -> float:
     """年化夏普（n<2 或 std=0 ⇒ NaN——不可算项不得填 0）。"""
     r = _clean(returns)
     n = len(r)
@@ -66,8 +70,9 @@ def annualized_sharpe(returns: Sequence[float], *,
     return m / math.sqrt(var) * math.sqrt(annualization)
 
 
-def annualized_return(returns: Sequence[float], *,
-                      annualization: int = 252) -> float:
+def annualized_return(
+    returns: Sequence[float], *, annualization: int = DEFAULT_ANNUALIZATION
+) -> float:
     """几何年化收益（∏(1+r) ≤ 0 ⇒ NaN）。"""
     r = _clean(returns)
     if not r:
@@ -93,8 +98,7 @@ def max_drawdown(returns: Sequence[float]) -> float:
     return mdd
 
 
-def _statistic(name: str, returns: Sequence[float],
-               annualization: int) -> float:
+def _statistic(name: str, returns: Sequence[float], annualization: int) -> float:
     if name == "sharpe":
         return annualized_sharpe(returns, annualization=annualization)
     if name == "annualized_return":
@@ -108,11 +112,18 @@ def distribution_summary(values: Sequence[float]) -> dict[str, Any]:
     """分布摘要（p05/p50/p95 + min/max/mean/std；NaN 剔除并披露 n）。"""
     vals = _clean(values)
     if not vals:
-        return {"n": 0, "p05": None, "p50": None, "p95": None, "min": None,
-                "max": None, "mean": None, "std": None}
+        return {
+            "n": 0,
+            "p05": None,
+            "p50": None,
+            "p95": None,
+            "min": None,
+            "max": None,
+            "mean": None,
+            "std": None,
+        }
     m = sum(vals) / len(vals)
-    var = (sum((x - m) ** 2 for x in vals) / (len(vals) - 1)
-           if len(vals) > 1 else 0.0)
+    var = sum((x - m) ** 2 for x in vals) / (len(vals) - 1) if len(vals) > 1 else 0.0
     return {
         "n": len(vals),
         "p05": percentile(vals, 0.05),
@@ -130,7 +141,7 @@ def bootstrap_ci(
     *,
     n_resamples: int = 1000,
     seed: int = 0,
-    annualization: int = 252,
+    annualization: int = DEFAULT_ANNUALIZATION,
     alpha: float = 0.05,
     statistics: Sequence[str] = ("sharpe", "annualized_return"),
 ) -> dict[str, Any]:
@@ -145,8 +156,12 @@ def bootstrap_ci(
         raise ValueError(f"alpha 须 ∈ (0,1)，得 {alpha!r}")
     r = _clean(returns)
     rng = random.Random(f"bootstrap:{int(seed)}")
-    out: dict[str, Any] = {"n_resamples": n_resamples, "seed": int(seed),
-                           "alpha": alpha, "n_periods": len(r)}
+    out: dict[str, Any] = {
+        "n_resamples": n_resamples,
+        "seed": int(seed),
+        "alpha": alpha,
+        "n_periods": len(r),
+    }
     n = len(r)
     for name in statistics:
         observed = _statistic(name, r, annualization)
@@ -155,16 +170,24 @@ def bootstrap_ci(
             sample = [r[rng.randrange(n)] for _ in range(n)] if n else []
             draws.append(_statistic(name, sample, annualization))
         summary = distribution_summary(draws)
-        lo = percentile([v for v in draws if v == v], alpha / 2) if any(
-            v == v for v in draws) else None
-        hi = percentile([v for v in draws if v == v], 1 - alpha / 2) if any(
-            v == v for v in draws) else None
+        lo = (
+            percentile([v for v in draws if v == v], alpha / 2)
+            if any(v == v for v in draws)
+            else None
+        )
+        hi = (
+            percentile([v for v in draws if v == v], 1 - alpha / 2)
+            if any(v == v for v in draws)
+            else None
+        )
         out[name] = {
             "observed": observed,
-            "p05": summary["p05"], "p50": summary["p50"], "p95": summary["p95"],
-            "ci_low": lo, "ci_high": hi,
-            "crosses_zero": (None if lo is None or hi is None
-                             else bool(lo <= 0.0 <= hi)),
+            "p05": summary["p05"],
+            "p50": summary["p50"],
+            "p95": summary["p95"],
+            "ci_low": lo,
+            "ci_high": hi,
+            "crosses_zero": (None if lo is None or hi is None else bool(lo <= 0.0 <= hi)),
             "n_valid": summary["n"],
         }
     return out
@@ -177,7 +200,7 @@ def permutation_pvalue(
     statistic: str = "sharpe",
     n_permutations: int = 1000,
     seed: int = 0,
-    annualization: int = 252,
+    annualization: int = DEFAULT_ANNUALIZATION,
 ) -> dict[str, Any]:
     """置换检验（**双侧** p 值 = P(|null| ≥ |observed|)）。
 
@@ -207,8 +230,12 @@ def permutation_pvalue(
         hits = sum(1 for v in valid if abs(v) >= abs(observed))
         p = hits / len(valid)
     return {
-        "scheme": scheme, "statistic": statistic, "n_permutations": n_permutations,
-        "seed": int(seed), "observed": observed, "p_value": p,
+        "scheme": scheme,
+        "statistic": statistic,
+        "n_permutations": n_permutations,
+        "seed": int(seed),
+        "observed": observed,
+        "p_value": p,
         "null_summary": distribution_summary(valid),
         "note": "双侧 p（|null| ≥ |observed|）；只报数字不判定（ADR-13）",
     }
@@ -222,7 +249,7 @@ def noise_baseline(
     n_draws: int = 1000,
     seed: int = 0,
     statistic: str = "sharpe",
-    annualization: int = 252,
+    annualization: int = DEFAULT_ANNUALIZATION,
 ) -> dict[str, Any]:
     """随机策略对照（"噪声尺子"）：同**持有天数**随机择时分布。
 
@@ -242,12 +269,20 @@ def noise_baseline(
         draws.append(_statistic(statistic, sample, annualization))
     valid = [v for v in draws if v == v]
     summary = distribution_summary(valid)
-    pct = (sum(1 for v in valid if v <= observed) / len(valid)
-           if valid and observed == observed else None)
+    pct = (
+        sum(1 for v in valid if v <= observed) / len(valid)
+        if valid and observed == observed
+        else None
+    )
     return {
-        "statistic": statistic, "n_hold": n_hold, "n_draws": n_draws,
-        "seed": int(seed), "observed": observed,
+        "statistic": statistic,
+        "n_hold": n_hold,
+        "n_draws": n_draws,
+        "seed": int(seed),
+        "observed": observed,
         "observed_percentile": pct,
-        "p05": summary["p05"], "p50": summary["p50"], "p95": summary["p95"],
+        "p05": summary["p05"],
+        "p50": summary["p50"],
+        "p95": summary["p95"],
         "n_valid": summary["n"],
     }

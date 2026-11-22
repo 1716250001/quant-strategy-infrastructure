@@ -32,6 +32,7 @@
     python main.py db freshness --json          # 机器可读
     python main.py db freshness --strict        # 有红/黄时 exit 1
 """
+
 import calendar
 import glob
 import json
@@ -55,19 +56,44 @@ MKT_CKPT = os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
 _PARTITION_SAMPLE = 3
 # CC-FIX-12（2026-11-10，§378）：补月频/季频/周频列名——`cn_ppi`/`cn_m`/`sf_month` 用
 # 小写 month、`cn_pmi` 用大写 MONTH、`cn_gdp` 用 quarter、`fut_weekly_detail` 用 week_date。
-_DATE_COL_CANDIDATES = ("trade_date", "ann_date", "end_date", "date", "month",
-                        "cal_date", "MONTH", "quarter", "week_date")
+_DATE_COL_CANDIDATES = (
+    "trade_date",
+    "ann_date",
+    "end_date",
+    "date",
+    "month",
+    "cal_date",
+    "MONTH",
+    "quarter",
+    "week_date",
+)
 
 # 日更表名单（两组并集）
-_DAILY_TABLES = set(DAILY_UPDATE_GROUPS) | set(DAILY_UPDATE_EXTRA)
+# ⚠ D4（2026-11-21）：`DAILY_UPDATE_GROUPS` 的 **keys 是组名（core/extend）**，
+#   不是表名；原 `set(DAILY_UPDATE_GROUPS)` 只得到两个组标签，导致 extend 组
+#   的 44 张表被误判为「仅回补」档（D-P1-8）。这里必须取 values 的并集。
+_DAILY_TABLES = set(DAILY_UPDATE_EXTRA)
+for _group_tables in DAILY_UPDATE_GROUPS.values():
+    _DAILY_TABLES |= set(_group_tables)
 
 # §462 F-2：前置日历/计划/发布日表 —— `ds<0` 是设计如此（源端本就提供未来日期），
 # 判「正常（前置日历）」，不计异常。⛔ 只豁免这 12 张；新表须逐张核实后加入。
-FORWARD_LOOKING = frozenset({
-    "fut_trade_cal", "cn_schedule", "broker_recommend",
-    "macro_uk_cpi", "macro_jp_cpi", "macro_de_cpi", "macro_ca_cpi", "macro_au_cpi",
-    "macro_ca_gdp", "macro_uk_unemp", "macro_jp_unemp", "macro_au_unemp",
-})
+FORWARD_LOOKING = frozenset(
+    {
+        "fut_trade_cal",
+        "cn_schedule",
+        "broker_recommend",
+        "macro_uk_cpi",
+        "macro_jp_cpi",
+        "macro_de_cpi",
+        "macro_ca_cpi",
+        "macro_au_cpi",
+        "macro_ca_gdp",
+        "macro_uk_unemp",
+        "macro_jp_unemp",
+        "macro_au_unemp",
+    }
+)
 
 
 def total_registered():
@@ -78,6 +104,7 @@ def total_registered():
     同源，单测固化该等式。
     """
     from alt.spec import BY_NAME as _ALT
+
     return len(BACKFILL_TARGETS) + len(_ALT)
 
 
@@ -91,8 +118,9 @@ def _pick_date_col(table_dir, preferred):
     try:
         names = set(pq.read_schema(files[-1]).names)
     except Exception as exc:
-        print(f"[freshness] 读 schema 失败 {files[-1]}: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(
+            f"[freshness] 读 schema 失败 {files[-1]}: {type(exc).__name__}: {exc}", file=sys.stderr
+        )
         return None
     for c in _DATE_COL_CANDIDATES:
         if c in names:
@@ -142,8 +170,10 @@ def _note_unreadable(f, exc):
 
 def _report_unreadable():
     if _UNREADABLE:
-        print(f"[freshness] ⚠ {len(_UNREADABLE)} 个分片读取失败"
-              f"（最新日期可能判老，停更结论需复核）", file=sys.stderr)
+        print(
+            f"[freshness] ⚠ {len(_UNREADABLE)} 个分片读取失败（最新日期可能判老，停更结论需复核）",
+            file=sys.stderr,
+        )
 
 
 def _latest_in_files(files, dc):
@@ -200,8 +230,7 @@ def _days_since_iso(s):
     try:
         return max(0, (datetime.now() - datetime.fromisoformat(str(s))).days)
     except Exception as exc:
-        print(f"[freshness] ISO 时间戳解析失败 {s!r}: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"[freshness] ISO 时间戳解析失败 {s!r}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
@@ -231,8 +260,7 @@ def _load_ckpt(path):
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
     except Exception as exc:
-        print(f"[freshness] 读断点失败 {path}: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(f"[freshness] 读断点失败 {path}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return {}
 
 
@@ -271,18 +299,25 @@ def _market_rows(only=None):
         dc = _pick_date_col(d, TABLE_DATE_COL.get(name))
         as_of, how = _as_of(d, dc) if dc else (None, "未登记日期列")
         rec = cp.get(name, {}) if isinstance(cp.get(name), dict) else {}
-        rows.append({
-            "lib": "market", "table": name, "as_of": as_of,
-            "last_pull": rec.get("last_fetch"),
-            "last_pull_rows": rec.get("last_fetch_rows"),
-            "tier": "daily" if name in _DAILY_TABLES else "backfill",
-            "newest_mtime": _newest_mtime(d), "source": how, "stale_days": None,
-        })
+        rows.append(
+            {
+                "lib": "market",
+                "table": name,
+                "as_of": as_of,
+                "last_pull": rec.get("last_fetch"),
+                "last_pull_rows": rec.get("last_fetch_rows"),
+                "tier": "daily" if name in _DAILY_TABLES else "backfill",
+                "newest_mtime": _newest_mtime(d),
+                "source": how,
+                "stale_days": None,
+            }
+        )
     return rows
 
 
 def _alt_rows(only=None):
     from alt.spec import BY_NAME
+
     cp = _load_ckpt(ALT_CKPT)
     root = os.path.dirname(ALT_CKPT)
     rows = []
@@ -298,12 +333,19 @@ def _alt_rows(only=None):
         else:
             as_of, how = _as_of(d, sp.date_col)
         rec = cp.get(name, {}) if isinstance(cp.get(name), dict) else {}
-        rows.append({
-            "lib": "alt", "table": name, "as_of": as_of, "last_pull": rec.get("last_attempt"),
-            "last_pull_rows": None,
-            "tier": "alt", "newest_mtime": _newest_mtime(d), "source": how,
-            "stale_days": int(getattr(sp, "max_age_days", 120) or 120),
-        })
+        rows.append(
+            {
+                "lib": "alt",
+                "table": name,
+                "as_of": as_of,
+                "last_pull": rec.get("last_attempt"),
+                "last_pull_rows": None,
+                "tier": "alt",
+                "newest_mtime": _newest_mtime(d),
+                "source": how,
+                "stale_days": int(getattr(sp, "max_age_days", 120) or 120),
+            }
+        )
     return rows
 
 
@@ -313,6 +355,7 @@ def build_rows(only=None):
     _alt_specs = {}
     if any(r["lib"] == "alt" for r in rows):
         from alt.spec import BY_NAME as _ALT_BY_NAME  # 惰性导入（同 _alt_rows）
+
         _alt_specs = _ALT_BY_NAME
     for r in rows:
         d = _to_date(r["as_of"])
@@ -342,8 +385,7 @@ def build_rows(only=None):
             # 静态名录表：无「内容日期」语义 ⇒ 只判「目录存在且有 parquet」。
             # 取舍：config 里的 min_rows 下限**本版不校验** —— 逐表全量读行数
             #       成本太高（_as_of 只抽样 2~3 个分区），留作后续判据再启用。
-            _root = (MARKET_DATA_DIR if r["lib"] == "market"
-                     else os.path.dirname(ALT_CKPT))
+            _root = MARKET_DATA_DIR if r["lib"] == "market" else os.path.dirname(ALT_CKPT)
             _has = bool(glob.glob(os.path.join(_root, name, "*.parquet")))
             r["verdict"] = "正常" if _has else "红"
             r["note"] = "静态名录"
@@ -377,7 +419,7 @@ def build_rows(only=None):
             _pr = PENDING_REFRESH[name]
             r["verdict"] = "待补拉"
             r["note"] = f"补拉计划: {_pr['plan']}（{_pr['decided']} 决定）"
-        r["diag"] = _diag(r)          # CC-FIX-7：诊断列（不参与 verdict）
+        r["diag"] = _diag(r)  # CC-FIX-7：诊断列（不参与 verdict）
     return rows
 
 
@@ -388,12 +430,14 @@ def render(rows, n_total=None):
              --only/--stale 变化）。
     """
     n_total = total_registered() if n_total is None else n_total
-    head = (f"{'库':6s} {'表':24s} {'最新数据日':10s} {'ds':>4s} {'dw':>4s} "
-            f"{'最近拉取':20s} {'诊断':18s} {'档':9s} 判定")
+    head = (
+        f"{'库':6s} {'表':24s} {'最新数据日':10s} {'ds':>4s} {'dw':>4s} "
+        f"{'最近拉取':20s} {'诊断':18s} {'档':9s} 判定"
+    )
     lines = [
-        f"[说明] v4.10 起默认展示全部 {n_total} 张表"
-        f"（旧版默认 18 张核心表）；用 --only 收窄。",
-        head, "-" * 110,
+        f"[说明] v4.10 起默认展示全部 {n_total} 张表（旧版默认 18 张核心表）；用 --only 收窄。",
+        head,
+        "-" * 110,
     ]
     for r in rows:
         _note = f"  ({r['note']})" if r.get("note") else ""
@@ -401,39 +445,51 @@ def render(rows, n_total=None):
             f"{r['lib']:6s} {r['table']:24s} {r['as_of_date'] or '-'!s:10s} "
             f"{('-' if r['ds'] is None else r['ds']):>4} {('-' if r['dw'] is None else r['dw']):>4} "
             f"{r['last_pull'] or '未知'!s:20s} {r.get('diag') or '':18s} "
-            f"{r['tier']:9s} {r['verdict']}{_note}")
+            f"{r['tier']:9s} {r['verdict']}{_note}"
+        )
     n_red = sum(1 for r in rows if r["verdict"] == "红")
     n_yel = sum(1 for r in rows if r["verdict"] == "黄")
     n_unk = sum(1 for r in rows if r["verdict"] == "未知")
     n_stale = sum(1 for r in rows if r["verdict"] == "已停更")
     n_pend = sum(1 for r in rows if r["verdict"] == "待补拉")
     lines.append("-" * 110)
-    lines.append(f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk - n_stale - n_pend} | "
-                 f"待补拉 {n_pend} | 黄 {n_yel} | 红 {n_red} | 已停更 {n_stale} | 未知 {n_unk}")
+    lines.append(
+        f"合计 {len(rows)} 张表：正常 {len(rows) - n_red - n_yel - n_unk - n_stale - n_pend} | "
+        f"待补拉 {n_pend} | 黄 {n_yel} | 红 {n_red} | 已停更 {n_stale} | 未知 {n_unk}"
+    )
     _diag_ct = {"已拉取·源端无更新": 0, "拉取记录陈旧": 0, "无拉取记录": 0, "目录缺失": 0}
     for r in rows:
         if r.get("diag") in _diag_ct:
             _diag_ct[r["diag"]] += 1
-    lines.append(f"诊断: 已拉取·源端无更新 {_diag_ct['已拉取·源端无更新']} | "
-                 f"拉取记录陈旧 {_diag_ct['拉取记录陈旧']} | "
-                 f"无拉取记录 {_diag_ct['无拉取记录']} | "
-                 f"目录缺失 {_diag_ct['目录缺失']}")
+    lines.append(
+        f"诊断: 已拉取·源端无更新 {_diag_ct['已拉取·源端无更新']} | "
+        f"拉取记录陈旧 {_diag_ct['拉取记录陈旧']} | "
+        f"无拉取记录 {_diag_ct['无拉取记录']} | "
+        f"目录缺失 {_diag_ct['目录缺失']}"
+    )
     if n_red or n_yel:
         lines.append("红表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "红"))
         lines.append("黄表: " + ", ".join(r["table"] for r in rows if r["verdict"] == "黄"))
     if n_pend:
-        lines.append("待补拉: " + ", ".join(
-            r["table"] for r in rows if r["verdict"] == "待补拉"))
+        lines.append("待补拉: " + ", ".join(r["table"] for r in rows if r["verdict"] == "待补拉"))
     if n_stale:
-        lines.append("已停更: " + ", ".join(
-            f"{r['table']}({STALE_BY_DESIGN.get(r['table'], {}).get('since', '源端停更')})"
-            for r in rows if r["verdict"] == "已停更"))
+        lines.append(
+            "已停更: "
+            + ", ".join(
+                f"{r['table']}({STALE_BY_DESIGN.get(r['table'], {}).get('since', '源端停更')})"
+                for r in rows
+                if r["verdict"] == "已停更"
+            )
+        )
     n_future = sum(1 for r in rows if r["ds"] is not None and r["ds"] < 0)
     if n_future:
         # F-6（§465.5）：信息展示，**不参与五档计数**；按传入 rows（含 --stale 过滤后）算。
-        lines.append("含未来数据: " + ", ".join(
-            f"{r['table']}(ds={r['ds']})" for r in rows
-            if r["ds"] is not None and r["ds"] < 0))
+        lines.append(
+            "含未来数据: "
+            + ", ".join(
+                f"{r['table']}(ds={r['ds']})" for r in rows if r["ds"] is not None and r["ds"] < 0
+            )
+        )
     lines.append("说明: ds=内容最新日期距今天数, dw=文件最新 mtime 距今天数; dw≤7 视为刚写过→绿")
     lines.append("      默认恒 exit 0；--strict 时存在红/黄才非零")
     return "\n".join(lines)
@@ -453,16 +509,20 @@ def run(only=None, as_json=False, strict=False):
             print(f"[freshness] 生成失败（默认仍 exit 0）: {exc!r}")
         return 0
     n_alert = sum(1 for r in rows if r["verdict"] in ("红", "黄"))
-    n_unread = len(_UNREADABLE)          # K′：读不出来的分片让结论不可信
+    n_unread = len(_UNREADABLE)  # K′：读不出来的分片让结论不可信
     if as_json:
-        print(json.dumps({"ok": True, "rows": rows,
-                          "n_alert": n_alert, "n_unreadable": n_unread},
-                         ensure_ascii=False, indent=1))
+        print(
+            json.dumps(
+                {"ok": True, "rows": rows, "n_alert": n_alert, "n_unreadable": n_unread},
+                ensure_ascii=False,
+                indent=1,
+            )
+        )
     else:
         print(render(rows))
     _report_unreadable()
     if strict and n_alert:
         return 1
-    if strict and n_unread:              # K′：strict 下读不全不得报绿
+    if strict and n_unread:  # K′：strict 下读不全不得报绿
         return 3
     return 0

@@ -41,6 +41,20 @@
 - 被依赖：仅 `main.py` 直接 import 本包；`tools/regress_pipeline.py` 经 `from main import build_parser` 与 `hasattr` 断言，间接受本包契约约束。
 - 禁止反向依赖：`cli` 顶层不得 import `fetch`/`tools`/`alt`/`push`（避免启动开销与循环导入）；`fetch`/`tools`/`alt` 不得 import `cli`。
 
+## 退出码契约（D2，2026-11-21）
+
+| rc | 含义 | 典型来源 |
+| --- | --- | --- |
+| `0` | 成功（含显式 `source_empty` 且该表档位允许） | 全部业务步骤成功；只读命令未返回 `int`（`None` 按 0） |
+| `1` | 受控业务失败（任一表 / 任一日 / 任一段失败） | `gap-update` `fail>0`；`redtide-supply` 子步骤异常；`fund-nav` 失败数>0；`download-*` / `backfill` 异常或返回失败；`alt-update` 任一表 `ok=False` 或 `errors` 非空 |
+| `2` | 用法或配置错误 | argparse 参数缺失/非法；`schedule` 预算超限（`fetch/schedule_runner.run` 既有约定） |
+
+- `app.main` 对 `None` 按 0 处理（只读命令兼容）；业务命令必须显式返回 `int`。
+- 实例锁冲突固定归 `1`（`fetch/schedule_runner._InstanceLock` 以 `SystemExit` 退出）。
+- `--json` 模式只约束 stdout 为纯 JSON，不改变退出码；失败提示写 stderr。
+- 计划任务 bat 依赖 `if errorlevel 1`；业务失败必须落到 `1`，否则 `FAIL_MAIN` 分支不会触发。
+- 已知缺口：`fetch/full_download.run_download`、`fetch/cb_download.run_cb_download`、`fetch/backfill.run_backfill` 的内部失败计数尚未返回，D2 只接通异常路径；`fund-nav` 的失败计数随 D4 的 `fund_nav_update` 改造提供，CLI 已支持 dict / 三元组两种透传形态。
+
 ## 红线
 
 - `main.py` 的 `build_parser` / `cmd_gap_update` / `cmd_leverage` / `cmd_etf_flow` re-export 被 `regress_pipeline` R5 断言依赖，禁删。

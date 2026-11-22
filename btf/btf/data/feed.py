@@ -7,6 +7,7 @@
     - 只读、可重复调用（同参数同结果）、无副作用；
     - 停牌股当日不在 bars 截面 map 中（库内口径：停牌日 daily 无行）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from btf.config.paths import MARKET_DATA_DIR
-from btf.data.tables_meta import daily_table_of
+from btf.data.tables_meta import DAILY_ENGINE_COLUMNS, daily_table_of
 from btf.domain.action import CorporateAction
 from btf.domain.cache import BoundedDict
 from btf.domain.contracts import CONTRACT_VERSION
@@ -29,9 +30,9 @@ _DIV_MAX_LAG_YEARS = 5
 #: corporate_actions 进程内 memo（IO-3）：键 (root, start, end, symbols) →
 #: (行动元组, P18 合并披露)。
 #: 网格搜索逐组合调用同一区间（原每组合全表读 ≈0.7s）；主库只读 → 结果稳定。
-_CORPORATE_ACTIONS_CACHE: BoundedDict[tuple[str, str, str, tuple | None],
-                                      tuple] = BoundedDict(
-    maxsize=32, name="feed.corporate_actions")
+_CORPORATE_ACTIONS_CACHE: BoundedDict[
+    tuple[str, str, str, tuple | None, tuple[int, int, str]], tuple
+] = BoundedDict(maxsize=32, name="feed.corporate_actions")
 
 
 @runtime_checkable
@@ -58,8 +59,9 @@ class DataFeed(Protocol):
 
     def bars_of(self, symbol: str, start: TradingDate, end: TradingDate) -> list[Bar]: ...
 
-    def history(self, symbol: str, end: TradingDate,
-                fields: Sequence[str] | None = None, n_bars: int = 1) -> list[Bar]:
+    def history(
+        self, symbol: str, end: TradingDate, fields: Sequence[str] | None = None, n_bars: int = 1
+    ) -> list[Bar]:
         """截至 end（含）最近 n_bars 个 bar（升序；研究/预计算用）。
 
         fields 预留（列裁剪优化，PoC 全字段返回）；重负载路径应使用
@@ -72,8 +74,11 @@ class DataFeed(Protocol):
     ) -> Iterator[tuple[TradingDate, Mapping[str, Bar]]]: ...
 
     def trading_states(
-        self, date: TradingDate, symbols: Sequence[str] | None = None,
-        *, with_touch_flags: bool = True,
+        self,
+        date: TradingDate,
+        symbols: Sequence[str] | None = None,
+        *,
+        with_touch_flags: bool = True,
     ) -> Mapping[str, object]:
         """with_touch_flags=False：跳过收盘触板标记合成（撮合路径优化，
         B2 依据：触板判定需读 daily 年表——月调仓 120 执行日×~0.15s ≈ 18s
@@ -81,7 +86,9 @@ class DataFeed(Protocol):
         ...
 
     def corporate_actions(
-        self, start: TradingDate, end: TradingDate,
+        self,
+        start: TradingDate,
+        end: TradingDate,
         symbols: Sequence[str] | None = None,
     ) -> list[CorporateAction]:
         """区间全市场实施态行动（PoC-3 任务 3.2；引擎步骤①装载源）。
@@ -111,8 +118,10 @@ def _to_bar(row: Mapping, conversions: Mapping[str, float]) -> Bar | None:
     return Bar(
         symbol=row["ts_code"],
         date=TradingDate.from_ymd(row["trade_date"]),
-        open=float(row["open"]), high=float(row["high"]),
-        low=float(row["low"]), close=float(row["close"]),
+        open=float(row["open"]),
+        high=float(row["high"]),
+        low=float(row["low"]),
+        close=float(row["close"]),
         pre_close=float(row["pre_close"]),
         volume=(float(row["vol"]) if row.get("vol") is not None else 0.0) * vol_f,
         amount=(float(row["amount"]) if row.get("amount") is not None else 0.0) * amt_f,
@@ -172,14 +181,18 @@ class _LazyCrossSection(Mapping):
                     code = codes[i]
                     if flt is not None and code not in flt:
                         continue
-                    if (opens[i] is None or highs[i] is None
-                            or lows[i] is None or closes_col[i] is None
-                            or pres[i] is None):
-                        continue                 # 坏行剔除（05 §20.4）
+                    if (
+                        opens[i] is None
+                        or highs[i] is None
+                        or lows[i] is None
+                        or closes_col[i] is None
+                        or pres[i] is None
+                    ):
+                        continue  # 坏行剔除（05 §20.4）
                     out[code] = closes_col[i]
                 self._closes = out
             return self._closes
-        if self._closes is not None:             # 已物化 → 直接筛
+        if self._closes is not None:  # 已物化 → 直接筛
             return {s: self._closes[s] for s in wanted if s in self._closes}
         c = self._cols
         codes = c["ts_code"]
@@ -193,8 +206,13 @@ class _LazyCrossSection(Mapping):
             code = codes[i]
             if code not in subset:
                 continue
-            if (opens[i] is None or highs[i] is None or lows[i] is None
-                    or closes_col[i] is None or pres[i] is None):
+            if (
+                opens[i] is None
+                or highs[i] is None
+                or lows[i] is None
+                or closes_col[i] is None
+                or pres[i] is None
+            ):
                 continue
             picked[code] = closes_col[i]
         return picked
@@ -225,8 +243,13 @@ class _LazyCrossSection(Mapping):
                 v = vols[i]
                 a = amounts[i]
                 out[code] = Bar(
-                    symbol=code, date=td,
-                    open=o, high=h, low=lo, close=cl, pre_close=p,
+                    symbol=code,
+                    date=td,
+                    open=o,
+                    high=h,
+                    low=lo,
+                    close=cl,
+                    pre_close=p,
                     volume=(v if v is not None else 0.0) * vol_f,
                     amount=(a if a is not None else 0.0) * amt_f,
                 )
@@ -250,8 +273,13 @@ class _LazyCrossSection(Mapping):
             return None
         v, a = c["vol"][i], c["amount"][i]
         return Bar(
-            symbol=c["ts_code"][i], date=TradingDate.from_ymd(c["trade_date"][i]),
-            open=o, high=h, low=lo, close=cl, pre_close=p,
+            symbol=c["ts_code"][i],
+            date=TradingDate.from_ymd(c["trade_date"][i]),
+            open=o,
+            high=h,
+            low=lo,
+            close=cl,
+            pre_close=p,
             volume=(v if v is not None else 0.0) * self._conv.get("vol", 1.0),
             amount=(a if a is not None else 0.0) * self._conv.get("amount", 1000.0),
         )
@@ -264,11 +292,11 @@ class _LazyCrossSection(Mapping):
             raise KeyError(key)
         bar = self._bar_at(i)
         if bar is None:
-            raise KeyError(key)       # 坏行=截面缺席
+            raise KeyError(key)  # 坏行=截面缺席
         return bar
 
     def keys(self):  # Mapping.keys 覆盖：列切片，不物化 Bar
-        codes = self._cols["ts_code"][self._lo:self._hi]
+        codes = self._cols["ts_code"][self._lo : self._hi]
         if self._wanted is None:
             return codes
         return [c for c in codes if c in self._wanted]
@@ -291,8 +319,11 @@ def _board_of(ts_code: str, market: str | None) -> str:
     """板块判定：market 列优先，缺列按代码前缀推断（MVP 口径）。"""
     if market:
         return {
-            "主板": "main", "中小板": "main", "创业板": "gem",
-            "科创板": "star", "北交所": "bse",
+            "主板": "main",
+            "中小板": "main",
+            "创业板": "gem",
+            "科创板": "star",
+            "北交所": "bse",
         }.get(market, "main")
     prefix = ts_code[:2]
     if prefix in {"60", "00"}:
@@ -301,7 +332,7 @@ def _board_of(ts_code: str, market: str | None) -> str:
         return "star"
     if prefix == "30":
         return "gem"
-    return "bse"                       # 43/83/87/92 等
+    return "bse"  # 43/83/87/92 等
 
 
 class TushareParquetFeed:
@@ -334,7 +365,8 @@ class TushareParquetFeed:
 
         self._meta = TABLES
         self._daily_conversions = {
-            "vol": 100.0, "amount": 1000.0,
+            "vol": 100.0,
+            "amount": 1000.0,
         }
         self._state = state_provider
         # EX-4 完全体（19 号 §49）：取数**只经 core**（原 6 处直呼 parquet_reader）
@@ -362,7 +394,8 @@ class TushareParquetFeed:
             raise RuntimeError(
                 "状态面板未注入：`TushareParquetFeed.states/trading_states` 需要 "
                 "`StateSynthesizer`。经 `BTFRuntime` 运行会自动注入；直接构造请传 "
-                "`state_provider=StateSynthesizer(root)`（R4 已反转 feed→state 依赖边）")
+                "`state_provider=StateSynthesizer(root)`（R4 已反转 feed→state 依赖边）"
+            )
         return self._state
 
     @property
@@ -399,8 +432,7 @@ class TushareParquetFeed:
 
         return self._stock_basic_instruments(alive)
 
-    def universe_span(self, start: TradingDate,
-                      end: TradingDate) -> list[Instrument]:
+    def universe_span(self, start: TradingDate, end: TradingDate) -> list[Instrument]:
         """**[start, end] 期间宇宙并集**（19 号 §20.3 / P0-NEW-4）。
 
         为什么需要：`universe(date)` 本身**逐日动态**（`list_date ≤ d ≤
@@ -451,7 +483,8 @@ class TushareParquetFeed:
         return self._stock_basic_rows_cache
 
     def _stock_basic_instruments(
-        self, alive,      # (list_date, delist_date) -> bool
+        self,
+        alive,  # (list_date, delist_date) -> bool
     ) -> list[Instrument]:
         """stock_basic → Instrument 列表（`universe` / `universe_span` 共用）。
 
@@ -465,20 +498,23 @@ class TushareParquetFeed:
             if not alive(listed, delisted):
                 continue
             code = r["ts_code"]
-            out.append(Instrument(
-                symbol=code,
-                asset_class=AssetClass.STOCK,
-                name=r.get("name") or "",
-                board=_board_of(code, r.get("market")),
-                lot_size=100,
-                list_date=(TradingDate.from_ymd(listed) if listed else None),
-                delist_date=(TradingDate.from_ymd(delisted) if delisted else None),
-            ))
+            out.append(
+                Instrument(
+                    symbol=code,
+                    asset_class=AssetClass.STOCK,
+                    name=r.get("name") or "",
+                    board=_board_of(code, r.get("market")),
+                    lot_size=100,
+                    list_date=(TradingDate.from_ymd(listed) if listed else None),
+                    delist_date=(TradingDate.from_ymd(delisted) if delisted else None),
+                )
+            )
         out.sort(key=lambda i: i.symbol)
         return out
 
-    def history(self, symbol: str, end: TradingDate,
-                fields: Sequence[str] | None = None, n_bars: int = 1) -> list[Bar]:
+    def history(
+        self, symbol: str, end: TradingDate, fields: Sequence[str] | None = None, n_bars: int = 1
+    ) -> list[Bar]:
         """截至 end 最近 n_bars 个 bar（协议口径；无 engine 生命周期缓存，
         重负载走 StrategyContext.history）。"""
         bars = self.bars_of(symbol, TradingDate.from_ymd("19901219"), end)
@@ -494,10 +530,11 @@ class TushareParquetFeed:
         daily_table: str = "daily",
     ) -> list[Bar]:
         t = self._store.read_codes(
-            daily_table, [symbol],
-            start.to_ymd(), end.to_ymd(),
-            columns=["ts_code", "trade_date", "open", "high", "low",
-                     "close", "pre_close", "vol", "amount"],
+            daily_table,
+            [symbol],
+            start.to_ymd(),
+            end.to_ymd(),
+            columns=list(DAILY_ENGINE_COLUMNS),
         )
         # 无行情（未上市/退市/区间外）→ 空表无列，直接返回 []（不得进
         # sort_by——`read_codes` 空结果返回 `pa.table({})`，实测 ArrowInvalid）
@@ -532,26 +569,32 @@ class TushareParquetFeed:
     ) -> Iterator[tuple[TradingDate, Mapping[str, Bar]]]:
         wanted = set(symbols) if symbols is not None else None
         for ymd, cols, lo, hi in self._store.iter_day_slices(
-            daily_table, start.to_ymd(), end.to_ymd(),
-            columns=["ts_code", "trade_date", "open", "high", "low",
-                     "close", "pre_close", "vol", "amount"],
+            daily_table,
+            start.to_ymd(),
+            end.to_ymd(),
+            columns=list(DAILY_ENGINE_COLUMNS),
             symbols=list(wanted) if wanted is not None else None,
         ):
-            yield TradingDate.from_ymd(ymd), _LazyCrossSection(
-                cols, lo, hi, self._daily_conversions, wanted
+            yield (
+                TradingDate.from_ymd(ymd),
+                _LazyCrossSection(cols, lo, hi, self._daily_conversions, wanted),
             )
 
     # ── 状态面板（1.6 交付；2.5 撮合路径加 with_touch_flags 裁剪）──
     def trading_states(
-        self, date: TradingDate, symbols: Sequence[str] | None = None,
-        *, with_touch_flags: bool = True,
+        self,
+        date: TradingDate,
+        symbols: Sequence[str] | None = None,
+        *,
+        with_touch_flags: bool = True,
     ) -> Mapping[str, object]:
-        return self._require_state().states(
-            date, symbols, with_touch_flags=with_touch_flags)
+        return self._require_state().states(date, symbols, with_touch_flags=with_touch_flags)
 
     # ── 公司行动（PoC-3 任务 3.2：dividend 实施态 → CorporateAction）──
     def corporate_actions(
-        self, start: TradingDate, end: TradingDate,
+        self,
+        start: TradingDate,
+        end: TradingDate,
         symbols: Sequence[str] | None = None,
     ) -> list[CorporateAction]:
         """区间全市场实施态行动（升序 ex_date；引擎步骤①装载源）。
@@ -599,7 +642,10 @@ class TushareParquetFeed:
         # 仅对 `is_fund_code` 标的装载；全市场口径（symbols=None）维持股票侧
         # 原语义（全市场宇宙来自 `stock_basic`，**不含 ETF** ⇒ 无需 ETF 事件）。
         sym_key = tuple(sorted(set(symbols))) if symbols else None
-        memo_key = (str(self.root), start.to_ymd(), end.to_ymd(), sym_key)
+        # D8：键并入主库版本戳——日更后公司行动缓存自动失效。
+        from btf.data.parquet_reader import data_stamp
+
+        memo_key = (str(self.root), start.to_ymd(), end.to_ymd(), sym_key, data_stamp(self.root))
         cached = _CORPORATE_ACTIONS_CACHE.get(memo_key)
         if cached is not None:
             self.dividend_dedup_note = cached[1]
@@ -609,18 +655,31 @@ class TushareParquetFeed:
         years = list(range(y0 - _DIV_MAX_LAG_YEARS, y1 + 1))
         t = self._store.read_full(
             "dividend",
-            columns=["ts_code", "ex_date", "pay_date", "record_date",
-                     "ann_date", "div_proc", "stk_bo_rate", "stk_co_rate",
-                     "cash_div", "end_date"],
+            columns=[
+                "ts_code",
+                "ex_date",
+                "pay_date",
+                "record_date",
+                "ann_date",
+                "div_proc",
+                "stk_bo_rate",
+                "stk_co_rate",
+                "cash_div",
+                "end_date",
+            ],
             years=years,
         )
         import pyarrow.compute as pc
 
-        t = t.filter(pc.and_(
-            pc.and_(pc.equal(t.column("div_proc"), "实施"),
-                    pc.greater_equal(t.column("ex_date"), start.to_ymd())),
-            pc.less_equal(t.column("ex_date"), end.to_ymd()),
-        ))
+        t = t.filter(
+            pc.and_(
+                pc.and_(
+                    pc.equal(t.column("div_proc"), "实施"),
+                    pc.greater_equal(t.column("ex_date"), start.to_ymd()),
+                ),
+                pc.less_equal(t.column("ex_date"), end.to_ymd()),
+            )
+        )
         seen: set[tuple] = set()
         out: list[CorporateAction] = []
         n_rows = 0
@@ -631,32 +690,41 @@ class TushareParquetFeed:
             # **P18（19 号 §165）**：去重键**不含 `end_date`**——同日业务参数
             # 全同即重复公告（含同参数但 `end_date` 不同的多年度写法）；
             # 金额/送转不同 ⇒ key 不同 ⇒ 真实多笔照常保留。
-            key = (r["ts_code"], r["ex_date"], r["pay_date"], r["record_date"],
-                   float(r["stk_bo_rate"] or 0.0),
-                   float(r["stk_co_rate"] or 0.0),
-                   float(r["cash_div"] or 0.0))
+            key = (
+                r["ts_code"],
+                r["ex_date"],
+                r["pay_date"],
+                r["record_date"],
+                float(r["stk_bo_rate"] or 0.0),
+                float(r["stk_co_rate"] or 0.0),
+                float(r["cash_div"] or 0.0),
+            )
             if key in seen:
                 continue
             seen.add(key)
-            out.append(CorporateAction(
-                symbol=r["ts_code"],
-                ex_date=TradingDate.from_ymd(r["ex_date"]),
-                pay_date=(TradingDate.from_ymd(r["pay_date"])
-                          if r["pay_date"] else None),
-                record_date=(TradingDate.from_ymd(r["record_date"])
-                             if r["record_date"] else None),
-                cash_div_per_share=float(r["cash_div"] or 0.0),
-                stk_div_per_share=(float(r["stk_bo_rate"] or 0.0)
-                                   + float(r["stk_co_rate"] or 0.0)),
-                ann_date=(TradingDate.from_ymd(r["ann_date"])
-                          if r["ann_date"] else None),
-            ))
+            out.append(
+                CorporateAction(
+                    symbol=r["ts_code"],
+                    ex_date=TradingDate.from_ymd(r["ex_date"]),
+                    pay_date=(TradingDate.from_ymd(r["pay_date"]) if r["pay_date"] else None),
+                    record_date=(
+                        TradingDate.from_ymd(r["record_date"]) if r["record_date"] else None
+                    ),
+                    cash_div_per_share=float(r["cash_div"] or 0.0),
+                    stk_div_per_share=(
+                        float(r["stk_bo_rate"] or 0.0) + float(r["stk_co_rate"] or 0.0)
+                    ),
+                    ann_date=(TradingDate.from_ymd(r["ann_date"]) if r["ann_date"] else None),
+                )
+            )
         merged = n_rows - len(out)
         #: **P18 披露**：本次区间合并掉的重复公告条数（0 ⇒ 空串，不恒现）。
         self.dividend_dedup_note = (
             f"dividend 同日重复公告合并 {merged} 条（业务参数全同、仅 "
             f"`end_date`/`ann_date` 不同；保留首行；P18 / 19 号 §165）"
-            if merged else "")
+            if merged
+            else ""
+        )
         # ── CL-2 第二段（R3′/R4′；19 号 §79.4）配股 / 缩股事件并入 ──
         # 来源＝离线清单 adapter（`btf.data.corp_action_probe`：akshare 快照
         # ＋ 本地 `adj_factor` 跳变真值；**不写主库**）。清单缺失 ⇒ 空表 +
@@ -673,7 +741,8 @@ class TushareParquetFeed:
             from btf.data.etf_corp_actions import to_etf_corporate_actions
 
             etf_acts, etf_notes, etf_summary = to_etf_corporate_actions(
-                self.root, sym_key, start, end)
+                self.root, sym_key, start, end
+            )
             if etf_acts:
                 out.extend(etf_acts)
             self.etf_action_notes = list(etf_notes)
@@ -761,29 +830,36 @@ class MixedDailyFeed:
     daily_tables = frozenset({"daily", "fund_daily", "index_daily"})
 
     #: 日线列（三表同构，05 §9.4 T-01 / T-12）
-    COLUMNS = ("ts_code", "trade_date", "open", "high", "low",
-               "close", "pre_close", "vol", "amount")
+    COLUMNS = (
+        "ts_code",
+        "trade_date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "pre_close",
+        "vol",
+        "amount",
+    )
 
     def __init__(self, root: Path | None = None, *, state_provider: Any = None):
         self.root = Path(root) if root else MARKET_DATA_DIR
         # R4：状态面板经构造期注入透传给股票侧原型（本模块亦不 import state）
-        self._delegate = TushareParquetFeed(self.root,
-                                            state_provider=state_provider)
-        self._state = state_provider          # 仅为 delegate 同源校验/披露
+        self._delegate = TushareParquetFeed(self.root, state_provider=state_provider)
+        self._state = state_provider  # 仅为 delegate 同源校验/披露
         from btf.data.core import YearTableStore
 
         self._store = YearTableStore(self.root)
         #: PF-9/P2-5：原无界 dict（键=预载过的标的）→ LRU 有界
-        self._bars_cache: BoundedDict[
-            str, tuple[TradingDate, TradingDate, list[Bar]]] = BoundedDict(
-                maxsize=8_000, name="mixed_feed.bars")
+        self._bars_cache: BoundedDict[str, tuple[TradingDate, TradingDate, list[Bar]]] = (
+            BoundedDict(maxsize=8_000, name="mixed_feed.bars")
+        )
 
     # ── 委托股票侧原型 ──
     def universe(self, date: TradingDate) -> list[Instrument]:
         return self._delegate.universe(date)
 
-    def universe_span(self, start: TradingDate,
-                      end: TradingDate) -> list[Instrument]:
+    def universe_span(self, start: TradingDate, end: TradingDate) -> list[Instrument]:
         """期间宇宙并集（P0-NEW-4）——委托股票侧原型（同 `universe`）。
 
         P2-NEW-4（19 号 §22.3）：委托须 `getattr` 兜底——delegate 若为自定义
@@ -808,26 +884,25 @@ class MixedDailyFeed:
         """状态面板合成器（`degraded_notes()` 等披露信息来源）。"""
         return self._delegate.states
 
-    def preload(self, symbols: Sequence[str],
-                start: TradingDate, end: TradingDate) -> int:
+    def preload(self, symbols: Sequence[str], start: TradingDate, end: TradingDate) -> int:
         """批量预载（V3-1 性能）：每表**一次**区间读 → 逐标的缓存。
 
         逐标的 `bars_of` 会按年重复读文件（88 标的 × 8 年 ≈700 次读）；
         整段回测（如奇点复跑）先经本方法预热——每表仅 3 次读。返回标的数。
         """
         groups: dict[str, list[str]] = {}
-        for sym in dict.fromkeys(symbols):        # 去重且保序
+        for sym in dict.fromkeys(symbols):  # 去重且保序
             groups.setdefault(daily_table_of(sym), []).append(sym)
         loaded = 0
         for table, syms in sorted(groups.items()):
-            t = self._store.read_codes(table, syms, start.to_ymd(), end.to_ymd(),
-                           columns=list(self.COLUMNS))
+            t = self._store.read_codes(
+                table, syms, start.to_ymd(), end.to_ymd(), columns=list(self.COLUMNS)
+            )
             t = t.sort_by([("ts_code", "ascending"), ("trade_date", "ascending")])
             cols = {n: t.column(n).to_pylist() for n in t.column_names}
             grouped: dict[str, list[Bar]] = {}
             for i in range(t.num_rows):
-                bar = _to_bar({n: cols[n][i] for n in t.column_names},
-                              self._delegate.conversions)
+                bar = _to_bar({n: cols[n][i] for n in t.column_names}, self._delegate.conversions)
                 if bar is not None:
                     grouped.setdefault(bar.symbol, []).append(bar)
             for sym, bars in grouped.items():
@@ -837,25 +912,32 @@ class MixedDailyFeed:
 
     # ── 单标的时序（按表路由 + 预载缓存）──
     def bars_of(
-        self, symbol: str, start: TradingDate, end: TradingDate, *,
+        self,
+        symbol: str,
+        start: TradingDate,
+        end: TradingDate,
+        *,
         daily_table: str | None = None,
     ) -> list[Bar]:
         cached = self._bars_cache.get(symbol)
         if cached is not None and start >= cached[0] and end <= cached[1]:
             return [b for b in cached[2] if start <= b.date <= end]
         return self._delegate.bars_of(
-            symbol, start, end,
-            daily_table=daily_table or daily_table_of(symbol))
+            symbol, start, end, daily_table=daily_table or daily_table_of(symbol)
+        )
 
     def trading_states(
-        self, date: TradingDate, symbols: Sequence[str] | None = None,
-        *, with_touch_flags: bool = True,
+        self,
+        date: TradingDate,
+        symbols: Sequence[str] | None = None,
+        *,
+        with_touch_flags: bool = True,
     ) -> Mapping[str, object]:
-        return self._delegate.trading_states(
-            date, symbols, with_touch_flags=with_touch_flags)
+        return self._delegate.trading_states(date, symbols, with_touch_flags=with_touch_flags)
 
-    def corporate_actions(self, start: TradingDate, end: TradingDate,
-                          symbols: Sequence[str] | None = None):
+    def corporate_actions(
+        self, start: TradingDate, end: TradingDate, symbols: Sequence[str] | None = None
+    ):
         return self._delegate.corporate_actions(start, end, symbols=symbols)
 
     @property
@@ -873,21 +955,26 @@ class MixedDailyFeed:
         """CL-2-H 覆盖段统计（透传；空 = 未请求）。"""
         return dict(getattr(self._delegate, "etf_scan_summary", {}) or {})
 
-    def history(self, symbol: str, end: TradingDate,
-                fields: Sequence[str] | None = None, n_bars: int = 1) -> list[Bar]:
+    def history(
+        self, symbol: str, end: TradingDate, fields: Sequence[str] | None = None, n_bars: int = 1
+    ) -> list[Bar]:
         bars = self.bars_of(symbol, TradingDate.from_ymd("19901219"), end)
         return bars[-n_bars:] if n_bars > 0 else []
 
     # ── 截面迭代（多表逐日归并；须显式 symbols）──
     def bars(
-        self, symbols: Sequence[str] | None,
-        start: TradingDate, end: TradingDate,
-        *, daily_table: str | None = None,
+        self,
+        symbols: Sequence[str] | None,
+        start: TradingDate,
+        end: TradingDate,
+        *,
+        daily_table: str | None = None,
     ) -> Iterator[tuple[TradingDate, Mapping[str, Bar]]]:
         if symbols is None:
             raise FeedError(
                 "混合表 Feed 不支持全市场截面（须显式 symbols）——engine 请经 "
-                "cross_section 传入交易宇宙；全市场口径请用 TushareParquetFeed")
+                "cross_section 传入交易宇宙；全市场口径请用 TushareParquetFeed"
+            )
         if daily_table is not None:
             raise FeedError("混合表 Feed 由代码段自动路由，不接受 daily_table 覆盖")
         wanted: dict[str, set[str]] = {"daily": set()}
@@ -900,14 +987,16 @@ class MixedDailyFeed:
         # `wanted[table]` 取行，少读的行本来就会被丢弃。
         iterators = {
             table: self._store.iter_day_slices(
-                table, start.to_ymd(), end.to_ymd(),
+                table,
+                start.to_ymd(),
+                end.to_ymd(),
                 columns=list(self.COLUMNS),
                 symbols=sorted(wanted[table]),
             )
-            for table in sorted(wanted) if wanted[table]
+            for table in sorted(wanted)
+            if wanted[table]
         }
-        heads = {table: next(iterator, None)
-                 for table, iterator in iterators.items()}
+        heads = {table: next(iterator, None) for table, iterator in iterators.items()}
         while any(head is not None for head in heads.values()):
             current = min(head[0] for head in heads.values() if head is not None)
             sections: list[Mapping[str, Bar]] = []
@@ -916,7 +1005,8 @@ class MixedDailyFeed:
                 if head is None or head[0] != current:
                     continue
                 _ymd, cols, lo, hi = head
-                sections.append(_LazyCrossSection(
-                    cols, lo, hi, self._delegate.conversions, wanted[table]))
+                sections.append(
+                    _LazyCrossSection(cols, lo, hi, self._delegate.conversions, wanted[table])
+                )
                 heads[table] = next(iterators[table], None)
             yield TradingDate.from_ymd(current), _MergedCrossSection(sections)

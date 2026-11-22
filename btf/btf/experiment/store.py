@@ -22,6 +22,7 @@ contract_version 兼容）。
 幂等（08 §13.7）：同参数重跑产出**新 run_id**（历史不可变）；run_id 撞名
 自动加序号后缀，绝不覆盖。
 """
+
 from __future__ import annotations
 
 import json
@@ -49,6 +50,34 @@ METRICS = "metrics.json"
 # ─────────────────────────────────────────────────────────────
 # 原子写
 # ─────────────────────────────────────────────────────────────
+def atomic_write_lines(path: Path, lines: Iterable[str], *, fsync: bool = True) -> None:
+    """原子写文本行（**逐行写入，不拼整串**；D11）。
+
+    与 `atomic_write_text` 同一落盘纪律（tmp → flush/fsync → `os.replace` →
+    父目录 fsync）；唯一差异是写入端为行迭代器——大产物（如 36 万行 fills）
+    不再先把整个文件拼成单个字符串，峰值内存从「全文 + 行列表」降为写入缓冲。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.tmp{os.getpid()}")
+    with tmp.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.writelines(lines)
+        if fsync:
+            fh.flush()
+            os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    if fsync:
+        try:
+            dir_fd = os.open(str(path.parent), os.O_RDONLY)
+        except OSError:  # Windows：目录不可 os.open
+            return
+        try:
+            os.fsync(dir_fd)  # POSIX：目录项替换落盘
+        except OSError:  # pragma: no cover
+            pass
+        finally:
+            os.close(dir_fd)
+
+
 def atomic_write_text(path: Path, text: str, *, fsync: bool = True) -> None:
     """原子写文本（tmp → **fsync** → os.replace ；父目录自动创建）。
 
@@ -60,33 +89,21 @@ def atomic_write_text(path: Path, text: str, *, fsync: bool = True) -> None:
     按 OSError 静默跳过（平台差异而非静默失败）。
     `fsync=False` 仅留给"临时/可重建"文件（默认 True 覆盖全部产物）。
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.tmp{os.getpid()}")
-    with tmp.open("w", encoding="utf-8", newline="\n") as fh:
-        fh.write(text)
-        if fsync:
-            fh.flush()
-            os.fsync(fh.fileno())
-    os.replace(tmp, path)
-    if fsync:
-        try:
-            dir_fd = os.open(str(path.parent), os.O_RDONLY)
-        except OSError:                              # Windows：目录不可 os.open
-            return
-        try:
-            os.fsync(dir_fd)                         # POSIX：目录项替换落盘
-        except OSError:                              # pragma: no cover
-            pass
-        finally:
-            os.close(dir_fd)
+    atomic_write_lines(path, [text], fsync=fsync)
 
 
 def _write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> int:
-    """原子写 JSONL（整文件一次性；返回行数）。"""
-    lines = [json.dumps(r, ensure_ascii=False, sort_keys=True, default=str)
-             for r in rows]
-    atomic_write_text(path, "".join(line + "\n" for line in lines))
-    return len(lines)
+    """原子写 JSONL（**逐行流式**；返回行数。D11）。"""
+    n = 0
+
+    def _lines() -> Iterable[str]:
+        nonlocal n
+        for r in rows:
+            n += 1
+            yield json.dumps(r, ensure_ascii=False, sort_keys=True, default=str) + "\n"
+
+    atomic_write_lines(path, _lines())
+    return n
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -111,31 +128,41 @@ def _ymd(value: Any) -> str | None:
 
 
 def _enc_fee(fee: Any) -> dict[str, float]:
-    return {"commission": float(getattr(fee, "commission", 0.0) or 0.0),
-            "stamp_duty": float(getattr(fee, "stamp_duty", 0.0) or 0.0),
-            "transfer_fee": float(getattr(fee, "transfer_fee", 0.0) or 0.0),
-            "total": float(getattr(fee, "total", 0.0) or 0.0)}
+    return {
+        "commission": float(getattr(fee, "commission", 0.0) or 0.0),
+        "stamp_duty": float(getattr(fee, "stamp_duty", 0.0) or 0.0),
+        "transfer_fee": float(getattr(fee, "transfer_fee", 0.0) or 0.0),
+        "total": float(getattr(fee, "total", 0.0) or 0.0),
+    }
 
 
 def _enc_fill(fill: Any) -> dict[str, Any]:
     return {
-        "fill_id": fill.fill_id, "order_id": fill.order_id,
-        "symbol": fill.symbol, "side": fill.side.value, "qty": fill.qty,
-        "price": float(fill.price), "fee": _enc_fee(fill.fee),
-        "fill_date": _ymd(fill.fill_date), "fill_timing": fill.fill_timing,
+        "fill_id": fill.fill_id,
+        "order_id": fill.order_id,
+        "symbol": fill.symbol,
+        "side": fill.side.value,
+        "qty": fill.qty,
+        "price": float(fill.price),
+        "fee": _enc_fee(fill.fee),
+        "fill_date": _ymd(fill.fill_date),
+        "fill_timing": fill.fill_timing,
         # F9（2026-10-06）：**滑点前基准价**（可空=旧产物）——报告据此单列
         # 「价内滑点成本」（`Fill.impact_cost`），修正 fee_ratio 低估。
-        "ref_price": (None if getattr(fill, "ref_price", None) is None
-                      else float(fill.ref_price)),
+        "ref_price": (None if getattr(fill, "ref_price", None) is None else float(fill.ref_price)),
     }
 
 
 def _enc_order(order: Any) -> dict[str, Any]:
     return {
-        "order_id": order.order_id, "symbol": order.symbol,
-        "side": order.side.value, "order_type": order.order_type.value,
-        "qty": order.qty, "limit_price": order.limit_price,
-        "created_at": _ymd(order.created_at), "tif": order.tif,
+        "order_id": order.order_id,
+        "symbol": order.symbol,
+        "side": order.side.value,
+        "order_type": order.order_type.value,
+        "qty": order.qty,
+        "limit_price": order.limit_price,
+        "created_at": _ymd(order.created_at),
+        "tif": order.tif,
         "tag": order.tag,
     }
 
@@ -143,7 +170,8 @@ def _enc_order(order: Any) -> dict[str, Any]:
 def _enc_snapshot(snap: Any) -> dict[str, Any]:
     return {
         "date": _ymd(snap.date),
-        "cash": float(snap.cash), "market_value": float(snap.market_value),
+        "cash": float(snap.cash),
+        "market_value": float(snap.market_value),
         "total_value": float(snap.total_value),
         "daily_return": float(snap.daily_return),
         "cumulative_return": float(snap.cumulative_return),
@@ -155,9 +183,12 @@ def _enc_snapshot(snap: Any) -> dict[str, Any]:
 
 def _enc_trade(trade: Any) -> dict[str, Any]:
     return {
-        "trade_id": trade.trade_id, "symbol": trade.symbol,
-        "qty": trade.qty, "pnl": float(trade.pnl),
-        "holding_days": trade.holding_days, "tag": trade.tag,
+        "trade_id": trade.trade_id,
+        "symbol": trade.symbol,
+        "qty": trade.qty,
+        "pnl": float(trade.pnl),
+        "holding_days": trade.holding_days,
+        "tag": trade.tag,
         "open_fill": _enc_fill(trade.open_fill) if trade.open_fill else None,
         "close_fill": _enc_fill(trade.close_fill) if trade.close_fill else None,
     }
@@ -246,10 +277,15 @@ class LocalRunStore:
         ——治 P2-NEW-7「空洞披露」（铁律新 16）。
         """
         manifest = RunManifest.skeleton(
-            config, run_id=run_id, data_fingerprint=data_fingerprint,
-            rules_version=rules_version, rules_overrides=rules_overrides,
-            assembly_notes=assembly_notes, data_version=data_version,
-            version_gate=version_gate)
+            config,
+            run_id=run_id,
+            data_fingerprint=data_fingerprint,
+            rules_version=rules_version,
+            rules_overrides=rules_overrides,
+            assembly_notes=assembly_notes,
+            data_version=data_version,
+            version_gate=version_gate,
+        )
         run_id = self._unique_run_id(manifest.run_id)
         if run_id != manifest.run_id:
             manifest = replace(manifest, run_id=run_id)
@@ -269,29 +305,28 @@ class LocalRunStore:
     def write_manifest(self, manifest: RunManifest) -> Path:
         """原子写 manifest（骨架/补全/失败态共用）。"""
         path = self.run_dir(manifest.run_id) / MANIFEST
-        atomic_write_text(path, json.dumps(manifest.to_dict(), ensure_ascii=False,
-                                           indent=2, sort_keys=True) + "\n")
+        atomic_write_text(
+            path,
+            json.dumps(manifest.to_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        )
         return path
 
     # ── 产物 ──
     def save_snapshots(self, run_id: str, snapshots: Sequence[Any]) -> int:
-        return _write_jsonl(self.run_dir(run_id) / SNAPSHOTS,
-                            [_enc_snapshot(s) for s in snapshots])
+        return _write_jsonl(self.run_dir(run_id) / SNAPSHOTS, [_enc_snapshot(s) for s in snapshots])
 
     def save_trades(self, run_id: str, trades: Sequence[Any]) -> int:
-        return _write_jsonl(self.run_dir(run_id) / TRADES,
-                            [_enc_trade(t) for t in trades])
+        return _write_jsonl(self.run_dir(run_id) / TRADES, [_enc_trade(t) for t in trades])
 
     def save_fills(self, run_id: str, fills: Sequence[Any]) -> int:
-        return _write_jsonl(self.run_dir(run_id) / FILLS,
-                            [_enc_fill(f) for f in fills])
+        return _write_jsonl(self.run_dir(run_id) / FILLS, [_enc_fill(f) for f in fills])
 
     def save_rejections(self, run_id: str, rejections: Sequence[Any]) -> int:
-        return _write_jsonl(self.run_dir(run_id) / REJECTIONS,
-                            [_enc_rejection(r) for r in rejections])
+        return _write_jsonl(
+            self.run_dir(run_id) / REJECTIONS, [_enc_rejection(r) for r in rejections]
+        )
 
-    def save_metrics(self, run_id: str, metrics: Mapping[str, float]
-                     ) -> RunManifest:
+    def save_metrics(self, run_id: str, metrics: Mapping[str, float]) -> RunManifest:
         """写 metrics.json + **补全 manifest**（status=COMPLETED + digest）。
 
         数值守卫（**P0-NEW-7**，19 号 §24.3）：`metrics` 只允许**数值**——
@@ -301,21 +336,27 @@ class LocalRunStore:
         今改为**快速失败 + 可操作报错**：指名违规键并给出处置建议（元信息走
         manifest/config_effective 或报告披露区，不混入数值指标集）。
         """
-        bad = sorted(k for k, v in metrics.items()
-                     if isinstance(v, bool) or not isinstance(v, (int, float)))
+        bad = sorted(
+            k for k, v in metrics.items() if isinstance(v, bool) or not isinstance(v, (int, float))
+        )
         if bad:
             raise ValueError(
                 f"metrics 只允许数值，违规键 {bad}——元信息（如 "
                 f"benchmark_symbol）请走 manifest/config_effective 或报告披露区"
-                f"（P0-NEW-7：混入数值指标集会污染 metrics.json 与 R1 摘要）")
+                f"（P0-NEW-7：混入数值指标集会污染 metrics.json 与 R1 摘要）"
+            )
         # NaN 指标（04 §8.5 降级）落 null——严格 JSON 合规；读回还原为 NaN
-        payload = {k: (None if v != v else float(v))
-                   for k, v in sorted(metrics.items())}
+        payload = {k: (None if v != v else float(v)) for k, v in sorted(metrics.items())}
         atomic_write_text(
             self.run_dir(run_id) / METRICS,
-            json.dumps({"contract_version": RUNRESULT_CONTRACT,
-                        "metrics": payload},
-                       ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+            json.dumps(
+                {"contract_version": RUNRESULT_CONTRACT, "metrics": payload},
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
         return self.complete(run_id, metrics)
 
     def complete(self, run_id: str, metrics: Mapping[str, float]) -> RunManifest:
@@ -355,8 +396,7 @@ class LocalRunStore:
             return {}
         with path.open(encoding="utf-8") as fh:
             raw = json.load(fh).get("metrics", {})
-        return {k: (float("nan") if v is None else float(v))
-                for k, v in raw.items()}
+        return {k: (float("nan") if v is None else float(v)) for k, v in raw.items()}
 
     def load(self, run_id: str) -> RunBundle:
         """读回全部产物（只读；报告再生成与 R1 对账入口）。"""
@@ -364,8 +404,10 @@ class LocalRunStore:
         return RunBundle(
             manifest=self.read_manifest(run_id),
             metrics=self.read_metrics(run_id),
-            snapshots=[SnapshotRecord(**{k: v for k, v in row.items()})
-                       for row in _read_jsonl(directory / SNAPSHOTS)],
+            snapshots=[
+                SnapshotRecord(**{k: v for k, v in row.items()})
+                for row in _read_jsonl(directory / SNAPSHOTS)
+            ],
             trades=_read_jsonl(directory / TRADES),
             fills=_read_jsonl(directory / FILLS),
             rejections=_read_jsonl(directory / REJECTIONS),
@@ -389,5 +431,6 @@ __all__ = [
     "LocalRunStore",
     "RunBundle",
     "SnapshotRecord",
+    "atomic_write_lines",
     "atomic_write_text",
 ]

@@ -21,6 +21,7 @@
 **与 `freeze` 的差异**：`freeze` 产出独立清单文件；本命令改配置本身。
 两者共用 `BTFRuntime.dataset_fingerprint()`（R2 单一真值源），不另起哈希。
 """
+
 from __future__ import annotations
 
 import re
@@ -33,8 +34,7 @@ from typing import Any
 #: 哈希令牌（与 `version.digest` 形制一致：`sha256:` + 16 位 hex）
 _HASH_RE = re.compile(r"sha256:[0-9a-f]{8,64}")
 #: 空声明兜底（`expected_hash: ""` / `expected_hash:`）
-_EMPTY_DECL_RE = re.compile(
-    r"(?P<head>\bexpected_hash\s*:\s*)(?P<val>\"\"|''|(?=[\s,}]))")
+_EMPTY_DECL_RE = re.compile(r"(?P<head>\bexpected_hash\s*:\s*)(?P<val>\"\"|''|(?=[\s,}]))")
 
 
 def _hash_line_index(lines: list[str]) -> int | None:
@@ -47,8 +47,9 @@ def _hash_line_index(lines: list[str]) -> int | None:
     return None
 
 
-def _compute_hash(path: Path, mode: str | None,
-                  environ: Mapping[str, str] | None) -> tuple[str, str]:
+def _compute_hash(
+    path: Path, mode: str | None, environ: Mapping[str, str] | None
+) -> tuple[str, str]:
     """实算该配置的数据指纹（档位＝配置自身 `data.fingerprint_mode`）。
 
     **MM-7 同源（§138.2 / freeze_dataset）**：进程内先摘掉 `expected_hash` /
@@ -58,19 +59,15 @@ def _compute_hash(path: Path, mode: str | None,
     from btf.app import filter_btf_env
     from btf.runtime import BTFRuntime
 
-    ovr: dict[str, Any] | None = (
-        {"data": {"fingerprint_mode": mode}} if mode else None)
-    rt = BTFRuntime().load_config(str(path),
-                                  environ=filter_btf_env(environ),
-                                  overrides=ovr)
+    ovr: dict[str, Any] | None = {"data": {"fingerprint_mode": mode}} if mode else None
+    rt = BTFRuntime().load_config(str(path), environ=filter_btf_env(environ), overrides=ovr)
     ds = rt.config.setdefault("data", {}).setdefault("dataset", {})
     ds.pop("expected_hash", None)
     ds.pop("version", None)
     rt.build()
     info = rt.dataset_fingerprint()
     if str(info.get("mode")) == "in-memory":
-        raise ValueError("内存 Feed 无文件指纹（mode=in-memory）——"
-                         "refresh-hash 只对文件主库有意义")
+        raise ValueError("内存 Feed 无文件指纹（mode=in-memory）——refresh-hash 只对文件主库有意义")
     return str(info.get("content_hash") or ""), str(info.get("mode") or "?")
 
 
@@ -93,8 +90,14 @@ def refresh_hash_one(
     `status` ∈ `updated | current | skipped | dry-run | failed`。
     """
     p = Path(path)
-    row: dict[str, Any] = {"file": str(p), "status": "", "old": "",
-                           "new": "", "mode": "", "message": ""}
+    row: dict[str, Any] = {
+        "file": str(p),
+        "status": "",
+        "old": "",
+        "new": "",
+        "mode": "",
+        "message": "",
+    }
     try:
         text = p.read_bytes().decode("utf-8")
     except FileNotFoundError:
@@ -111,9 +114,8 @@ def refresh_hash_one(
 
     try:
         new, used_mode = _compute_hash(p, mode, environ)
-    except Exception as exc:                  # X-8：单文件失败不中断批量
-        row.update(status="failed",
-                   message=f"实算失败：{type(exc).__name__}: {exc}")
+    except Exception as exc:  # X-8：单文件失败不中断批量
+        row.update(status="failed", message=f"实算失败：{type(exc).__name__}: {exc}")
         return row
     row.update(old=old, new=new, mode=used_mode)
     if old == new:
@@ -129,34 +131,33 @@ def refresh_hash_one(
     else:
         mm = _EMPTY_DECL_RE.search(line)
         if not mm:
-            row.update(status="failed",
-                       message="expected_hash 行无法解析（既无 sha256 令牌亦非空声明）")
+            row.update(
+                status="failed", message="expected_hash 行无法解析（既无 sha256 令牌亦非空声明）"
+            )
             return row
         head = mm.group("head")
         quoted = f'"{new}"'
         # 流式映射 `{expected_hash: , rules: ...}` 与块式行尾都适配
-        new_line = line[:mm.start()] + f"{head}{quoted}" + line[mm.end():]
+        new_line = line[: mm.start()] + f"{head}{quoted}" + line[mm.end() :]
     lines[ln_no] = new_line
 
     bak = _backup_path(p, Path(backup_dir) if backup_dir else None)
+    bak.parent.mkdir(parents=True, exist_ok=True)  # --backup-dir 首次可不存在
     shutil.copy2(p, bak)
     p.write_bytes("".join(lines).encode("utf-8"))
 
     # X-5 写后自检：重算 → 比对；不等/异常则回滚
     try:
         check, _ = _compute_hash(p, mode, environ)
-    except Exception as exc:                  # 任何失败都要回滚
+    except Exception as exc:  # 任何失败都要回滚
         shutil.copy2(bak, p)
-        row.update(status="failed",
-                   message=f"写后自检异常已回滚：{type(exc).__name__}: {exc}")
+        row.update(status="failed", message=f"写后自检异常已回滚：{type(exc).__name__}: {exc}")
         return row
     if check != new:
         shutil.copy2(bak, p)
-        row.update(status="failed",
-                   message=f"写后自检不等已回滚（写 {new} / 复算 {check}）")
+        row.update(status="failed", message=f"写后自检不等已回滚（写 {new} / 复算 {check}）")
         return row
-    row.update(status="updated",
-               message=f"已写回（备份 {bak.name}；档位 {used_mode}）")
+    row.update(status="updated", message=f"已写回（备份 {bak.name}；档位 {used_mode}）")
     return row
 
 
@@ -178,18 +179,22 @@ def refresh_dataset_hash(
         raise ValueError("必须且只能给 --config 或 --dir 之一")
     rows: list[dict[str, Any]] = []
     if config:
-        rows.append(refresh_hash_one(config, dry_run=dry_run, mode=mode,
-                                     backup_dir=backup_dir, environ=environ))
+        rows.append(
+            refresh_hash_one(
+                config, dry_run=dry_run, mode=mode, backup_dir=backup_dir, environ=environ
+            )
+        )
     else:
         cfg_dir = Path(directory)
         if not cfg_dir.is_dir():
             raise ValueError(f"--dir 不存在或不是目录：{cfg_dir}")
         for p in sorted(cfg_dir.glob("*.yaml")):
-            rows.append(refresh_hash_one(p, dry_run=dry_run, mode=mode,
-                                         backup_dir=backup_dir,
-                                         environ=environ))
+            rows.append(
+                refresh_hash_one(
+                    p, dry_run=dry_run, mode=mode, backup_dir=backup_dir, environ=environ
+                )
+            )
     counts: dict[str, int] = {}
     for r in rows:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
-    return {"rows": rows, "counts": counts,
-            "failed": [r for r in rows if r["status"] == "failed"]}
+    return {"rows": rows, "counts": counts, "failed": [r for r in rows if r["status"] == "failed"]}

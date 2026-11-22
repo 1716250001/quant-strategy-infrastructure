@@ -21,6 +21,7 @@
 
 失败信息统一含「**文档路径＋行号＋声明值＋实测值**」（§110.2 要求）。
 """
+
 from __future__ import annotations
 
 import os
@@ -55,7 +56,10 @@ USAGE_DOC = "18-回测平台使用指引.md"
 #: 旧 19 号演进记录已于 2026-11-20 归档（`备份\归档文件\架构账本归档-20261120\`）；
 #: T-C 的完成清单源头改读归档件，缺失则跳过——守卫不再依赖活目录中的已退役文档。
 DOC_19_ARCHIVED = (
-    DOC_DIR.parents[3] / "备份" / "归档文件" / "架构账本归档-20261120"
+    DOC_DIR.parents[3]
+    / "备份"
+    / "归档文件"
+    / "架构账本归档-20261120"
     / "回测工具架构-19-架构审查与重构演进记录.md"
 )
 
@@ -70,16 +74,19 @@ def _measured_collect(marker: str | None = None) -> int:
     `marker=None` ⇒ **全量**（T-F 用）；`"not l5"` ⇒ **非 L5**（T-A 用）。
     ⚠ 口径不可互换：README 的「l1–l5 + smoke 五层」是全量，用非 L5 会差 22。
     """
-    cmd = [sys.executable, "-m", "pytest", "tests", "--collect-only",
-           "-p", "no:cacheprovider"]
+    cmd = [sys.executable, "-m", "pytest", "tests", "--collect-only", "-p", "no:cacheprovider"]
     if marker:
         cmd += ["-m", marker]
     proc = subprocess.run(
-        cmd, cwd=str(BTF_ROOT), capture_output=True, text=True,
-        encoding="utf-8", errors="replace",
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-    assert proc.returncode == 0, (
-        f"collect 失败（EXIT={proc.returncode}）：{proc.stdout[-400:]}")
+        cmd,
+        cwd=str(BTF_ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert proc.returncode == 0, f"collect 失败（EXIT={proc.returncode}）：{proc.stdout[-400:]}"
     return sum(1 for ln in proc.stdout.splitlines() if "::" in ln)
 
 
@@ -96,25 +103,30 @@ BTF_VERSION_FILE = BTF_ROOT / "btf" / "_version.py"
 
 def _source_version() -> str:
     """从 `btf/_version.py` 读 `__version__`——**禁 hardcode**（D7-6）。"""
-    m = re.search(r'^__version__\s*=\s*"([^"]+)"',
-                  BTF_VERSION_FILE.read_text(encoding="utf-8"), re.MULTILINE)
-    assert m, f"{BTF_VERSION_FILE}: 未找到 `__version__ = \"...\"` 声明"
+    m = re.search(
+        r'^__version__\s*=\s*"([^"]+)"', BTF_VERSION_FILE.read_text(encoding="utf-8"), re.MULTILINE
+    )
+    assert m, f'{BTF_VERSION_FILE}: 未找到 `__version__ = "..."` 声明'
     return m.group(1)
 
 
 #: 表头声明：`版本 **X.Y.Z**`
 _VER_DECL_PAT = re.compile(r"版本\s*\*\*([0-9]+\.[0-9]+\.[0-9]+)\*\*")
 #: 示例注释：`bt --version   # btf X.Y.Z`
-_VER_CLI_PAT = re.compile(
-    r"bt\s+--version\s*#[^\n]*?btf\s+([0-9]+\.[0-9]+\.[0-9]+)")
+_VER_CLI_PAT = re.compile(r"bt\s+--version\s*#[^\n]*?btf\s+([0-9]+\.[0-9]+\.[0-9]+)")
 #: 目录树：`tests/   1305 项`
 _CNT_PAT = re.compile(r"tests/\s+([0-9]+)\s*项")
 
 
 # ───────────────────────── T-A 计数守卫 ─────────────────────────
 
+
 def test_t_a_count_guard():
-    """① 双口径**存在性**（tag 快照＋工作区）；② 工作区值 == 实测 collect。"""
+    """① 双口径**存在性**（tag 快照＋工作区）；② 工作区值 == 实测 collect。
+
+    **D9 子例**：同函数内追加「命令数 / `TABLES` / `METRICS` / 内置注册名 / run 产物」
+    五项真源计数守卫（不新增测试函数；取值一律来自代码真源，不 hardcode）。
+    """
     measured = _measured_non_l5()
     problems: list[str] = []
     for name in CURRENT_DOCS:
@@ -127,16 +139,109 @@ def test_t_a_count_guard():
             if "tag 快照" not in ln:
                 problems.append(
                     f"{DOC_DIR / name}:{i} 声明值=「工作区」缺配「tag 快照」双口径；"
-                    f"实测值=工作区口径应为 {measured}（行={ln.strip()[:90]}）")
+                    f"实测值=工作区口径应为 {measured}（行={ln.strip()[:90]}）"
+                )
             if str(measured) not in ln:
                 problems.append(
                     f"{DOC_DIR / name}:{i} 声明值（工作区）≠ 实测 {measured}；"
-                    f"实测值={measured}（行={ln.strip()[:90]}）")
+                    f"实测值={measured}（行={ln.strip()[:90]}）"
+                )
         if seen == 0:
             problems.append(
                 f"{DOC_DIR / name}:—  声明值=缺「工作区」口径声明（双口径要求）；"
-                f"实测值=工作区应为 {measured}")
+                f"实测值=工作区应为 {measured}"
+            )
     assert not problems, "\n".join(problems)
+
+    # ── D9 真源计数子例（命令数 / 表 / 指标 / 注册名 / run 产物） ──
+    from btf import registry
+    from btf.analytics.metrics import METRICS
+    from btf.cli.main import COMMANDS
+    from btf.data.tables_meta import TABLES
+    from btf.experiment import store
+    from btf.runtime.run_orchestrator import DATA_QUALITY
+
+    # 只数**内置**名：`available()` 会并入测试/用户动态注册（同进程可达 52），
+    # 口径必须取 `_BUILTIN` 名字表（`_point_table` 惰性装载后计数）。
+    builtin_names = sum(len(registry.catalog._point_table(p)) for p in registry.points())
+    run_artifacts = {
+        store.MANIFEST,
+        store.METRICS,
+        store.SNAPSHOTS,
+        store.FILLS,
+        store.TRADES,
+        store.REJECTIONS,
+        store.EVENTS,
+        DATA_QUALITY,
+    }
+    count_problems: list[str] = []
+
+    def _check(name: str, pattern: str, want: int, label: str) -> None:
+        hits = 0
+        for i, ln in enumerate(_read(name), 1):
+            for m in re.finditer(pattern, ln):
+                hits += 1
+                got = int(m.group(1))
+                if got != want:
+                    count_problems.append(
+                        f"{DOC_DIR / name}:{i} 声明值（{label}）={got}；"
+                        f"实测值={want}（行={ln.strip()[:90]}）"
+                    )
+        if hits == 0:
+            count_problems.append(f"{DOC_DIR / name}:— 声明值=缺「{label}」；实测值={want}")
+
+    cmd_pat = r"(?<![\d.])(\d{2,3})\s*(?:条)?命令族"
+    for name in (
+        "README.md",
+        "01-总览与定位.md",
+        "03-总体架构方案对比与推荐.md",
+        "04-领域模型与核心接口.md",
+        "16-架构评审与验收标准.md",
+        "18-回测平台使用指引.md",
+        "19-回测平台CLI功能手册.md",
+    ):
+        _check(name, cmd_pat, len(COMMANDS), "命令族")
+
+    tables_pat = r"tables_meta[^\n]{0,50}?(\d{2,3})\s*表"
+    for name in (
+        "README.md",
+        "01-总览与定位.md",
+        "03-总体架构方案对比与推荐.md",
+        "04-领域模型与核心接口.md",
+        "05-数据架构与数据集体系.md",
+        "14-工程化专项设计-上.md",
+        "17-术语表与关键状态机.md",
+    ):
+        _check(name, tables_pat, len(TABLES), "tables_meta 表数")
+
+    metrics_pat = r"METRICS[^\n]{0,12}?(\d{2})(?=\s*(?:项|名|[）)]))"
+    for name in ("04-领域模型与核心接口.md", "18-回测平台使用指引.md", "19-回测平台CLI功能手册.md"):
+        _check(name, metrics_pat, len(METRICS), "METRICS 指标数")
+
+    builtin_pat = r"(\d{2})\s*个内置名"
+    for name in ("01-总览与定位.md", "04-领域模型与核心接口.md", "19-回测平台CLI功能手册.md"):
+        _check(name, builtin_pat, builtin_names, "注册内置名")
+
+    art_lines = [
+        (i, ln)
+        for i, ln in enumerate(BTF_README.read_text(encoding="utf-8").splitlines(), 1)
+        if "manifest.json" in ln and "data_quality_report.json" in ln
+    ]
+    if not art_lines:
+        count_problems.append(
+            f"{BTF_README}:— 声明值=缺 run 产物清单；"
+            f"实测值={len(run_artifacts)} 个 {sorted(run_artifacts)}"
+        )
+    else:
+        i, ln = art_lines[0]
+        declared = set(re.findall(r"[A-Za-z0-9_]+\.jsonl?", ln))
+        if declared != run_artifacts:
+            count_problems.append(
+                f"{BTF_README}:{i} 声明值（run 产物）={len(declared)} 个 "
+                f"{sorted(declared)}；实测值={len(run_artifacts)} 个 "
+                f"{sorted(run_artifacts)}"
+            )
+    assert not count_problems, "\n".join(count_problems)
 
 
 # ───────────────────────── T-B 口径守卫 ─────────────────────────
@@ -150,7 +255,8 @@ def test_t_a_count_guard():
 #: `（0 → 2 笔）`）当数字；`(?!\s*(?:笔|%|倍))` 防把**成交笔数/百分比**当数字。
 _WARMUP_PAT = re.compile(
     r"(?<![_\w])warm[-\s]?up[^\d\n]{0,48}?(?<![_\w.])(\d{1,4})(?!\d)"
-    r"(?!\s*(?:-|→|~|—)\s*\d)(?!\s*(?:笔|%|倍))")
+    r"(?!\s*(?:-|→|~|—)\s*\d)(?!\s*(?:笔|%|倍))"
+)
 
 
 def _warmup_number_ok(num: int, line: str, declared: int) -> bool:
@@ -175,7 +281,8 @@ def _tb_warmup_problems() -> list[str]:
                 if not _warmup_number_ok(num, ln, declared):
                     problems.append(
                         f"{DOC_DIR / name}:{i} 声明值=warm-up {num}；"
-                        f"实测值=声明 {declared}（行={ln.strip()[:90]}）")
+                        f"实测值=声明 {declared}（行={ln.strip()[:90]}）"
+                    )
     return problems
 
 
@@ -199,9 +306,9 @@ def test_tb_catches_wrong_warmup_in_current_doc(tmp_path, monkeypatch):
         shutil.copy2(DOC_DIR / name, tmp_path / name)
     bad = tmp_path / "09-测试验证与基准.md"
     bad.write_text(
-        bad.read_text(encoding="utf-8")
-        + "\n> 反向测试注入：warmup=999（故意写错）\n",
-        encoding="utf-8")
+        bad.read_text(encoding="utf-8") + "\n> 反向测试注入：warmup=999（故意写错）\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(sys.modules[__name__], "DOC_DIR", tmp_path)
 
     problems = _tb_warmup_problems()
@@ -216,8 +323,7 @@ def test_tb_catches_wrong_warmup_in_current_doc(tmp_path, monkeypatch):
 # ───────────────────────── T-C 矛盾扫描器 ─────────────────────────
 
 #: 「已完成」语义标记（取自 19 号正文；**清单不硬编码**，逐行提取）
-_DONE_MARKERS = ("验收通过", "交付合格", "判为交付", "已交付", "闭合",
-                 "全达成", "全满足", "已完成")
+_DONE_MARKERS = ("验收通过", "交付合格", "判为交付", "已交付", "闭合", "全达成", "全满足", "已完成")
 _WAIT_PAT = re.compile(r"待\s*(R\d+′)")
 
 
@@ -242,11 +348,13 @@ def test_t_c_stale_wait_scanner():
                 if unit in done:
                     problems.append(
                         f"{DOC_DIR / name}:{i} 声明值=「待 {unit}」；"
-                        f"实测值=19 号已判该单交付合格（行={ln.strip()[:90]}）")
+                        f"实测值=19 号已判该单交付合格（行={ln.strip()[:90]}）"
+                    )
     assert not problems, "\n".join(problems)
 
 
 # ───────────────────────── T-D 时变量格式守卫 ─────────────────────────
+
 
 def test_t_d_timevarying_format_guard():
     """CHANGELOG digest 清单**条目块**必须含「扫描时刻」＋日期；**不锁数值**。
@@ -270,8 +378,10 @@ def test_t_d_timevarying_format_guard():
         blocks.append((start, cur))
 
     hit_blocks = [(i, b) for i, b in blocks if any("扫描时刻" in ln for ln in b)]
-    assert hit_blocks, (f"{CHANGELOG}:— 声明值=缺「扫描时刻」条目块；"
-                        f"实测值=digest 链计数系时变量、必须带扫描时刻（R60′/T-D）")
+    assert hit_blocks, (
+        f"{CHANGELOG}:— 声明值=缺「扫描时刻」条目块；"
+        f"实测值=digest 链计数系时变量、必须带扫描时刻（R60′/T-D）"
+    )
     bad = []
     for i, b in hit_blocks:
         text = "\n".join(b)
@@ -279,13 +389,16 @@ def test_t_d_timevarying_format_guard():
             bad.append((i, b[0]))
     assert not bad, "\n".join(
         f"{CHANGELOG}:{i} 声明值=条目块有「扫描时刻」但无日期；"
-        f"实测值=须含 YYYY-MM-DD（块首行={ln.strip()[:90]}）" for i, ln in bad)
+        f"实测值=须含 YYYY-MM-DD（块首行={ln.strip()[:90]}）"
+        for i, ln in bad
+    )
 
 
 # ─────────────── T-E／T-F：`btf/README.md`（§278-E／§279 D-7） ───────────────
 # 为什么单列：`CURRENT_DOCS` 里的 `README.md` 是**架构目录**的 README，不是
 # `btf/README.md` ⇒ btf README 长期零守卫，版本号与测试计数一路漂（§278）。
 # 与 `tests/ 1288 项`（§278）。
+
 
 def test_t_e_btf_readme_version_guard():
     """T-E：`btf/README.md` **两处**版本声明都必须 == `_version.py`。
@@ -297,18 +410,19 @@ def test_t_e_btf_readme_version_guard():
     want = _source_version()
     text = BTF_README.read_text(encoding="utf-8")
     assert _VER_DECL_PAT.search(text), (
-        f"{BTF_README}:— 声明值=缺表头「版本 **X.Y.Z**」；实测值={want}")
+        f"{BTF_README}:— 声明值=缺表头「版本 **X.Y.Z**」；实测值={want}"
+    )
     assert _VER_CLI_PAT.search(text), (
-        f"{BTF_README}:— 声明值=缺示例注释「bt --version # btf X.Y.Z」；"
-        f"实测值={want}")
+        f"{BTF_README}:— 声明值=缺示例注释「bt --version # btf X.Y.Z」；实测值={want}"
+    )
     problems: list[str] = []
     for i, ln in enumerate(text.splitlines(), 1):
         for pat in (_VER_DECL_PAT, _VER_CLI_PAT):
             for got in pat.findall(ln):
                 if got != want:
                     problems.append(
-                        f"{BTF_README}:{i} 声明值={got}；实测值={want}"
-                        f"（行={ln.strip()[:90]}）")
+                        f"{BTF_README}:{i} 声明值={got}；实测值={want}（行={ln.strip()[:90]}）"
+                    )
     assert not problems, "\n".join(problems)
 
 
@@ -321,10 +435,10 @@ def test_t_f_btf_readme_count_guard():
     measured = _measured_collect(None)
     text = BTF_README.read_text(encoding="utf-8")
     got = _CNT_PAT.findall(text)
-    assert got, (f"{BTF_README}:— 声明值=缺 `tests/ N 项`；"
-                 f"实测值=全量 collect {measured}")
+    assert got, f"{BTF_README}:— 声明值=缺 `tests/ N 项`；实测值=全量 collect {measured}"
     bad = [g for g in got if int(g) != measured]
     assert not bad, "\n".join(
         f"{BTF_README}:— 声明值（tests 项数）={g}；实测值={measured}"
-        f"（口径=全量 collect，非 L5 不计）" for g in bad)
-
+        f"（口径=全量 collect，非 L5 不计）"
+        for g in bad
+    )

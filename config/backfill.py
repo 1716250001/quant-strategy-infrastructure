@@ -26,7 +26,7 @@ import os
 #   start     起始日期 (by_date / by_month 模式)
 #   note      备注/风险提示
 # [ARCHIVED 2026-09-25 G1] 死配置：全库 grep（83 文件，含字符串/getattr 形态）+工作区/skills 交叉核实均无引用。原用途：旧补数默认起点（现行 backfill 引擎自带断点起点）。保留定义保行号稳定，勿新增引用。
-BACKFILL_START_DEFAULT = "20160101"   # 近10年
+BACKFILL_START_DEFAULT = "20160101"  # 近10年
 
 
 # 指数清单: index_weight / index_dailybasic 用
@@ -47,22 +47,78 @@ BACKFILL_START_DEFAULT = "20160101"   # 近10年
 #       正确层2 排除项应为: {信用债, 利率债, 规模, 综合}。
 BACKFILL_INDEX_CODES = [
     # —— 原有 13 码（2026-10-21 前）——
-    "000016.SH", "000300.SH", "000905.SH", "000852.SH", "932000.CSI",
-    "000688.SH", "399006.SZ", "000001.SH", "899050.BJ",
-    "399300.SZ", "000010.SH", "000009.SH", "000011.SH",
+    "000016.SH",
+    "000300.SH",
+    "000905.SH",
+    "000852.SH",
+    "932000.CSI",
+    "000688.SH",
+    "399006.SZ",
+    "000001.SH",
+    "899050.BJ",
+    "399300.SZ",
+    "000010.SH",
+    "000009.SH",
+    "000011.SH",
     # —— EE-FUND-13-C C1 批 58 码（2026-10-21 §53 返工后）——
-    "930598.CSI", "930599.CSI", "930601.CSI", "930604.CSI", "930606.CSI",
-    "930608.CSI", "930614.CSI", "930620.CSI", "930625.CSI", "930632.CSI",
-    "930633.CSI", "930641.CSI", "930648.CSI", "930651.CSI", "930652.CSI",
-    "930653.CSI", "930662.CSI", "930697.CSI", "930707.CSI", "930708.CSI",
-    "930709.CSI", "930712.CSI", "930713.CSI", "930716.CSI", "930719.CSI",
-    "930720.CSI", "930721.CSI", "930725.CSI", "930726.CSI", "930740.CSI",
-    "930743.CSI", "930758.CSI", "930781.CSI", "930782.CSI", "930790.CSI",
-    "930791.CSI", "930792.CSI", "930794.CSI", "930796.CSI", "930820.CSI",
-    "930821.CSI", "930839.CSI", "930850.CSI", "930851.CSI", "930875.CSI",
-    "930901.CSI", "930902.CSI", "930910.CSI", "930914.CSI", "930917.CSI",
-    "930927.CSI", "930928.CSI", "930939.CSI", "930955.CSI", "930965.CSI",
-    "930967.CSI", "930986.CSI", "930997.CSI",
+    "930598.CSI",
+    "930599.CSI",
+    "930601.CSI",
+    "930604.CSI",
+    "930606.CSI",
+    "930608.CSI",
+    "930614.CSI",
+    "930620.CSI",
+    "930625.CSI",
+    "930632.CSI",
+    "930633.CSI",
+    "930641.CSI",
+    "930648.CSI",
+    "930651.CSI",
+    "930652.CSI",
+    "930653.CSI",
+    "930662.CSI",
+    "930697.CSI",
+    "930707.CSI",
+    "930708.CSI",
+    "930709.CSI",
+    "930712.CSI",
+    "930713.CSI",
+    "930716.CSI",
+    "930719.CSI",
+    "930720.CSI",
+    "930721.CSI",
+    "930725.CSI",
+    "930726.CSI",
+    "930740.CSI",
+    "930743.CSI",
+    "930758.CSI",
+    "930781.CSI",
+    "930782.CSI",
+    "930790.CSI",
+    "930791.CSI",
+    "930792.CSI",
+    "930794.CSI",
+    "930796.CSI",
+    "930820.CSI",
+    "930821.CSI",
+    "930839.CSI",
+    "930850.CSI",
+    "930851.CSI",
+    "930875.CSI",
+    "930901.CSI",
+    "930902.CSI",
+    "930910.CSI",
+    "930914.CSI",
+    "930917.CSI",
+    "930927.CSI",
+    "930928.CSI",
+    "930939.CSI",
+    "930955.CSI",
+    "930965.CSI",
+    "930967.CSI",
+    "930986.CSI",
+    "930997.CSI",
 ]
 
 # ── R1 补数池（2026-11-16，赤潮 §488/§489）────────────────────────────
@@ -71,12 +127,12 @@ BACKFILL_INDEX_CODES = [
 # 约束：① 文件缺失时静默跳过（原有 71 个照常工作）
 #       ② 不改 index_weight 的 layout（btf 硬编码 SINGLE）
 #       ③ 清单已逐个核过后缀（不含 .SI）
-_extra_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "index_weight_extra_codes.txt")
+_extra_path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "index_weight_extra_codes.txt"
+)
 if os.path.exists(_extra_path):
     with open(_extra_path, encoding="utf-8") as _f:
-        _extra = [ln.strip() for ln in _f
-                  if ln.strip() and not ln.strip().startswith("#")]
+        _extra = [ln.strip() for ln in _f if ln.strip() and not ln.strip().startswith("#")]
     BACKFILL_INDEX_CODES = list(BACKFILL_INDEX_CODES) + _extra
 
 # index_monthly 专用码清单（2026-11-04 §306 G4b）:
@@ -88,9 +144,19 @@ if os.path.exists(_extra_path):
 #   ⇒ 源端不覆盖月线（两码 index_daily 日线齐全）。**码保留不删**：删掉会让
 #   "配置 13 / 库内 11"的差异变成静默消失，保留则每次 backfill 都会显式返回空。
 BACKFILL_INDEX_MONTHLY_CODES = [
-    "000016.SH", "000300.SH", "000905.SH", "000852.SH", "932000.CSI",
-    "000688.SH", "399006.SZ", "000001.SH", "899050.BJ",
-    "399300.SZ", "000010.SH", "000009.SH", "000011.SH",
+    "000016.SH",
+    "000300.SH",
+    "000905.SH",
+    "000852.SH",
+    "932000.CSI",
+    "000688.SH",
+    "399006.SZ",
+    "000001.SH",
+    "899050.BJ",
+    "399300.SZ",
+    "000010.SH",
+    "000009.SH",
+    "000011.SH",
 ]
 
 # 国际指数清单: index_global 用 — 2026-09-19 新增
@@ -99,26 +165,43 @@ BACKFILL_INDEX_MONTHLY_CODES = [
 # ⚠ 该接口是**双重限频**: 10次/分钟 + **100次/天**（后者极易被忽略）。
 # ⚠ 单次硬顶 4000 行; 实测限定 2016 年起后各指数约 2700 行，不截断。
 # 用途: 海外市场参照（与组合的美股/港股/巴西持仓直接咬合）
-BACKFILL_GLOBAL_INDEX_CODES = [    # 美股
-    "SPX", "IXIC", "DJI", "RUT",
+BACKFILL_GLOBAL_INDEX_CODES = [  # 美股
+    "SPX",
+    "IXIC",
+    "DJI",
+    "RUT",
     # 港股
-    "HSI", "HKTECH", "HKAH",
+    "HSI",
+    "HKTECH",
+    "HKAH",
     # 重点: 巴西（持仓 520870/159100 的标的指数）
     "IBOVESPA",
     # 其他主要市场
-    "N225", "FTSE", "GDAXI", "FCHI", "SENSEX", "KS11", "TWII",
-    "RTS", "AS51", "SPTSX", "XIN9", "CSX5P", "CKLSE", "HSHKCI",
+    "N225",
+    "FTSE",
+    "GDAXI",
+    "FCHI",
+    "SENSEX",
+    "KS11",
+    "TWII",
+    "RTS",
+    "AS51",
+    "SPTSX",
+    "XIN9",
+    "CSX5P",
+    "CKLSE",
+    "HSHKCI",
 ]
 
 # 南华期货指数清单: fut_index_daily 用 — 2026-09-19 新增
 # ⚠ 该接口**必填 ts_code**（不传报错）；传不同 code 返回不同数据（已实测验证）。
 # 代码格式 = <指数简称>.NH；单指数全历史约 5000 行（2006 起）。
 BACKFILL_FUT_INDEX_CODES = [
-    "NHCI.NH",    # 南华商品指数
-    "NHAI.NH",    # 南华农产品指数
-    "NHMI.NH",    # 南华金属指数
-    "NHECI.NH",   # 南华能化指数
-    "NHII.NH",    # 南华工业品指数
+    "NHCI.NH",  # 南华商品指数
+    "NHAI.NH",  # 南华农产品指数
+    "NHMI.NH",  # 南华金属指数
+    "NHECI.NH",  # 南华能化指数
+    "NHII.NH",  # 南华工业品指数
 ]
 
 # 需分页的接口配置 — 2026-09-16 实测补全
@@ -132,37 +215,37 @@ BACKFILL_FUT_INDEX_CODES = [
 #
 # 字段: api -> (每页行数, 单日页数上限保护)
 BACKFILL_PAGE_CONF = {
-    "index_daily":  (4500,  20),
-    "fut_holding":  (2000,  30),
-    "opt_daily":    (2000,  60),
-    "fut_wsr":      (2000,  10),
-    "repo_daily":   (2000,   5),
-    "moneyflow":    (5000,   5),
-    "margin_detail":(5000,   5),
-    "margin_secs":  (5000,   5),
-    "top_inst":     (5000,   5),
-    "block_trade":  (5000,   5),
+    "index_daily": (4500, 20),
+    "fut_holding": (2000, 30),
+    "opt_daily": (2000, 60),
+    "fut_wsr": (2000, 10),
+    "repo_daily": (2000, 5),
+    "moneyflow": (5000, 5),
+    "margin_detail": (5000, 5),
+    "margin_secs": (5000, 5),
+    "top_inst": (5000, 5),
+    "block_trade": (5000, 5),
     # ⚠ hk_hold 页大小必须 ≤ 服务端硬顶 4,200（DB-R10 R10-3）：
     #   实测 limit 传 None/4200/5000/10000 一律只返 4,200 ⇒ 若 page=5000，
     #   首页 4,200 就被判「不足一页=末页」，第 2 页永不发 → 静默丢数据。
     #   真值：20260331=5,027 行 / 20260630=5,254 行（offset 分页才拿得全）。
-    "hk_hold":      (2000,  10),
-    "suspend_d":    (5000,   5),
-    "fut_daily":    (5000,   5),
+    "hk_hold": (2000, 10),
+    "suspend_d": (5000, 5),
+    "fut_daily": (5000, 5),
     # ⚠ bc_otcqt 单日约 5,145 行（2026-10-29 实测 20261028 = 2000+2000+1145 三页），
     #   单次硬顶 2000 ⇒ 保持 (2000, 10) 即可（原"8,160 行 / 5 页"为旧口径，已过期）
-    "bc_otcqt":     (2000,  10),
+    "bc_otcqt": (2000, 10),
     # ⚠ top10_holders / top10_floatholders（2026-09-19）:
     #   按报告期批量拉全市场，单页硬顶 6000（实测 offset 0/6000/12000 各返 6000 行）
     #   —— 不配分页会静默丢数据（每期真实行数远超 6000）。
     #   分页参数名是 `period` 而非 `trade_date`（由 conf["period_param"] 传入）。
-    "top10_holders":      (6000, 20),
+    "top10_holders": (6000, 20),
     "top10_floatholders": (6000, 20),
     # ⚠ share_float（2026-11-08 CC-FIX-3 实测）:
     #   按 ts_code 单只拉取时单次硬顶 6,000 行（大盘次新股解禁股东可达上万条），
     #   页大小取 5,000 留安全边际；按 ann_date 单日同样会超顶（20261102=11,794 行），
     #   周期通道侧由 PERIODIC_UPDATE_TARGETS["share_float"]["page_size"] 单独控。
-    "share_float":        (5000, 20),
+    "share_float": (5000, 20),
 }
 
 # 兼容旧名(仅按 key 判断是否分页)
@@ -177,29 +260,36 @@ BACKFILL_PAGED = set(BACKFILL_PAGE_CONF.keys())
 # 说明: 阈值越小越省内存、但写入次数多; 越大越快、但崩溃损失窗口大。
 #       当前按"单年最终规模"设: 小接口可攒更多天。
 BACKFILL_FLUSH_CONF = {
-    "moneyflow":     {"days": 30, "rows": 500_000},
+    "moneyflow": {"days": 30, "rows": 500_000},
     "margin_detail": {"days": 30, "rows": 500_000},
-    "margin_secs":   {"days": 30, "rows": 500_000},
-    "fut_daily":     {"days": 40, "rows": 500_000},
-    "hk_hold":       {"days": 40, "rows": 500_000},
-    "top_list":      {"days": 40, "rows": 300_000},
-    "top_inst":      {"days": 40, "rows": 300_000},
-    "block_trade":   {"days": 40, "rows": 300_000},
-    "suspend_d":     {"days": 60, "rows": 300_000},
-    "hsgt_top10":    {"days": 60, "rows": 200_000},
-    "ggt_top10":     {"days": 60, "rows": 200_000},
-    "margin":        {"days": 60, "rows": 200_000},
+    "margin_secs": {"days": 30, "rows": 500_000},
+    "fut_daily": {"days": 40, "rows": 500_000},
+    "hk_hold": {"days": 40, "rows": 500_000},
+    "top_list": {"days": 40, "rows": 300_000},
+    "top_inst": {"days": 40, "rows": 300_000},
+    "block_trade": {"days": 40, "rows": 300_000},
+    "suspend_d": {"days": 60, "rows": 300_000},
+    "hsgt_top10": {"days": 60, "rows": 200_000},
+    "ggt_top10": {"days": 60, "rows": 200_000},
+    "margin": {"days": 60, "rows": 200_000},
     "disclosure_date": {"days": 30, "rows": 300_000},
 }
 BACKFILL_FLUSH_DEFAULT = {"days": 20, "rows": 500_000}
+
+#: 分页**默认值**（未登记接口）：(每页行数, 单日页数上限)。
+#: D11：原硬编码在 `fetch/backfill_io.fetch_paged_by_date` 的 `.get(api, (5000, 10))`
+#: —— 消费端自带默认会与配置真源分叉；今统一到此。
+BACKFILL_PAGE_DEFAULT = (5000, 10)
 
 # daily / daily_basic 单日行数已逼近 6000 上限（实测 5553），
 # 加进分页表以防未来标的数扩容后被静默截断（每天多 1 次请求）。
 # 其余核心表单日行数远低于上限, 无需分页。
 # ⚠ BACKFILL_PAGED 是 BACKFILL_PAGE_CONF 的键快照(定义在 7b 节), 此处
 #   必须一并同步, 否则 run_target 判断 `api in BACKFILL_PAGED` 仍为假。
-BACKFILL_PAGE_CONF.update({
-    "daily":       (5000, 5),
-    "daily_basic": (5000, 5),
-})
+BACKFILL_PAGE_CONF.update(
+    {
+        "daily": (5000, 5),
+        "daily_basic": (5000, 5),
+    }
+)
 BACKFILL_PAGED.update({"daily", "daily_basic"})

@@ -9,6 +9,7 @@
 ——以 ``B3_OVER_BUDGET`` 实测值打印并触发架构复查留痕（CP1 性能专项），
 同时保留证据段（交易日/成交/拒单/吞吐）供下一轮优化对照。
 """
+
 from __future__ import annotations
 
 import time
@@ -33,6 +34,8 @@ pytestmark = [pytest.mark.l5]
 
 ROOT = Path(MARKET_DATA_DIR)
 B3_LIMIT_SECONDS = 60.0
+#: D8/B3 内存红线：实测峰值 + 余量（旧口径「<2GB」未实测，已废弃）。
+B3_RSS_LIMIT_MB = 4096.0
 START, END = date(2015, 1, 1), date(2024, 12, 31)
 
 
@@ -61,26 +64,34 @@ def instruments() -> dict[str, object]:
     return out
 
 
-def _run_scan(start: date, end: date, instruments: dict) -> tuple[float, int, int, int]:
-    """跑一次全市场截面回测，返回 (耗时, 交易日, 成交, 拒单)。"""
+def _run_scan(start: date, end: date, instruments: dict) -> tuple[float, int, int, int, float]:
+    """跑一次全市场截面回测，返回 (耗时, 交易日, 成交, 拒单, 峰值RSS MB)。"""
     # R4（19 号 §48）：引擎路径需状态面板 → 构造期注入（上方 `instruments`
     # 夹具只读 `universe()`，无需注入——恰好反证"仅状态路径需要"）
     feed = TushareParquetFeed(ROOT, state_provider=StateSynthesizer(ROOT))
     symbols = sorted(instruments)
-    handler = NextOpenHandler(cost_model=AShareTieredFeeModel(),
-                              slippage_model=NoSlippage(),
-                              instruments=instruments)
+    handler = NextOpenHandler(
+        cost_model=AShareTieredFeeModel(), slippage_model=NoSlippage(), instruments=instruments
+    )
     engine = Engine(
-        feed, MonthlyEqualWeight(symbols),
-        start=TradingDate(start), end=TradingDate(end),
-        initial_cash=1e9, handler=handler,
+        feed,
+        MonthlyEqualWeight(symbols),
+        start=TradingDate(start),
+        end=TradingDate(end),
+        initial_cash=1e9,
+        handler=handler,
         rebalancer=FullRebalancer(instruments=instruments),
-        risk_manager=RuleChainManager([]), instruments=instruments,
+        risk_manager=RuleChainManager([]),
+        instruments=instruments,
     )
     t0 = time.perf_counter()
     result = engine.run()
     elapsed = time.perf_counter() - t0
-    return elapsed, result.n_days, len(result.fills), len(result.rejections)
+    from tests.benchmark import _perf
+
+    # D8/B3：峰值 RSS 与 build+run 同进程（Windows PeakWorkingSetSize 上界口径）
+    peak_mb = _perf.peak_rss_mb()
+    return (elapsed, result.n_days, len(result.fills), len(result.rejections), peak_mb)
 
 
 @pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason="主库不可用")
@@ -92,18 +103,23 @@ def test_b3_two_year_scan_evidence(instruments):
     """
     from tests.benchmark import _perf
 
-    elapsed, n_days, n_fills, n_rej = _perf.run_budget(
+    elapsed, n_days, n_fills, n_rej, peak_mb = _perf.run_budget(
         "B3-evidence",
         lambda: _run_scan(date(2015, 1, 1), date(2016, 12, 31), instruments),
         B3_LIMIT_SECONDS,
-        hint=("2 年尺度即超预算 ⇒ 十年尺度必超标：回查全市场扫描路径"
-              "（触发架构复查 / CP1 性能专项）"),
-        seconds=lambda row: row[0])
+        hint=(
+            "2 年尺度即超预算 ⇒ 十年尺度必超标：回查全市场扫描路径（触发架构复查 / CP1 性能专项）"
+        ),
+        seconds=lambda row: row[0],
+    )
     per_day = elapsed / max(n_days, 1)
-    print(f"\nB3-evidence: {n_days} 交易日 × {len(instruments)} 标的 | "
-          f"{n_fills:,} 成交 / {n_rej:,} 拒单 | {elapsed:.1f}s"
-          f"（≈{per_day * 1000:.1f} ms/日；线性外推十年 "
-          f"{per_day * 2440:.0f}s vs 预算 {B3_LIMIT_SECONDS:.0f}s）")
+    print(
+        f"\nB3-evidence: {n_days} 交易日 × {len(instruments)} 标的 | "
+        f"{n_fills:,} 成交 / {n_rej:,} 拒单 | {elapsed:.1f}s | "
+        f"峰值 RSS {peak_mb:.0f} MB"
+        f"（≈{per_day * 1000:.1f} ms/日；线性外推十年 "
+        f"{per_day * 2440:.0f}s vs 预算 {B3_LIMIT_SECONDS:.0f}s）"
+    )
     assert n_days > 400, "交易日数异常"
     assert n_fills > 5_000, "成交笔数量级异常（截面策略应大规模调仓）"
 
@@ -127,15 +143,22 @@ def test_b3_full_decade_scan(instruments):
     """
     from tests.benchmark import _perf
 
-    elapsed, n_days, fills, rejections = _perf.run_budget(
+    elapsed, n_days, fills, rejections, peak_mb = _perf.run_budget(
         "B3-decade",
         lambda: _run_scan(START, END, instruments),
         B3_LIMIT_SECONDS,
-        hint=("回查全市场扫描路径（per-day 消费 / 列式截面 / stk_limit 索引 / "
-              "快照单遍融合）"),
-        seconds=lambda row: row[0])
-    print(f"\nB3-decade: {n_days} 交易日 × {len(instruments)} 标的 | "
-          f"{fills:,} 成交 / {rejections:,} 拒单 | {elapsed:.1f}s"
-          f"（预算 {B3_LIMIT_SECONDS:.0f}s，按归一化墙钟判定（MM-8））")
+        hint=("回查全市场扫描路径（per-day 消费 / 列式截面 / stk_limit 索引 / 快照单遍融合）"),
+        seconds=lambda row: row[0],
+    )
+    print(
+        f"\nB3-decade: {n_days} 交易日 × {len(instruments)} 标的 | "
+        f"{fills:,} 成交 / {rejections:,} 拒单 | {elapsed:.1f}s | "
+        f"峰值 RSS {peak_mb:.0f} MB（红线 {B3_RSS_LIMIT_MB:.0f} MB）"
+        f"（预算 {B3_LIMIT_SECONDS:.0f}s，按归一化墙钟判定（MM-8/D8））"
+    )
     assert n_days > 2300
-
+    # D8/B3：内存红线按实测峰值 + 余量；测法见 tests/perf/BASELINE.md。
+    assert peak_mb < B3_RSS_LIMIT_MB, (
+        f"B3 峰值 RSS {peak_mb:.0f} MB ≥ 红线 {B3_RSS_LIMIT_MB:.0f} MB——"
+        f"回查全市场截面物化/年表缓存（READ_CACHE_MB）是否失控"
+    )

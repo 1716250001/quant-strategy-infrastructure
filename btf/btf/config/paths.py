@@ -14,6 +14,7 @@
     BTF_OUTPUT_DIR   回测产物根（默认 工作区根/回测产物 = 量化策略/回测产物）
     BTF_DATASETS_DIR 黄金/示例数据集根（默认 包根/btf_datasets）
 """
+
 from __future__ import annotations
 
 import os
@@ -57,9 +58,7 @@ def _default_market_data() -> Path:
 
 
 MARKET_DATA_DIR = _from_env("BTF_DATA_DIR", _default_market_data())
-ALT_DATA_DIR = _from_env(
-    "BTF_ALT_DATA_DIR", Path(PROJECT_ROOT.anchor) / "全量数据" / "alt_data"
-)
+ALT_DATA_DIR = _from_env("BTF_ALT_DATA_DIR", Path(PROJECT_ROOT.anchor) / "全量数据" / "alt_data")
 
 # 产物目录：默认 工作区根「回测产物/」=（D:/量化策略/回测产物，06 §11.3 部署拓扑；
 # 绝不写主库）。单一落盘点：引擎 runs/ 与 tools/run_v77_robustness.py 的
@@ -71,13 +70,14 @@ RUNS_DIR = OUTPUT_DIR / "runs"
 DATASETS_DIR = _from_env("BTF_DATASETS_DIR", PACKAGE_ROOT / "btf_datasets")
 
 # 公司行动离线清单根（**CL-2 第二段 R1′/R2′**；19 号 §79.4）：配股/缩股事件
-# 清单（JSON，含来源哈希与校验统计）——由 `python -m btf.data.corp_action_probe`
+# 清单（JSON，含来源哈希与校验统计）——由 `python tools/build_corp_actions.py`
 # 生成，feed 侧 adapter 读取（**不写主库** `market_data`；含 IRREVERSIBLE 无关）。
 #: ⚠ 变量名**必须** `BTFTOOL_` 前缀（**N7**，19 号 §69.4）：`BTF_` 前缀会被
 #: 配置层当覆盖键注入（`BTF_CORP_ACTION_DIR` ⇒ 顶层 `corp_action_dir` 非法键，
 #: 一设即**全平台配置校验崩**——本批实测踩中一次，见 18 号 §九·X）。
-CORP_ACTION_DIR = _from_env("BTFTOOL_CORP_ACTION_DIR",
-                            PACKAGE_ROOT / "btf_datasets" / "corp_actions")
+CORP_ACTION_DIR = _from_env(
+    "BTFTOOL_CORP_ACTION_DIR", PACKAGE_ROOT / "btf_datasets" / "corp_actions"
+)
 
 # 数据冻结清单根（**CL-4**，19 号 §72.5 S-2）：**项目内只读目录**——每回测落一份
 # 「表清单 ＋ content_hash ＋ anchor_date」不可变清单（`bt dataset freeze`）。
@@ -85,4 +85,3 @@ CORP_ACTION_DIR = _from_env("BTFTOOL_CORP_ACTION_DIR",
 # 08 号（数据）与 20 号（使用纪律）。`BTFTOOL_FREEZE_DIR` 可覆盖（**N7 前缀纪律**，
 # 19 号 §69.4：`BTF_` 前缀会被配置层当覆盖键注入 ⇒ 校验崩）。
 FREEZE_DIR = _from_env("BTFTOOL_FREEZE_DIR", PROJECT_ROOT / "_freeze")
-

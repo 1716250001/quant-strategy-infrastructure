@@ -6,6 +6,7 @@ common/logging_setup.py — 统一日志初始化
 改为：由入口（main.py 的 main()）在启动时显式调用 setup_logging()，
 且保证幂等（重复调用不会叠加 handler）。
 """
+
 import logging
 import os
 import sys
@@ -50,8 +51,8 @@ def setup_logging(name="teleagent", level=logging.INFO, log_file=None, console=T
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
         fh = RotatingFileHandler(
             log_file,
-            maxBytes=5 * 1024 * 1024,   # 单文件 5 MB
-            backupCount=3,               # 保留 3 份备份 → 上限 20 MB
+            maxBytes=5 * 1024 * 1024,  # 单文件 5 MB
+            backupCount=3,  # 保留 3 份备份 → 上限 20 MB
             encoding="utf-8",
         )
         fh.setFormatter(fmt)
@@ -59,3 +60,13 @@ def setup_logging(name="teleagent", level=logging.INFO, log_file=None, console=T
 
     _configured = True
     return logger
+
+
+def log_event(message, level=logging.INFO):
+    """把关键事件写入已配置的日志文件（未配置时由 logging 兜底到 stderr）。
+
+    为什么需要（D4 D-P1-8/日志）：本仓大量使用 `print`，而 `chichao.log`
+    由 `setup_logging` 建好后**一直 0 字节**。关键失败/分步耗时必须至少
+    有一份进文件，供计划任务与事后审计读取。
+    """
+    logging.getLogger("chichao").log(level, message)

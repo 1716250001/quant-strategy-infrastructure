@@ -35,6 +35,7 @@ alt/update.py — alt 库每日增量更新
   python -m alt.update --status             # 只看各表新鲜度（零请求）
   python -m alt.update --list               # 列出可更新表
 """
+
 import argparse
 import json
 import os
@@ -63,15 +64,18 @@ def load_state():
         try:
             return json.load(open(STATE_FILE, encoding="utf-8"))
         except Exception as exc:
-            print(f"[alt.update] 状态文件读取失败（按空处理）{STATE_FILE}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[alt.update] 状态文件读取失败（按空处理）{STATE_FILE}: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             return {}
     return {}
 
 
 def save_state(state):
     ensure_alt_dirs()
-    assert_writable(STATE_FILE)             # M1：落盘前过写入守卫
+    assert_writable(STATE_FILE)  # M1：落盘前过写入守卫
     tmp = STATE_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=1)
@@ -80,14 +84,16 @@ def save_state(state):
 
 def days_since(iso_str):
     if not iso_str:
-        return 10 ** 6
+        return 10**6
     try:
         t = datetime.fromisoformat(iso_str)
         return (datetime.now() - t).total_seconds() / 86400
     except Exception as exc:
-        print(f"[alt.update] ISO 时间解析失败 {iso_str!r}（按极老处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
-        return 10 ** 6
+        print(
+            f"[alt.update] ISO 时间解析失败 {iso_str!r}（按极老处理）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 10**6
 
 
 # ============================================================
@@ -123,10 +129,18 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
     """
     if ckpt is None or not is_initialized(sp, ckpt):
         if sp.mode == "list":
-            return {"action": "skip", "dates": [], "lookback_dates": [],
-                    "reason": f"尚未建库（先跑 python -m alt.list_backfill --table {sp.name}）"}
-        return {"action": "skip", "reason": "尚未建库（请先跑 alt.backfill）",
-                "dates": [], "lookback_dates": []}
+            return {
+                "action": "skip",
+                "dates": [],
+                "lookback_dates": [],
+                "reason": f"尚未建库（先跑 python -m alt.list_backfill --table {sp.name}）",
+            }
+        return {
+            "action": "skip",
+            "reason": "尚未建库（请先跑 alt.backfill）",
+            "dates": [],
+            "lookback_dates": [],
+        }
 
     # ── mode="list"（按标的列表逐只拉）——v1.2 起分两类处理（2026-10-11）──
     #   ① rotate_days>0（港股 hk_daily / hk_qfq_factor）：
@@ -136,16 +150,18 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
     #      必须整表重建、不适用增量或轮转 ⇒ 仍走专用入口 us_backfill。
     if sp.mode == "list":
         if (sp.rotate_days or 0) > 0:
-            return {"action": "rotate", "dates": [], "lookback_dates": [],
-                    "reason": f"轮转更新（{sp.rotate_days} 天/轮，最久未拉优先）"}
+            return {
+                "action": "rotate",
+                "dates": [],
+                "lookback_dates": [],
+                "reason": f"轮转更新（{sp.rotate_days} 天/轮，最久未拉优先）",
+            }
         # §163 R11-2：skip 文案（通用 + us_daily_qfq 特化）
         if sp.name == "us_daily_qfq":
             reason = "us_daily_qfq 已废弃（§159），见 spec.note"
         else:
-            reason = ('mode="list" 且 rotate_days=0 → 不走日更；'
-                      '请用该表专用入口（见 spec.note）')
-        return {"action": "skip", "dates": [], "lookback_dates": [],
-                "reason": reason}
+            reason = 'mode="list" 且 rotate_days=0 → 不走日更；请用该表专用入口（见 spec.note）'
+        return {"action": "skip", "dates": [], "lookback_dates": [], "reason": reason}
 
     # ── single 布局：按刷新间隔决定是否全量刷新 ──
     if sp.layout == "single":
@@ -153,10 +169,18 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
         age = days_since(last)
         age_s = "首次" if not last else f"距今 {age:.1f} 天"
         if not force and last and age < sp.update_every_days:
-            return {"action": "skip", "dates": [], "lookback_dates": [],
-                    "reason": f"{age_s} < 刷新间隔 {sp.update_every_days} 天"}
-        return {"action": "single", "dates": [], "lookback_dates": [],
-                "reason": f"全量刷新（{age_s}）"}
+            return {
+                "action": "skip",
+                "dates": [],
+                "lookback_dates": [],
+                "reason": f"{age_s} < 刷新间隔 {sp.update_every_days} 天",
+            }
+        return {
+            "action": "single",
+            "dates": [],
+            "lookback_dates": [],
+            "reason": f"全量刷新（{age_s}）",
+        }
 
     # ── by_year 布局：算缺口 ∪ 复核窗口 ──
     dc = sp.date_col
@@ -178,14 +202,21 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
     if sp.is_snapshot:
         safe, why, warn = is_snapshot_safe_now()
         if not safe:
-            return {"action": "skip", "dates": [], "lookback_dates": [],
-                    "reason": f"纯快照表暂停：{why}"}
-        rsn = (f"纯快照表：仅采集当日 {target_date}"
-               f"（无日期维度，禁止复核窗口以免覆盖历史）")
+            return {
+                "action": "skip",
+                "dates": [],
+                "lookback_dates": [],
+                "reason": f"纯快照表暂停：{why}",
+            }
+        rsn = f"纯快照表：仅采集当日 {target_date}（无日期维度，禁止复核窗口以免覆盖历史）"
         if warn:
             rsn += f"｜⚠ {warn}"
-        return {"action": "dates", "dates": [target_date],
-                "lookback_dates": [target_date], "reason": rsn}
+        return {
+            "action": "dates",
+            "dates": [target_date],
+            "lookback_dates": [target_date],
+            "reason": rsn,
+        }
 
     refresh = recent_trade_dates(lookback, end_date=target_date) if lookback else []
 
@@ -207,8 +238,12 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
         dates = list(refresh) or [target_date]
         if floor:
             dates = [d for d in dates if d >= floor] or [target_date]
-        return {"action": "dates", "dates": dates, "lookback_dates": list(refresh),
-                "reason": "读不到库内最新日期 → 仅跑复核窗口"}
+        return {
+            "action": "dates",
+            "dates": dates,
+            "lookback_dates": list(refresh),
+            "reason": "读不到库内最新日期 → 仅跑复核窗口",
+        }
 
     gaps = trade_dates_between(latest, target_date)
     if floor:
@@ -219,14 +254,21 @@ def plan_one(sp, target_date, lookback, state, force=False, ckpt=None):
     if floor:
         dates = [d for d in dates if d >= floor]
     if not dates:
-        return {"action": "skip", "dates": [], "lookback_dates": [],
-                "reason": f"已是最新（库内 {latest}）"}
+        return {
+            "action": "skip",
+            "dates": [],
+            "lookback_dates": [],
+            "reason": f"已是最新（库内 {latest}）",
+        }
     extra = ""
     if floor:
         extra = f"｜窗口限制 {sp.max_backfill_days} 天（早于 {floor} 的不再尝试）"
-    return {"action": "dates", "dates": dates, "lookback_dates": list(refresh),
-            "reason": f"缺口 {len(gaps)} 天 + 复核 {len(refresh)} 天"
-                      f"（库内最新 {latest}）{extra}"}
+    return {
+        "action": "dates",
+        "dates": dates,
+        "lookback_dates": list(refresh),
+        "reason": f"缺口 {len(gaps)} 天 + 复核 {len(refresh)} 天（库内最新 {latest}）{extra}",
+    }
 
 
 # ============================================================
@@ -245,8 +287,7 @@ def update_single(sp, limiter, ckpt, dry_run=False):
         end = datetime.now().strftime("%Y%m%d")
         start = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
         kw["range_window"] = (start, end)
-    return run_spec(sp, limiter, ckpt, dry_run=dry_run, force=True,
-                    verbose=True, **kw)
+    return run_spec(sp, limiter, ckpt, dry_run=dry_run, force=True, verbose=True, **kw)
 
 
 def update_by_year(sp, limiter, ckpt, dates, lookback_dates, dry_run=False):
@@ -254,15 +295,24 @@ def update_by_year(sp, limiter, ckpt, dates, lookback_dates, dry_run=False):
 
     复核窗口内的日期用 force=True 强制重拉（修"断点已记但数据残缺"）。
     """
-    agg = {"table": sp.name, "tier": sp.tier, "mode": sp.mode, "requests": 0,
-           "rows": 0, "added": 0, "ok": True, "skipped": False,
-           "errors": [], "warnings": [],
-           "done_dates": [], "refreshed_dates": []}
+    agg = {
+        "table": sp.name,
+        "tier": sp.tier,
+        "mode": sp.mode,
+        "requests": 0,
+        "rows": 0,
+        "added": 0,
+        "ok": True,
+        "skipped": False,
+        "errors": [],
+        "warnings": [],
+        "done_dates": [],
+        "refreshed_dates": [],
+    }
     lb = set(lookback_dates or [])
     for d in dates:
         force = d in lb
-        r = run_spec(sp, limiter, ckpt, dry_run=dry_run, force=force,
-                     verbose=False, target_date=d)
+        r = run_spec(sp, limiter, ckpt, dry_run=dry_run, force=force, verbose=False, target_date=d)
         agg["requests"] += r["requests"]
         agg["rows"] += r["rows"]
         agg["added"] += r["added"]
@@ -295,19 +345,36 @@ def update_rotate(sp, limiter, ckpt, dry_run=False, budget=None):
       因**顺序执行**（update 其余表跑完才轮转到此），两实例不叠加速率。
     """
     from alt import list_backfill as lb
+
     res = lb.run(sp.name, budget=budget, dry_run=dry_run, yes=True, verbose=True)
     if dry_run:
-        return {"table": sp.name, "action": "rotate", "requests": 0, "rows": 0,
-                "added": 0, "ok": True, "errors": [], "warnings": [],
-                "done_dates": [], "refreshed_dates": [],
-                "reason": f"[dry-run] 轮转计划 {res.get('planned', 0)} 只"}
+        return {
+            "table": sp.name,
+            "action": "rotate",
+            "requests": 0,
+            "rows": 0,
+            "added": 0,
+            "ok": True,
+            "errors": [],
+            "warnings": [],
+            "done_dates": [],
+            "refreshed_dates": [],
+            "reason": f"[dry-run] 轮转计划 {res.get('planned', 0)} 只",
+        }
     stat = res.get("stat") or {}
     n_req = stat.get("ok", 0) + stat.get("empty", 0) + stat.get("fail", 0)
-    return {"table": sp.name, "action": "rotate", "requests": n_req,
-            "rows": stat.get("rows", 0), "added": stat.get("added", 0),
-            "ok": stat.get("fail", 0) == 0,
-            "errors": list(res.get("errors", []))[:3], "warnings": [],
-            "done_dates": [], "refreshed_dates": []}
+    return {
+        "table": sp.name,
+        "action": "rotate",
+        "requests": n_req,
+        "rows": stat.get("rows", 0),
+        "added": stat.get("added", 0),
+        "ok": stat.get("fail", 0) == 0,
+        "errors": list(res.get("errors", []))[:3],
+        "warnings": [],
+        "done_dates": [],
+        "refreshed_dates": [],
+    }
 
 
 # ============================================================
@@ -327,28 +394,62 @@ def freshness_report(specs, verbose=True):
     from common import reader as _reader
 
     today = pd.Timestamp.now().normalize()
+    ckpt = AltCheckpoint()  # 只读；D4：status 展示最近拉取
+    retired = getattr(sp_mod, "_RETIRED_AGE_720", frozenset())
     rows = []
     for sp in specs:
+        rec = ckpt.data.get(sp.name) if isinstance(ckpt.data.get(sp.name), dict) else {}
+        last_pull = rec.get("last_attempt") or rec.get("updated") or ""
         # 落盘后必须让布局缓存失效，否则刚创建的表读不到
         _reader.clear_cache(sp.name, root=ALT_DATA_DIR)
         if not table_dir_exists(sp.name):
-            rows.append({"table": sp.name, "state": "缺失", "latest": "", "age": None})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": "缺失",
+                    "latest": "",
+                    "age": None,
+                    "last_pull": last_pull,
+                }
+            )
             continue
         # 快照表（has_date=False，如 us_universe）：**无日期维度，新鲜度判据不适用**
         #   2026-09-21 修复：原实现落入下面 `sp.date_col not in df.columns` → 报「无数据」，
         #   但那是**结构性事实**（该表本就没有日期列），不是数据缺失。
         if not sp.has_date:
-            rows.append({"table": sp.name, "state": "无日期维度",
-                         "latest": "", "age": None})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": "无日期维度",
+                    "latest": "",
+                    "age": None,
+                    "last_pull": last_pull,
+                }
+            )
             continue
         try:
             df = _read_all(sp)
         except Exception as e:
-            rows.append({"table": sp.name, "state": f"读取失败:{type(e).__name__}",
-                         "latest": "", "age": None})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": f"读取失败:{type(e).__name__}",
+                    "latest": "",
+                    "age": None,
+                    "last_pull": last_pull,
+                }
+            )
             continue
         if df is None or len(df) == 0 or sp.date_col not in df.columns:
-            rows.append({"table": sp.name, "state": "无数据", "latest": "", "age": None})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": "无数据",
+                    "latest": "",
+                    "age": None,
+                    "last_pull": last_pull,
+                }
+            )
             continue
         d = pd.to_datetime(df[sp.date_col].astype(str), format="%Y%m%d", errors="coerce").dropna()
         past = d[d <= today]
@@ -358,11 +459,20 @@ def freshness_report(specs, verbose=True):
         # 已知停更的表降级为「已登记停更」（2026-09-21 新增）:
         #   否则每次自检都刷 15 条已知项（金十系源端停更 1 年）→ 狼来了，
         #   真正的「新出现的断更」反而被淹没。
-        if state == "陈旧" and sp.known_stale:
+        # D4：_RETIRED_AGE_720 的 14 张表无论年龄一律显式标注「已登记停更」，
+        #   不得因 720 天阈值而显示 OK。
+        if sp.name in retired or sp.known_stale:
             state = "已登记停更"
-        rows.append({"table": sp.name, "state": state,
-                     "latest": latest.strftime("%Y%m%d"), "age": age,
-                     "threshold": sp.max_age_days})
+        rows.append(
+            {
+                "table": sp.name,
+                "state": state,
+                "latest": latest.strftime("%Y%m%d"),
+                "age": age,
+                "threshold": sp.max_age_days,
+                "last_pull": last_pull,
+            }
+        )
 
     if verbose:
         print("=" * 92)
@@ -387,7 +497,9 @@ def freshness_report(specs, verbose=True):
                     sp = next((s for s in specs if s.name == r["table"]), None)
                     if sp and sp.known_stale:
                         extra = f"  ← {sp.known_stale[:62]}"
-                print(f"    {r['table']:<26}{r['state']:<10}最新 {r['latest'] or '—':<10}{age}{extra}")
+                print(
+                    f"    {r['table']:<26}{r['state']:<10}最新 {r['latest'] or '—':<10}{age}{extra}"
+                )
         if bad:
             print("\n  需关注:")
             for r in sorted(bad, key=lambda x: -(x.get("age") or 0)):
@@ -408,6 +520,7 @@ def _read_all(sp):
     """
     from alt.reader import read_alt
     from common import reader as _reader
+
     _reader.clear_cache(sp.name, root=ALT_DATA_DIR)
     return read_alt(sp.name)
 
@@ -415,8 +528,15 @@ def _read_all(sp):
 # ============================================================
 # 五、主流程
 # ============================================================
-def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
-        force=False, verbose=True, rotate_budget=None):
+def run(
+    tier=None,
+    only=None,
+    dry_run=False,
+    lookback=DEFAULT_LOOKBACK,
+    force=False,
+    verbose=True,
+    rotate_budget=None,
+):
     ensure_alt_dirs()
 
     if only:
@@ -433,8 +553,7 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
         #   「无匹配表」而 automation 报成功 —— 正是本会话在查的那类静默失败。
         _bad = [_t for _t in _tiers if _t not in sp_mod.BY_TIER]
         if _bad:
-            raise SystemExit(f"[FATAL] 非法 tier: {_bad}"
-                             f"（合法值: {sp_mod.TIERS}）")
+            raise SystemExit(f"[FATAL] 非法 tier: {_bad}（合法值: {sp_mod.TIERS}）")
         specs = [sp for _t in _tiers for sp in sp_mod.BY_TIER.get(_t, [])]
     else:
         specs = list(sp_mod.ALL_SPECS)
@@ -459,7 +578,9 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
     print(f"  库根     : {ALT_DATA_DIR}")
     print(f"  目标交易日: {tdate}（按日型表使用）")
     print(f"  复核窗口 : 最近 {lookback} 个交易日")
-    print(f"  表数     : {len(specs)}（待执行 {sum(1 for _, p in plans if p['action'] != 'skip')}）")
+    print(
+        f"  表数     : {len(specs)}（待执行 {sum(1 for _, p in plans if p['action'] != 'skip')}）"
+    )
     print(f"  时间     : {datetime.now():%Y-%m-%d %H:%M:%S}")
     print("=" * 92)
 
@@ -476,17 +597,26 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
 
     from alt.audit import isolation_guard
 
-    guard = (nullcontext() if dry_run
-             else isolation_guard(verbose=verbose, label="alt.update"))
+    guard = nullcontext() if dry_run else isolation_guard(verbose=verbose, label="alt.update")
 
     with guard:
         for i, (sp, p) in enumerate(plans, 1):
             head = f"[{i}/{len(plans)}] {sp.name:<26} {p['action']:<7}"
             if p["action"] == "skip":
                 print(f"{head} — {p['reason'][:70]}")
-                results.append({"table": sp.name, "action": "skip",
-                                "requests": 0, "rows": 0, "added": 0, "ok": True,
-                                "errors": [], "warnings": [], "reason": p["reason"]})
+                results.append(
+                    {
+                        "table": sp.name,
+                        "action": "skip",
+                        "requests": 0,
+                        "rows": 0,
+                        "added": 0,
+                        "ok": True,
+                        "errors": [],
+                        "warnings": [],
+                        "reason": p["reason"],
+                    }
+                )
                 # §182 R15-2a：每张表处理完即落盘（含 skip）——防崩溃丢前面所有表的 last_update
                 if not dry_run:
                     save_state(state)
@@ -495,27 +625,39 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
             print(f"{head} — {p['reason'][:70]}")
             try:
                 if p["action"] == "rotate":
-                    r = update_rotate(sp, limiter, ckpt, dry_run=dry_run,
-                                      budget=rotate_budget)
+                    r = update_rotate(sp, limiter, ckpt, dry_run=dry_run, budget=rotate_budget)
                 elif p["action"] == "single":
                     r = update_single(sp, limiter, ckpt, dry_run=dry_run)
                 else:
-                    r = update_by_year(sp, limiter, ckpt, p["dates"],
-                                       p["lookback_dates"], dry_run=dry_run)
+                    r = update_by_year(
+                        sp, limiter, ckpt, p["dates"], p["lookback_dates"], dry_run=dry_run
+                    )
                 r["action"] = p["action"]
                 r["reason"] = p["reason"]
             except Exception as e:
-                r = {"table": sp.name, "action": p["action"], "requests": 0, "rows": 0,
-                     "added": 0, "ok": False, "errors": [f"{type(e).__name__}: {e}"],
-                     "warnings": [], "reason": p["reason"]}
+                r = {
+                    "table": sp.name,
+                    "action": p["action"],
+                    "requests": 0,
+                    "rows": 0,
+                    "added": 0,
+                    "ok": False,
+                    "errors": [f"{type(e).__name__}: {e}"],
+                    "warnings": [],
+                    "reason": p["reason"],
+                }
             results.append(r)
 
             stat = "OK" if r["ok"] else "FAIL"
-            print(f"      请求 {r['requests']:>3} | 落盘 {r['rows']:>7,} 行"
-                  f"（新增 {r['added']:,}） | {stat}")
+            print(
+                f"      请求 {r['requests']:>3} | 落盘 {r['rows']:>7,} 行"
+                f"（新增 {r['added']:,}） | {stat}"
+            )
             if r.get("done_dates"):
-                print(f"      新增日期: {r['done_dates'][0]}~{r['done_dates'][-1]}"
-                      f"（{len(r['done_dates'])} 天）")
+                print(
+                    f"      新增日期: {r['done_dates'][0]}~{r['done_dates'][-1]}"
+                    f"（{len(r['done_dates'])} 天）"
+                )
             if r.get("refreshed_dates"):
                 print(f"      复核刷新: {r['refreshed_dates']}")
             for w in r.get("warnings", [])[:2]:
@@ -543,11 +685,15 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
     print("\n" + "=" * 92)
     print("汇总")
     print("=" * 92)
-    print(f"  执行 {len(ran)} 张：成功 {ok_n} | 失败 {len(ran)-ok_n} |"
-          f" 跳过 {len(results)-len(ran)}")
-    print(f"  请求数 {sum(r['requests'] for r in results)} |"
-          f" 落盘 {sum(r['rows'] for r in results):,} 行"
-          f"（新增 {sum(r['added'] for r in results):,}） | 耗时 {dur:.1f}s")
+    print(
+        f"  执行 {len(ran)} 张：成功 {ok_n} | 失败 {len(ran) - ok_n} |"
+        f" 跳过 {len(results) - len(ran)}"
+    )
+    print(
+        f"  请求数 {sum(r['requests'] for r in results)} |"
+        f" 落盘 {sum(r['rows'] for r in results):,} 行"
+        f"（新增 {sum(r['added'] for r in results):,}） | 耗时 {dur:.1f}s"
+    )
     print(f"  {limiter.status_str()}")
 
     fails = [r for r in ran if not r["ok"]]
@@ -566,26 +712,34 @@ def run(tier=None, only=None, dry_run=False, lookback=DEFAULT_LOOKBACK,
 
 def status_only(tier=None, only=None):
     """只做新鲜度体检（零请求）"""
-    specs = ([sp_mod.get(only)] if only else
-             (list(sp_mod.BY_TIER.get(tier, [])) if tier else list(sp_mod.ALL_SPECS)))
+    specs = (
+        [sp_mod.get(only)]
+        if only
+        else (list(sp_mod.BY_TIER.get(tier, [])) if tier else list(sp_mod.ALL_SPECS))
+    )
     print("=" * 92)
     print(f"alt 库新鲜度体检（零请求）   {datetime.now():%Y-%m-%d %H:%M:%S}")
     print("=" * 92)
     rows = freshness_report(specs, verbose=False)
-    print(f"{'表名':<26}{'状态':<10}{'最新':<12}{'距今':<9}{'阈值':<7}")
+    print(f"{'表名':<26}{'状态':<10}{'最近拉取':<20}{'最新':<12}{'距今':<9}{'阈值':<7}")
     print("-" * 92)
     for r in sorted(rows, key=lambda x: (x["state"] != "OK", -(x.get("age") or 0))):
         age = f"{r['age']} 天" if r.get("age") is not None else "—"
-        print(f"{r['table']:<26}{r['state']:<10}{r['latest'] or '—':<12}"
-              f"{age:<9}{r.get('threshold', '—'):<7}")
-    bad = [r for r in rows if r["state"] != "OK"]
+        print(
+            f"{r['table']:<26}{r['state']:<10}{r.get('last_pull') or '未知':<20}"
+            f"{r['latest'] or '—':<12}{age:<9}{r.get('threshold', '—'):<7}"
+        )
+    info_states = {"无日期维度", "已登记停更"}
+    bad = [r for r in rows if r["state"] not in info_states | {"OK"}]
+    n_info = sum(1 for r in rows if r["state"] in info_states)
     print("-" * 92)
-    print(f"  正常 {len(rows)-len(bad)} | 异常 {len(bad)}")
+    print(f"  正常 {len(rows) - len(bad) - n_info} | 异常 {len(bad)} | 不报警 {n_info}")
 
     # v1.2：list 表轮转进度（零请求；轮转表不按"全表最新日"判新鲜，
     #       须按"逐只水位"看——04 §8.6 / 09 §14.2）
     try:
         from alt.list_backfill import show_status as _rotate_status
+
         print()
         _rotate_status()
     except Exception as e:
@@ -601,18 +755,27 @@ def main(argv=None):
     # DB-R9：--tier 支持逗号分隔多组（如 P0,P1,P3,P4,P0_EXT）。
     #   故不能用 argparse 的 choices（它校验**整串**，逗号串必然失败）；
     #   改为自校验，逐项比对 sp_mod.TIERS，非法值直接报错退出（不放行拼写错误）。
-    p.add_argument("--tier", help="按优先级执行，支持逗号分隔多组"
-                                 "（如 P0,P1,P3,P4,P0_EXT）；合法值见 --list")
+    p.add_argument(
+        "--tier", help="按优先级执行，支持逗号分隔多组（如 P0,P1,P3,P4,P0_EXT）；合法值见 --list"
+    )
     p.add_argument("--only")
     p.add_argument("--dry-run", action="store_true", help="只输出计划，不发请求")
-    p.add_argument("--lookback", type=int, default=DEFAULT_LOOKBACK,
-                   help=f"复核窗口（交易日数），默认 {DEFAULT_LOOKBACK}")
+    p.add_argument(
+        "--lookback",
+        type=int,
+        default=DEFAULT_LOOKBACK,
+        help=f"复核窗口（交易日数），默认 {DEFAULT_LOOKBACK}",
+    )
     p.add_argument("--force", action="store_true", help="忽略刷新间隔强制全刷")
     p.add_argument("--status", action="store_true", help="只做新鲜度体检（零请求）")
     p.add_argument("--list", action="store_true", help="列出可更新表与策略")
-    p.add_argument("--rotate-budget", type=int, default=None, dest="rotate_budget",
-                   help="list 表轮转的单表批量上限（默认 ceil(n/rotate_days)，"
-                        "如港股 398 只/表）")
+    p.add_argument(
+        "--rotate-budget",
+        type=int,
+        default=None,
+        dest="rotate_budget",
+        help="list 表轮转的单表批量上限（默认 ceil(n/rotate_days)，如港股 398 只/表）",
+    )
     args = p.parse_args(argv)
 
     if args.status:
@@ -631,14 +794,29 @@ def main(argv=None):
                 mark = "✓" if table_dir_exists(s.name) else " "
                 iv = f"每{s.update_every_days}天" if layout == "single" else "每日"
                 if s.mode == "list":
-                    iv = (f"轮转 {s.rotate_days} 天/轮（list_backfill）"
-                          if (s.rotate_days or 0) > 0 else "整表重建（us_backfill）")
+                    iv = (
+                        f"轮转 {s.rotate_days} 天/轮（list_backfill）"
+                        if (s.rotate_days or 0) > 0
+                        else "整表重建（us_backfill）"
+                    )
                 print(f"  {mark} {s.tier}  {s.name:<26}{s.note[:34]:<36}{iv}")
         return 0
 
-    run(tier=args.tier, only=args.only, dry_run=args.dry_run,
-        lookback=args.lookback, force=args.force,
-        rotate_budget=args.rotate_budget)
+    results = run(
+        tier=args.tier,
+        only=args.only,
+        dry_run=args.dry_run,
+        lookback=args.lookback,
+        force=args.force,
+        rotate_budget=args.rotate_budget,
+    )
+    failed = [
+        r for r in results if r.get("action") != "skip" and (not r.get("ok") or r.get("errors"))
+    ]
+    if failed:
+        names = ", ".join(str(r.get("table")) for r in failed)
+        print(f"[alt.update] 失败表 {len(failed)} 张: {names}", file=sys.stderr)
+        return 1
     return 0
 
 

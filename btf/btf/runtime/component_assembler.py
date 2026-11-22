@@ -14,6 +14,7 @@
 方法体与拆分前**逐字一致**（由脚本搬移），故语义等价性由既有 824 测试直接验证；
 后续子批可再收敛为持有显式依赖的类（配合 `RunOrchestrator` 一并做）。
 """
+
 from __future__ import annotations
 
 import copy
@@ -37,6 +38,7 @@ class DataQualityError(RuntimeError):
     该名（对外 API 不变，调用方无需改动）。
     """
 
+
 __all__ = ["ComponentAssembler", "DataQualityError"]
 
 
@@ -44,16 +46,22 @@ def _ymd(s: str) -> TradingDate:
     """`_runtime` 时期的私有别名 —— 现统一走 `domain.types` 单一真源（R4）。"""
     return parse_trading_date(s)
 
+
 #: 数据指纹**进程内 memo**（BB-1；随 `compute_data_version` 一并下沉到此）：
 #: 键 = (root, tables, years, mode)。同一进程内重复 build/run（网格/批量 `--set`）
 #: 不应重复付算力；跨进程的 `bt run` 仍会重新实算 ⇒ 数据重写可检出。
-_FINGERPRINT_MEMO: dict[tuple, Any] = {}
+#: D11：无界 dict → **有界 LRU（8 条）**，与 `_VERSION_INFO_MEMO` 同界——网格
+#: 搜索的组合数远超保留价值，旧实现会随组合线性涨内存。
+_FINGERPRINT_MEMO: OrderedDict[tuple, Any] = OrderedDict()
+_FINGERPRINT_MEMO_MAX = 8
 
 #: **P3（19 号 §242）**：装配结果**进程内** memo（甲档）——只缓存两份纯数据
 #: （`data_quality` 载荷 + `data_version` 字典），**不缓存 runtime 对象**。
 #: 键含 `expected_hash`（数据契约变了必须失效）；LRU 上限 8 条。
 #: 收益：网格/多组同进程内，质检（≈8 s/组）与指纹只算一次。
-_QUALITY_MEMO: OrderedDict[tuple, tuple[dict[str, Any], tuple[str, ...], str, str | None]] = OrderedDict()
+_QUALITY_MEMO: OrderedDict[tuple, tuple[dict[str, Any], tuple[str, ...], str, str | None]] = (
+    OrderedDict()
+)
 _QUALITY_MEMO_MAX = 8
 #: 两份纯数据的另一份：`compute_data_version` 的**返回字典**（同样 LRU 8 条）。
 #: 键另含 `end_ymd`（`anchor_date` 夹取区间末）与 `expected_hash`（契约变更即失效）。
@@ -75,8 +83,11 @@ def _price_anchor(tables_detail: Mapping[str, Any], end_ymd: str) -> str:
     - ③ 夹取区间末：静态/未来日期不把锚点写成未来（声明侧同口径夹取）。
     无行情表 `date_max` ⇒ 返回空串（调用方按各自语义兜底）。
     """
-    marks = [d["date_max"] for name, d in tables_detail.items()
-             if name in _PRICE_TABLES and d.get("date_max")]
+    marks = [
+        d["date_max"]
+        for name, d in tables_detail.items()
+        if name in _PRICE_TABLES and d.get("date_max")
+    ]
     if not marks:
         return ""
     return min(min(marks), end_ymd) if end_ymd else min(marks)
@@ -119,7 +130,7 @@ class ComponentAssembler:
         # a1 指纹无谓变化并触发版本门禁。
         if any(is_fund_code(sym) for sym in self.rt.instruments):
             tables.add("fund_basic")
-        if ((self.rt.config.get("report") or {}).get("benchmark")):
+        if (self.rt.config.get("report") or {}).get("benchmark"):
             tables.add("index_daily")
         return sorted(tables)
 
@@ -145,10 +156,13 @@ class ComponentAssembler:
         feed_name = str((self.rt.config.get("data") or {}).get("feed") or "?")
         bad = routing_conflicts(self.rt.instruments, caps)
         if bad:
-            raise ConfigError(
-                format_routing_conflicts(bad, feed_name, caps))
-        logger.info("feed 路由校验通过：%d 标的（%s 能力表 %s）",
-                    len(self.rt.instruments), feed_name, sorted(caps))
+            raise ConfigError(format_routing_conflicts(bad, feed_name, caps))
+        logger.info(
+            "feed 路由校验通过：%d 标的（%s 能力表 %s）",
+            len(self.rt.instruments),
+            feed_name,
+            sorted(caps),
+        )
 
     def guard_benchmark(self, period: Mapping[str, Any]) -> None:
         """装配期基准守卫（P1-NEW-6）：形制 + 区间覆盖（零行即 ConfigError）。
@@ -166,22 +180,29 @@ class ComponentAssembler:
 
         for symbol in symbols:
             if not self.rt._BENCHMARK_RE.match(str(symbol)):
-                raise ConfigError([
-                    f"report.benchmark={symbol!r} 形制非法：应为"
-                    f"「6 位数字.交易所」（如 000300.SH / 399006.SZ / 000905.SH）"])
+                raise ConfigError(
+                    [
+                        f"report.benchmark={symbol!r} 形制非法：应为"
+                        f"「6 位数字.交易所」（如 000300.SH / 399006.SZ / 000905.SH）"
+                    ]
+                )
 
             n = probe_index_coverage(
-                str(symbol), _ymd(period["start"]).to_ymd(),
-                _ymd(period["end"]).to_ymd(), root=getattr(self.rt.feed, "root", None),
-                store=self.rt._table_store())
+                str(symbol),
+                _ymd(period["start"]).to_ymd(),
+                _ymd(period["end"]).to_ymd(),
+                root=getattr(self.rt.feed, "root", None),
+                store=self.rt._table_store(),
+            )
             if n == 0:
-                raise ConfigError([
-                    f"report.benchmark={symbol} 在区间 {period['start']}~"
-                    f"{period['end']} 内无任何行情（index_daily 零行）——"
-                    f"请核对基准代码或区间；装配期即拒绝，避免跑完整段回测才报错"])
-            logger.info("基准装配期校验通过：%s（区间内 %d 个交易日有行情）",
-                        symbol, n)
-
+                raise ConfigError(
+                    [
+                        f"report.benchmark={symbol} 在区间 {period['start']}~"
+                        f"{period['end']} 内无任何行情（index_daily 零行）——"
+                        f"请核对基准代码或区间；装配期即拒绝，避免跑完整段回测才报错"
+                    ]
+                )
+            logger.info("基准装配期校验通过：%s（区间内 %d 个交易日有行情）", symbol, n)
 
     def run_data_quality(self, period: Mapping[str, Any]) -> dict[str, Any]:
         """装配期数据不变量校验（CC-1..CC-5；CC-6 产物/披露见 `run()` 与报告）。
@@ -198,15 +219,20 @@ class ComponentAssembler:
         qcfg = dict((self.rt.config.get("data") or {}).get("quality") or {})
         if not qcfg.get("enabled", True):
             logger.info("数据不变量校验：配置关闭（data.quality.enabled=false）")
-            return {"enabled": False,
-                    "note": "已由配置关闭（data.quality.enabled=false）——"
-                            "本 run 未做 CC-1..CC-5 校验（披露而非静默）"}
+            return {
+                "enabled": False,
+                "note": "已由配置关闭（data.quality.enabled=false）——"
+                "本 run 未做 CC-1..CC-5 校验（披露而非静默）",
+            }
         root = getattr(self.rt.feed, "root", None)
         if root is None:
             logger.info("数据不变量校验：内存 Feed（无文件可校验，标注 skipped）")
-            return {"enabled": False, "mode": "in-memory",
-                    "note": "内存 Feed：无文件级数据可校验（非静默跳过）"}
-        universe = sorted(self.rt.instruments)     # dict[symbol, Instrument] 的键
+            return {
+                "enabled": False,
+                "mode": "in-memory",
+                "note": "内存 Feed：无文件级数据可校验（非静默跳过）",
+            }
+        universe = sorted(self.rt.instruments)  # dict[symbol, Instrument] 的键
         cap = int(qcfg.get("max_symbols", 200) or 0)
         sampled = bool(cap) and len(universe) > cap
         symbols = universe[:cap] if sampled else universe
@@ -220,12 +246,15 @@ class ComponentAssembler:
         # 「同进程内 `--set` 改 universe」；配置指纹覆盖 quality/strict 与基准。
         ds_cfg = (self.rt.config.get("data") or {}).get("dataset") or {}
         memo_key = (
-            str(root), start_ymd, end_ymd,
+            str(root),
+            start_ymd,
+            end_ymd,
             str(ds_cfg.get("expected_hash") or ""),
             tuple(sorted((k, repr(v)) for k, v in qcfg.items())),
             repr((self.rt.config.get("report") or {}).get("benchmark")),
             hashlib.sha1("\n".join(universe).encode("utf-8")).hexdigest(),
-            price_tables, limit_tables,
+            price_tables,
+            limit_tables,
         )
         t_hit = perf_counter()
         hit = _QUALITY_MEMO.get(memo_key)
@@ -234,13 +263,15 @@ class ComponentAssembler:
             self.rt.data_quality_cache = "命中"
             payload, notes, summary, warn = copy.deepcopy(hit[0]), hit[1], hit[2], hit[3]
             self.rt.assembly_notes.extend(notes)
-            logger.info("数据不变量校验：**命中进程内缓存**（%s~%s）｜%s",
-                        start_ymd, end_ymd, summary)
+            logger.info(
+                "数据不变量校验：**命中进程内缓存**（%s~%s）｜%s", start_ymd, end_ymd, summary
+            )
             if warn:
                 logger.warning("%s", warn)
             if qcfg.get("strict", False) and not payload.get("ok", True):
                 raise DataQualityError(
-                    "数据不变量校验未通过（strict=true，fail-closed）：" + summary)
+                    "数据不变量校验未通过（strict=true，fail-closed）：" + summary
+                )
             payload["seconds_assembly"] = round(perf_counter() - t_hit, 4)
             return payload
         logger.info("数据不变量校验：**重算**（未命中进程内缓存）")
@@ -266,23 +297,33 @@ class ComponentAssembler:
                 cal = calendar_days(root, start_ymd, end_ymd)
                 st_pairs = synth.st_pairs(start_ymd, end_ymd, symbols, cal=cal)
                 st_source = synth.st_source()
-            except Exception as exc:            # 取不到 = 不可用（不静默）
-                logger.warning("数据不变量校验：ST 名单获取失败（%s: %s）——"
-                               "CC-2 将只按板块上限判定", type(exc).__name__, exc)
+            except Exception as exc:  # 取不到 = 不可用（不静默）
+                logger.warning(
+                    "数据不变量校验：ST 名单获取失败（%s: %s）——CC-2 将只按板块上限判定",
+                    type(exc).__name__,
+                    exc,
+                )
         if st_source == "unavailable":
             st_warn = (
                 "数据不变量校验：ST 名单不可用（namechange 缺失/取不到）→ CC-2 "
                 "按板块上限判定，**会漏检 ST 股 5%~10% 的越界**（披露而非静默；"
-                "铁律新 16）")
+                "铁律新 16）"
+            )
             logger.warning("%s", st_warn)
             warns.append(st_warn)
             self.rt.assembly_notes.append(
-                "CC-2 ST 上限：ST 名单不可用 → 只按板块上限判定，"
-                "**可能漏检 ST 越界**（非静默）")
+                "CC-2 ST 上限：ST 名单不可用 → 只按板块上限判定，**可能漏检 ST 越界**（非静默）"
+            )
 
-        report = run_checks(root, start_ymd, end_ymd, symbols=set(symbols),
-                            price_tables=price_tables, limit_tables=limit_tables,
-                            st_symbols=st_pairs)
+        report = run_checks(
+            root,
+            start_ymd,
+            end_ymd,
+            symbols=set(symbols),
+            price_tables=price_tables,
+            limit_tables=limit_tables,
+            st_symbols=st_pairs,
+        )
         payload = report.as_dict()
         payload["sampled_symbols"] = sampled
         payload["checked_symbols"] = len(symbols)
@@ -294,37 +335,46 @@ class ComponentAssembler:
         if not report.ok:
             dq_warn = (
                 f"数据不变量校验发现 {report.n_findings} 行异常（"
-                + "、".join(f"{r.rule}:{r.n_findings}"
-                            for r in report.rules if not r.ok)
+                + "、".join(f"{r.rule}:{r.n_findings}" for r in report.rules if not r.ok)
                 + "）——详见 run 目录 data_quality_report.json / "
-                  "报告「数据质量」章节")
+                "报告「数据质量」章节"
+            )
             logger.warning("%s", dq_warn)
             warns.append(dq_warn)
         # 报告披露（CC-6）：走既有**强制章节**「假设与披露」通道（assembly_notes
         # → manifest → 报告），不新增模板章节（避免动渲染器）
         self.rt.assembly_notes.append(
             "数据不变量校验（CC-1..CC-5 阻断 ＋ CC-7 只报，装配期）："
-            + ("全部通过（阻断项）" if report.ok else
-               f"发现 {report.n_findings} 行异常（"
-               + "、".join(f"{r.rule}:{r.n_findings}"
-                           for r in report.rules
-                           if not r.ok and r.rule not in NON_BLOCKING_RULES)
-               + "）——明细见 run 目录 data_quality_report.json")
-            + (f"；标的抽样 {len(symbols)}/{len(self.rt.instruments)}"
-               "（data.quality.max_symbols）" if sampled else ""))
+            + (
+                "全部通过（阻断项）"
+                if report.ok
+                else f"发现 {report.n_findings} 行异常（"
+                + "、".join(
+                    f"{r.rule}:{r.n_findings}"
+                    for r in report.rules
+                    if not r.ok and r.rule not in NON_BLOCKING_RULES
+                )
+                + "）——明细见 run 目录 data_quality_report.json"
+            )
+            + (
+                f"；标的抽样 {len(symbols)}/{len(self.rt.instruments)}（data.quality.max_symbols）"
+                if sampled
+                else ""
+            )
+        )
         # P14（19 号 §172 C）：CC-7 **只报不阻断**，但披露**不得省略**
         cc7 = next((r for r in report.rules if r.rule == "CC-7"), None)
         if cc7 is not None:
             if cc7.findings:
                 self.rt.assembly_notes.append(
                     "CC-7 送转一致性（只报不阻断）："
-                    + "；".join(f"{f.detail} → {f.n_rows} 条"
-                                 for f in cc7.findings)
-                    + "（明细见 run 目录 data_quality_report.json）")
+                    + "；".join(f"{f.detail} → {f.n_rows} 条" for f in cc7.findings)
+                    + "（明细见 run 目录 data_quality_report.json）"
+                )
             else:
                 self.rt.assembly_notes.append(
-                    f"CC-7 送转一致性（只报不阻断）：{cc7.checked_rows} "
-                    "个送转事件均检出因子跳变")
+                    f"CC-7 送转一致性（只报不阻断）：{cc7.checked_rows} 个送转事件均检出因子跳变"
+                )
         payload["seconds_assembly"] = round(perf_counter() - t0, 4)
         # ── P3（19 号 §242）：写进程内 memo（LRU 8 条）──────────────────
         # 只缓存**两份纯数据＋披露文本**（红线 1：不缓存 runtime 对象）；
@@ -340,9 +390,7 @@ class ComponentAssembler:
         while len(_QUALITY_MEMO) > _QUALITY_MEMO_MAX:
             _QUALITY_MEMO.popitem(last=False)
         if qcfg.get("strict", False) and not report.ok:
-            raise DataQualityError(
-                f"数据不变量校验未通过（strict=true，fail-closed）："
-                f"{summary}")
+            raise DataQualityError(f"数据不变量校验未通过（strict=true，fail-closed）：{summary}")
         return payload
 
     def compute_data_version(self, period: Mapping[str, Any]) -> dict[str, Any]:
@@ -358,46 +406,65 @@ class ComponentAssembler:
             # 内存 Feed / 测试替身：无文件可指纹——**显式**标注来源（非
             # `unknown` 占位；铁律新 16 要的是"不恒空且不误导"）
             logger.info("数据指纹：内存 Feed（无文件指纹，标注 in-memory）")
-            return {"content_hash": (
-                        f"sha256:in-memory:{len(self.rt.instruments)}sym"),
-                    "tables": [], "anchor_date": end_ymd,
-                    "mode": "in-memory",
-                    "note": "内存 Feed：无文件级指纹（非占位 unknown）"}
+            return {
+                "content_hash": (f"sha256:in-memory:{len(self.rt.instruments)}sym"),
+                "tables": [],
+                "anchor_date": end_ymd,
+                "mode": "in-memory",
+                "fingerprint_version": None,
+                "note": "内存 Feed：无文件级指纹（非占位 unknown）",
+            }
         tables = self.rt._data_tables()
         years = list(range(int(start_ymd[:4]), int(end_ymd[:4]) + 1))
         # 档位（§39.4「保留 full 开关」+ BB-1 实测修正缺省）：
-        #   meta = Parquet 元数据（行数/行组统计/大小+mtime）——**毫秒级**，缺省；
+        #   meta = Parquet 元数据（行数/行组统计/大小；**不含 mtime**）——
+        #          **毫秒级**，缺省；fingerprint_version=2（G3/D6）；
         #   fast = 键列内容抽样——大表单次 ≈7.2s（10 年 6 表实测），显式开；
         #   full = 全列抽样——可检出**数值级修订**，重。
         # 缺省之所以从 fast 降到 meta：装配期指纹曾按"每组合一次"落到网格搜索
         # 路径上（12 组合 ×8 进程 8.0s → **43.8s**，B4 外推 3647s 超预算），
         # 且单次 `bt run` 亦 +7.2s 启动开销；meta 档把成本压到 ~0。
-        mode = str((self.rt.config.get("data") or {}).get(
-            "fingerprint_mode") or "meta")
+        mode = str((self.rt.config.get("data") or {}).get("fingerprint_mode") or "meta")
         if mode not in ("meta", "fast", "full"):
-            raise ConfigError([
-                f"data.fingerprint_mode={mode!r} 非法"
-                f"（可选 meta（缺省）| fast | full）"])
+            raise ConfigError(
+                [f"data.fingerprint_mode={mode!r} 非法（可选 meta（缺省）| fast | full）"]
+            )
         t0 = perf_counter()
         # ── P3（19 号 §242）：指纹结果进程内 memo（LRU 8 条）───────────────
         # 键含 `end_ymd`（水位夹取依赖它）与 `expected_hash`（契约变更即失效）。
         ds_cfg = (self.rt.config.get("data") or {}).get("dataset") or {}
-        vkey = (str(root), tuple(tables), tuple(years), end_ymd, mode,
-                str(ds_cfg.get("expected_hash") or ""))
+        vkey = (
+            str(root),
+            tuple(tables),
+            tuple(years),
+            end_ymd,
+            mode,
+            str(ds_cfg.get("expected_hash") or ""),
+        )
         cached = _VERSION_INFO_MEMO.get(vkey)
         if cached is not None:
             _VERSION_INFO_MEMO.move_to_end(vkey)
             self.rt.data_fingerprint_seconds = perf_counter() - t0
-            logger.info("数据指纹（%s 档，%d 表 × %d 年，%.2fs）：%s | 数据水位 %s"
-                        "（**命中进程内缓存**）", mode, len(tables), len(years),
-                        self.rt.data_fingerprint_seconds, cached["content_hash"],
-                        cached["anchor_date"])
+            logger.info(
+                "数据指纹（%s 档，%d 表 × %d 年，%.2fs）：%s | 数据水位 %s（**命中进程内缓存**）",
+                mode,
+                len(tables),
+                len(years),
+                self.rt.data_fingerprint_seconds,
+                cached["content_hash"],
+                cached["anchor_date"],
+            )
             return copy.deepcopy(cached)
         key = (str(root), tuple(tables), tuple(years), mode)
         fp = _FINGERPRINT_MEMO.get(key)
-        if fp is None:                       # 进程内 memo：同输入只算一次
+        if fp is None:  # 进程内 memo：同输入只算一次
             fp = compute(tables, Path(root), mode=mode, years=years)
             _FINGERPRINT_MEMO[key] = fp
+            _FINGERPRINT_MEMO.move_to_end(key)
+            while len(_FINGERPRINT_MEMO) > _FINGERPRINT_MEMO_MAX:
+                _FINGERPRINT_MEMO.popitem(last=False)
+        else:
+            _FINGERPRINT_MEMO.move_to_end(key)
         self.rt.data_fingerprint_seconds = perf_counter() - t0
         detail = fp.as_dict()
         # **P16 ①②③（19 号 §165）**：水位 = 行情表 `date_max` 的 **min**
@@ -411,6 +478,8 @@ class ComponentAssembler:
             "anchor_date": anchor,
             "tables_detail": detail,
             "mode": mode,
+            # G3/D6：meta 档剔除 mtime；manifest.data_version 记录该口径版本
+            "fingerprint_version": 2,
         }
         _VERSION_INFO_MEMO[vkey] = copy.deepcopy(info)
         _VERSION_INFO_MEMO.move_to_end(vkey)
@@ -418,8 +487,13 @@ class ComponentAssembler:
             _VERSION_INFO_MEMO.popitem(last=False)
         logger.info(
             "数据指纹（%s 档，%d 表 × %d 年，%.2fs）：%s | 数据水位 %s",
-            mode, len(tables), len(years), self.rt.data_fingerprint_seconds,
-            fp.digest, anchor)
+            mode,
+            len(tables),
+            len(years),
+            self.rt.data_fingerprint_seconds,
+            fp.digest,
+            anchor,
+        )
         return info
 
     def guard_dataset_version(self, period: Mapping[str, Any]) -> None:
@@ -460,21 +534,26 @@ class ComponentAssembler:
         declared_anchor = str(ds_cfg.get("anchor_date") or "").strip()
         if not (declared_version or declared_hash or declared_anchor):
             return
-        if (declared_version and declared_hash
-                and declared_version != declared_hash):
-            raise ConfigError([
-                "data.dataset.version 与 data.dataset.expected_hash 声明不一致"
-                f"（自相矛盾）：version={declared_version!r} / "
-                f"expected_hash={declared_hash!r}（RC-14）"])
+        if declared_version and declared_hash and declared_version != declared_hash:
+            raise ConfigError(
+                [
+                    "data.dataset.version 与 data.dataset.expected_hash 声明不一致"
+                    f"（自相矛盾）：version={declared_version!r} / "
+                    f"expected_hash={declared_hash!r}（RC-14）"
+                ]
+            )
         declared = declared_version or declared_hash
 
         info = self.compute_data_version(period)
         mode = str(info.get("mode") or "?")
         if mode == "in-memory" or not info.get("tables_detail"):
-            raise ConfigError([
-                "声明了 data.dataset.version/expected_hash/anchor_date，但当前 "
-                "Feed 为**内存 Feed**（无文件指纹）——数据版本门禁无法校验，"
-                "拒绝静默放行（RC-14：门禁的意义即「不一致即拒」）"])
+            raise ConfigError(
+                [
+                    "声明了 data.dataset.version/expected_hash/anchor_date，但当前 "
+                    "Feed 为**内存 Feed**（无文件指纹）——数据版本门禁无法校验，"
+                    "拒绝静默放行（RC-14：门禁的意义即「不一致即拒」）"
+                ]
+            )
         computed_hash = str(info.get("content_hash") or "")
         if declared and computed_hash != declared:
             if skip_reason:
@@ -483,15 +562,21 @@ class ComponentAssembler:
                     "数据版本门禁（RC-14）：**哈希门禁按折跳过**"
                     f"（version_gate={skip_reason}）：声明 {declared} ≠ 实算 "
                     f"{computed_hash}（档位 {mode}）——折区间为整段子区间，"
-                    "指纹必然不同（机制约束，非换数）；anchor_date 水位门禁仍生效")
+                    "指纹必然不同（机制约束，非换数）；anchor_date 水位门禁仍生效"
+                )
             else:
-                raise ConfigError([
-                    f"数据版本门禁未通过（RC-14）：声明 {declared} ≠ 实算 "
-                    f"{computed_hash}（档位 {mode}）——数据快照与声明不一致；"
-                    f"如确认换数，请更新 data.dataset.version/expected_hash"])
-        watermarks = [d.get("date_max")
-                      for name, d in info.get("tables_detail", {}).items()
-                      if name in _PRICE_TABLES and d.get("date_max")]
+                raise ConfigError(
+                    [
+                        f"数据版本门禁未通过（RC-14）：声明 {declared} ≠ 实算 "
+                        f"{computed_hash}（档位 {mode}）——数据快照与声明不一致；"
+                        f"如确认换数，请更新 data.dataset.version/expected_hash"
+                    ]
+                )
+        watermarks = [
+            d.get("date_max")
+            for name, d in info.get("tables_detail", {}).items()
+            if name in _PRICE_TABLES and d.get("date_max")
+        ]
         # 区间末缺失（WF 折/单测桩只给 period 子集）⇒ 不夹取，按原值比较。
         end_ymd = _ymd(period["end"]).to_ymd() if period.get("end") else ""
         # P16 ③：**双向夹取区间末**——声明超区间（如跑 2016 却声明 2026-09-18）
@@ -502,25 +587,33 @@ class ComponentAssembler:
         actual_anchor = min(watermarks) if watermarks else ""
         if actual_anchor and end_ymd:
             actual_anchor = min(actual_anchor, end_ymd)
-        declared_eff = (min(declared_ymd, end_ymd)
-                        if (declared_ymd and end_ymd) else declared_ymd)
-        clamp_note = (""
-                      if declared_eff in ("", declared_ymd)
-                      else f"（声明 {declared_anchor} 超区间末，按 {declared_eff} 夹取）")
+        declared_eff = min(declared_ymd, end_ymd) if (declared_ymd and end_ymd) else declared_ymd
+        clamp_note = (
+            ""
+            if declared_eff in ("", declared_ymd)
+            else f"（声明 {declared_anchor} 超区间末，按 {declared_eff} 夹取）"
+        )
         if declared_anchor:
             if not actual_anchor:
-                raise ConfigError([
-                    "数据版本门禁未通过（RC-14）：声明了 "
-                    f"data.dataset.anchor_date={declared_anchor}，但实算水位"
-                    "为空（tables_detail 无行情表 date_max）"])
+                raise ConfigError(
+                    [
+                        "数据版本门禁未通过（RC-14）：声明了 "
+                        f"data.dataset.anchor_date={declared_anchor}，但实算水位"
+                        "为空（tables_detail 无行情表 date_max）"
+                    ]
+                )
             if actual_anchor < declared_eff:
-                raise ConfigError([
-                    f"数据版本门禁未通过（RC-14）：行情表数据水位 {actual_anchor} "
-                    f"< 声明下限 {declared_eff}{clamp_note}——数据未更新到声明"
-                    f"水位（P16：水位只取 daily/fund_daily/index_daily 的 min）；"
-                    f"请先更新数据或下调声明"])
+                raise ConfigError(
+                    [
+                        f"数据版本门禁未通过（RC-14）：行情表数据水位 {actual_anchor} "
+                        f"< 声明下限 {declared_eff}{clamp_note}——数据未更新到声明"
+                        f"水位（P16：水位只取 daily/fund_daily/index_daily 的 min）；"
+                        f"请先更新数据或下调声明"
+                    ]
+                )
         self.rt.assembly_notes.append(
             "数据版本门禁通过（RC-14）：声明哈希 "
             f"{declared or '（未声明）'} / 声明水位 "
             f"{declared_anchor or '（未声明）'}{clamp_note}；实算 {computed_hash}"
-            f"（档位 {mode}）、水位 {actual_anchor or '—'}")
+            f"（档位 {mode}）、水位 {actual_anchor or '—'}"
+        )

@@ -8,6 +8,7 @@
     ③ **无文件年早退**：扫描 1990–2099 时 `pq.read_table` 调用次数 = 有文件年数；
     ④ 未登记表仍抛 `ValueError`（签名/失败语义不变）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,7 +17,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import pytest
-from btf.data import core
+from btf.data import parquet_reader
 from btf.data.core import YearTableStore
 
 TABLE = "adj_factor"
@@ -67,14 +68,12 @@ class TestSymbolRangeEquivalent:
 
     def test_boundary_years_filter(self, root: Path):
         store = YearTableStore(root)
-        t = store.symbol_range(TABLE, SYMS[0], "20200601", "20201231",
-                               ["adj_factor"])
+        t = store.symbol_range(TABLE, SYMS[0], "20200601", "20201231", ["adj_factor"])
         assert [r["trade_date"] for r in _rows(t)] == ["20200601", "20201231"]
 
     def test_single_day(self, root: Path):
         store = YearTableStore(root)
-        t = store.symbol_range(TABLE, SYMS[1], "20200102", "20200102",
-                               ["adj_factor"])
+        t = store.symbol_range(TABLE, SYMS[1], "20200102", "20200102", ["adj_factor"])
         rows = _rows(t)
         assert len(rows) == 1
         assert rows[0]["ts_code"] == SYMS[1]
@@ -89,14 +88,14 @@ class TestSymbolRangeEquivalent:
             calls.append(args)
             return real_read(*args, **kwargs)
 
-        monkeypatch.setattr(core.pq, "read_table", counted)
-        t = store.symbol_range(TABLE, SYMS[0], "19900101", "20991231",
-                               ["adj_factor"])
+        # D11：`core` 的读盘已统一经 `parquet_reader`（`_read` 单一入口），
+        # 计数桩须打在真正的 I/O 出口上。
+        monkeypatch.setattr(parquet_reader.pq, "read_table", counted)
+        t = store.symbol_range(TABLE, SYMS[0], "19900101", "20991231", ["adj_factor"])
         assert t.num_rows == 7
         assert len(calls) == 3, f"仅 3 个有文件年应读盘，实际 {len(calls)}"
 
     def test_unregistered_table_raises(self, root: Path):
         store = YearTableStore(root)
         with pytest.raises(ValueError, match="表未登记"):
-            store.symbol_range("no_such_table", SYMS[0], "20200101", "20201231",
-                               ["x"])
+            store.symbol_range("no_such_table", SYMS[0], "20200101", "20201231", ["x"])

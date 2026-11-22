@@ -3,7 +3,7 @@
 
 铁律（H2）：赤潮体系规则唯一源 = 赤潮/rules/single-source.md（v7.7）；
 回测侧参数必须经 RulesProvider 加载，YAML 出现规则参数字面量（未声明
-override: true）→ Schema 校验拒绝（由 btf/schemas/backtest.v1.json
+override: true）→ Schema 校验拒绝（由 btf/btf/schemas/backtest.v1.json
 rules 段落地，M1 任务 4.3）。
 
 M1 交付：协议 + StaticRulesProvider（契约冒烟/单测/非规则源策略的最小
@@ -27,6 +27,7 @@ M3 任务 6.1 交付：**MirrorJsonRulesProvider**——读 `rules_mirror_v77.js
 **百分数**，如 5.0 表示 5%），并在 `units` 中显式声明——04 §8.3.7 文档侧
 的 `roe_waa_min=0.05`（小数）经 `aliases` 映射到同一参数，避免双口径。
 """
+
 from __future__ import annotations
 
 import json
@@ -58,8 +59,7 @@ class StaticRulesProvider:
 
     contract_version: ClassVar[str] = CONTRACT_VERSION
 
-    def __init__(self, params: Mapping[str, Mapping[str, Any]],
-                 version: str = "static"):
+    def __init__(self, params: Mapping[str, Mapping[str, Any]], version: str = "static"):
         self._params = {k: dict(v) for k, v in params.items()}
         self._version = version
 
@@ -68,8 +68,7 @@ class StaticRulesProvider:
 
     def get(self, rule_id: str) -> Mapping[str, Any]:
         if rule_id not in self._params:
-            raise KeyError(
-                f"未登记规则 {rule_id!r}（已登记: {sorted(self._params)}）")
+            raise KeyError(f"未登记规则 {rule_id!r}（已登记: {sorted(self._params)}）")
         return dict(self._params[rule_id])
 
 
@@ -95,42 +94,43 @@ class MirrorJsonRulesProvider:
 
     contract_version: ClassVar[str] = CONTRACT_VERSION
 
-    def __init__(self, path: str | Path,
-                 overrides: Sequence[Mapping[str, Any]] = ()):
+    def __init__(self, path: str | Path, overrides: Sequence[Mapping[str, Any]] = ()):
         self.path = Path(path)
         payload = json.loads(self.path.read_text(encoding="utf-8"))
         self.schema_version: str = payload.get("schema_version", "")
         self._rules: dict[str, dict[str, Any]] = {
-            k: dict(v) for k, v in (payload.get("rules") or {}).items()}
+            k: dict(v) for k, v in (payload.get("rules") or {}).items()
+        }
         self._aliases: dict[str, str] = dict(payload.get("aliases") or {})
         self._units: dict[str, str] = dict(payload.get("units") or {})
         self._version: str = payload.get("rules_version", "unknown")
         # ── R66′/P-NEW-1：构造期一次性合并（生效语义）＋ 规范化留痕 ──
         self._overrides: tuple[Mapping[str, Any], ...] = tuple(
-            self._normalize_override(raw) for raw in overrides)
+            self._normalize_override(raw) for raw in overrides
+        )
         for entry in self._overrides:
-            key, param, value = (entry["rule_id"], entry["param"],
-                                 entry["value"])
+            key, param, value = (entry["rule_id"], entry["param"], entry["value"])
             if key not in self._rules:
                 raise ValueError(
                     f"override 指向未登记规则 {key!r}"
                     f"（已登记: {sorted(self._rules)}）——fail-closed，"
-                    "禁静默 no-op（R66′/P-NEW-1 教训）")
-            self._rules[key][param] = value      # 浅合并：覆盖/追加
+                    "禁静默 no-op（R66′/P-NEW-1 教训）"
+                )
+            self._rules[key][param] = value  # 浅合并：覆盖/追加
 
     def _normalize_override(self, raw: Mapping[str, Any]) -> dict[str, Any]:
         """条目规范化：`rule_id|rule` 二选一 ＋ `param`/`value` 必填；键名走 aliases。"""
         if not isinstance(raw, Mapping):
-            raise ValueError(
-                f"override 条目须为映射，得 {type(raw).__name__}: {raw!r}")
+            raise ValueError(f"override 条目须为映射，得 {type(raw).__name__}: {raw!r}")
         rule_id = raw.get("rule_id", raw.get("rule"))
         param = raw.get("param")
         if not rule_id or not param or "value" not in raw:
-            raise ValueError(
-                f"override 条目缺 rule_id(/rule)、param 或 value: {dict(raw)}")
-        return {"rule_id": self._aliases.get(rule_id, rule_id),
-                "param": self._aliases.get(param, param),
-                "value": raw["value"]}
+            raise ValueError(f"override 条目缺 rule_id(/rule)、param 或 value: {dict(raw)}")
+        return {
+            "rule_id": self._aliases.get(rule_id, rule_id),
+            "param": self._aliases.get(param, param),
+            "value": raw["value"],
+        }
 
     # ── 协议 ──
     def rules_version(self) -> str:
@@ -144,8 +144,7 @@ class MirrorJsonRulesProvider:
         """
         key = self._aliases.get(rule_id, rule_id)
         if key not in self._rules:
-            raise KeyError(
-                f"未登记规则 {rule_id!r}（已登记: {sorted(self._rules)}）")
+            raise KeyError(f"未登记规则 {rule_id!r}（已登记: {sorted(self._rules)}）")
         return dict(self._rules[key])
 
     # ── 便捷（报告/机检用）──

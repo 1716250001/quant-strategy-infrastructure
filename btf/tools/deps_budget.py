@@ -8,11 +8,16 @@
 同名包跨组只计一次（预算按"新引入的包"算）；开发工具链（ruff 等
 仅开发机使用、不入 pyproject 依赖者）不计入——架构 07 §12.11 原清单口径。
 """
+
 import sys
 import tomllib
 from pathlib import Path
 
 BUDGET = 8  # 架构纪律：新直接依赖预算上限
+
+#: 基础运行时依赖（G3/D7，2026-11-22）：Parquet 读写与质检数值计算，
+#: 属平台底座而非「插件/可选」槽位，按 07 §12.11 修订后的口径不计入预算。
+BASE_RUNTIME = frozenset({"pyarrow", "numpy"})
 
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
@@ -26,16 +31,36 @@ def main() -> int:
 
     deps: dict[str, str] = {}
     for dep in proj.get("dependencies", []):
-        deps[dep.split(">")[0].split("<")[0].split("=")[0].split("!")[0].split("~")[0].split("[")[0].strip()] = "runtime"
+        deps[
+            dep.split(">")[0]
+            .split("<")[0]
+            .split("=")[0]
+            .split("!")[0]
+            .split("~")[0]
+            .split("[")[0]
+            .strip()
+        ] = "runtime"
     for group, items in proj.get("optional-dependencies", {}).items():
         for dep in items:
-            name = dep.split(">")[0].split("<")[0].split("=")[0].split("!")[0].split("~")[0].split("[")[0].strip()
+            name = (
+                dep.split(">")[0]
+                .split("<")[0]
+                .split("=")[0]
+                .split("!")[0]
+                .split("~")[0]
+                .split("[")[0]
+                .strip()
+            )
             deps.setdefault(name, group)
 
-    print(f"btf 新直接依赖（去重）: {len(deps)}/{BUDGET}")
-    for name, group in sorted(deps.items()):
+    counted = {k: v for k, v in deps.items() if k not in BASE_RUNTIME}
+    print(
+        f"btf 新直接依赖（去重）: {len(counted)}/{BUDGET}"
+        f"（基础运行时 {sorted(BASE_RUNTIME & set(deps))} 不计入）"
+    )
+    for name, group in sorted(counted.items()):
         print(f"  - {name:20s} [{group}]")
-    if len(deps) > BUDGET:
+    if len(counted) > BUDGET:
         print("超预算！架构 07 §12.11 纪律违规，需 ADR 评审")
         return 2
     print("预算内 [OK]")

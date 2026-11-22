@@ -14,6 +14,7 @@
     - 降级时写哨兵行（kind=_sampled），reader 据此提示 replay 不完整；
     - 确定性：采样判定只依赖事件序号（seq % stride），与事件内容无关。
 """
+
 from __future__ import annotations
 
 import json
@@ -62,10 +63,15 @@ def _d(td: TradingDate | None) -> str | None:
 
 def _enc_order(o: Order) -> dict[str, Any]:
     return {
-        "order_id": o.order_id, "symbol": o.symbol,
-        "side": o.side.value, "order_type": o.order_type.value,
-        "qty": o.qty, "limit_price": o.limit_price,
-        "created_at": _d(o.created_at), "tif": o.tif, "tag": o.tag,
+        "order_id": o.order_id,
+        "symbol": o.symbol,
+        "side": o.side.value,
+        "order_type": o.order_type.value,
+        "qty": o.qty,
+        "limit_price": o.limit_price,
+        "created_at": _d(o.created_at),
+        "tif": o.tif,
+        "tag": o.tag,
     }
 
 
@@ -75,9 +81,14 @@ def _enc_fee(f: Fee) -> dict[str, float]:
 
 def _enc_fill(f: Fill) -> dict[str, Any]:
     return {
-        "fill_id": f.fill_id, "order_id": f.order_id, "symbol": f.symbol,
-        "side": f.side.value, "qty": f.qty, "price": f.price,
-        "fee": _enc_fee(f.fee), "fill_date": _d(f.fill_date),
+        "fill_id": f.fill_id,
+        "order_id": f.order_id,
+        "symbol": f.symbol,
+        "side": f.side.value,
+        "qty": f.qty,
+        "price": f.price,
+        "fee": _enc_fee(f.fee),
+        "fill_date": _d(f.fill_date),
         "fill_timing": f.fill_timing,
         # F9（2026-10-06）：滑点前基准价（可空；旧日志无此键 ⇒ 解码回 None）
         "ref_price": (None if f.ref_price is None else float(f.ref_price)),
@@ -92,10 +103,13 @@ def _enc_action(a: CorporateAction) -> dict[str, Any]:
     # CL-2 第二段（R3′/R5′，19 号 §79.4）：配股/缩股字段入事件日志
     # （旧字段原样；新字段带默认值 ⇒ 旧日志解码仍兼容）。
     return {
-        "symbol": a.symbol, "ex_date": _d(a.ex_date), "pay_date": _d(a.pay_date),
+        "symbol": a.symbol,
+        "ex_date": _d(a.ex_date),
+        "pay_date": _d(a.pay_date),
         "record_date": _d(a.record_date),
         "cash_div_per_share": a.cash_div_per_share,
-        "stk_div_per_share": a.stk_div_per_share, "ann_date": _d(a.ann_date),
+        "stk_div_per_share": a.stk_div_per_share,
+        "ann_date": _d(a.ann_date),
         "rights_ratio": a.rights_ratio,
         "rights_price": a.rights_price,
         "rights_ex_date": _d(a.rights_ex_date),
@@ -140,11 +154,15 @@ def _td(s: str | None) -> TradingDate | None:
 
 def _dec_order(p: dict[str, Any]) -> Order:
     return Order(
-        order_id=p["order_id"], symbol=p["symbol"],
-        side=OrderSide(p["side"]), order_type=OrderType(p["order_type"]),
-        qty=p["qty"], limit_price=p["limit_price"],
+        order_id=p["order_id"],
+        symbol=p["symbol"],
+        side=OrderSide(p["side"]),
+        order_type=OrderType(p["order_type"]),
+        qty=p["qty"],
+        limit_price=p["limit_price"],
         created_at=TradingDate.from_ymd(p["created_at"]),
-        tif=p.get("tif", "day"), tag=p.get("tag"),
+        tif=p.get("tif", "day"),
+        tag=p.get("tag"),
     )
 
 
@@ -154,12 +172,16 @@ def _dec_fee(p: dict[str, Any]) -> Fee:
 
 def _dec_fill(p: dict[str, Any]) -> Fill:
     return Fill(
-        fill_id=p["fill_id"], order_id=p["order_id"], symbol=p["symbol"],
-        side=OrderSide(p["side"]), qty=p["qty"], price=p["price"],
+        fill_id=p["fill_id"],
+        order_id=p["order_id"],
+        symbol=p["symbol"],
+        side=OrderSide(p["side"]),
+        qty=p["qty"],
+        price=p["price"],
         fee=_dec_fee(p["fee"]),
         fill_date=TradingDate.from_ymd(p["fill_date"]),
         fill_timing=p["fill_timing"],
-        ref_price=p.get("ref_price"),          # F9：缺键（旧日志）⇒ None
+        ref_price=p.get("ref_price"),  # F9：缺键（旧日志）⇒ None
     )
 
 
@@ -179,15 +201,17 @@ def _dec_action(p: dict[str, Any]) -> CorporateAction:
         consolidation_ratio=ratio_or_default(
             p.get("consolidation_ratio"),
             context=f"events_log:{p.get('symbol')}",
-            warn=logger.warning),
+            warn=logger.warning,
+        ),
         consolidation_source=str(p.get("consolidation_source") or "proxy"),
-        pex_override=(float(p["pex_override"])
-                      if p.get("pex_override") is not None else None),
+        pex_override=(float(p["pex_override"]) if p.get("pex_override") is not None else None),
         symbol=p["symbol"],
-        ex_date=TradingDate.from_ymd(p["ex_date"]), pay_date=_td(p["pay_date"]),
+        ex_date=TradingDate.from_ymd(p["ex_date"]),
+        pay_date=_td(p["pay_date"]),
         record_date=_td(p["record_date"]),
         cash_div_per_share=p["cash_div_per_share"],
-        stk_div_per_share=p["stk_div_per_share"], ann_date=_td(p["ann_date"]),
+        stk_div_per_share=p["stk_div_per_share"],
+        ann_date=_td(p["ann_date"]),
     )
 
 
@@ -230,10 +254,13 @@ class EventLogWriter:
         self._stride = max(2, sample_stride)
         self._tail_keep = tail_keep
         self._fh: TextIO = self.path.open("w", encoding="utf-8", newline="\n")
-        self._seq = 0                # 已见事件数（采样判定基准）
-        #: 尾部 ring 存**事件对象**（PF-7：延迟编码——超预算行不再立即 dumps）
-        self._tail: deque[tuple[int, EngineEvent]] = deque(maxlen=tail_keep)
-        self.sampled = False         # 降级标志（报告披露 "事件日志已采样"）
+        self._seq = 0  # 已见事件数（采样判定基准）
+        #: 尾部 ring 存**编码后摘要**（D11：原存事件对象 ⇒ MarketCloseEvent
+        #: 的 `data` 截面（~3,800 标的）被钉住，实测 1,000 条 ≈ 990 MB）。
+        #: 现在写入时即 `encode_event`（只取 n_symbols 等摘要），`json.dumps`
+        #: 仍延迟到 close()（PF-7 的"省 CPU"目标不变）。
+        self._tail: deque[tuple[int, dict[str, Any]]] = deque(maxlen=tail_keep)
+        self.sampled = False  # 降级标志（报告披露 "事件日志已采样"）
         #: 实际 `json.dumps` 次数（PF-7 断言锚点；铁律新 16：不恒空）
         self.n_serialized = 0
 
@@ -241,12 +268,13 @@ class EventLogWriter:
     def n_events(self) -> int:
         return self._seq
 
+    @staticmethod
+    def _dumps(seq: int, obj: dict[str, Any]) -> str:
+        return json.dumps({"seq": seq, **obj}, ensure_ascii=False, sort_keys=True)
+
     def _encode(self, seq: int, event: EngineEvent) -> str:
         self.n_serialized += 1
-        return json.dumps(
-            {"seq": seq, **encode_event(event)},
-            ensure_ascii=False, sort_keys=True,
-        )
+        return self._dumps(seq, encode_event(event))
 
     def write(self, event: EngineEvent) -> None:
         """写一个事件；超预算自动降级采样（每 stride 条落 1 + 尾部补写）。
@@ -263,31 +291,35 @@ class EventLogWriter:
         seq = self._seq
         if seq <= self._max_records:
             self._fh.write(self._encode(seq, event) + "\n")
-            self._tail.append((seq, event))
+            self._tail.append((seq, encode_event(event)))
             return
         if not self.sampled:
             self.sampled = True
-            self._fh.write(json.dumps(
-                {"seq": seq, "kind": _SAMPLED_MARK, "stride": self._stride},
-                ensure_ascii=False, sort_keys=True,
-            ) + "\n")
+            self._fh.write(
+                json.dumps(
+                    {"seq": seq, "kind": _SAMPLED_MARK, "stride": self._stride},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
         # 采样模式：seq % stride == 0 才序列化落盘；其余仅入尾部 ring（延迟编码）
         if seq % self._stride == 0:
             self._fh.write(self._encode(seq, event) + "\n")
-        self._tail.append((seq, event))
-        if seq % 4096 == 0:              # 阈值 flush：崩溃丢尾部上限可控
+        self._tail.append((seq, encode_event(event)))
+        if seq % 4096 == 0:  # 阈值 flush：崩溃丢尾部上限可控
             self._fh.flush()
 
     def close(self) -> None:
         """补写尾部全保段（仅采样段中未落盘的行），幂等。"""
         if self._fh.closed:
             return
-        for seq, event in self._tail:
+        for seq, obj in self._tail:
             if seq <= self._max_records:
                 continue  # 全量段已在 write() 落盘
             if seq % self._stride == 0:
                 continue  # 采样流已落盘，跳过去重
-            self._fh.write(self._encode(seq, event) + "\n")
+            self._fh.write(self._dumps(seq, obj) + "\n")
         self._fh.close()
 
     def __enter__(self) -> EventLogWriter:

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "btf/schemas/backtest.v1.json",
+  "$id": "btf/btf/schemas/backtest.v1.json",
   "title": "btf 回测配置（backtest.v1）",
   "description": "04 §8.5 / 06 §11.5 配置契约。rules 段实施 H2：仅 source/path/rules_version/overrides，规则参数字面量一律拒绝；覆盖必须逐条 override: true 声明。",
   "type": "object",

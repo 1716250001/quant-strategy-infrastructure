@@ -27,6 +27,7 @@ tools/db_audit.py — 全量数据库体检
 
 主键配置在 config.DB_AUDIT_PKEYS。
 """
+
 import glob
 import json
 import os
@@ -84,10 +85,12 @@ def _parquet_column_names(path):
     """只读 parquet **元数据**拿列名（不读数据本体，约 1ms）"""
     try:
         import pyarrow.parquet as pq
+
         return list(pq.ParquetFile(path).schema_arrow.names)
     except Exception as exc:
-        print(f"[db.audit] 读 parquet 元数据失败 {path}: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[db.audit] 读 parquet 元数据失败 {path}: {type(exc).__name__}: {exc}", file=sys.stderr
+        )
         return []
 
 
@@ -139,8 +142,7 @@ def _get_data_latest_date(name):
                 latest = v
         return latest if seen else None
     except Exception as exc:
-        print(f"[db.audit] 读库内最新日期失败: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(f"[db.audit] 读库内最新日期失败: {type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
@@ -192,8 +194,10 @@ def _alt_spec_note(name):
     except Exception as exc:
         # SKIP（§451 基线误判）：返回 "" 是故意的（调用方只判 "已废弃" in note），
         # 空串＝无废弃标记；此处只补可观测性，不改返回值。
-        print(f"[db.audit] 导入 alt.spec 失败（note 按空处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[db.audit] 导入 alt.spec 失败（note 按空处理）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return ""
     sp = BY_NAME.get(name)
     return getattr(sp, "note", "") or ""
@@ -286,8 +290,10 @@ def audit_checkpoint(verbose=True):
     errors, infos, deep_n = [], [], 0
     inventory = _checkpoint_files()
     if verbose:
-        print(f"\n  遍历断点载体 {len(inventory)} 个（registry 驱动，已去重；"
-              f"21 载体 = 全部 − NOT_A_CHECKPOINT）:")
+        print(
+            f"\n  遍历断点载体 {len(inventory)} 个（registry 驱动，已去重；"
+            f"21 载体 = 全部 − NOT_A_CHECKPOINT）:"
+        )
     for dom in inventory:
         lvl, depth, msg = _check_carrier(dom)
         deep_n += depth == "deep"
@@ -300,8 +306,10 @@ def audit_checkpoint(verbose=True):
             infos.append((f"{dom.library}/{dom.file}", msg))
 
     if verbose:
-        print(f"\n  覆盖: 载体 {len(inventory)} 个全部核过（deep {deep_n} / "
-              f"struct {len(inventory) - deep_n}）")
+        print(
+            f"\n  覆盖: 载体 {len(inventory)} 个全部核过（deep {deep_n} / "
+            f"struct {len(inventory) - deep_n}）"
+        )
         print(f"\n  ⛔ 真异常: {len(errors)}")
         for n, s in errors:
             print(f"    [{n}] {s}")
@@ -375,10 +383,18 @@ def audit_checkpoint_disk(verbose=True):
             verdict = "⚠ 断点有·磁盘无（疑虚记/待核验）"
         else:
             verdict = "断点滞后（磁盘有·断点无，需 ckpt --fix）"
-        rows.append({"name": name, "mode": mode, "ckpt": len(done), "disk": len(disk),
-                     "only_ckpt": len(only_ckpt), "only_disk": len(only_disk),
-                     "verdict": verdict,
-                     "samples": sorted(only_ckpt)[:3] or sorted(only_disk)[:3]})
+        rows.append(
+            {
+                "name": name,
+                "mode": mode,
+                "ckpt": len(done),
+                "disk": len(disk),
+                "only_ckpt": len(only_ckpt),
+                "only_disk": len(only_disk),
+                "verdict": verdict,
+                "samples": sorted(only_ckpt)[:3] or sorted(only_disk)[:3],
+            }
+        )
 
     if verbose:
         print()
@@ -388,13 +404,17 @@ def audit_checkpoint_disk(verbose=True):
         if not rows:
             print("  ✓ 无差异（全部表：断点键与磁盘键完全一致）")
             return rows
-        print(f"  {'表名':18s} {'模式':8s} {'断点':>7s} {'磁盘':>7s} "
-              f"{'断点有磁盘无':>12s} {'磁盘有断点无':>12s}  结论")
+        print(
+            f"  {'表名':18s} {'模式':8s} {'断点':>7s} {'磁盘':>7s} "
+            f"{'断点有磁盘无':>12s} {'磁盘有断点无':>12s}  结论"
+        )
         print("  " + "-" * 96)
         tot_c = tot_d = tot_a = tot_b = 0
         for r in rows:
-            print(f"  {r['name']:18s} {r['mode']:8s} {r['ckpt']:7,d} {r['disk']:7,d} "
-                  f"{r['only_ckpt']:12,d} {r['only_disk']:12,d}  {r['verdict']}")
+            print(
+                f"  {r['name']:18s} {r['mode']:8s} {r['ckpt']:7,d} {r['disk']:7,d} "
+                f"{r['only_ckpt']:12,d} {r['only_disk']:12,d}  {r['verdict']}"
+            )
             if r["samples"]:
                 print(f"    样例: {r['samples']}")
             tot_c += r["ckpt"]
@@ -402,8 +422,10 @@ def audit_checkpoint_disk(verbose=True):
             tot_a += r["only_ckpt"]
             tot_b += r["only_disk"]
         print("  " + "-" * 96)
-        print(f"  合计: {len(rows)} 张有差 | 断点有磁盘无 {tot_a:,} | "
-              f"磁盘有断点无 {tot_b:,}（断点 {tot_c:,} / 磁盘 {tot_d:,}）")
+        print(
+            f"  合计: {len(rows)} 张有差 | 断点有磁盘无 {tot_a:,} | "
+            f"磁盘有断点无 {tot_b:,}（断点 {tot_c:,} / 磁盘 {tot_d:,}）"
+        )
     return rows
 
 
@@ -479,11 +501,21 @@ def audit_checkpoint_diff(verbose=True):
             verdict = "⚠ extra"
         else:
             verdict = "未来日(正常)"
-        rows.append({"name": name, "mode": mode, "expect": len(expect),
-                     "done": len(done), "extra": len(extra), "miss": len(miss),
-                     "miss_future": len(future), "miss_real": len(real),
-                     "verdict": verdict, "extra_keys": extra[:3],
-                     "miss_keys": (real or future)[:3]})
+        rows.append(
+            {
+                "name": name,
+                "mode": mode,
+                "expect": len(expect),
+                "done": len(done),
+                "extra": len(extra),
+                "miss": len(miss),
+                "miss_future": len(future),
+                "miss_real": len(real),
+                "verdict": verdict,
+                "extra_keys": extra[:3],
+                "miss_keys": (real or future)[:3],
+            }
+        )
         tot["expect"] += len(expect)
         tot["done"] += len(done)
         tot["extra"] += len(extra)
@@ -497,21 +529,26 @@ def audit_checkpoint_diff(verbose=True):
         print("  A2. G1 双向差集（周期键口径；extra=断点有·应有无，miss=应有·断点无）")
         print(SEP)
         print(f"  基准日(真实今天): {today}")
-        print(f"\n  {'表名':18s} {'模式':9s} {'期望':>6s} {'实际':>6s} {'extra':>6s} "
-              f"{'miss':>6s} {'未来':>5s} {'真实':>5s}  判定")
+        print(
+            f"\n  {'表名':18s} {'模式':9s} {'期望':>6s} {'实际':>6s} {'extra':>6s} "
+            f"{'miss':>6s} {'未来':>5s} {'真实':>5s}  判定"
+        )
         print("  " + "-" * 84)
         for r in rows:
-            print(f"  {r['name']:18s} {r['mode']:9s} {r['expect']:6d} {r['done']:6d} "
-                  f"{r['extra']:6d} {r['miss']:6d} {r['miss_future']:5d} "
-                  f"{r['miss_real']:5d}  {r['verdict']}")
+            print(
+                f"  {r['name']:18s} {r['mode']:9s} {r['expect']:6d} {r['done']:6d} "
+                f"{r['extra']:6d} {r['miss']:6d} {r['miss_future']:5d} "
+                f"{r['miss_real']:5d}  {r['verdict']}"
+            )
             # 样例键：M3 要求能直接看到"哪只代码/哪一天"（如 001381.SZ）
             if r["extra_keys"] or r["miss_keys"]:
-                print(f"    样例: extra={r['extra_keys'] or '-'} "
-                      f"miss={r['miss_keys'] or '-'}")
+                print(f"    样例: extra={r['extra_keys'] or '-'} miss={r['miss_keys'] or '-'}")
         print("  " + "-" * 84)
-        print(f"  合计: 期望 {tot['expect']} | 实际 {tot['done']} | extra {tot['extra']} "
-              f"| miss {tot['miss']}（未来 {tot['future']} + 真实 {tot['real']}）"
-              f" | {len(rows)} 张表有差")
+        print(
+            f"  合计: 期望 {tot['expect']} | 实际 {tot['done']} | extra {tot['extra']} "
+            f"| miss {tot['miss']}（未来 {tot['future']} + 真实 {tot['real']}）"
+            f" | {len(rows)} 张表有差"
+        )
     return rows
 
 
@@ -529,14 +566,118 @@ def _write_path_subsets(name):
     BACKFILL_TARGETS / DAILY_UPDATE_EXTRA，故组内成员不额外产生 subset。
     """
     out = []
-    for label, conf in (("backfill", BACKFILL_TARGETS.get(name)),
-                        ("periodic", PERIODIC_UPDATE_TARGETS.get(name)),
-                        ("daily", DAILY_UPDATE_EXTRA.get(name))):
+    for label, conf in (
+        ("backfill", BACKFILL_TARGETS.get(name)),
+        ("periodic", PERIODIC_UPDATE_TARGETS.get(name)),
+        ("daily", DAILY_UPDATE_EXTRA.get(name)),
+    ):
         if conf is not None:
             out.append((label, conf.get("subset") or "*"))
     if not out and any(name in v for v in DAILY_UPDATE_GROUPS.values()):
         out.append(("daily_group", "*"))
     return out
+
+
+#: SQLite 主键不接受 NULL，判重时用不可见哨兵代替（等价 pandas「NA 与 NA 相等」）。
+_PK_NA = "\x00NA"
+
+
+def _pk_frame(path, pk):
+    """读单个 parquet 的主键列；列不存在时回退全列（保持旧降级语义）。"""
+    try:
+        return pd.read_parquet(path, columns=list(pk))
+    except Exception as exc:
+        print(
+            f"[db.audit] 读主键列失败，回退全列 {os.path.basename(path)}: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        x = pd.read_parquet(path)
+        return x[[c for c in pk if c in x.columns]]
+
+
+def _pk_group_counts(x, pk):
+    """单文件内按主键 GROUP BY 计数（只保留键列，内存与单文件同阶）。"""
+    key = x.copy()
+    for c in pk:
+        key[c] = key[c].astype("string").fillna(_PK_NA)
+    return key.groupby(list(pk), sort=False).size()
+
+
+def _iter_key_counts(g, ncols):
+    """把 (key, n) 迭代成 SQLite 参数元组（单列键为标量，需包成 1 元组）。"""
+    for key, n in g.items():
+        if ncols == 1:
+            yield (key, int(n))
+        else:
+            yield (*key, int(n))
+
+
+def _pk_dup_external(dir_path, files, pk):
+    """逐文件 GROUP BY 主键 → 临时 SQLite 外存累加 → 主键重复数。
+
+    D10（D-P1-11）为什么必须改：原实现把全部年度文件的主键列 `pd.concat`
+    成一张表再 `duplicated()`，index_daily（约 3,595 万行）单表峰值 >2GB。
+    现改为：
+      1. 每次只读**一个** parquet 的主键列并 `groupby().size()`；
+      2. 把 (键, 计数) UPSERT 进临时 SQLite（磁盘外存，页缓存上限 64MB）；
+      3. 汇总 `SUM(n) - COUNT(*)` 即主键重复行数（与 `duplicated()` 等值）；
+      4. 临时库用后即删（finally），不写主库、不进备份。
+
+    返回 (pk_dup, rows)：pk_dup=-1 表示主键列在全部文件中都不存在（原语义）；
+    rows=0 表示无可读数据。
+    """
+    import shutil
+    import sqlite3
+    import tempfile
+
+    tmpdir = tempfile.mkdtemp(prefix="db_audit_pk_")
+    db_path = os.path.join(tmpdir, "pk.sqlite")
+    conn = None
+    rows = 0
+    seen_cols = set()
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("PRAGMA journal_mode=OFF")
+        cur.execute("PRAGMA synchronous=OFF")
+        cur.execute("PRAGMA cache_size=-65536")  # 页缓存上限 64MB
+        cols = [f"k{i}" for i in range(len(pk))]
+        col_sql = ", ".join(cols)
+        cur.execute(
+            f"CREATE TABLE t ({col_sql}, n INTEGER NOT NULL, PRIMARY KEY ({col_sql})) WITHOUT ROWID"
+        )
+        upsert = (
+            f"INSERT INTO t ({col_sql}, n) "
+            f"VALUES ({', '.join('?' * len(cols))}, ?) "
+            f"ON CONFLICT ({col_sql}) DO UPDATE SET n = n + excluded.n"
+        )
+        for f in files:
+            try:
+                x = _pk_frame(os.path.join(dir_path, f), pk)
+            except Exception:
+                continue
+            if not len(x):
+                continue
+            seen_cols.update(x.columns)
+            for c in pk:
+                if c not in x.columns:
+                    x[c] = pd.NA  # 与旧 concat 的「缺列补 NaN」一致
+            rows += len(x)
+            g = _pk_group_counts(x[pk], pk)
+            cur.executemany(upsert, _iter_key_counts(g, len(pk)))
+            conn.commit()  # 逐文件提交，避免大事务撑内存/回滚日志
+        if any(c not in seen_cols for c in pk):
+            return -1, rows
+        if rows == 0:
+            return None, 0
+        cur.execute("SELECT COALESCE(SUM(n), 0), COUNT(*) FROM t")
+        total, distinct = cur.fetchone()
+        return int(total) - int(distinct), rows
+    finally:
+        if conn is not None:
+            conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
@@ -569,36 +710,27 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
         if not files:
             continue
 
-        frames = []
+        pk_dup = None
         tot = 0
-        for f in files:
-            try:
-                cols = [c for c in (pk or []) if c]
-                # 只读主键列(若指定), 否则读全列(用于整行判重)
-                x = pd.read_parquet(os.path.join(d, f), columns=cols or None)
-                if len(x):
-                    frames.append(x)
-                    tot += len(x)
-            except Exception as exc:
-                print(f"[db.audit] 读主键列失败，回退全列 {f}: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
-                # 主键列可能不存在, 回退读全列
+        if pk:
+            # D10（D-P1-11）：主键重复改走「逐文件 GROUP BY + 外存聚合」，
+            # 不再 pd.concat 全部年度 PK 列（index_daily 约 3,595 万行会 OOM）。
+            pk_dup, tot = _pk_dup_external(d, files, pk)
+            if tot == 0:
+                continue
+        else:
+            # 无主键配置 → 需要全列判重，只能逐文件读入（exact 时全量）。
+            frames = []
+            for f in files:
                 try:
                     x = pd.read_parquet(os.path.join(d, f))
                     if len(x):
-                        frames.append(x if not pk else x[[c for c in pk if c in x.columns]])
+                        frames.append(x)
                         tot += len(x)
                 except Exception:
                     pass
-
-        if not frames or tot == 0:
-            continue
-        allf = pd.concat(frames, ignore_index=True)
-
-        pk_dup = None
-        if pk:
-            miss = [c for c in pk if c not in allf.columns]
-            pk_dup = -1 if miss else int(allf.duplicated(subset=pk).sum())
+            if not frames or tot == 0:
+                continue
 
         # 整行判重:
         #   有主键配置 → 主键判重已足够, 整行判重仅抽样(避免读全列大表)
@@ -649,9 +781,11 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
                 verd = "✓ 无真重复"
             elif full_dup:
                 tag = f"{full_dup:,} 行" if exact else f"{full_dup} 行({dup_scope})"
-                verd = (f"ℹ 上游即有重复 {tag}"
-                        if name in DB_AUDIT_UPSTREAM_DUP
-                        else f"⚠ 有真重复 {tag}")
+                verd = (
+                    f"ℹ 上游即有重复 {tag}"
+                    if name in DB_AUDIT_UPSTREAM_DUP
+                    else f"⚠ 有真重复 {tag}"
+                )
             else:
                 verd = "未采样"
         elif full_dup is None:
@@ -659,9 +793,11 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
         elif pk_dup == 0:
             verd = "✓ 主键干净" if full_dup > 0 else "✓ 无真重复"
         elif full_dup > 0:
-            verd = (f"ℹ 上游即有重复(抽样{full_dup:,})"
-                    if name in DB_AUDIT_UPSTREAM_DUP
-                    else f"⚠ 有真重复(抽样{full_dup:,})")
+            verd = (
+                f"ℹ 上游即有重复(抽样{full_dup:,})"
+                if name in DB_AUDIT_UPSTREAM_DUP
+                else f"⚠ 有真重复(抽样{full_dup:,})"
+            )
         elif name in KEY_NARROW_ACK and pk_dup > 0:
             # CC-FIX-8 v2（§369/§372）：已裁定保留窄键的表 —— 显式 ACK + 增长护栏
             _ack = KEY_NARROW_ACK[name]
@@ -671,8 +807,9 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
             if pk_dup <= _lim:
                 verd = f"✓ 已裁定：上游修订（同键多行 {pk_dup:,} 行，基线 {_base}）"
             else:
-                verd = (f"⚠ 已裁定表同键多行异常增长：{pk_dup:,} 行 > "
-                        f"基线 {_base}×{_ratio:g}={_lim:g}")
+                verd = (
+                    f"⚠ 已裁定表同键多行异常增长：{pk_dup:,} 行 > 基线 {_base}×{_ratio:g}={_lim:g}"
+                )
         else:
             # CC-FIX-6 v3（2026-11-09，§368 Q3）：主键有重复、抽样整行全不同时，
             #   是否「键不足」取决于**写入端 subset**（不是审计主键）：
@@ -684,11 +821,11 @@ def audit_duplicates(only=None, verbose=True, show_samples=3, exact=False):
                 verd = "✓ 业务多行（写路径已全列判重）"
             else:
                 _desc = "; ".join(f"{lbl}={s}" for lbl, s in _narrow)
-                verd = (f"⚠ 键可能不足：同键不同值 {pk_dup:,} 行"
-                        f"（写路径 subset={_desc}）")
+                verd = f"⚠ 键可能不足：同键不同值 {pk_dup:,} 行（写路径 subset={_desc}）"
 
-        results.append({"name": name, "rows": tot, "pk_dup": pk_dup,
-                        "full_dup": full_dup, "verdict": verd})
+        results.append(
+            {"name": name, "rows": tot, "pk_dup": pk_dup, "full_dup": full_dup, "verdict": verd}
+        )
         if verbose:
             if pk is None:
                 pks = "未配置"
@@ -729,13 +866,11 @@ def audit_truncation(verbose=True, table_dirs=None):
         print(SEP)
         print("  B2. 截断残留检测（单码行数为 cap／page_size 整数倍，见各行标注）")
         print(SEP)
-        print("  说明: 只有存在「单次硬顶」的接口才需要 offset 翻页；"
-              "停在整页 = 疑似少翻一页。")
+        print("  说明: 只有存在「单次硬顶」的接口才需要 offset 翻页；停在整页 = 疑似少翻一页。")
 
     # CC-FIX-6 v3（2026-11-09，§368）：判据优先用 cap（源端单次硬顶＝截断签名），
     #   未配 cap 的表回落 page_size。
-    targets = {n: c for n, c in BACKFILL_TARGETS.items()
-               if c.get("page_size") or c.get("cap")}
+    targets = {n: c for n, c in BACKFILL_TARGETS.items() if c.get("page_size") or c.get("cap")}
     out = []
     failed = 0
     for name, conf in sorted(targets.items()):
@@ -756,8 +891,7 @@ def audit_truncation(verbose=True, table_dirs=None):
             except Exception as e:
                 failed += 1
                 if verbose:
-                    print(f"  [READ-FAIL] {name}/{os.path.basename(f)}: "
-                          f"{type(e).__name__}: {e}")
+                    print(f"  [READ-FAIL] {name}/{os.path.basename(f)}: {type(e).__name__}: {e}")
         if not good:
             continue
         no_col = [f for f, names in good if "ts_code" not in names]
@@ -768,8 +902,10 @@ def audit_truncation(verbose=True, table_dirs=None):
         if no_col:
             failed += len(no_col)
             if verbose:
-                print(f"  [READ-FAIL] {name}: {len(no_col)} 个分片缺 ts_code 列: "
-                      f"{[os.path.basename(f) for f in no_col][:5]}")
+                print(
+                    f"  [READ-FAIL] {name}: {len(no_col)} 个分片缺 ts_code 列: "
+                    f"{[os.path.basename(f) for f in no_col][:5]}"
+                )
 
         frames = []
         for f, _names in good:
@@ -780,25 +916,38 @@ def audit_truncation(verbose=True, table_dirs=None):
             except Exception as e:
                 failed += 1
                 if verbose:
-                    print(f"  [READ-FAIL] {name}/{os.path.basename(f)}: "
-                          f"{type(e).__name__}: {e}")
+                    print(f"  [READ-FAIL] {name}/{os.path.basename(f)}: {type(e).__name__}: {e}")
         if not frames:
             continue
         cnt = pd.concat(frames, ignore_index=True)["ts_code"].astype(str).value_counts()
         sus = cnt[(cnt % page == 0) & (cnt >= page)].sort_values(ascending=False)
-        out.append({"table": name, "cap": page, "cap_source": unit,
-                    "codes": len(cnt), "rows": int(cnt.sum()),
-                    "suspects": {str(k): int(v) for k, v in sus.items()}})
+        out.append(
+            {
+                "table": name,
+                "cap": page,
+                "cap_source": unit,
+                "codes": len(cnt),
+                "rows": int(cnt.sum()),
+                "suspects": {str(k): int(v) for k, v in sus.items()},
+            }
+        )
         if verbose:
-            print(f"  {name:22s} {unit}={page:<5d} {len(cnt):,} 码 / "
-                  f"{int(cnt.sum()):,} 行 → 疑似 {len(sus)} 只")
+            print(
+                f"  {name:22s} {unit}={page:<5d} {len(cnt):,} 码 / "
+                f"{int(cnt.sum()):,} 行 → 疑似 {len(sus)} 只"
+            )
             for code, n in list(sus.items())[:10]:
                 print(f"      {code}  db_rows={n:,}  db_rows%{page}={n % page}")
             if len(sus) > 10:
                 print(f"      ... 其余 {len(sus) - 10} 只见 JSON/明细")
-            print("      " + ("✓ 无截断残留" if len(sus) == 0 else
-                              f"⚠ 疑似截断 {len(sus)} 只"
-                              f"（必须用 fetch_paged_by_code 重探）"))
+            print(
+                "      "
+                + (
+                    "✓ 无截断残留"
+                    if len(sus) == 0
+                    else f"⚠ 疑似截断 {len(sus)} 只（必须用 fetch_paged_by_code 重探）"
+                )
+            )
     if verbose:
         print(f"  [统计] 读取失败 {failed} 个文件")
         if not out:
@@ -839,12 +988,15 @@ def _period_key(task, mode, freq):
     if mode == "by_date" and freq == "week":
         try:
             import datetime as _dt
+
             dd = _dt.date(int(s[:4]), int(s[4:6]), int(s[6:8]))
             y, w, _ = dd.isocalendar()
             return f"{y}W{w:02d}"
         except Exception as exc:
-            print(f"[db.audit] 周期键折算失败（回退原串 {s}）: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[db.audit] 周期键折算失败（回退原串 {s}）: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             return s
     return s
 
@@ -864,13 +1016,14 @@ def _period_ongoing(task, freq, today):
     if freq == "week":
         try:
             import datetime as _dt
+
             a = _dt.date(int(s[:4]), int(s[4:6]), int(s[6:8])).isocalendar()[:2]
-            b = _dt.date(int(today[:4]), int(today[4:6]),
-                         int(today[6:8])).isocalendar()[:2]
+            b = _dt.date(int(today[:4]), int(today[4:6]), int(today[6:8])).isocalendar()[:2]
             return a == b
         except Exception as exc:
-            print(f"[db.audit] 周周期判定失败 {task!r}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[db.audit] 周周期判定失败 {task!r}: {type(exc).__name__}: {exc}", file=sys.stderr
+            )
             return False
     return False
 
@@ -921,8 +1074,10 @@ def audit_gaps(verbose=True):
 
     if verbose:
         print(f"  基准日: {today}")
-        print(f"\n  {'接口':18s} {'模式':9s} {'已完成':>8s} {'应有':>8s} "
-              f"{'完成率':>8s} {'还差':>7s}  {'类别':4s}")
+        print(
+            f"\n  {'接口':18s} {'模式':9s} {'已完成':>8s} {'应有':>8s} "
+            f"{'完成率':>8s} {'还差':>7s}  {'类别':4s}"
+        )
         print("  " + "-" * 76)
 
     out = []
@@ -931,8 +1086,7 @@ def audit_gaps(verbose=True):
             continue
         if conf.get("audit_skip"):
             continue  # 独立补数入口: 缺口由日更/增量机制兜底, db_audit 不重复算
-        if conf["api"] in ("cn_cpi", "cn_ppi", "cn_m", "cn_pmi", "cn_gdp",
-                           "sf_month", "hk_basic"):
+        if conf["api"] in ("cn_cpi", "cn_ppi", "cn_m", "cn_pmi", "cn_gdp", "sf_month", "hk_basic"):
             pass  # once 类照常处理
         mode = conf["mode"]
         done = set(cp.get(name, {}).get("completed", []))
@@ -955,15 +1109,19 @@ def audit_gaps(verbose=True):
             # 2026-11-11 P3-1 收口：改调 expected_task_count（快照日 20261113），
             # 与 R12 的"真源"逐位一致；build_tasks 仍按真实今天跑，属执行侧。
             from fetch.backfill_spec import expected_task_count
+
             try:
                 tasks, kind = expected_task_count(name, conf)
                 if kind == "date" and tasks:
                     expect = [str(t) for t in tasks]
             except Exception as exc:
-                print(f"[db.audit] expected_task_count 失败 {name}（退按日枚举）: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                print(
+                    f"[db.audit] expected_task_count 失败 {name}（退按日枚举）: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 expect = None
-            if expect is None:      # 兜底：expected_task_count 不可用时退回按日枚举
+            if expect is None:  # 兜底：expected_task_count 不可用时退回按日枚举
                 start = conf.get("start", "20160101")
                 expect = [d for d in open_dates(start_date=start) if d <= today]
         elif mode in ("by_range", "by_period"):
@@ -975,6 +1133,7 @@ def audit_gaps(verbose=True):
             #   且已处理 single_range、截断到今天、各 kind 的格式转换。
             #   **不要再在 db_audit 内新增任何自行实现的任务计算。**
             from fetch.backfill_spec import expected_task_count
+
             tasks, kind = expected_task_count(name, conf)
             if tasks is None:
                 expect = None
@@ -988,6 +1147,7 @@ def audit_gaps(verbose=True):
             # 2026-11-11 同上：by_month 的 month_last_trade_dates 在 build_tasks
             # 内不传 end（取 datetime.now()）⇒ 体检侧会按天漂移，故统一走真源。
             from fetch.backfill_spec import expected_task_count
+
             try:
                 tasks, kind = expected_task_count(name, conf)
                 if kind == "need_meta" or tasks is None:
@@ -995,14 +1155,19 @@ def audit_gaps(verbose=True):
                 else:
                     expect = [str(t) for t in tasks]
             except Exception as exc:
-                print(f"[db.audit] expected_task_count 失败 {name}（应有数未知）: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                print(
+                    f"[db.audit] expected_task_count 失败 {name}（应有数未知）: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 expect = None
 
         if expect is None:
             if verbose:
-                print(f"  {name:18s} {mode:9s} {len(done):8d} {'?':>8s} "
-                      f"{'?':>8s} {'?':>7s}  (应有数未知)")
+                print(
+                    f"  {name:18s} {mode:9s} {len(done):8d} {'?':>8s} "
+                    f"{'?':>8s} {'?':>7s}  (应有数未知)"
+                )
             continue
 
         # ── 缺口计算（按**周期键**比对，消除滚动端点漂移）──
@@ -1011,8 +1176,7 @@ def audit_gaps(verbose=True):
         freq = conf.get("freq", "day")
         done_keys = {_period_key(d, mode, freq) for d in done}
         miss_keys = {_period_key(e, mode, freq) for e in expect} - done_keys
-        miss = sorted({e for e in expect
-                       if _period_key(e, mode, freq) in miss_keys})
+        miss = sorted({e for e in expect if _period_key(e, mode, freq) in miss_keys})
         miss = [str(x) for x in miss]
 
         # ── 数据口径校验（仅 by_date）──
@@ -1043,20 +1207,29 @@ def audit_gaps(verbose=True):
         #   会算出 100%，却又同时显示"还差 1"，自相矛盾。
         matched = max(len(expect) - len(miss), 0)
         ratio = matched / len(expect) * 100 if expect else 100
-        out.append({"name": name, "mode": mode, "done": len(done),
-                    "expect": len(expect), "missing": len(miss),
-                    "category": _gap_category(name, conf),
-                    "first": miss[0] if miss else "",
-                    "last": miss[-1] if miss else "",
-                    "data_stale": bool(data_stale),
-                    "data_latest": data_latest if data_stale else None})
+        out.append(
+            {
+                "name": name,
+                "mode": mode,
+                "done": len(done),
+                "expect": len(expect),
+                "missing": len(miss),
+                "category": _gap_category(name, conf),
+                "first": miss[0] if miss else "",
+                "last": miss[-1] if miss else "",
+                "data_stale": bool(data_stale),
+                "data_latest": data_latest if data_stale else None,
+            }
+        )
         if verbose:
             stale_tag = " ⚠断点虚记" if data_stale else ""
             cat = _gap_category(name, conf)
             # 真缺口（日更表）高亮，设计性差额与周期表用普通样式
             cat_tag = "★" + cat if cat == GAP_CAT_DAILY else " " + cat
-            print(f"  {name:18s} {mode:9s} {len(done):8d} {len(expect):8d} "
-                  f"{ratio:7.1f}% {len(miss):7d}  {cat_tag:4s}{stale_tag}")
+            print(
+                f"  {name:18s} {mode:9s} {len(done):8d} {len(expect):8d} "
+                f"{ratio:7.1f}% {len(miss):7d}  {cat_tag:4s}{stale_tag}"
+            )
             if data_stale and data_latest:
                 print(f"    断点口径: 已完成, 数据口径: 最新={data_latest}")
 
@@ -1080,25 +1253,33 @@ def audit_gaps(verbose=True):
             else:
                 print("\n  ✓ 真缺口（日更表）: **0** —— 所有参与日更的接口均已到位")
 
-            for cat, label in ((GAP_CAT_EXEMPT, "豁免表（刻意不日更）"),
-                               (GAP_CAT_CYCLE, "周期表（周/月线，周期未结束）")):
+            for cat, label in (
+                (GAP_CAT_EXEMPT, "豁免表（刻意不日更）"),
+                (GAP_CAT_CYCLE, "周期表（周/月线，周期未结束）"),
+            ):
                 v = by_cat.get(cat)
                 if v:
-                    print(f"  ⓘ {label}: {v['n']} 个接口 / {v['miss']} 个差额"
-                          f" —— **设计性差额，非缺口**（这些表不参与日更，差额会持续存在）")
+                    print(
+                        f"  ⓘ {label}: {v['n']} 个接口 / {v['miss']} 个差额"
+                        f" —— **设计性差额，非缺口**（这些表不参与日更，差额会持续存在）"
+                    )
 
             print(f"\n  合计差额: {tot:,} 个任务（其中真缺口 {daily_miss:,}）")
             if daily_miss:
                 bd = by_cat.get(GAP_CAT_DAILY, {}).get("bydate", 0)
                 if bd:
                     par = max(BACKFILL_PARALLEL_TARGETS, 1)
-                    print(f"    其中 by_date 类 {bd:,} 个交易日请求"
-                          f" (按 41 天/分钟 4 接口并行 ≈ {bd/41/par:.0f} 分钟)")
+                    print(
+                        f"    其中 by_date 类 {bd:,} 个交易日请求"
+                        f" (按 41 天/分钟 4 接口并行 ≈ {bd / 41 / par:.0f} 分钟)"
+                    )
                 print("  续跑命令: python main.py backfill --tier A,B")
             stale_count = sum(1 for x in out if x.get("data_stale"))
             if stale_count:
                 print(f"  ⚠ 其中 {stale_count} 个接口断点虚记（调用成功但返空被记为完成），")
-                print("    实际数据落后于断点记录。建议: python main.py gap-update --group all --lookback 5")
+                print(
+                    "    实际数据落后于断点记录。建议: python main.py gap-update --group all --lookback 5"
+                )
         else:
             print("  ✓ 无缺口（含日更表与豁免表）")
     return out
@@ -1139,18 +1320,21 @@ def audit_scale(top_n=12, verbose=True):
             tot_b += s
 
     if verbose:
-        print(f"  目录数: {len(by_dir)} | parquet 文件: {tot_f:,}" +
-              (f" (+根目录 {root_files})" if root_files else ""))
-        print(f"  总大小: {tot_b/1024**3:.2f} GB")
+        print(
+            f"  目录数: {len(by_dir)} | parquet 文件: {tot_f:,}"
+            + (f" (+根目录 {root_files})" if root_files else "")
+        )
+        print(f"  总大小: {tot_b / 1024**3:.2f} GB")
         try:
             import shutil
+
             _t, _u, fr = shutil.disk_usage(os.path.splitdrive(MARKET_DATA_DIR)[0] + "\\")
-            print(f"  磁盘剩余: {fr/1024**3:.1f} GB")
+            print(f"  磁盘剩余: {fr / 1024**3:.1f} GB")
         except Exception:
             pass
         print(f"\n  Top {top_n} 目录:")
         for k, (n, s) in sorted(by_dir.items(), key=lambda x: -x[1][1])[:top_n]:
-            print(f"    {k:20s} {n:7,d} 文件  {s/1024**2:9.1f} MB")
+            print(f"    {k:20s} {n:7,d} 文件  {s / 1024**2:9.1f} MB")
 
     return {"dirs": len(by_dir), "files": tot_f, "bytes": tot_b, "by_dir": by_dir}
 
@@ -1168,8 +1352,7 @@ def _read_code_set(name):
     try:
         import pyarrow.parquet as pq
     except Exception as exc:
-        print(f"[db.audit] 导入 pyarrow 失败: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(f"[db.audit] 导入 pyarrow 失败: {type(exc).__name__}: {exc}", file=sys.stderr)
         return None
     for f in os.listdir(d):
         if not f.endswith(".parquet"):
@@ -1182,8 +1365,10 @@ def _read_code_set(name):
             t = pq.read_table(os.path.join(d, f), columns=[col])
             out |= {str(x) for x in t.column(col).to_pylist() if x is not None}
         except Exception as exc:
-            print(f"[db.audit] 读代码集失败 {f}（整表放弃）: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[db.audit] 读代码集失败 {f}（整表放弃）: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             return None
     return out
 
@@ -1196,6 +1381,7 @@ def audit_data_check(only=None, verbose=True):
     """
     from config import BACKFILL_TARGETS
     from config import MARKET_DATA_DIR as _MD
+
     cp_path = os.path.join(_MD, ".backfill_checkpoint.json")
     if not os.path.exists(cp_path):
         return []
@@ -1214,9 +1400,15 @@ def audit_data_check(only=None, verbose=True):
         if data is None:
             continue
         nodata = done - data
-        rows.append({"table": name, "done": len(done), "with_data": len(done & data),
-                     "done_no_data": len(nodata),
-                     "sample": sorted(nodata)[:5]})
+        rows.append(
+            {
+                "table": name,
+                "done": len(done),
+                "with_data": len(done & data),
+                "done_no_data": len(nodata),
+                "sample": sorted(nodata)[:5],
+            }
+        )
     rows.sort(key=lambda r: -r["done_no_data"])
     if verbose:
         print()
@@ -1226,15 +1418,94 @@ def audit_data_check(only=None, verbose=True):
         print(f"  {'接口':20s} {'断点完成':>8s} {'有数据':>8s} {'零行':>8s}  样例")
         print("  " + "-" * 76)
         for r in rows:
-            print(f"  {r['table']:20s} {r['done']:8d} {r['with_data']:8d} "
-                  f"{r['done_no_data']:8d}  {','.join(r['sample'])}")
+            print(
+                f"  {r['table']:20s} {r['done']:8d} {r['with_data']:8d} "
+                f"{r['done_no_data']:8d}  {','.join(r['sample'])}"
+            )
         print(f"  合计: {len(rows)} 表 / 零行码 {sum(r['done_no_data'] for r in rows):,}")
     return rows
 
 
-def run_audit(sections=("checkpoint", "dup", "truncation", "gap", "scale"),
-              only=None, verbose=True, exact=False, as_json=False,
-              data_check=False):
+# ============================================================
+# E. 数据语义谓词（D5）：把合法语义从「污染」中剔除
+# ============================================================
+# D5-E 实测（2026-11-21）：
+#   · opt_daily 非正/越界 ~1,281 万行，绝大多数是 `vol=0 ∧ OHL=0`（无成交）；
+#   · cb_daily / fut_daily 同类；fut_daily 另有 close=pre_close、vol=0 的「无成交有结算」；
+#   · index_daily 3,575 个非正点位中，典型为 395011.SZ / H50059.CSI 的 close=0（源端零点位）；
+#   · daily / index_daily / index_global 的少量 OHLC 越界是真异常，必须继续报出。
+# 这些谓词只做**分类**，不改库内数据行；调用方据此决定「真异常 / 合法语义」。
+_SEMANTIC_NO_TRADE_TABLES = frozenset({"opt_daily", "cb_daily", "fut_daily"})
+_SEMANTIC_ZERO_POINT_TABLES = frozenset(
+    {
+        "index_daily",
+        "index_weekly",
+        "index_monthly",
+        "index_global",
+    }
+)
+
+
+def classify_ohlc_anomalies(df, table):
+    """把 OHLC 异常分为「真异常」与「合法语义」，返回 dict。
+
+    合法语义：
+      · 无成交：`opt_daily` / `cb_daily` / `fut_daily` 的 `vol==0` 且 OHL<=0
+        （无成交不产生开高低；close 可保留昨收/结算价）；
+      · 零点位：指数表 close<=0（源端对已停更/未编制点位给 0）。
+    """
+    import numpy as np
+
+    n = len(df)
+    out = {"table": table, "rows": n, "true_anomalies": 0, "legal_semantic": 0, "samples": []}
+    if n == 0:
+        return out
+
+    def _col(name):
+        return df[name] if name in df.columns else pd.Series(np.nan, index=df.index)
+
+    o, h, low, c = _col("open"), _col("high"), _col("low"), _col("close")
+    vol, amount = _col("vol"), _col("amount")
+
+    legal = pd.Series(False, index=df.index)
+    if table in _SEMANTIC_NO_TRADE_TABLES:
+        legal |= (
+            (vol.fillna(0) == 0) & (o.fillna(0) <= 0) & (h.fillna(0) <= 0) & (low.fillna(0) <= 0)
+        )
+    if table in _SEMANTIC_ZERO_POINT_TABLES:
+        # 零点位必须是「close=0 且 OHL 也为 0/空」；若 close=0 但 OHL 有值，
+        # 属真异常（O1：不能仅凭 close==0 把坏行一起掩掉）。
+        legal |= (c.fillna(0) == 0) & (o.fillna(0) <= 0) & (h.fillna(0) <= 0) & (low.fillna(0) <= 0)
+
+    bad = pd.Series(False, index=df.index)
+    bad |= h < low
+    bad |= (c < low) | (c > h)
+    bad |= (o < low) | (o > h)
+    if table not in _SEMANTIC_ZERO_POINT_TABLES:
+        bad |= c <= 0
+    bad |= (vol < 0) | (amount < 0)
+
+    true_bad = bad & ~legal
+    out["true_anomalies"] = int(true_bad.sum())
+    out["legal_semantic"] = int(legal.sum())
+    if out["true_anomalies"]:
+        sample_cols = [
+            x
+            for x in ("ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount")
+            if x in df.columns
+        ]
+        out["samples"] = df.loc[true_bad, sample_cols].head(3).to_dict("records")
+    return out
+
+
+def run_audit(
+    sections=("checkpoint", "dup", "truncation", "gap", "scale"),
+    only=None,
+    verbose=True,
+    exact=False,
+    as_json=False,
+    data_check=False,
+):
     """执行体检。exact=True 时无主键目录做全量整行判重(慢, 约18分钟)。
 
     as_json: stdout 输出结果 JSON（CLI --json；2026-09-30 P3 统一）
@@ -1274,6 +1545,7 @@ def run_audit(sections=("checkpoint", "dup", "truncation", "gap", "scale"),
 
     if as_json:
         from common.jsonio import print_json
+
         out = dict(result)
         if "checkpoint" in out:
             errs, infos = out["checkpoint"]
@@ -1285,8 +1557,7 @@ def run_audit(sections=("checkpoint", "dup", "truncation", "gap", "scale"),
         if "dup" in result:
             n_issue += len([r for r in result["dup"] if "⚠" in r["verdict"]])
         if "gap" in result:
-            n_issue += len([x for x in result["gap"]
-                            if x.get("category") == GAP_CAT_DAILY])
+            n_issue += len([x for x in result["gap"] if x.get("category") == GAP_CAT_DAILY])
         out["n_issue"] = n_issue
         print_json(out, indent=1)
         return result
@@ -1309,8 +1580,9 @@ def run_audit(sections=("checkpoint", "dup", "truncation", "gap", "scale"),
         print(f"  真重复:     {'✓ 未发现' if not b else f'⚠ {len(b)} 个目录'}")
     if "truncation" in result:
         n_sus = sum(len(r["suspects"]) for r in result["truncation"])
-        print(f"  截断残留:   {'✓ 无' if n_sus == 0 else f'⚠ 疑似 {n_sus} 只'}"
-              f"（诊断项，不计入总体）")
+        print(
+            f"  截断残留:   {'✓ 无' if n_sus == 0 else f'⚠ 疑似 {n_sus} 只'}（诊断项，不计入总体）"
+        )
     if "gap" in result:
         g = result["gap"]
         # ⚠ 只有**真缺口（日更表）**才计入「待关注」（2026-09-22 修复）：
@@ -1322,13 +1594,17 @@ def run_audit(sections=("checkpoint", "dup", "truncation", "gap", "scale"),
             print("  缺口:       ✓ 无")
         elif not daily_g:
             miss_tot = sum(x["missing"] for x in g)
-            print(f"  缺口:       ✓ 真缺口 0"
-                  f"（另有 {len(g)} 个接口 / {miss_tot:,} 个**设计性差额**，见上方分类）")
+            print(
+                f"  缺口:       ✓ 真缺口 0"
+                f"（另有 {len(g)} 个接口 / {miss_tot:,} 个**设计性差额**，见上方分类）"
+            )
         else:
             miss_tot = sum(x["missing"] for x in daily_g)
             print(f"  缺口:       ⚠ {len(daily_g)} 个**日更**接口待补, 合计 {miss_tot:,} 请求")
     if "scale" in result:
         s = result["scale"]
-        print(f"  规模:       {s['files']:,} 文件 / {s['bytes']/1024**3:.2f} GB / {s['dirs']} 目录")
+        print(
+            f"  规模:       {s['files']:,} 文件 / {s['bytes'] / 1024**3:.2f} GB / {s['dirs']} 目录"
+        )
     print(f"\n  总体: {'✓ 健康' if n_issue == 0 else f'⚠ {n_issue} 项待关注'}")
     return result

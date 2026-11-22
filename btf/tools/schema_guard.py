@@ -21,6 +21,7 @@
     python schema_guard.py --no-selftest --json
 退出码：0 = 全部已在 schema 声明；1 = 有缺失或自检失败；2 = 环境/参数错误
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,19 +34,40 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PROJ = os.path.dirname(HERE)
 CLI = os.path.join(PROJ, "btf", "cli", "main.py")
 LOADER = os.path.join(PROJ, "btf", "config", "loader.py")
-SCHEMA = os.path.join(PROJ, "schemas", "backtest.v1.json")
+SCHEMA = os.path.join(PROJ, "btf", "schemas", "backtest.v1.json")
 
 #: C 类：运行时真正消费的配置键（来自 2026-10-21 grep `btf/runtime|engine|config`）
 #: 新增 run_cfg/exec_cfg/... .get("x") 消费点时必须同步登记，否则守卫不覆盖。
 RUNTIME_KEYS: dict[str, set[str]] = {
-    "run": {"strategy", "strategy_paths", "params", "period", "universe",
-            "initial_cash", "price_view", "delisted_settlement",
-            "event_log"},
-    "execution": {"handler", "handler_params", "cost_model", "cost_model_params",
-                  "slippage", "rebalancer", "rebalancer_params"},
+    "run": {
+        "strategy",
+        "strategy_paths",
+        "params",
+        "period",
+        "universe",
+        "initial_cash",
+        "price_view",
+        "delisted_settlement",
+        "event_log",
+    },
+    "execution": {
+        "handler",
+        "handler_params",
+        "cost_model",
+        "cost_model_params",
+        "slippage",
+        "rebalancer",
+        "rebalancer_params",
+    },
     "risk": {"rules", "allow_empty_chain"},
-    "data": {"feed", "feed_params", "dataset", "quality", "fingerprint_mode",
-             "allow_degraded_limit"},
+    "data": {
+        "feed",
+        "feed_params",
+        "dataset",
+        "quality",
+        "fingerprint_mode",
+        "allow_degraded_limit",
+    },
     "report": {"benchmark", "sections"},
     "analysis": {"annualization_factor", "risk_free_rate", "metrics"},
     "rules": {"source", "path", "overrides"},
@@ -66,8 +88,10 @@ def load_schema(path: str = SCHEMA) -> dict:
 
 def cli_injections(path: str = CLI) -> set[str]:
     src = open(path, encoding="utf-8").read()
-    pat = re.compile(r'overrides\.setdefault\(\s*"([A-Za-z0-9_]+)"\s*,\s*\{\}\s*\)'
-                     r'\s*\[\s*"([A-Za-z0-9_]+)"\s*\]')
+    pat = re.compile(
+        r'overrides\.setdefault\(\s*"([A-Za-z0-9_]+)"\s*,\s*\{\}\s*\)'
+        r'\s*\[\s*"([A-Za-z0-9_]+)"\s*\]'
+    )
     return {f"{a}.{b}" for a, b in pat.findall(src)}
 
 
@@ -88,7 +112,7 @@ def loader_defaults(path: str = LOADER) -> set[str]:
             depth -= 1
             if depth == 0:
                 break
-    obj = ast.literal_eval(src[i:j + 1])
+    obj = ast.literal_eval(src[i : j + 1])
     out: set[str] = set()
 
     def walk(o, prefix=""):
@@ -103,8 +127,9 @@ def loader_defaults(path: str = LOADER) -> set[str]:
 
 
 def runtime_keys() -> set[str]:
-    return {f"{sec}.{k}" if sec != "__top__" else k
-            for sec, keys in RUNTIME_KEYS.items() for k in keys}
+    return {
+        f"{sec}.{k}" if sec != "__top__" else k for sec, keys in RUNTIME_KEYS.items() for k in keys
+    }
 
 
 # ---------------------------------------------------------------- schema 路径
@@ -145,22 +170,28 @@ def is_allowed(path: str, paths: set[str], open_nodes: set[str]) -> bool:
     for i in range(len(parts) - 1, 0, -1):
         if ".".join(parts[:i]) in open_nodes:
             return True
-    if "" in open_nodes:          # 根开放
+    if "" in open_nodes:  # 根开放
         return True
     return False
 
 
 # ---------------------------------------------------------------- 检查
-def check(paths: set[str], open_nodes: set[str], groups: dict[str, set[str]],
-          known: dict[str, str] | None = None) -> dict:
+def check(
+    paths: set[str],
+    open_nodes: set[str],
+    groups: dict[str, set[str]],
+    known: dict[str, str] | None = None,
+) -> dict:
     known = KNOWN_GAPS if known is None else known
     res = {}
     for name, keys in groups.items():
         miss = sorted(k for k in keys if not is_allowed(k, paths, open_nodes))
-        res[name] = {"checked": len(keys),
-                     "missing": miss,
-                     "known_gaps": [k for k in miss if k in known],
-                     "fatal": [k for k in miss if k not in known]}
+        res[name] = {
+            "checked": len(keys),
+            "missing": miss,
+            "known_gaps": [k for k in miss if k in known],
+            "fatal": [k for k in miss if k not in known],
+        }
     res["ok"] = all(not g["fatal"] for k, g in res.items() if isinstance(g, dict))
     return res
 
@@ -175,7 +206,9 @@ def report(r: dict) -> str:
             L.append(f"❌ {label}（{g['checked']}）：schema 未声明 {len(g['fatal'])} 个")
             L += [f"     - {x}" for x in g["fatal"]]
         elif g["known_gaps"]:
-            L.append(f"⚠️ {label}（{g['checked']}）：全部可声明之外，另有 {len(g['known_gaps'])} 个已知缺口")
+            L.append(
+                f"⚠️ {label}（{g['checked']}）：全部可声明之外，另有 {len(g['known_gaps'])} 个已知缺口"
+            )
         else:
             L.append(f"✅ {label}（{g['checked']}）：全部已声明")
     gaps = [k for g in r.values() if isinstance(g, dict) for k in g.get("known_gaps", [])]
@@ -193,18 +226,26 @@ def selftest() -> bool:
     bad = {"A": {"run.__fake_a__"}, "B": {"__fake_b__"}, "C": {"run.__fake_c__"}}
     bad_case = check(paths, set(), bad, known={})
     # 已知缺口不应被判失败（但必须出现在 missing 里）
-    gap_case = check(paths, set(), {"A": {"run.known_gap_x"}, "B": set(), "C": set()},
-                     known={"run.known_gap_x": "test"})
+    gap_case = check(
+        paths,
+        set(),
+        {"A": {"run.known_gap_x"}, "B": set(), "C": set()},
+        known={"run.known_gap_x": "test"},
+    )
     open_case = check(paths, {"data"}, {"A": {"data.any_new_key"}, "B": set(), "C": set()})
     p1 = ok_case["ok"] is True
-    p4 = (gap_case["ok"] is True and "run.known_gap_x" in gap_case["A"]["known_gaps"])
-    p2 = (bad_case["ok"] is False
-          and "run.__fake_a__" in bad_case["A"]["missing"]
-          and "__fake_b__" in bad_case["B"]["missing"]
-          and "run.__fake_c__" in bad_case["C"]["missing"])
+    p4 = gap_case["ok"] is True and "run.known_gap_x" in gap_case["A"]["known_gaps"]
+    p2 = (
+        bad_case["ok"] is False
+        and "run.__fake_a__" in bad_case["A"]["missing"]
+        and "__fake_b__" in bad_case["B"]["missing"]
+        and "run.__fake_c__" in bad_case["C"]["missing"]
+    )
     p3 = open_case["ok"] is True
-    print(f"[selftest] 正例通过={p1} / 三类负例全被抓={p2} / 开放节点放行={p3} / "
-          f"已知缺口不判失败={p4} → " + ("PASS" if all((p1, p2, p3, p4)) else "FAIL"))
+    print(
+        f"[selftest] 正例通过={p1} / 三类负例全被抓={p2} / 开放节点放行={p3} / "
+        f"已知缺口不判失败={p4} → " + ("PASS" if all((p1, p2, p3, p4)) else "FAIL")
+    )
     return all((p1, p2, p3, p4))
 
 

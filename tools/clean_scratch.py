@@ -12,8 +12,8 @@ tools/clean_scratch.py — `_scratch/` 定期清理（一次性探针/临时产�
   3. 保护区（永不删，精确名匹配）：
        `wind-研究暂存/`  Wind 研究剥离期代码（含明文 key，禁外发）
        `README.md`        本区保留策略说明（TMP-03 加入，否则会被本脚本自删）
-     （2026-11-21 迁出：`backups/` → `备份\归档文件\scratch-backups-历史快照-20261121\`；
-       `bt_check_logs/` → `代码\logs\bt_check\`；`schedule_logs/` → `代码\logs\schedule\`）
+     （2026-11-21 迁出：`backups/` → `备份\\归档文件\\scratch-backups-历史快照-20261121\\`；
+       `bt_check_logs/` → `代码\\logs\\bt_check\\`；`schedule_logs/` → `代码\\logs\\schedule\\`）
      另有 `--keep` 可追加名字/前缀豁免（可多次）。
   4. 默认 **干跑**：只打印清单；`--apply` 才真删。
 
@@ -28,6 +28,7 @@ tools/clean_scratch.py — `_scratch/` 定期清理（一次性探针/临时产�
   2. `_scratch/` 自身、保护区、未到期项：只报不动（跳过计数与可删计数分开对账）
   3. --apply 后复读目录，逐项核对"已消失"，任一残留即非零退出
 """
+
 import argparse
 import shutil
 import sys
@@ -80,7 +81,9 @@ def main() -> int:
     rows = []
     for p in sorted(SCRATCH.iterdir(), key=lambda x: x.stat().st_mtime):
         age = (now - p.stat().st_mtime) / 86400.0
-        protected = p.name in PROTECTED or any(p.name == k or p.name.startswith(k) for k in args.keep)
+        protected = p.name in PROTECTED or any(
+            p.name == k or p.name.startswith(k) for k in args.keep
+        )
         if protected:
             act = "KEEP(保护)"
         elif age >= args.days:
@@ -91,12 +94,16 @@ def main() -> int:
 
     deletable = [r for r in rows if r[2] == "DELETE"]
     print(f"_scratch = {SCRATCH}")
-    print(f"寿命窗 = {args.days:g} 天 | 顶层项 {len(rows)} | 可删 {len(deletable)} "
-          f"| 保护区 {sum(1 for r in rows if r[2].startswith('KEEP'))} "
-          f"| 未到期 {sum(1 for r in rows if r[2].startswith('keep'))}")
+    print(
+        f"寿命窗 = {args.days:g} 天 | 顶层项 {len(rows)} | 可删 {len(deletable)} "
+        f"| 保护区 {sum(1 for r in rows if r[2].startswith('KEEP'))} "
+        f"| 未到期 {sum(1 for r in rows if r[2].startswith('keep'))}"
+    )
     print("-" * 78)
     for age, p, act, size in rows:
-        print(f"{age:6.1f}d  {act:<12s} {'DIR ' if p.is_dir() else 'FILE'} {p.name}  ({human(size)})")
+        print(
+            f"{age:6.1f}d  {act:<12s} {'DIR ' if p.is_dir() else 'FILE'} {p.name}  ({human(size)})"
+        )
     if not deletable:
         print("-" * 78)
         print("无可删项（干跑/真删均无动作）。")
@@ -104,8 +111,10 @@ def main() -> int:
 
     if not args.apply:
         print("-" * 78)
-        print(f"[干跑] 上述 {len(deletable)} 项将在 --apply 时删除"
-              f"（合计 {human(sum(r[3] for r in deletable))}）。加 --apply 执行。")
+        print(
+            f"[干跑] 上述 {len(deletable)} 项将在 --apply 时删除"
+            f"（合计 {human(sum(r[3] for r in deletable))}）。加 --apply 执行。"
+        )
         return 0
 
     print("-" * 78)
@@ -126,8 +135,10 @@ def main() -> int:
 
     left = {p.name for p in SCRATCH.iterdir()}
     residual = [r[1].name for r in deletable if r[1].name in left]
-    print(f"复读校验: 删除 {len(deletable) - len(residual)}/{len(deletable)}"
-          f"{' PASS' if not residual else ' FAIL ' + str(residual)}")
+    print(
+        f"复读校验: 删除 {len(deletable) - len(residual)}/{len(deletable)}"
+        f"{' PASS' if not residual else ' FAIL ' + str(residual)}"
+    )
     return 1 if (residual or failed) else 0
 
 

@@ -50,6 +50,7 @@ main.py gap-update 现在直接调用本模块（命令名不变，定时任务�
   python -m fetch.daily_update --list        # 列出每日更新接口清单
   python -m fetch.periodic_update --status   # 只看事件面表周期通道状态（零请求）
 """
+
 import argparse
 import os
 import sys
@@ -57,7 +58,7 @@ import time
 from datetime import datetime
 
 from common import reader
-from common.calendar import open_dates_by_market
+from common.calendar import CalendarStaleError, check_coverage, open_dates_by_market
 from config import (
     BACKFILL_TARGETS,
     DAILY_UPDATE_EXTRA,
@@ -207,11 +208,10 @@ def _resolve_gaps_periodic(name, conf, target_date, lookback):
 
     if conf["freq"] == "week":
         samples = week_last_trade_dates(
-            start, target_date, calendar=cal,
-            anchor=conf.get("week_anchor", "last_trade"))
+            start, target_date, calendar=cal, anchor=conf.get("week_anchor", "last_trade")
+        )
     else:
-        samples = [d for _m, d in
-                   month_last_trade_dates(start, target_date, calendar=cal)]
+        samples = [d for _m, d in month_last_trade_dates(start, target_date, calendar=cal)]
     samples = [d for d in samples if str(d) <= str(target_date)]
 
     reader.clear_cache(name)
@@ -241,8 +241,8 @@ def _resolve_gaps_range(name, conf, target_date, date_col=None):
          "trade_date"，直接用会读错列（实证 shibor 的列名是 "date"）。
     """
     from config import TABLE_DATE_COL
-    dc = (date_col or conf.get("date_col")
-          or TABLE_DATE_COL.get(name) or "date")
+
+    dc = date_col or conf.get("date_col") or TABLE_DATE_COL.get(name) or "date"
     reader.clear_cache(name)
     latest = reader.latest_date(name, dc)
 
@@ -254,7 +254,7 @@ def _resolve_gaps_range(name, conf, target_date, date_col=None):
         info["gap"] = [task]
         return [task], info
     if str(latest) >= str(target_date):
-        return [], info                     # 已是最新
+        return [], info  # 已是最新
     task = (str(latest), str(target_date))
     info["gap"] = [task]
     return [task], info
@@ -263,10 +263,17 @@ def _resolve_gaps_range(name, conf, target_date, date_col=None):
 # ============================================================
 # 主流程
 # ============================================================
-def run_daily_update(target_date=None, dry_run=False, groups=("core",),
-                     lookback=None, workers=None, only=None,
-                     verbose=False, with_market_state=True,
-                     with_periodic=True):
+def run_daily_update(
+    target_date=None,
+    dry_run=False,
+    groups=("core",),
+    lookback=None,
+    workers=None,
+    only=None,
+    verbose=False,
+    with_market_state=True,
+    with_periodic=True,
+):
     """每日增量更新。
 
     参数:
@@ -310,7 +317,17 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     print(f"  接口组: {', '.join(groups)} → {len(names)} 个接口")
     print("=" * 78)
 
+    # D4（D-P1-2）：先证明本地日历覆盖 target，否则 resolve_gaps 会把
+    # 「日历截断」误判成「无缺口 / 已是最新」。
+    try:
+        check_coverage(target_date)
+    except CalendarStaleError as exc:
+        print(f"  [ERROR] {exc}")
+        print("  [ERROR] 本地日历未覆盖 target，请先更新 trade_cal")
+        return {"ok": 0, "fail": 1, "rows": 0, "error": str(exc)}
+
     # ── Step 1: 逐表算缺口 ──
+    t_step1 = time.time()
     print("\n[Step 1] 缺口分析")
     print("-" * 78)
     print(f"  {'接口':16s} {'库内最新':>10s} {'缺口':>5s} {'复核':>5s}  待跑日期")
@@ -343,10 +360,13 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
         #   ⚠ 依赖 run_target 的 `ignore_checkpoint=True`（本模块已传）
         #     → pending = 全部标的，不会被"该标的已在库"跳过。
         if _mode == "by_code":
-            print(f"  {name:16s} {'全量重拉':>10s} {0:>5d} {0:>5d}  "
-                  f"按标的逐个拉全历史（by_code，幂等）")
-            plan.append((name, conf, None, {"latest": "-", "gap": [],
-                                            "refresh": [], "full_refresh": True}))
+            print(
+                f"  {name:16s} {'全量重拉':>10s} {0:>5d} {0:>5d}  "
+                f"按标的逐个拉全历史（by_code，幂等）"
+            )
+            plan.append(
+                (name, conf, None, {"latest": "-", "gap": [], "refresh": [], "full_refresh": True})
+            )
             continue
         try:
             dates, info = resolve_gaps(name, conf, target_date, lookback)
@@ -366,8 +386,9 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
             show = f"{_s}~{_e}" + (f"(共{len(dates)}段)" if len(dates) > 1 else "")
         else:
             show = ",".join(d[-4:] for d in dates[:8]) + ("..." if len(dates) > 8 else "")
-        print(f"  {name:16s} {latest:>10s} {len(info['gap']):>5d} "
-              f"{len(info['refresh']):>5d}  {show}")
+        print(
+            f"  {name:16s} {latest:>10s} {len(info['gap']):>5d} {len(info['refresh']):>5d}  {show}"
+        )
         plan.append((name, conf, dates, info))
 
     if not plan:
@@ -379,8 +400,10 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     total_calls = sum(len(d) if d else 0 for _, _, d, _ in plan)
     n_full = sum(1 for _, _, d, _ in plan if d is None)
     print("-" * 78)
-    print(f"  合计: {len(plan)} 个接口 | {total_calls} 个接口-交易日"
-          + (f" | {n_full} 个全量重拉（任务数运行期确定）" if n_full else ""))
+    print(
+        f"  合计: {len(plan)} 个接口 | {total_calls} 个接口-交易日"
+        + (f" | {n_full} 个全量重拉（任务数运行期确定）" if n_full else "")
+    )
 
     if dry_run:
         print("\n  [DRY-RUN] 只统计不写入")
@@ -393,20 +416,30 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     cp = Checkpoint(MARKET_DATA_DIR, filename=".backfill_checkpoint.json")
 
     results = []
+    failed_tables = []
     t_all = time.time()
     try:
         for name, conf, dates, _info in plan:
             try:
-                r = run_target(pro, name, conf, cp, workers, dry_run=False,
-                               verbose=verbose, date_override=dates,
-                               ignore_checkpoint=True)
+                r = run_target(
+                    pro,
+                    name,
+                    conf,
+                    cp,
+                    workers,
+                    dry_run=False,
+                    verbose=verbose,
+                    date_override=dates,
+                    ignore_checkpoint=True,
+                )
                 if r:
                     results.append((name, r))
             except KeyboardInterrupt:
                 raise
             except Exception as e:
                 print(f"  [ERROR] {name}: {type(e).__name__}: {str(e)[:100]}")
-                results.append((name, {"done": 0, "est": len(dates)}))
+                failed_tables.append(name)
+                results.append((name, {"done": 0, "est": len(dates), "failed": True}))
     except KeyboardInterrupt:
         print("\n  [中断] 断点已保存，下次可续跑")
     finally:
@@ -419,6 +452,7 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
             print("\n[Step 3] market_state 跌停状态派生")
             try:
                 from fetch.redtide_supply import run_market_state
+
                 run_market_state(years=[int(target_date[:4])])
             except Exception as e:
                 print(f"  [WARN] market_state 派生失败: {str(e)[:80]}")
@@ -431,17 +465,32 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     print("=" * 78)
     ok_n = fail_n = 0
     for name, _conf, dates, _info in plan:
-        done = next((r["done"] for n, r in results if n == name), None)
-        if done is None:
+        rec = next((r for n, r in results if n == name), None)
+        if rec is None or rec.get("failed"):
             fail_n += 1
+            failed_tables.append(name)
             print(f"  [✗] {name:16s} 未完成")
         else:
             ok_n += 1
             # dates=None 表示全量重拉类（任务数在运行期才确定），不显示"目标N天"
             scope = "全量重拉" if dates is None else f"目标{len(dates):>3d}天"
-            print(f"  [✓] {name:16s} {scope}  成功{done:>3d}")
-    print(f"\n  成功={ok_n} 失败={fail_n} | 总耗时={(time.time()-t_all)/60:.1f} 分钟")
+            print(f"  [✓] {name:16s} {scope}  成功{rec.get('done', 0):>3d}")
+    elapsed = time.time() - t_all
+    print(f"\n  成功={ok_n} 失败={fail_n} | 总耗时={elapsed / 60:.1f} 分钟")
     print(f"  断点文件: {cp.path}")
+
+    # D4：关键失败必须同时进日志文件（`chichao.log` 原为 0 字节 —— print
+    # 不进 logging）。记录分步耗时与失败表名，供计划任务/事后审计。
+    try:
+        from common.logging_setup import log_event
+
+        log_event(
+            f"[daily_update] target={target_date} ok={ok_n} fail={fail_n} "
+            f"failed={sorted(set(failed_tables))} "
+            f"gap_s={t_all - t_step1:.1f} run_s={elapsed:.1f}"
+        )
+    except Exception:
+        pass
 
     # ── Step 4: 权限漏网告警（2026-09-20 新增）──
     #   为什么放在最后：日更期间所有接口都跑完了，才能看到全貌。
@@ -461,6 +510,7 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     if with_periodic and not only and not dry_run:
         try:
             from fetch.periodic_update import run_periodic_update
+
             print("\n[Step 5] 事件面表周期更新通道（E-01；未到期则零请求）")
             per_result = run_periodic_update(quiet=False, record_version=False)
         except Exception as e:
@@ -471,13 +521,18 @@ def run_daily_update(target_date=None, dry_run=False, groups=("core",),
     #     全部表失败 ⇒ 不记（"成功日更"是写入前提）。best-effort：失败只告警，
     #     版本落后由 doctor「库版本」可见。
     if not dry_run:
-        per_tables = [n for n, r in (per_result or {}).items()
-                      if isinstance(r, dict) and "skipped" not in r]
+        per_tables = [
+            n for n, r in (per_result or {}).items() if isinstance(r, dict) and "skipped" not in r
+        ]
         if ok_n > 0 or per_tables:
             try:
                 from common.db_version import record as _dbv
+
                 tables = [n for n, r in results if (r or {}).get("done")] + per_tables
-                _dbv(tables, note=f"日更 ok={ok_n}" + (f"+周期{len(per_tables)}" if per_tables else ""))
+                _dbv(
+                    tables,
+                    note=f"日更 ok={ok_n}" + (f"+周期{len(per_tables)}" if per_tables else ""),
+                )
             except Exception as e:
                 print(f"  [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")
 
@@ -494,8 +549,10 @@ def _report_permission_denied(dry_run=False):
     try:
         from fetch.base import permission_denied_apis, permission_denied_count
     except Exception as exc:
-        print(f"[fetch.daily_update] 导入权限拒绝记录失败（跳过告警）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fetch.daily_update] 导入权限拒绝记录失败（跳过告警）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return
 
     n = permission_denied_count()
@@ -504,10 +561,14 @@ def _report_permission_denied(dry_run=False):
 
     try:
         import config
+
         leaky_permissions = config.LEAKY_PERMISSIONS
     except Exception as exc:
-        print(f"[fetch.daily_update] 读 LEAKY_PERMISSIONS 失败（按空处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fetch.daily_update] 读 LEAKY_PERMISSIONS 失败（按空处理）: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         leaky_permissions = {}
 
     apis = permission_denied_apis()
@@ -554,12 +615,12 @@ def _report_permission_denied(dry_run=False):
     # ── PushPlus 推送（失败不影响主流程）──
     try:
         from config import PUSHPLUS_CHANNEL, PUSHPLUS_TOKEN
+
         if PUSHPLUS_TOKEN and len(PUSHPLUS_TOKEN) > 10:
             from push.pushplus import PushPlus
-            pp = PushPlus(token=PUSHPLUS_TOKEN, channel=PUSHPLUS_CHANNEL,
-                          template="markdown")
-            pp.send_markdown("\n".join(lines),
-                             title="★ 数据权限告警（漏网可能已收紧）")
+
+            pp = PushPlus(token=PUSHPLUS_TOKEN, channel=PUSHPLUS_CHANNEL, template="markdown")
+            pp.send_markdown("\n".join(lines), title="★ 数据权限告警（漏网可能已收紧）")
             print("  [OK] 权限告警已推送")
     except Exception as e:
         print(f"  [WARN] 权限告警推送失败（不影响主流程）: {str(e)[:80]}")
@@ -571,18 +632,23 @@ def _report_permission_denied(dry_run=False):
 def main(argv=None):
     p = argparse.ArgumentParser(description="每日增量更新（复用 backfill 引擎）")
     p.add_argument("--date", default=None, help="目标交易日 YYYYMMDD（默认最近交易日）")
-    p.add_argument("--group", default="core",
-                   help="接口组: core / extend / all（默认 core）")
-    p.add_argument("--lookback", type=int, default=None,
-                   help=f"复核窗口交易日数（默认 {DAILY_UPDATE_LOOKBACK}）")
+    p.add_argument("--group", default="core", help="接口组: core / extend / all（默认 core）")
+    p.add_argument(
+        "--lookback",
+        type=int,
+        default=None,
+        help=f"复核窗口交易日数（默认 {DAILY_UPDATE_LOOKBACK}）",
+    )
     p.add_argument("--only", default=None, help="只跑指定表, 逗号分隔")
     p.add_argument("--workers", type=int, default=None, help="每接口并发线程数")
     p.add_argument("--dry-run", action="store_true", help="只算缺口, 不发请求")
     p.add_argument("--verbose", action="store_true", help="打印重试日志")
-    p.add_argument("--no-market-state", action="store_true",
-                   help="不重算 market_state 派生表")
-    p.add_argument("--no-periodic", action="store_true",
-                   help="不检查事件面表周期更新通道（E-01；默认检查，未到期零请求）")
+    p.add_argument("--no-market-state", action="store_true", help="不重算 market_state 派生表")
+    p.add_argument(
+        "--no-periodic",
+        action="store_true",
+        help="不检查事件面表周期更新通道（E-01；默认检查，未到期零请求）",
+    )
     p.add_argument("--list", action="store_true", help="列出接口清单后退出")
     a = p.parse_args(argv)
 
@@ -593,17 +659,22 @@ def main(argv=None):
             for n in members:
                 conf = get_target_conf(n)
                 src = "DAILY_UPDATE_EXTRA" if n in DAILY_UPDATE_EXTRA else "BACKFILL_TARGETS"
-                print(f"{n:18s} {conf.get('desc','') if conf else '?':20s} "
-                      f"{gname:10s} {src}")
+                print(f"{n:18s} {conf.get('desc', '') if conf else '?':20s} {gname:10s} {src}")
         return
 
     groups = tuple(x.strip() for x in a.group.split(",") if x.strip())
     only = [x.strip() for x in a.only.split(",") if x.strip()] if a.only else None
-    run_daily_update(target_date=a.date, dry_run=a.dry_run, groups=groups,
-                     lookback=a.lookback, workers=a.workers, only=only,
-                     verbose=a.verbose,
-                     with_market_state=not a.no_market_state,
-                     with_periodic=not a.no_periodic)
+    run_daily_update(
+        target_date=a.date,
+        dry_run=a.dry_run,
+        groups=groups,
+        lookback=a.lookback,
+        workers=a.workers,
+        only=only,
+        verbose=a.verbose,
+        with_market_state=not a.no_market_state,
+        with_periodic=not a.no_periodic,
+    )
 
 
 if __name__ == "__main__":

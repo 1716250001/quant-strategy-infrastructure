@@ -17,6 +17,7 @@ wind/catalog.py — Wind 第三库目录索引（WIND-LIB W-1）
   总行数 = 4,157 / series_only = 717 / raw_only = 15 / both = 3,425
   valid = 3,430 / 无效 = 10 / schema 变体 = 5 / 变体可归因 = 0
 """
+
 import argparse
 import glob
 import hashlib
@@ -31,13 +32,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.parquet_store import _atomic_write_parquet
 from wind.config import (
     WIND_CATALOG_FILE,
+    WIND_RAW_DIR,
+    WIND_SERIES_DIR,
     assert_writable,
     violation_count,
 )
 
-# ── 源目录（W-2a 迁移后已就位） ──────────────────────────────
-SERIES_DIR = r"D:\全量数据\wind_data\norm\series\wind_index_daily"   # 已迁移（W-2a）
-RAW_DIR = r"D:\全量数据\wind_data\raw"                             # 已搬迁（W-2b）
+# ── 源目录（D-P1-5：从 wind.config / CHICHAO_DATA_ROOT 派生，禁硬编码盘符）──
+SERIES_DIR = os.path.join(WIND_SERIES_DIR, "wind_index_daily")
+RAW_DIR = WIND_RAW_DIR
 
 # ── 核心列集（§70.2.1 全部 5 种变体都有的 7 列）───────────────
 CORE_COLS = {"TIME", "OPEN", "MATCH", "HIGH", "LOW", "CHANGEHANDRATE", "AVPRICE"}
@@ -78,8 +81,8 @@ def _probe_raw():
     print(f"[probe_raw] 找到 {len(files)} JSON")
 
     results = []
-    schema_counter = Counter()       # schema_hash → count
-    raw_errors = []                  # 记录异常
+    schema_counter = Counter()  # schema_hash → count
+    raw_errors = []  # 记录异常
 
     for fp in files:
         wc = _windcode_from_json_path(fp)
@@ -96,7 +99,7 @@ def _probe_raw():
             "schema_missing_core": [],
             "schema_extra_unknown": [],
             "raw_error": None,
-            "raw_empty": False,      # ⭐ 源端无数据（有列无行），非错误
+            "raw_empty": False,  # ⭐ 源端无数据（有列无行），非错误
             "source_message": None,  # ⭐ 源端明确拒绝时的原文
         }
         try:
@@ -192,7 +195,9 @@ def _probe_raw():
 
         results.append(entry)
 
-    print(f"[probe_raw] 解析 {len(results)} / valid={sum(1 for r in results if r['valid'])} / errors={len(raw_errors)}")
+    print(
+        f"[probe_raw] 解析 {len(results)} / valid={sum(1 for r in results if r['valid'])} / errors={len(raw_errors)}"
+    )
     print(f"[probe_raw] schema 变体数: {len(schema_counter)}")
     for h, c in schema_counter.most_common():
         cols = next((set(r["raw_cols"]) for r in results if r["schema_hash"] == h), set())
@@ -207,6 +212,7 @@ def _probe_raw():
 def _probe_series():
     """探测 parquet 成品（只读 date 列）"""
     import pyarrow.parquet as pq
+
     print(f"[probe_series] 扫描 {SERIES_DIR} ...")
     files = glob.glob(os.path.join(SERIES_DIR, "*.parquet"))
     print(f"[probe_series] 找到 {len(files)} parquet")
@@ -218,25 +224,29 @@ def _probe_series():
             t = pq.read_table(fp, columns=["date"])
             dates = t.column(0).to_pylist()
             dates = [d for d in dates if d is not None]
-            results.append({
-                "windcode": wc,
-                "series_path": fp,
-                "series_present": True,
-                "series_rows": len(dates),
-                "series_date_min": min(dates) if dates else None,
-                "series_date_max": max(dates) if dates else None,
-                "series_error": None,
-            })
+            results.append(
+                {
+                    "windcode": wc,
+                    "series_path": fp,
+                    "series_present": True,
+                    "series_rows": len(dates),
+                    "series_date_min": min(dates) if dates else None,
+                    "series_date_max": max(dates) if dates else None,
+                    "series_error": None,
+                }
+            )
         except Exception as e:
-            results.append({
-                "windcode": wc,
-                "series_path": fp,
-                "series_present": True,
-                "series_rows": 0,
-                "series_date_min": None,
-                "series_date_max": None,
-                "series_error": str(e),
-            })
+            results.append(
+                {
+                    "windcode": wc,
+                    "series_path": fp,
+                    "series_present": True,
+                    "series_rows": 0,
+                    "series_date_min": None,
+                    "series_date_max": None,
+                    "series_error": str(e),
+                }
+            )
     print(f"[probe_series] {len(results)} parquet 全部只读 date 列")
     return results
 
@@ -244,11 +254,14 @@ def _probe_series():
 def _build(raw_results, series_results):
     """并集 + 状态机 + 写盘"""
     import pandas as pd
+
     raw_map = {r["windcode"]: r for r in raw_results}
     series_map = {r["windcode"]: r for r in series_results}
 
     all_codes = set(raw_map.keys()) | set(series_map.keys())
-    print(f"[build] 并集 {len(all_codes)} windcode（raw={len(raw_map)} / series={len(series_map)}）")
+    print(
+        f"[build] 并集 {len(all_codes)} windcode（raw={len(raw_map)} / series={len(series_map)}）"
+    )
 
     rows = []
     for wc in sorted(all_codes):
@@ -269,7 +282,7 @@ def _build(raw_results, series_results):
         row = {
             "windcode": wc,
             "status": status,
-            "as_of": datetime.now().strftime("%Y%m%d"),   # R1-1 补必填 as_of
+            "as_of": datetime.now().strftime("%Y%m%d"),  # R1-1 补必填 as_of
             # raw 侧
             "raw_present": r.get("raw_present", False),
             "valid": r.get("valid", False),
@@ -303,16 +316,20 @@ def _build(raw_results, series_results):
 
 def _verify(df):
     """门槛验证（§70.4）"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("[verify] 门槛验证")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     checks = [
         ("总行数 = 4,157", df.shape[0], 4157),
         ("series_only = 717", (df["status"] == "series_only").sum(), 717),
         ("raw_only = 15", (df["status"] == "raw_only").sum(), 15),
         ("both = 3,425", (df["status"] == "both").sum(), 3425),
-        ("both + raw_only = 3,440", ((df["status"] == "both").sum() + (df["status"] == "raw_only").sum()), 3440),
+        (
+            "both + raw_only = 3,440",
+            ((df["status"] == "both").sum() + (df["status"] == "raw_only").sum()),
+            3440,
+        ),
         ("valid = 3,430", df["valid"].sum(), 3430),
     ]
     all_ok = True
@@ -331,15 +348,19 @@ def _verify(df):
     # 变体 D (多 _DATE) 的 valid 子集实例数
     d_variants = df[(df["schema_extra_unknown"] != "") & (df["valid"])]
     all_ok = all_ok and n_variants >= 4 and n_variants <= 5  # 4 或 5 均合格
-    print(f"  schema 变体数: {n_variants} / expect 4~5 {'✅' if 4<=n_variants<=5 else '❌'}")
+    print(f"  schema 变体数: {n_variants} / expect 4~5 {'✅' if 4 <= n_variants <= 5 else '❌'}")
     if len(d_variants):
-        print(f"    注：变体 D（多 _DATE）valid 子集 {len(d_variants)} 实例（派单 §70.2.1 已标注其来源）")
+        print(
+            f"    注：变体 D（多 _DATE）valid 子集 {len(d_variants)} 实例（派单 §70.2.1 已标注其来源）"
+        )
 
     # 变体可归因（valid 中 core_cols_ok + 无 unknown）
     valid_df = df[df["valid"]]
     # 注：core_cols_ok 在 valid 子集上统计（§70.2.2 口径）
     ok_core = valid_df["core_cols_ok"].sum()
-    print(f"  有效 raw core_cols_ok (§70.2.2 修正后口径): {ok_core} / valid={len(valid_df)} {'✅' if ok_core == len(valid_df) else '❌'}")
+    print(
+        f"  有效 raw core_cols_ok (§70.2.2 修正后口径): {ok_core} / valid={len(valid_df)} {'✅' if ok_core == len(valid_df) else '❌'}"
+    )
     if ok_core != len(valid_df):
         all_ok = False
 
@@ -358,6 +379,7 @@ def main():
             print(f"❌ catalog 不存在: {WIND_CATALOG_FILE}")
             sys.exit(2)
         import pandas as pd
+
         df = pd.read_parquet(WIND_CATALOG_FILE)
         ok = _verify(df)
         sys.exit(0 if ok else 1)
@@ -385,6 +407,7 @@ def main():
 
     # 写盘（assert_writable 保护）
     from wind.config import WIND_CATALOG_DIR
+
     os.makedirs(WIND_CATALOG_DIR, exist_ok=True)
     assert_writable(WIND_CATALOG_FILE)
     # CC-WIND-1（2026-11-03）：原子写（tmp → fsync → os.replace → 目录 fsync），

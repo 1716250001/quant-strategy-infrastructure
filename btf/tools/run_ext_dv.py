@@ -9,6 +9,7 @@ btf 的 nav 序列逐月切片后按同一口径重算（窗口变化，不是�
     python tools/run_ext_dv.py --panel <panel.parquet> [--arms DV5,G5] [--dry-run]
 退出码：0=全部成功 / 1=有失败臂
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,7 +40,7 @@ ARMS: list[tuple[str, str, int, str, str]] = [
 ]
 
 START, END = "2016-01-04", "2026-09-30"
-BENCH = "000922.CSI"          # 中证红利（价格指数，报告同口径）
+BENCH = "000922.CSI"  # 中证红利（价格指数，报告同口径）
 BENCH2 = "000300.SH"
 
 
@@ -49,19 +50,30 @@ def _config(variant: str, top_k: int, rank_key: str, panel: str) -> dict:
         "run": {
             "strategy": STRATEGY,
             "strategy_paths": [str(STRATEGY_ROOT)],
-            "params": {"variant": variant, "top_k": top_k,
-                       "rank_key": rank_key, "panel_path": panel},
+            "params": {
+                "variant": variant,
+                "top_k": top_k,
+                "rank_key": rank_key,
+                "panel_path": panel,
+            },
             "universe": {"source": "all"},
             "period": {"start": START, "end": END},
             "initial_cash": 1_000_000,
         },
         "data": {"feed": "tushare_parquet"},
-        "execution": {"handler": "next_open", "cost_model": "tiered_v1",
-                      "rebalancer": "full",
-                      "slippage": {"model": "pct", "params": {"pct": 0.001}}},
-        "risk": {"rules": [{"name": "tradability"},
-                           {"name": "max_weight", "params": {"max_weight": 0.95}},
-                           {"name": "cash_check"}]},
+        "execution": {
+            "handler": "next_open",
+            "cost_model": "tiered_v1",
+            "rebalancer": "full",
+            "slippage": {"model": "pct", "params": {"pct": 0.001}},
+        },
+        "risk": {
+            "rules": [
+                {"name": "tradability"},
+                {"name": "max_weight", "params": {"max_weight": 0.95}},
+                {"name": "cash_check"},
+            ]
+        },
         "rules": {"source": "mirror_json", "path": str(RULES_MIRROR)},
         "report": {"benchmark": "000300.SH"},
     }
@@ -71,12 +83,18 @@ def _slice_metrics(nav: list[tuple[str, float]], start: str, end: str) -> dict:
     """在 btf 的 nav 上切窗口 → 同口径重算（年化按自然日、MDD 按日收盘）。"""
     import datetime as dt
 
-    s = [(d.replace("-", ""), v) for d, v in nav if start.replace("-", "") <= d.replace("-", "") <= end.replace("-", "")]
+    s = [
+        (d.replace("-", ""), v)
+        for d, v in nav
+        if start.replace("-", "") <= d.replace("-", "") <= end.replace("-", "")
+    ]
     if len(s) < 5:
         return {}
     v0, v1 = s[0][1], s[-1][1]
-    yrs = (dt.date(int(s[-1][0][:4]), int(s[-1][0][4:6]), int(s[-1][0][6:8]))
-           - dt.date(int(s[0][0][:4]), int(s[0][0][4:6]), int(s[0][0][6:8]))).days / 365.25
+    yrs = (
+        dt.date(int(s[-1][0][:4]), int(s[-1][0][4:6]), int(s[-1][0][6:8]))
+        - dt.date(int(s[0][0][:4]), int(s[0][0][4:6]), int(s[0][0][6:8]))
+    ).days / 365.25
     ann = (v1 / v0) ** (1 / yrs) - 1 if yrs > 0 and v0 > 0 else float("nan")
     peak, mdd = s[0][1], 0.0
     for _d, v in s:
@@ -85,11 +103,15 @@ def _slice_metrics(nav: list[tuple[str, float]], start: str, end: str) -> dict:
     rets = [s[i][1] / s[i - 1][1] - 1 for i in range(1, len(s))]
     mu = sum(rets) / len(rets)
     var = sum((r - mu) ** 2 for r in rets) / max(len(rets) - 1, 1)
-    vol = var ** 0.5 * (252 ** 0.5)
-    return {"年化": round(ann * 100, 2), "回撤": round(mdd * 100, 2),
-            "波动": round(vol * 100, 2),
-            "夏普": round(ann / vol, 2) if vol > 0 else None,
-            "区间": f"{s[0][0]}~{s[-1][0]}", "年数": round(yrs, 2)}
+    vol = var**0.5 * (252**0.5)
+    return {
+        "年化": round(ann * 100, 2),
+        "回撤": round(mdd * 100, 2),
+        "波动": round(vol * 100, 2),
+        "夏普": round(ann / vol, 2) if vol > 0 else None,
+        "区间": f"{s[0][0]}~{s[-1][0]}",
+        "年数": round(yrs, 2),
+    }
 
 
 def run_arm(arm: tuple[str, str, int, str, str], panel: str, out_dir: Path) -> dict:
@@ -97,18 +119,29 @@ def run_arm(arm: tuple[str, str, int, str, str], panel: str, out_dir: Path) -> d
     from btf.runtime import BTFRuntime, make_store
 
     t0 = time.perf_counter()
-    rt = (BTFRuntime()
-          .load_config(_config(variant, top_k, rank_key, panel))
-          .build())
+    rt = BTFRuntime().load_config(_config(variant, top_k, rank_key, panel)).build()
     result = rt.run(store=make_store(out_dir / "runs"))
     nav = [(s.date.to_ymd(), s.total_value) for s in result.snapshots]
-    row: dict = {"arm": aid, "variant": variant, "top_k": top_k,
-                 "rank_key": rank_key, "note": note,
-                 "wall_s": round(time.perf_counter() - t0, 1),
-                 "n_days": result.n_days, "run_id": result.run_id}
-    for k in ("total_return", "annualized_return", "sharpe_ratio",
-              "max_drawdown", "calmar_ratio", "total_turnover", "fee_ratio",
-              "n_fills"):
+    row: dict = {
+        "arm": aid,
+        "variant": variant,
+        "top_k": top_k,
+        "rank_key": rank_key,
+        "note": note,
+        "wall_s": round(time.perf_counter() - t0, 1),
+        "n_days": result.n_days,
+        "run_id": result.run_id,
+    }
+    for k in (
+        "total_return",
+        "annualized_return",
+        "sharpe_ratio",
+        "max_drawdown",
+        "calmar_ratio",
+        "total_turnover",
+        "fee_ratio",
+        "n_fills",
+    ):
         row[k] = result.metrics.get(k)
     row["全区间"] = _slice_metrics(nav, START, END)
     row["段1_2016_2020"] = _slice_metrics(nav, "2016-01-04", "2020-12-31")
@@ -120,6 +153,13 @@ def run_arm(arm: tuple[str, str, int, str, str], panel: str, out_dir: Path) -> d
 
 
 def main() -> int:
+    # D9/G3 O1：依赖已退役的 `rules.source=mirror_json`——标注退役并退出。
+    print(
+        "[retired] rules.source=mirror_json 已随 v7.7 资产退役（G3/D7）；"
+        "run_ext_dv 仅存档，不再可运行。",
+        file=sys.stderr,
+    )
+    return 2
     ap = argparse.ArgumentParser()
     ap.add_argument("--panel", required=True)
     ap.add_argument("--arms", default="")
@@ -136,20 +176,34 @@ def main() -> int:
         try:
             rows.append(run_arm(arm, args.panel, out_dir))
             r = rows[-1]
-            print(f"        年化 {r['annualized_return'] * 100:.2f}% "
-                  f"回撤 {r['max_drawdown'] * 100:.2f}% 夏普 {r['sharpe_ratio']} "
-                  f"换手 {r['total_turnover']:.2f} 成交 {r['n_fills']} "
-                  f"({r['wall_s']:.0f}s)", flush=True)
-        except Exception as exc:                     # 不吞：如实登记
+            print(
+                f"        年化 {r['annualized_return'] * 100:.2f}% "
+                f"回撤 {r['max_drawdown'] * 100:.2f}% 夏普 {r['sharpe_ratio']} "
+                f"换手 {r['total_turnover']:.2f} 成交 {r['n_fills']} "
+                f"({r['wall_s']:.0f}s)",
+                flush=True,
+            )
+        except Exception as exc:  # 不吞：如实登记
             fails.append((arm[0], repr(exc)))
             print(f"        FAIL {exc!r}", flush=True)
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
     path = out_dir / f"ext-dv-{stamp}.json"
-    path.write_text(json.dumps({"start": START, "end": END, "panel": args.panel,
-                                "bench": BENCH, "rows": rows,
-                                "fails": fails}, ensure_ascii=False, indent=2),
-                    encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "start": START,
+                "end": END,
+                "panel": args.panel,
+                "bench": BENCH,
+                "rows": rows,
+                "fails": fails,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     print(f"\n[ext-dv] 落盘 {path}")
     if fails:
         print(f"[ext-dv] 失败 {len(fails)} 臂：{fails}")

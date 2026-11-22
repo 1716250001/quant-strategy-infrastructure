@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tools/db_version.py — 库版本 `db_version.json` 写入口（EE-D11-1 动作 A；08 §13.5 V1.1 冻结规范）
+"""common/db_version.py — 库版本 `db_version.json` 写入口（EE-D11-1 动作 A；08 §13.5 V1.1 冻结规范）
 ================================================================================================
 
 规范依据：`docs/代码架构/全量数据库架构/08-可复现性与数据版本.md §13.5`（v1.1 定版已冻结）——
@@ -15,13 +15,14 @@
 但 doctor 会把"版本落后/缺失"显示出来，可被体检发现）：
     1. `fetch/daily_update.py`   成功日更收尾（含 Step 5 周期通道的表合并为**一次**记录）
     2. `fetch/backfill.py`       补数/回补完成（完成项 > 0 才记）
-    3. `fetch/periodic_update.py 周期通道**独立运行**时（被日更内嵌时由 1 统一记，防同日双计）
-    4. `tools/db_schema_align.py 跨分区 schema 对齐（结构性变更语义；n_fixed>0 才记）
+    3. `fetch/periodic_update.py` 周期通道**独立运行**时（被日更内嵌时由 1 统一记，防同日双计）
+    4. `tools/db/schema_align.py` 跨分区 schema 对齐（结构性变更语义；n_fixed>0 才记）
 
 口径说明（规范未覆盖处，cb 实现并在回执报请审查方确认）：
     `checkpoint_rev` ＝ `.backfill_checkpoint.json` 各表 `completed` 计数之和
     （**单调可比较**的库态代理：补数/回补只增不减；日更不改变它）。
 """
+
 import argparse
 import json
 import os
@@ -48,8 +49,10 @@ def _read(path):
             d = json.load(f)
         return d if isinstance(d, dict) else {}
     except Exception as exc:
-        print(f"[common.db_version] 读版本文件失败（按空处理）{path}: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[common.db_version] 读版本文件失败（按空处理）{path}: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return {}
 
 
@@ -59,11 +62,12 @@ def _checkpoint_rev(root=None):
     try:
         with open(p, encoding="utf-8") as f:
             cp = json.load(f)
-        return sum(len(v.get("completed", []))
-                   for v in cp.values() if isinstance(v, dict))
+        return sum(len(v.get("completed", [])) for v in cp.values() if isinstance(v, dict))
     except Exception as exc:
-        print(f"[common.db_version] 读断点计数失败（按 0 处理）{p}: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[common.db_version] 读断点计数失败（按 0 处理）{p}: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return 0
 
 
@@ -106,16 +110,24 @@ def record(tables_changed, note=None, structural=False, root=None):
     # 历史轮转信息保留在文件尾部（08 §13.5 只冻结四必填字段；历史追加不违反唯一落点）
     hist = cur.get("history")
     if isinstance(hist, list):
-        hist.append({k: cur.get(k) for k in
-                     ("version", "generated_at", "tables_changed", "checkpoint_rev")
-                     if cur.get(k) is not None})
-        if len(hist) > 90:                       # 上限防膨胀（≈90 次变更）
+        hist.append(
+            {
+                k: cur.get(k)
+                for k in ("version", "generated_at", "tables_changed", "checkpoint_rev")
+                if cur.get(k) is not None
+            }
+        )
+        if len(hist) > 90:  # 上限防膨胀（≈90 次变更）
             hist = hist[-90:]
         rec["history"] = hist
     elif cur:
-        rec["history"] = [{k: cur.get(k) for k in
-                           ("version", "generated_at", "tables_changed", "checkpoint_rev")
-                           if cur.get(k) is not None}]
+        rec["history"] = [
+            {
+                k: cur.get(k)
+                for k in ("version", "generated_at", "tables_changed", "checkpoint_rev")
+                if cur.get(k) is not None
+            }
+        ]
     p = version_path(root)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     tmp = p + ".tmp"
@@ -141,14 +153,17 @@ def main(argv=None):
     except Exception:
         pass
     p = argparse.ArgumentParser(
-        description="库版本 db_version.json 写入口（08 §13.5；EE-D11-1 动作 A）")
+        description="库版本 db_version.json 写入口（08 §13.5；EE-D11-1 动作 A）"
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("record", help="写一条版本（同日自动递增 N）")
-    r.add_argument("--tables", default="",
-                   help="变更表名，逗号分隔（轮转表可用 '表(覆盖/总数)' 形式）")
+    r.add_argument(
+        "--tables", default="", help="变更表名，逗号分隔（轮转表可用 '表(覆盖/总数)' 形式）"
+    )
     r.add_argument("--note", default=None)
-    r.add_argument("--structural", action="store_true",
-                   help="标记为结构性变更（--rebuild / schema 对齐类）")
+    r.add_argument(
+        "--structural", action="store_true", help="标记为结构性变更（--rebuild / schema 对齐类）"
+    )
     r.add_argument("--root", default=None, help="库根（默认 MARKET_DATA_DIR；沙盒测试用）")
     s = sub.add_parser("show", help="显示当前库版本（缺失 ⇒ 提示未生成）")
     s.add_argument("--root", default=None)
@@ -159,9 +174,11 @@ def main(argv=None):
     if a.cmd == "record":
         tables = [t.strip() for t in a.tables.split(",") if t.strip()]
         rec = record(tables, note=a.note, structural=a.structural, root=a.root)
-        print(f"[ok] 库版本已写入: {rec['version']}"
-              f" | tables_changed={rec['tables_changed'] or ['（接线基线/无表变更）']}"
-              f" | checkpoint_rev={rec['checkpoint_rev']}")
+        print(
+            f"[ok] 库版本已写入: {rec['version']}"
+            f" | tables_changed={rec['tables_changed'] or ['（接线基线/无表变更）']}"
+            f" | checkpoint_rev={rec['checkpoint_rev']}"
+        )
         print(f"     {version_path(a.root)}")
         return 0
     rec = show(a.root)

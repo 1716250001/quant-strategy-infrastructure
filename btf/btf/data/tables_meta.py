@@ -4,6 +4,7 @@
 口径与架构文档一致（含终审勘误：E3 etf_limit=2019-06-26、E4 moneyflow=2008-01-02）；
 主键/起点与 db_schema.json 快照对齐。单位换算在此声明、由 Feed 落地（1.4 契约）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -14,8 +15,8 @@ from enum import Enum
 class Layout(Enum):
     """Parquet 物理布局（实测：by_year 16 表 / single 2 表 / metadata 3 表）。"""
 
-    BY_YEAR = "by_year"    # {表}/{YYYY}.parquet，一年一文件含全市场
-    SINGLE = "single"      # {表}/{表名}.parquet（宏观/静态/小快照）
+    BY_YEAR = "by_year"  # {表}/{YYYY}.parquet，一年一文件含全市场
+    SINGLE = "single"  # {表}/{表名}.parquet（宏观/静态/小快照）
     METADATA = "metadata"  # {主库}/metadata/{表名}.parquet
 
 
@@ -24,7 +25,7 @@ class UnitConversion:
     """单位换算声明（05 §9.4：库内原始单位 → 契约单位）。"""
 
     field: str
-    factor: float          # 契约值 = 原始值 × factor
+    factor: float  # 契约值 = 原始值 × factor
     raw_unit: str
     contract_unit: str
 
@@ -35,16 +36,19 @@ class TableMeta:
 
     name: str
     layout: Layout
-    date_col: str                  # 主时间列（YYYYMMDD 字符串）
-    start: str | None              # 实测数据起点（YYYYMMDD；None=静态表）
-    pk: tuple[str, ...]            # 逻辑去重主键
+    date_col: str  # 主时间列（YYYYMMDD 字符串）
+    start: str | None  # 实测数据起点（YYYYMMDD；None=静态表）
+    pk: tuple[str, ...]  # 逻辑去重主键
     conversions: tuple[UnitConversion, ...] = ()
     note: str = ""
 
 
 # ── 股票行情与状态（T-01..T-08）──
 DAILY = TableMeta(
-    name="daily", layout=Layout.BY_YEAR, date_col="trade_date", start="19901219",
+    name="daily",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="19901219",
     pk=("ts_code", "trade_date"),
     conversions=(
         UnitConversion("vol", 100.0, "手", "股"),
@@ -52,40 +56,85 @@ DAILY = TableMeta(
     ),
     note="个股日线·不复权；撮合基准价",
 )
+#: 引擎（行情截面）读取 `daily` 的列集——**单一真源**（D11）。
+#: `feed.bars/bars_of` 与 `state._close_table` 共用同一列集，使按年文件只解码一次
+#: （状态侧 3 列是它的子集，`select` 投影零拷贝）。
+DAILY_ENGINE_COLUMNS: tuple[str, ...] = (
+    "ts_code",
+    "trade_date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "pre_close",
+    "vol",
+    "amount",
+)
+#: 状态面板只消费的三列（`_close_table` 的 `select` 目标）。
+DAILY_CLOSE_COLUMNS: tuple[str, ...] = ("ts_code", "trade_date", "close")
 ADJ_FACTOR = TableMeta(
-    name="adj_factor", layout=Layout.BY_YEAR, date_col="trade_date", start="19910703",
-    pk=("ts_code", "trade_date"), note="复权因子；复权一律消费侧计算",
+    name="adj_factor",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="19910703",
+    pk=("ts_code", "trade_date"),
+    note="复权因子；复权一律消费侧计算",
 )
 STK_LIMIT = TableMeta(
-    name="stk_limit", layout=Layout.BY_YEAR, date_col="trade_date", start="20080102",
-    pk=("ts_code", "trade_date"), note="涨跌停价（回测撮合硬约束）",
+    name="stk_limit",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="20080102",
+    pk=("ts_code", "trade_date"),
+    note="涨跌停价（回测撮合硬约束）",
 )
 SUSPEND_D = TableMeta(
-    name="suspend_d", layout=Layout.BY_YEAR, date_col="trade_date", start="20000104",
-    pk=("trade_date", "ts_code"), note="停复牌；口径=当天在表即停牌",
+    name="suspend_d",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="20000104",
+    pk=("trade_date", "ts_code"),
+    note="停复牌；口径=当天在表即停牌",
 )
 NAMECHANGE = TableMeta(
-    name="namechange", layout=Layout.BY_YEAR, date_col="start_date", start="19901201",
+    name="namechange",
+    layout=Layout.BY_YEAR,
+    date_col="start_date",
+    start="19901201",
     pk=("ts_code", "start_date"),
     note="曾用名=ST 唯一来源（name 含 'ST' ∧ start≤d<end）",
 )
 DIVIDEND = TableMeta(
-    name="dividend", layout=Layout.BY_YEAR, date_col="ex_date", start="19901231",
+    name="dividend",
+    layout=Layout.BY_YEAR,
+    date_col="ex_date",
+    start="19901231",
     pk=("ts_code", "end_date", "ann_date", "div_proc"),
     note="分红送转；仅'实施'态进入引擎；pay_date 两时点（N7-A/E5）",
 )
 STOCK_BASIC = TableMeta(
-    name="stock_basic", layout=Layout.METADATA, date_col="list_date", start=None,
-    pk=("ts_code",), note="股票列表；宇宙快照与退市口径（L/D/P）",
+    name="stock_basic",
+    layout=Layout.METADATA,
+    date_col="list_date",
+    start=None,
+    pk=("ts_code",),
+    note="股票列表；宇宙快照与退市口径（L/D/P）",
 )
 TRADE_CAL = TableMeta(
-    name="trade_cal", layout=Layout.METADATA, date_col="cal_date", start=None,
-    pk=("exchange", "cal_date"), note="交易日历唯一真源（至 2027-12-31）",
+    name="trade_cal",
+    layout=Layout.METADATA,
+    date_col="cal_date",
+    start=None,
+    pk=("exchange", "cal_date"),
+    note="交易日历唯一真源（至 2027-12-31）",
 )
 
 # ── 指数与估值（T-09/T-10/T-15/T-16）──
 INDEX_DAILY = TableMeta(
-    name="index_daily", layout=Layout.BY_YEAR, date_col="trade_date", start="19931014",
+    name="index_daily",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="19931014",
     pk=("ts_code", "trade_date"),
     conversions=(
         UnitConversion("vol", 100.0, "手", "股"),
@@ -94,44 +143,72 @@ INDEX_DAILY = TableMeta(
     note="指数日线·基准收益",
 )
 DAILY_BASIC = TableMeta(
-    name="daily_basic", layout=Layout.BY_YEAR, date_col="trade_date", start="19901219",
+    name="daily_basic",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="19901219",
     pk=("ts_code", "trade_date"),
     conversions=(UnitConversion("total_mv", 10000.0, "万元", "元"),),
     note="每日估值；v7.7 L2 硬筛子数据源（MVP，H1）",
 )
 INDEX_WEIGHT = TableMeta(
-    name="index_weight", layout=Layout.SINGLE, date_col="trade_date", start=None,
-    pk=("index_code", "con_code", "trade_date"), note="指数成分权重（月末快照）",
+    name="index_weight",
+    layout=Layout.SINGLE,
+    date_col="trade_date",
+    start=None,
+    pk=("index_code", "con_code", "trade_date"),
+    note="指数成分权重（月末快照）",
 )
 INDEX_DAILYBASIC = TableMeta(
-    name="index_dailybasic", layout=Layout.BY_YEAR, date_col="trade_date", start="20040102",
-    pk=("ts_code", "trade_date"), note="指数每日估值；v7.7 估值定锚（MVP，H1）",
+    name="index_dailybasic",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="20040102",
+    pk=("ts_code", "trade_date"),
+    note="指数每日估值；v7.7 估值定锚（MVP，H1）",
 )
 
 # ── 事件与资金（T-11/T-13/T-14/T-17）──
 NEW_SHARE = TableMeta(
-    name="new_share", layout=Layout.SINGLE, date_col="ipo_date", start="20160122",
-    pk=("ts_code",), note="IPO；次新股过滤",
+    name="new_share",
+    layout=Layout.SINGLE,
+    date_col="ipo_date",
+    start="20160122",
+    pk=("ts_code",),
+    note="IPO；次新股过滤",
 )
 MONEYFLOW = TableMeta(
-    name="moneyflow", layout=Layout.BY_YEAR, date_col="trade_date", start="20080102",
+    name="moneyflow",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="20080102",
     pk=("ts_code", "trade_date"),
     conversions=(UnitConversion("net_mf_amount", 10000.0, "万元", "元"),),
     note="个股资金流向；v7.7 买点双条件（MVP，H1）；起点 2008-01-02（终审 E4）",
 )
 FINA_INDICATOR = TableMeta(
-    name="fina_indicator", layout=Layout.BY_YEAR, date_col="end_date", start="19901231",
-    pk=("ts_code", "end_date"), note="财务指标；ROE_WAA（年报缓存口径，PIT 按 ann_date）",
+    name="fina_indicator",
+    layout=Layout.BY_YEAR,
+    date_col="end_date",
+    start="19901231",
+    pk=("ts_code", "end_date"),
+    note="财务指标；ROE_WAA（年报缓存口径，PIT 按 ann_date）",
 )
 FX_DAILY = TableMeta(
-    name="fx_daily", layout=Layout.BY_YEAR, date_col="trade_date", start="19380104",
+    name="fx_daily",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="19380104",
     pk=("ts_code", "trade_date"),
     note="外汇/贵金属；奇点 XAU 依赖（backlog，R12；缺 BRLCNY 已知）",
 )
 
 # ── ETF（T-12，H1：奇点战法第一验收场景）──
 FUND_DAILY = TableMeta(
-    name="fund_daily", layout=Layout.BY_YEAR, date_col="trade_date", start="19980407",
+    name="fund_daily",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="19980407",
     pk=("ts_code", "trade_date"),
     conversions=(
         UnitConversion("vol", 100.0, "手", "份"),
@@ -140,7 +217,10 @@ FUND_DAILY = TableMeta(
     note="ETF/基金日线；列同构 daily",
 )
 ETF_LIMIT = TableMeta(
-    name="etf_limit", layout=Layout.BY_YEAR, date_col="trade_date", start="20190626",
+    name="etf_limit",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="20190626",
     pk=("ts_code", "trade_date"),
     note="ETF 涨跌停价；起点 2019-06-26（终审 E3）——更早由 BoardRule 计算回退并披露",
 )
@@ -149,7 +229,10 @@ ETF_LIMIT = TableMeta(
 #: （原实现静默回落 1.0 ⇒ ETF 未复权价的折算日跳变污染回测价格序列）。
 #: 起点经主库实测（`fund_adj/1999.parquet` 最小 trade_date = 19991022）。
 FUND_ADJ = TableMeta(
-    name="fund_adj", layout=Layout.BY_YEAR, date_col="trade_date", start="19991022",
+    name="fund_adj",
+    layout=Layout.BY_YEAR,
+    date_col="trade_date",
+    start="19991022",
     pk=("ts_code", "trade_date"),
     note="ETF 复权因子；ETF/LOF 复权唯一口径（股票走 adj_factor；RC-04）",
 )
@@ -158,7 +241,10 @@ FUND_ADJ = TableMeta(
 #: 金额（禁除 base_unit）**；按 `(ts_code, ex_date)` 去重、只消费 `div_proc='实施'`。
 #: 起点经主库实测（`fund_div` 最小 ex_date = 20070426，19 号 §92.2）。
 FUND_DIV = TableMeta(
-    name="fund_div", layout=Layout.BY_YEAR, date_col="ex_date", start="20070426",
+    name="fund_div",
+    layout=Layout.BY_YEAR,
+    date_col="ex_date",
+    start="20070426",
     pk=("ts_code", "ex_date"),
     note="ETF/LOF 分红；div_cash 即每份金额；pay_date 两时点（ADR-20/R32′）",
 )
@@ -168,7 +254,10 @@ FUND_DIV = TableMeta(
 #: 主键 `ts_code`（完整带后缀）；`fund_type` 用于排除混合型/债券型。
 #: `date_col` 必须保留 `list_date`：`fast` 档指纹要拼 `[date_col, ts_code]`。
 FUND_BASIC = TableMeta(
-    name="fund_basic", layout=Layout.METADATA, date_col="list_date", start=None,
+    name="fund_basic",
+    layout=Layout.METADATA,
+    date_col="list_date",
+    start=None,
     pk=("ts_code",),
     note="基金列表（benchmark / fund_type）；CC-2 20% 档判定（D-1/D-3）",
 )
@@ -176,11 +265,29 @@ FUND_BASIC = TableMeta(
 #: 全部 21 表注册表（05 §9.4 + D-1：16 BY_YEAR / 2 SINGLE / 3 METADATA；
 #: T-20 `fund_div` 为 CL-2-H/R32′ 新增；T-21 `fund_share` 仅披露不判折算，暂不注册）
 TABLES: dict[str, TableMeta] = {
-    t.name: t for t in (
-        DAILY, ADJ_FACTOR, STK_LIMIT, SUSPEND_D, NAMECHANGE, DIVIDEND,
-        STOCK_BASIC, TRADE_CAL, INDEX_DAILY, DAILY_BASIC, INDEX_WEIGHT,
-        INDEX_DAILYBASIC, NEW_SHARE, MONEYFLOW, FINA_INDICATOR, FX_DAILY,
-        FUND_DAILY, ETF_LIMIT, FUND_ADJ, FUND_DIV, FUND_BASIC,
+    t.name: t
+    for t in (
+        DAILY,
+        ADJ_FACTOR,
+        STK_LIMIT,
+        SUSPEND_D,
+        NAMECHANGE,
+        DIVIDEND,
+        STOCK_BASIC,
+        TRADE_CAL,
+        INDEX_DAILY,
+        DAILY_BASIC,
+        INDEX_WEIGHT,
+        INDEX_DAILYBASIC,
+        NEW_SHARE,
+        MONEYFLOW,
+        FINA_INDICATOR,
+        FX_DAILY,
+        FUND_DAILY,
+        ETF_LIMIT,
+        FUND_ADJ,
+        FUND_DIV,
+        FUND_BASIC,
     )
 }
 
@@ -214,7 +321,7 @@ def daily_table_of(symbol: str) -> str:
         return "index_daily"
     if code.startswith(STOCK_PREFIXES) or code[:2] in STOCK_SHORT:
         return "daily"
-    return "fund_daily"                       # ETF/LOF（51x/56x/58x/159x/16x/50x）
+    return "fund_daily"  # ETF/LOF（51x/56x/58x/159x/16x/50x）
 
 
 def factor_table_of(symbol: str) -> str:
@@ -224,8 +331,7 @@ def factor_table_of(symbol: str) -> str:
     判定（双真源必然漂移）。指数无复权因子（btf 内不复权指数），回落
     `adj_factor` 保持既有行为。
     """
-    return ("fund_adj" if daily_table_of(symbol) == "fund_daily"
-            else "adj_factor")
+    return "fund_adj" if daily_table_of(symbol) == "fund_daily" else "adj_factor"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -235,28 +341,38 @@ def factor_table_of(symbol: str) -> str:
 # `config-check` 用**类属性**（不实例化 Feed）；两侧只共用「纯比对」与
 # 「消息格式化」，避免第二个判断真源（19 号 §254-C）。
 # ─────────────────────────────────────────────────────────────
-def routing_conflicts(symbols: Iterable[str],
-                      caps: Iterable[str] | None) -> list[tuple[str, str]]:
+def routing_conflicts(symbols: Iterable[str], caps: Iterable[str] | None) -> list[tuple[str, str]]:
     """标的 × 能力表 → `[(sym, 所需表)]`；`caps` 为 None/空 ⇒ 不判（第三方豁免）。"""
     if not caps:
         return []
     cap_set = frozenset(caps)
-    return [(sym, daily_table_of(sym)) for sym in symbols
-            if daily_table_of(sym) not in cap_set]
+    return [(sym, daily_table_of(sym)) for sym in symbols if daily_table_of(sym) not in cap_set]
 
 
-def format_routing_conflicts(conflicts: Iterable[tuple[str, str]],
-                             feed_name: str,
-                             caps: Iterable[str] | None) -> list[str]:
+def format_routing_conflicts(
+    conflicts: Iterable[tuple[str, str]], feed_name: str, caps: Iterable[str] | None
+) -> list[str]:
     """路由冲突 → `run` 现行 item 文本（**逐字保持**；D-2 判据 D2-2/D2-5）。"""
     supported = sorted(caps or ())
     return [
         f"feed↔标的路由不匹配：{sym} 需要 `{table}` 表，但 data.feed="
         f"{feed_name} 仅支持 {supported}——请改用 data.feed="
         f"`mixed`（三表自动路由），或从宇宙移除该标的"
-        for sym, table in conflicts]
+        for sym, table in conflicts
+    ]
 
 
-__all__ = ["INDEX_PREFIXES", "INDEX_SUFFIXES", "STOCK_PREFIXES", "STOCK_SHORT",
-           "TABLES", "Layout", "TableMeta", "UnitConversion", "daily_table_of",
-           "factor_table_of", "format_routing_conflicts", "routing_conflicts"]
+__all__ = [
+    "INDEX_PREFIXES",
+    "INDEX_SUFFIXES",
+    "STOCK_PREFIXES",
+    "STOCK_SHORT",
+    "TABLES",
+    "Layout",
+    "TableMeta",
+    "UnitConversion",
+    "daily_table_of",
+    "factor_table_of",
+    "format_routing_conflicts",
+    "routing_conflicts",
+]

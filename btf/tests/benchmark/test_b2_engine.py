@@ -13,6 +13,7 @@ _LazyCrossSection 单行构造，B1 物化段 22s 禁区）。
 窗口依据：index_weight 000300.SH 快照 20160129 起（128 月），
 2016-2025 为完整十年 PIT 干净窗口（2015 无成分数据，不前向填充）。
 """
+
 from __future__ import annotations
 
 import time
@@ -56,12 +57,15 @@ def _load_hs300_monthly() -> dict[str, list[tuple[str, float]]]:
     t = pq.read_table(ROOT / "index_weight" / "index_weight.parquet")
     m = t.filter(pc.equal(t.column("index_code"), "000300.SH"))
     out: dict[str, list[tuple[str, float]]] = {}
-    for code, ymd, weight in zip(m.column("con_code").to_pylist(),
-                                 m.column("trade_date").to_pylist(),
-                                 m.column("weight").to_pylist(), strict=True):
+    for code, ymd, weight in zip(
+        m.column("con_code").to_pylist(),
+        m.column("trade_date").to_pylist(),
+        m.column("weight").to_pylist(),
+        strict=True,
+    ):
         out.setdefault(ymd[:6], []).append((code, weight))
     for v in out.values():
-        v.sort(key=lambda x: (-x[1], x[0]))     # 确定性：权重降序、code 决胜
+        v.sort(key=lambda x: (-x[1], x[0]))  # 确定性：权重降序、code 决胜
     return out
 
 
@@ -75,7 +79,7 @@ class Hs300TopN(StrategyBase):
         self._top_n = top_n
 
     def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
-        if date.iso.day <= 3:                     # 月首首交易日
+        if date.iso.day <= 3:  # 月首首交易日
             month = date.to_ymd()[:6]
             y, m = int(month[:4]), int(month[4:6])
             prev = f"{y - 1}12" if m == 1 else f"{y}{m - 1:02d}"
@@ -83,17 +87,18 @@ class Hs300TopN(StrategyBase):
             if snap:
                 picks = [code for code, _ in snap[: self._top_n]]
                 weight = 1.0 / len(picks)
-                ctx.submit_target(TargetPortfolio(
-                    date, {code: weight for code in picks}))
+                ctx.submit_target(TargetPortfolio(date, {code: weight for code in picks}))
 
 
 class TestB2MemorySmoke:
     """MemoryFeed 段：合成 3 标的 × 40 交易日，月调仓全链路冒烟。"""
 
     def test_monthly_rebalance_smoke(self, tmp_path: Path):
-        days = [TradingDate(date(2020, 1, 1) + __import__("datetime").timedelta(days=i))
-                for i in range(40)]
-        days = [d for d in days if d.iso.weekday() < 5]        # 工作日
+        days = [
+            TradingDate(date(2020, 1, 1) + __import__("datetime").timedelta(days=i))
+            for i in range(40)
+        ]
+        days = [d for d in days if d.iso.weekday() < 5]  # 工作日
         bars, states = [], {}
         for i, d in enumerate(days):
             for j, sym in enumerate(("000001.SZ", "600519.SH", "300750.SZ")):
@@ -105,15 +110,19 @@ class TestB2MemorySmoke:
         class TwoAssets(StrategyBase):
             def on_close(self, ctx, date):
                 if date.iso.day <= 3:
-                    ctx.submit_target(TargetPortfolio(
-                        date, {"000001.SZ": 0.5, "600519.SH": 0.5}))
+                    ctx.submit_target(TargetPortfolio(date, {"000001.SZ": 0.5, "600519.SH": 0.5}))
 
-        r = Engine(feed, TwoAssets(), start=days[0], end=days[-1],
-                   initial_cash=1_000_000.0,
-                   handler=NextOpenHandler(cost_model=FlatRateCostModel()),
-                   event_log_path=tmp_path / "ev.jsonl").run()
+        r = Engine(
+            feed,
+            TwoAssets(),
+            start=days[0],
+            end=days[-1],
+            initial_cash=1_000_000.0,
+            handler=NextOpenHandler(cost_model=FlatRateCostModel()),
+            event_log_path=tmp_path / "ev.jsonl",
+        ).run()
         assert r.n_days == len(days)
-        assert len(r.fills) >= 3                   # 建仓 + 再平衡确有成交
+        assert len(r.fills) >= 3  # 建仓 + 再平衡确有成交
         assert r.snapshots[-1].total_value > 0
         assert (tmp_path / "ev.jsonl").exists()
 
@@ -125,6 +134,9 @@ class TestB2RealFeed:
     def test_b2_hs300_monthly_10y(self, tmp_path: Path):
         monthly = _load_hs300_monthly()
         assert "201601" in monthly and len(monthly) >= 120
+        # **D8/B2**：与生产路径同参——显式宇宙 `cross_section`（候选集为
+        # 十年内出现过的全部成分股；旧口径不传 ⇒ feed 扫全市场）。
+        cross_section = sorted({code for snap in monthly.values() for code, _w in snap})
 
         # R4（19 号 §48）：状态面板**构造期注入**（feed 已不再 import state）
         # **MM-8（19 号 §140）**：门槛改「归一化墙钟」——每次尝试独立建 feed/引擎
@@ -139,29 +151,38 @@ class TestB2RealFeed:
             feed = TushareParquetFeed(ROOT, state_provider=StateSynthesizer(ROOT))
             t0 = time.perf_counter()
             result = Engine(
-                feed, Hs300TopN(monthly, top_n=20),
-                start=START, end=END,
+                feed,
+                Hs300TopN(monthly, top_n=20),
+                start=START,
+                end=END,
                 initial_cash=1_000_000.0,
                 handler=NextOpenHandler(cost_model=FlatRateCostModel()),
                 event_log_path=log_path,
+                cross_section=cross_section,
             ).run()
             return time.perf_counter() - t0, result, log_path
 
         elapsed, r, events_path = _perf.run_budget(
-            "B2", _measure, B2_LIMIT_SECONDS,
-            hint=("逐日消费路径回查（全截面物化禁区/states 触板裁剪/"
-                  "_LazyCrossSection bisect）"),
-            seconds=lambda payload: payload[0])
+            "B2",
+            _measure,
+            B2_LIMIT_SECONDS,
+            hint=("逐日消费路径回查（全截面物化禁区/states 触板裁剪/_LazyCrossSection bisect）"),
+            seconds=lambda payload: payload[0],
+        )
 
         n_events = sum(1 for _ in events_path.open(encoding="utf-8"))
-        band = ("软目标内" if elapsed <= B2_SOFT_TARGET_SECONDS
-                else f"超软目标 {B2_SOFT_TARGET_SECONDS}s（负载？）")
+        band = (
+            "软目标内"
+            if elapsed <= B2_SOFT_TARGET_SECONDS
+            else f"超软目标 {B2_SOFT_TARGET_SECONDS}s（负载？）"
+        )
         print(
-            f"\nB2-real: {r.n_days} 交易日 | {len(r.orders)} 订单 | "
+            f"\nB2-real: {r.n_days} 交易日 | {len(cross_section)} 显式标的 | "
+            f"{len(r.orders)} 订单 | "
             f"{len(r.fills)} 成交 | {len(r.rejections)} 拒单 | "
             f"{n_events} 事件 | {elapsed:.2f}s"
-            f"（{band}；硬门槛 {B2_LIMIT_SECONDS}s（按归一化墙钟判定，MM-8））"
+            f"（{band}；硬门槛 {B2_LIMIT_SECONDS}s（按归一化墙钟判定，MM-8/D8；"
+            f"cross_section 与生产同参））"
         )
         assert r.n_days > 2_400, "十年交易日数量级异常"
         assert len(r.fills) > 500, "月调仓成交量级异常（120 月×~20 标的）"
-

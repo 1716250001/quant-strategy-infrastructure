@@ -19,11 +19,14 @@
 
 依赖：仅标准库（`math` / `statistics`）——便于单测与复算，不引入 scipy。
 """
+
 from __future__ import annotations
 
 import math
 import statistics
 from collections.abc import Sequence
+
+from btf.analytics.metrics import DEFAULT_ANNUALIZATION
 
 __all__ = [
     "annualized_to_period",
@@ -48,40 +51,57 @@ def _norm_ppf(p: float) -> float:
     """标准正态分位（Acklam 近似，|误差| ≲ 1.15e-9）。"""
     if not 0.0 < p < 1.0:
         raise ValueError(f"p 须 ∈ (0,1)，得 {p!r}")
-    a = (-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
-         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00)
-    b = (-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
-         6.680131188771972e+01, -1.328068155288572e+01)
-    c = (-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
-         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00)
-    d = (7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
-         3.754408661907416e+00)
+    a = (
+        -3.969683028665376e01,
+        2.209460984245205e02,
+        -2.759285104469687e02,
+        1.383577518672690e02,
+        -3.066479806614716e01,
+        2.506628277459239e00,
+    )
+    b = (
+        -5.447609879822406e01,
+        1.615858368580409e02,
+        -1.556989798598866e02,
+        6.680131188771972e01,
+        -1.328068155288572e01,
+    )
+    c = (
+        -7.784894002430293e-03,
+        -3.223964580411365e-01,
+        -2.400758277161838e00,
+        -2.549732539343734e00,
+        4.374664141464968e00,
+        2.938163982698783e00,
+    )
+    d = (7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e00, 3.754408661907416e00)
     plow, phigh = 0.02425, 1 - 0.02425
     if p < plow:
         q = math.sqrt(-2 * math.log(p))
-        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q
-                + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
+        )
     if p > phigh:
         q = math.sqrt(-2 * math.log(1 - p))
-        return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q
-                 + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+        return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
+        )
     q = p - 0.5
     r = q * q
     num = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
-    den = (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0)
+    den = ((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0
     return num / den
 
 
 # ── 公共 API ──
-def annualized_to_period(sr_annual: float, *, annualization: int = 252) -> float:
+def annualized_to_period(sr_annual: float, *, annualization: int = DEFAULT_ANNUALIZATION) -> float:
     """年化夏普 → 单期夏普（PSR/DSR 的输入口径）。"""
     if annualization <= 0:
         raise ValueError(f"annualization 须 > 0，得 {annualization!r}")
     return float(sr_annual) / math.sqrt(annualization)
 
 
-def sharpe_stderr(sr: float, *, n_periods: int, skew: float = 0.0,
-                  kurt: float = 3.0) -> float:
+def sharpe_stderr(sr: float, *, n_periods: int, skew: float = 0.0, kurt: float = 3.0) -> float:
     """夏普标准误（含偏度 / 峰度修正；B&LdP 方差式）。
 
     `n_periods` 为**样本期数**（如日收益样本数）；`sr` 为单期夏普。
@@ -94,8 +114,9 @@ def sharpe_stderr(sr: float, *, n_periods: int, skew: float = 0.0,
     return math.sqrt(var)
 
 
-def probabilistic_sharpe(sr: float, *, sr0: float = 0.0, n_periods: int,
-                         skew: float = 0.0, kurt: float = 3.0) -> float:
+def probabilistic_sharpe(
+    sr: float, *, sr0: float = 0.0, n_periods: int, skew: float = 0.0, kurt: float = 3.0
+) -> float:
     """PSR：`P(真实单期夏普 > sr0)`（Bailey & López de Prado）。
 
     返回 ∈ (0,1)；**越大越显著**。典型判读阈值 0.95（但多重检验下须改用 DSR）。
@@ -104,9 +125,9 @@ def probabilistic_sharpe(sr: float, *, sr0: float = 0.0, n_periods: int,
     return _norm_cdf((sr - sr0) / se)
 
 
-def expected_max_sharpe(*, n_periods: int, skew: float = 0.0,
-                        kurt: float = 3.0, sr: float = 0.0,
-                        n_trials: int) -> float:
+def expected_max_sharpe(
+    *, n_periods: int, skew: float = 0.0, kurt: float = 3.0, sr: float = 0.0, n_trials: int
+) -> float:
     """N 次试验下**最大夏普的期望**（多重检验基准）。
 
     `n_trials ≤ 1` ⇒ 返回 0（无校正）。
@@ -119,19 +140,17 @@ def expected_max_sharpe(*, n_periods: int, skew: float = 0.0,
     return se * ((1.0 - _EULER) * z1 + _EULER * z2)
 
 
-def deflated_sharpe(sr: float, *, n_periods: int, skew: float = 0.0,
-                    kurt: float = 3.0, n_trials: int = 1) -> float:
+def deflated_sharpe(
+    sr: float, *, n_periods: int, skew: float = 0.0, kurt: float = 3.0, n_trials: int = 1
+) -> float:
     """DSR：以"N 次试验的最大夏普期望"为基准的 PSR。
 
     **DSR 才是"挑出来"的夏普的正确显著性**（PSR 只看单个策略，不看挑选过程）。
     """
     if n_trials <= 1:
-        return probabilistic_sharpe(sr, sr0=0.0, n_periods=n_periods,
-                                    skew=skew, kurt=kurt)
-    sr0 = expected_max_sharpe(n_periods=n_periods, skew=skew, kurt=kurt, sr=sr,
-                              n_trials=n_trials)
-    return probabilistic_sharpe(sr, sr0=sr0, n_periods=n_periods,
-                               skew=skew, kurt=kurt)
+        return probabilistic_sharpe(sr, sr0=0.0, n_periods=n_periods, skew=skew, kurt=kurt)
+    sr0 = expected_max_sharpe(n_periods=n_periods, skew=skew, kurt=kurt, sr=sr, n_trials=n_trials)
+    return probabilistic_sharpe(sr, sr0=sr0, n_periods=n_periods, skew=skew, kurt=kurt)
 
 
 def sharpe_moments(returns: Sequence[float]) -> tuple[int, float, float, float]:
@@ -146,8 +165,8 @@ def sharpe_moments(returns: Sequence[float]) -> tuple[int, float, float, float]:
     if m2 <= 0.0:
         raise ValueError("收益方差为 0：夏普无定义（PSR/DSR 不适用）")
     sd = math.sqrt(m2)
-    skew = statistics.fmean([d ** 3 for d in dev]) / m2 ** 1.5
-    kurt = statistics.fmean([d ** 4 for d in dev]) / m2 ** 2
+    skew = statistics.fmean([d**3 for d in dev]) / m2**1.5
+    kurt = statistics.fmean([d**4 for d in dev]) / m2**2
     return n, m / sd, skew, kurt
 
 
@@ -160,5 +179,4 @@ def psr_from_returns(returns: Sequence[float], *, sr0: float = 0.0) -> float:
 def dsr_from_returns(returns: Sequence[float], *, n_trials: int) -> float:
     """便捷式：原始收益序列 → DSR（`n_trials` = 含"历史累计试验"的总试验数）。"""
     n, sr, skew, kurt = sharpe_moments(returns)
-    return deflated_sharpe(sr, n_periods=n, skew=skew, kurt=kurt,
-                           n_trials=n_trials)
+    return deflated_sharpe(sr, n_periods=n, skew=skew, kurt=kurt, n_trials=n_trials)

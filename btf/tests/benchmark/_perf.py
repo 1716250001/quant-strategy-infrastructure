@@ -23,14 +23,24 @@
 参考常数（`CPU_REF`／`IO_REF`）为**空载 n=3 取中位**；**禁止在负载下取样**
 （否则系数恒≈1，机制自废）。换机须重取并留痕。
 """
+
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from btf.config.paths import MARKET_DATA_DIR
+
+#: D8 标定留痕：参考常数与门槛的标定日/口径（环境指纹见 `tests/perf/BASELINE.md`）。
+#: 参考常数仅在**空载**下重取；门槛（budget）本身不因机器态放宽。
+CALIBRATED_AT = "2026-11-22"
+CALIBRATION_NOTE = (
+    "CPU_REF/IO_REF 为本机空载 n=3 中位（2026-10-24 首次，2026-11-22 D8 复核）；"
+    "B1/B2/B3/B4/B5/LIQ 的硬门槛均为原始预算，判定按 normalized=raw/k（k 只许放大）"
+)
 
 #: 参考机：本机（书房电脑，12 逻辑核），2026-10-24，空载（实测均值 ~20% 负载），
 #: n=3 取中位。**换机须重取并留痕**（禁止在负载下取样，否则系数恒≈1、机制自废）。
@@ -47,9 +57,11 @@ _CPU_RING = 2_000_000
 _CPU_FLOAT = 200_000
 
 #: IO 探针固定文件集与固定 2 列（§140.1）
-_IO_FILES = (("daily", "2016.parquet", ("ts_code", "close")),
-             ("adj_factor", "2016.parquet", ("ts_code", "adj_factor")),
-             ("index_daily", "2016.parquet", ("ts_code", "close")))
+_IO_FILES = (
+    ("daily", "2016.parquet", ("ts_code", "close")),
+    ("adj_factor", "2016.parquet", ("ts_code", "adj_factor")),
+    ("index_daily", "2016.parquet", ("ts_code", "close")),
+)
 
 
 def cpu_probe() -> float:
@@ -63,7 +75,7 @@ def cpu_probe() -> float:
     total = 0.0
     for i in range(_CPU_FLOAT):
         total += 1.0 / (i + 1)
-    if acc == 0 or total == 0.0:      # 防"死代码消除"把探针优化成空跑
+    if acc == 0 or total == 0.0:  # 防"死代码消除"把探针优化成空跑
         raise RuntimeError("CPU 探针退化（结果未被使用？）")
     return time.perf_counter() - t0
 
@@ -80,7 +92,7 @@ def io_probe() -> float | None:
     paths = [(root / name / fname, cols) for name, fname, cols in _IO_FILES]
     if not all(path.is_file() for path, _ in paths):
         return None
-    for path, cols in paths:                      # 预热（不计入）
+    for path, cols in paths:  # 预热（不计入）
         pq.read_table(path, columns=list(cols))
     samples: list[float] = []
     for _ in range(2):
@@ -111,12 +123,58 @@ def machine_factor() -> float:
     if raw > FACTOR_MAX:
         raise EnvNotQualifiedError(
             f"[ENV] 标定系数 k={raw:.2f}>3.0，本机不具备判定条件——请空载重跑；"
-            f"不得据此判代码回归、不得改 budget")
+            f"不得据此判代码回归、不得改 budget"
+        )
     return max(1.0, raw)
 
 
 class EnvNotQualifiedError(AssertionError):
     """本机状态不满足判定条件（**失败**，不是 skip——§140.1）。"""
+
+
+def peak_rss_mb() -> float:
+    """进程**峰值**常驻内存（MB）——D8/B3 统一测量口径（build+run 同进程）。
+
+    Windows 用 `GetProcessMemoryInfo.PeakWorkingSetSize`（含 build 前的已用
+    内存，属上界口径）；其他平台用 `resource.ru_maxrss`（Linux 单位 KB）。
+    """
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        class _PMC(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = _PMC()
+        counters.cb = ctypes.sizeof(counters)
+        kernel32 = ctypes.WinDLL("kernel32.dll")
+        psapi = ctypes.WinDLL("psapi.dll")
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        psapi.GetProcessMemoryInfo.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(_PMC),
+            wintypes.DWORD,
+        ]
+        psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+        if not psapi.GetProcessMemoryInfo(
+            kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb
+        ):
+            raise OSError("GetProcessMemoryInfo 失败")
+        return counters.PeakWorkingSetSize / (1024.0 * 1024.0)
+    import resource
+
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
 
 
 def _normalized(raw: float, factor_raw: float) -> tuple[float, float]:
@@ -157,10 +215,12 @@ def run_budget(
         factor_raw = max(factor_before, factor_after)
         factor, normalized = _normalized(raw, factor_raw)
         attempts.append((raw, factor, normalized))
-        print(f"\n{name} attempt-{attempt}: raw {raw:.2f}s | "
-              f"factor {factor:.2f}（k_before={factor_before:.2f} / "
-              f"k_after={factor_after:.2f}） | "
-              f"normalized {normalized:.2f}s（budget {budget:.0f}s）")
+        print(
+            f"\n{name} attempt-{attempt}: raw {raw:.2f}s | "
+            f"factor {factor:.2f}（k_before={factor_before:.2f} / "
+            f"k_after={factor_after:.2f}） | "
+            f"normalized {normalized:.2f}s（budget {budget:.0f}s）"
+        )
         # **M-1（19 号 §141 D）——先判达标，再判环境**：clamp 只截到
         # `FACTOR_MAX` ⇒ normalized 是**欠校正**的（欠校正只会让"通过"更难，
         # 不会制造假通过），故只要 normalized ≤ budget 即通过，与 k 多大无关。
@@ -170,15 +230,29 @@ def run_budget(
         if factor_raw > FACTOR_MAX:
             raise EnvNotQualifiedError(
                 f"[ENV] 标定系数 k={factor_raw:.2f}>3.0，本机不具备判定条件——"
-                f"请空载重跑；不得据此判代码回归、不得改 budget")
+                f"请空载重跑；不得据此判代码回归、不得改 budget"
+            )
     raw, factor, normalized = attempts[-1]
     detail = "；".join(
-        f"#{i} raw {r:.2f}s / normalized {n:.2f}s"
-        for i, (r, _f, n) in enumerate(attempts, 1))
+        f"#{i} raw {r:.2f}s / normalized {n:.2f}s" for i, (r, _f, n) in enumerate(attempts, 1)
+    )
     raise AssertionError(
         f"[PERF] {name} normalized {normalized:.2f}s > {budget:.0f}s"
-        f"（raw {raw:.2f}s / k {factor:.2f}）——{hint}；两次实测：{detail}")
+        f"（raw {raw:.2f}s / k {factor:.2f}）——{hint}；两次实测：{detail}"
+    )
 
 
-__all__ = ["CPU_REF", "FACTOR_MAX", "IO_REF", "EnvNotQualifiedError", "cpu_probe",
-           "io_probe", "machine_factor", "raw_machine_factor", "run_budget"]
+__all__ = [
+    "CALIBRATED_AT",
+    "CALIBRATION_NOTE",
+    "CPU_REF",
+    "FACTOR_MAX",
+    "IO_REF",
+    "EnvNotQualifiedError",
+    "cpu_probe",
+    "io_probe",
+    "machine_factor",
+    "peak_rss_mb",
+    "raw_machine_factor",
+    "run_budget",
+]

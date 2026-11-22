@@ -13,6 +13,7 @@
     6. registry RUN_STORE 扩展点 + 版本协商；
     7. FIFO 开平配对（trades 产物源）。
 """
+
 from __future__ import annotations
 
 import json
@@ -66,22 +67,35 @@ SYM = "000001.SZ"
 
 CONFIG = {
     "schema_version": "backtest.v1",
-    "run": {"strategy": "m:S", "period": {"start": "2015-01-05",
-                                          "end": "2015-01-09"},
-            "initial_cash": 1_000_000},
-    "data": {"feed": "memory", "anchor_date": "2026-09-23",
-             "token": "SECRET-TOKEN"},
+    "run": {
+        "strategy": "m:S",
+        "period": {"start": "2015-01-05", "end": "2015-01-09"},
+        "initial_cash": 1_000_000,
+    },
+    "data": {"feed": "memory", "anchor_date": "2026-09-23", "token": "SECRET-TOKEN"},
     "seed": 20260926,
 }
 
 
-def mk_fill(side: OrderSide, qty: int, price: float, fee_total: float = 0.0,
-            fid: str = "F1", day: str = "20150106") -> Fill:
-    return Fill(fill_id=fid, order_id="O1", symbol=SYM, side=side, qty=qty,
-                price=price,
-                fee=Fee(commission=fee_total, stamp_duty=0.0,
-                        transfer_fee=0.0, total=fee_total),
-                fill_date=D(day), fill_timing="open")
+def mk_fill(
+    side: OrderSide,
+    qty: int,
+    price: float,
+    fee_total: float = 0.0,
+    fid: str = "F1",
+    day: str = "20150106",
+) -> Fill:
+    return Fill(
+        fill_id=fid,
+        order_id="O1",
+        symbol=SYM,
+        side=side,
+        qty=qty,
+        price=price,
+        fee=Fee(commission=fee_total, stamp_duty=0.0, transfer_fee=0.0, total=fee_total),
+        fill_date=D(day),
+        fill_timing="open",
+    )
 
 
 def _snapshots(prices=(10.0, 12.0, 9.0, 10.0)) -> list:
@@ -95,14 +109,22 @@ def _snapshots(prices=(10.0, 12.0, 9.0, 10.0)) -> list:
 
 
 def _fills() -> list[Fill]:
-    return [mk_fill(OrderSide.BUY, 1_000, 10.0, 5.0, "F1", "20150105"),
-            mk_fill(OrderSide.SELL, 600, 11.0, 6.0, "F2", "20150107")]
+    return [
+        mk_fill(OrderSide.BUY, 1_000, 10.0, 5.0, "F1", "20150105"),
+        mk_fill(OrderSide.SELL, 600, 11.0, 6.0, "F2", "20150107"),
+    ]
 
 
 def _rejections() -> list[tuple[Order, Rejection]]:
-    order = Order(order_id="O2", symbol=SYM, side=OrderSide.BUY,
-                  order_type=OrderType.MARKET, qty=100, limit_price=None,
-                  created_at=D("20150106"))
+    order = Order(
+        order_id="O2",
+        symbol=SYM,
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        qty=100,
+        limit_price=None,
+        created_at=D("20150106"),
+    )
     return [(order, Rejection(RejectCode.INSUFFICIENT_CASH, "现金不足"))]
 
 
@@ -119,8 +141,16 @@ class TestManifest:
 
     def test_four_versions_present(self):
         m = RunManifest.skeleton(CONFIG)
-        assert set(m.data_version) == {"dataset", "anchor_date", "content_hash",
-                                       "tables", "completeness_level"}
+        assert set(m.data_version) == {
+            "dataset",
+            "anchor_date",
+            "content_hash",
+            "tables",
+            "completeness_level",
+            "mode",
+            "fingerprint_version",
+        }
+        assert m.data_version["fingerprint_version"] == 2  # G3/D6
         assert set(m.code_version) == {"git_commit", "dirty", "package_version"}
         assert m.config_hash.startswith("sha256:")
         assert set(m.env_version) == {"python", "libs", "platform"}
@@ -134,8 +164,8 @@ class TestManifest:
     def test_config_hash_stable_and_content_sensitive(self):
         a = config_hash_of(CONFIG)
         b = config_hash_of(dict(CONFIG, extra=1))
-        assert a == config_hash_of(CONFIG)      # 确定性
-        assert a != b                            # 内容敏感
+        assert a == config_hash_of(CONFIG)  # 确定性
+        assert a != b  # 内容敏感
 
     def test_data_version_uses_expected_hash_when_declared(self):
         cfg = {"data": {"feed": "memory", "expected_hash": "sha256:abc123"}}
@@ -146,7 +176,7 @@ class TestManifest:
         """E2 纪律：运行时实采，不抄录文档。"""
         env = collect_env_version()
         assert env["python"].count(".") >= 1
-        assert env["platform"]                # win32/linux/darwin
+        assert env["platform"]  # win32/linux/darwin
         assert isinstance(env["libs"], dict)  # 未安装则空，不伪造
 
     def test_seed_default_zero(self):
@@ -161,14 +191,18 @@ class TestManifest:
         assert bad.status == STATUS_FAILED and bad.error == "ValueError: boom"
 
     def test_roundtrip_dict(self):
-        m = RunManifest.skeleton(CONFIG, rules_version="v7.7@sha256:ab12",
-                                 rules_overrides=[{"rule_id": "L2", "value": 20}])
+        m = RunManifest.skeleton(
+            CONFIG,
+            rules_version="v7.7@sha256:ab12",
+            rules_overrides=[{"rule_id": "L2", "value": 20}],
+        )
         back = RunManifest.from_dict(json.loads(json.dumps(m.to_dict())))
         assert back == m
 
     def test_run_id_format(self):
         """run_id = 时间戳 + config_hash 前 6 位（08 §13.2）。"""
         import datetime as dt
+
         cfg_hash = config_hash_of(CONFIG)
         rid = new_run_id(cfg_hash, dt.datetime(2026, 9, 26, 15, 30, 0))
         assert rid == f"20260926_153000_{cfg_hash.split(':')[-1][:6]}"
@@ -182,16 +216,14 @@ class TestMetricsDigest:
         assert metrics_digest_of(a) == metrics_digest_of({"y": 2.0, "x": 1.0})
 
     def test_nan_normalized(self):
-        assert metrics_digest_of({"a": float("nan")}) == metrics_digest_of(
-            {"a": float("nan")})
+        assert metrics_digest_of({"a": float("nan")}) == metrics_digest_of({"a": float("nan")})
 
     def test_value_change_changes_digest(self):
         assert metrics_digest_of({"a": 1.0}) != metrics_digest_of({"a": 1.0000001})
 
     def test_precision_stable(self):
         """浮点格式化稳定：0.1+0.2 与字面量 0.30000000000000004 同 digest。"""
-        assert metrics_digest_of({"a": 0.1 + 0.2}) == metrics_digest_of(
-            {"a": 0.30000000000000004})
+        assert metrics_digest_of({"a": 0.1 + 0.2}) == metrics_digest_of({"a": 0.30000000000000004})
 
 
 # ═════════════════════════════════════════════════════════════
@@ -226,7 +258,7 @@ class TestLocalRunStore:
         """原子写：tmp + replace——不残留 .tmp 文件。"""
         path = tmp_path / "a.json"
         atomic_write_text(path, "hello")
-        atomic_write_text(path, "world")           # 覆盖（Windows 亦原子）
+        atomic_write_text(path, "world")  # 覆盖（Windows 亦原子）
         assert path.read_text(encoding="utf-8") == "world"
         assert not list(tmp_path.glob("*.tmp*"))
 
@@ -344,12 +376,24 @@ def fills_from_rows(rows: list[dict]) -> list[Fill]:
     out = []
     for r in rows:
         fee = r["fee"]
-        out.append(Fill(
-            fill_id=r["fill_id"], order_id=r["order_id"], symbol=r["symbol"],
-            side=OrderSide(r["side"]), qty=r["qty"], price=r["price"],
-            fee=Fee(commission=fee["commission"], stamp_duty=fee["stamp_duty"],
-                    transfer_fee=fee["transfer_fee"], total=fee["total"]),
-            fill_date=D(r["fill_date"]), fill_timing=r["fill_timing"]))
+        out.append(
+            Fill(
+                fill_id=r["fill_id"],
+                order_id=r["order_id"],
+                symbol=r["symbol"],
+                side=OrderSide(r["side"]),
+                qty=r["qty"],
+                price=r["price"],
+                fee=Fee(
+                    commission=fee["commission"],
+                    stamp_duty=fee["stamp_duty"],
+                    transfer_fee=fee["transfer_fee"],
+                    total=fee["total"],
+                ),
+                fill_date=D(r["fill_date"]),
+                fill_timing=r["fill_timing"],
+            )
+        )
     return out
 
 
@@ -391,21 +435,25 @@ class TestFifoPairing:
 
     def test_holding_days(self):
         trades = pair_fills_to_trades(_fills())
-        assert trades[0].holding_days == 2          # 20150105 → 20150107
+        assert trades[0].holding_days == 2  # 20150105 → 20150107
 
     def test_fifo_order_across_lots(self):
         """两笔买入（先 500@10 后 500@12）→ 卖 600：先平第一笔全部再平第二笔 100。"""
-        fills = [mk_fill(OrderSide.BUY, 500, 10.0, 0.0, "F1", "20150105"),
-                 mk_fill(OrderSide.BUY, 500, 12.0, 0.0, "F2", "20150106"),
-                 mk_fill(OrderSide.SELL, 600, 11.0, 0.0, "F3", "20150108")]
+        fills = [
+            mk_fill(OrderSide.BUY, 500, 10.0, 0.0, "F1", "20150105"),
+            mk_fill(OrderSide.BUY, 500, 12.0, 0.0, "F2", "20150106"),
+            mk_fill(OrderSide.SELL, 600, 11.0, 0.0, "F3", "20150108"),
+        ]
         trades = pair_fills_to_trades(fills)
-        assert [(t.qty, t.open_fill.price, t.close_fill.price) for t in trades
-                if t.close_fill] == [(500, 10.0, 11.0), (100, 12.0, 11.0)]
+        assert [(t.qty, t.open_fill.price, t.close_fill.price) for t in trades if t.close_fill] == [
+            (500, 10.0, 11.0),
+            (100, 12.0, 11.0),
+        ]
         assert sum(t.qty for t in trades if t.close_fill is None) == 400
 
     def test_deterministic_trade_ids(self):
         a = pair_fills_to_trades(_fills())
-        b = pair_fills_to_trades(list(reversed(_fills())))   # 输入乱序
+        b = pair_fills_to_trades(list(reversed(_fills())))  # 输入乱序
         assert [t.trade_id for t in a] == ["T000001", "T000002"]
         assert [(t.qty, t.pnl) for t in a] == [(t.qty, t.pnl) for t in b]
 

@@ -8,6 +8,7 @@
   实算水位 ≥ 声明；内存 Feed 声明任何版本键 ⇒ 拒（无法校验）。
 - **opt-in 零成本**：未声明 ⇒ 不计算、不披露、行为逐位不变。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -21,8 +22,7 @@ from tests.fixtures.scenarios import t_plus1_scenario
 pytestmark = [pytest.mark.l2]
 
 ROOT = MARKET_DATA_DIR
-requires_mainlib = pytest.mark.skipif(
-    not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
+requires_mainlib = pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
 
 MEM_FEED = "rc14_gate_mem_feed"
 
@@ -34,10 +34,14 @@ class TestCollectDataVersionLocation:
     def test_reads_dataset_block(self):
         from btf.experiment.manifest import collect_data_version
 
-        dv = collect_data_version({"data": {
-            "feed": "tushare_parquet",
-            "dataset": {"anchor_date": "2024-12-31",
-                        "expected_hash": "sha256:abc"}}})
+        dv = collect_data_version(
+            {
+                "data": {
+                    "feed": "tushare_parquet",
+                    "dataset": {"anchor_date": "2024-12-31", "expected_hash": "sha256:abc"},
+                }
+            }
+        )
         assert dv["anchor_date"] == "2024-12-31"
         assert dv["content_hash"] == "sha256:abc"
 
@@ -45,12 +49,17 @@ class TestCollectDataVersionLocation:
         """兼容旧位（历史产物 / 直调）：顶层仍可读，`dataset.*` 优先。"""
         from btf.experiment.manifest import collect_data_version
 
-        dv = collect_data_version({"data": {
-            "feed": "memory", "expected_hash": "sha256:old"}})
+        dv = collect_data_version({"data": {"feed": "memory", "expected_hash": "sha256:old"}})
         assert dv["content_hash"] == "sha256:old"
-        dv2 = collect_data_version({"data": {
-            "feed": "memory", "expected_hash": "sha256:old",
-            "dataset": {"expected_hash": "sha256:new"}}})
+        dv2 = collect_data_version(
+            {
+                "data": {
+                    "feed": "memory",
+                    "expected_hash": "sha256:old",
+                    "dataset": {"expected_hash": "sha256:new"},
+                }
+            }
+        )
         assert dv2["content_hash"] == "sha256:new"
 
 
@@ -94,8 +103,7 @@ class TestMemoryFeedDeclaredRejected:
         from btf.runtime import BTFRuntime
 
         with pytest.raises(ConfigError, match="内存 Feed"):
-            BTFRuntime().load_config(
-                _mem_cfg(version="sha256:whatever")).build()
+            BTFRuntime().load_config(_mem_cfg(version="sha256:whatever")).build()
 
     def test_undeclared_memory_feed_unchanged(self, mem_feed):
         """opt-in 零成本：未声明 ⇒ 不计算、不披露（行为逐位不变）。"""
@@ -147,21 +155,39 @@ class TestFileFeedGate:
         assert "数据版本门禁通过" in joined
         assert truth in joined and "档位" in joined
 
+    def test_fingerprint_version_is_v2(self):
+        """G3/D6：缺省 meta 档输出 fingerprint_version=2（不含 mtime 口径）。"""
+        from btf.runtime import BTFRuntime
+
+        rt = BTFRuntime().load_config(_lib_cfg()).build()
+        info = rt._compute_data_version(rt.config["run"]["period"])
+        assert info["mode"] == "meta"
+        assert info["fingerprint_version"] == 2
+        assert all(t["fingerprint_version"] == 2 for t in info["tables_detail"].values())
+
+    def test_manifest_records_mode_and_version(self):
+        """manifest.data_version 记录 mode 与 fingerprint_version（旧产物缺键可读）。"""
+        from btf.experiment.manifest import collect_data_version
+
+        dv = collect_data_version({"data": {"feed": "tushare_parquet", "fingerprint_mode": "meta"}})
+        assert dv["mode"] == "meta"
+        assert dv["fingerprint_version"] == 2
+
     def test_hash_mismatch_rejected(self):
         """声明错哈希 ⇒ ConfigError（拒绝静默换数）。"""
         from btf.runtime import BTFRuntime
 
         with pytest.raises(ConfigError, match="数据版本门禁未通过"):
-            BTFRuntime().load_config(
-                _lib_cfg({"version": "sha256:deadbeef"})).build()
+            BTFRuntime().load_config(_lib_cfg({"version": "sha256:deadbeef"})).build()
 
     def test_version_and_expected_hash_conflict_rejected(self):
         """version 与 expected_hash 同时声明且不一致 ⇒ 自相矛盾即拒。"""
         from btf.runtime import BTFRuntime
 
         with pytest.raises(ConfigError, match="自相矛盾"):
-            BTFRuntime().load_config(_lib_cfg({
-                "version": "sha256:aaa", "expected_hash": "sha256:bbb"})).build()
+            BTFRuntime().load_config(
+                _lib_cfg({"version": "sha256:aaa", "expected_hash": "sha256:bbb"})
+            ).build()
 
     def test_anchor_beyond_period_end_clamped_passes(self):
         """**P16 ③（19 号 §165）**：声明水位超区间末 ⇒ 夹取后必须通过。
@@ -171,8 +197,7 @@ class TestFileFeedGate:
         """
         from btf.runtime import BTFRuntime
 
-        rt = BTFRuntime().load_config(
-            _lib_cfg({"anchor_date": "2099-12-31"})).build()
+        rt = BTFRuntime().load_config(_lib_cfg({"anchor_date": "2099-12-31"})).build()
         joined = " | ".join(rt.assembly_notes)
         assert "数据版本门禁通过" in joined
         assert "夹取" in joined
@@ -181,8 +206,7 @@ class TestFileFeedGate:
         """声明水位 ≤ 实算 ⇒ 通过（数据已更新到声明水位之上）。"""
         from btf.runtime import BTFRuntime
 
-        rt = BTFRuntime().load_config(
-            _lib_cfg({"anchor_date": "2020-01-01"})).build()
+        rt = BTFRuntime().load_config(_lib_cfg({"anchor_date": "2020-01-01"})).build()
         assert any("数据版本门禁通过" in n for n in rt.assembly_notes)
 
 
@@ -214,14 +238,20 @@ class TestGateTableSetMatchesActualUse:
     def test_gate_accepts_freeze_fingerprint_for_etf(self):
         from btf.runtime import BTFRuntime
 
-        frozen = BTFRuntime().load_config(
-            _etf_cfg()).build().dataset_fingerprint()
+        frozen = BTFRuntime().load_config(_etf_cfg()).build().dataset_fingerprint()
         assert "fund_daily" in frozen["tables"], frozen["tables"]
-        assert "daily" not in frozen["tables"], (
-            f"ETF 宇宙的表集含 daily：{frozen['tables']}")
-        rt = BTFRuntime().load_config(_etf_cfg({
-            # 冻结清单里的 fast/meta 值——门禁须接受"同源实算"的结果
-            "expected_hash": frozen["content_hash"],
-            "anchor_date": "2024-01-01"})).build()
+        assert "daily" not in frozen["tables"], f"ETF 宇宙的表集含 daily：{frozen['tables']}"
+        rt = (
+            BTFRuntime()
+            .load_config(
+                _etf_cfg(
+                    {
+                        # 冻结清单里的 fast/meta 值——门禁须接受"同源实算"的结果
+                        "expected_hash": frozen["content_hash"],
+                        "anchor_date": "2024-01-01",
+                    }
+                )
+            )
+            .build()
+        )
         assert any("数据版本门禁通过" in n for n in rt.assembly_notes)
-

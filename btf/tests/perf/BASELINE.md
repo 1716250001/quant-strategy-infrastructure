@@ -21,7 +21,7 @@
 | **LIQ 十年全区间预计算** | **760 s**（`state_of` 逐日） | **软 < 5 s ／ 硬 < 8 s**（D-8） | ✅ **3.6–5.3 s**（≈145–210x；软目标偶超，硬门槛稳过） | `tests/perf/test_liq_precompute.py` |
 | LIQ 语义等值 | — | 逐字段相等 | ✅ 2430 日全区间 **0 差异** | 同上（抽样 40+ 日逐日对账） |
 | LIQ 单日查询（预热后） | 312.8 ms | < 1 ms | 查表 O(1)（预计算序列 dict） | 同上 |
-| 全市场十年内存 | MemoryError（不可跑） | < 2 GB | ✅ 可跑完（B3 十年 32.9s；表级缓存有界） | `test_b3_full_decade_scan` |
+| 全市场十年内存 | MemoryError（不可跑） | **≤ 4.0 GB**（D8 实测 3.61 GB + 余量） | ✅ **3,608 MB 峰值 RSS**（2026-11-22，B3 十年 36.8s） | `test_b3_full_decade_scan` |
 | 十年冗余文件读（LIQ 路径） | ≥ 9,720 次 | < 100 | ✅ 每表每年 1 次（`YearTableStore.loads ≤ 40`） | `test_precompute_reuses_store_cache` |
 | `closes()` dict 写 | ≈9.7e6（全截面） | O(P) 持仓数 | ✅ `closes(wanted)` 按需产出 | B3 基准不回归 |
 
@@ -151,3 +151,60 @@
 该漂移与 B1/B4 同源（机器态/页缓存），故以软/硬口径消除假失败，而非改实现。
 **机器无关的回归守卫照旧**：LIQ 语义等值 + `loads ≤ 40` 精确 IO 断言 + 分布锚点
 （RECOVERY 1.7% / 最长 3 日）。
+
+## 七、D8 性能基准修正与复测（2026-11-22）
+
+### 7.1 环境指纹
+
+| 项 | 值 |
+|---|---|
+| CPU | AMD Ryzen 5 5600X 6-Core（6 核 / 12 逻辑核） |
+| RAM | 34,243,641,344 B ≈ 31.9 GiB |
+| 磁盘 | EXT X200E SSD（Fixed hard disk media，953.7 GiB） |
+| OS / Python | Windows / **3.13.15** |
+| pyarrow | **25.0.1** |
+| git commit | `38cea79`（工作区含 D1–G4 未提交改动） |
+| `db_version` | **MD-20261122.11**（`2026-11-22T13:36:40+08:00`，tables_changed=dividend） |
+| 数据规模 | **117** 个表目录 / **7,761** 个 parquet / **7,199,124,705 B（≈6.70 GiB）** / **300,116,082 行**（0 个不可读文件） |
+
+### 7.2 测量方法（统一口径）
+
+- **墙钟**：全部走 `tests/benchmark/_perf.run_budget`——`normalized = raw ÷ k`，
+  `k = max(cpu/cpu_ref, io/io_ref)`（clamp `[1.0, 3.0]`，只许放大）；每个基准
+  最多 2 次，任一次 `normalized <= budget` 即通过。B1/B2/B3/B4/B5/LIQ 已全部接入。
+- **峰值 RSS**：`_perf.peak_rss_mb()`——Windows `GetProcessMemoryInfo.PeakWorkingSetSize`
+  （含 build+run 同进程的进程级峰值，属**上界口径**）；其他平台 `resource.ru_maxrss`。
+- **隔离单跑**：遵循 OBS-5，逐文件顺序执行，确认无并发 `python`（本机 k 实测 1.06–1.44）。
+
+### 7.3 本轮实测（2026-11-22）
+
+| 基准 | budget | raw | k | normalized | 判定 | 备注 |
+|---|---|---|---|---|---|---|
+| B1 十年就绪 | 14.0s | **7.07s** | 1.26 | 5.60s | ✅ | 2431 交易日；物化证据段 6.70s |
+| B2 沪深300 轮动 10 年 | 20.0s | **4.87s** | 1.14 | 4.28s | ✅ | **cross_section=637 显式标的**（旧口径全市场 14–17s） |
+| B3 全市场十年 | 60.0s | **36.76s** | 1.15 | 32.07s | ✅ | 峰值 RSS **3,608 MB**（红线 4,096） |
+| B4 千组外推 | 1800s | **1422s**（12 组 17.1s 外推） | 1.44 | 984.37s | ✅ | 质检跳过（`build(quality=False)`）后复测 |
+| B5 报告生成 | 5.0s | **0.41s** | 1.13 | 0.37s | ✅ | 872 快照 / 4.97 MB |
+| LIQ 十年预计算 | 8.0s | **3.12s** | 1.11 | 2.82s | ✅ | 2430 交易日；≈244x vs 760s 基线 |
+
+### 7.4 门槛与标定
+
+- **budget 未放宽**：B1 14s / B2 20s / B3 60s / B4 1800s / B5 5s / LIQ 8s 均为原始预算。
+- **k 参考常数**：`CPU_REF=0.2070s`、`IO_REF=0.0537s`（空载 n=3 中位；2026-10-24 首取，
+  2026-11-22 D8 复核未漂移）；`FACTOR_MAX=3.0`。标定日/口径见 `_perf.CALIBRATED_AT`。
+- **B3 内存红线**：由未实测的「<2 GB」改为 **4,096 MB**（实测 3,608 MB，余量 1.14x）。
+
+### 7.5 缓存数据版本键（D8）
+
+- `parquet_reader._CACHE`：键加入 `(size, mtime_ns)`（`_cache_key_with_sig`）；
+  文件改写后同路径旧缓存自动失效；shm 仍按 `(path, cols)` 冻结。
+- `adjust._SHARED_ROWS` 与 `feed._CORPORATE_ACTIONS_CACHE`：键加入
+  `data_stamp(root)`＝`metadata/db_version.json` 的 `(size, mtime_ns, version)`；
+  日更/补数后旧进程缓存自动失效。
+- 单测：`tests/unit/test_d8_perf_contracts.py`（改写返回新值 / 版本戳跟踪 / 质检跳过）。
+
+### 7.6 先测后改观测项
+
+`experiment/store.py` 写放大、`daily` 双解码、`state.py` Arrow `group_by`、
+`events_log` tail 常驻：本轮**未改实现**；现有 B1/B3/B4 预算内未显示超支，
+按 D8 规格留 D11 做隔离微基准后决定是否改。

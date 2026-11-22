@@ -7,6 +7,10 @@
 
 ### 新增（Added）
 
+- **REQ-20261121-06 全量审查修复（btf 侧）**：`meta` 指纹去 `mtime_ns` 并输出
+  `fingerprint_version=2`；`schemas`/`btf_datasets` 随 wheel；缓存键含文件版本与
+  `db_version` 戳；`gate.py` 全仓双 BOM 门禁；14/21/17/37/8 计数守卫；
+  `refresh-hash` 补 6 例；`btf_datasets` 缺失时 `ConfigError` 不静默。
 - **CC-2 基金 20% 档**：按「跟踪标的 × 时点」判定 ETF 涨跌幅上限（星 20% / 创 20% /
   其余 10%），来源表 `metadata/fund_basic.parquet`（19 号 §255；`2ecc28e`）
 - **`bt data quality --start/--end`**：区间质检明细（CC-1～CC-7，`--price-table` /
@@ -17,6 +21,9 @@
 
 ### 修复（Fixed）
 
+- **双 BOM 复发根因阻断**：重复 Trae 窗口重放 `_scratch/restore_b1.py` 导致三文件
+  反复加 BOM；脚本已删除、重复窗口关闭，`gate.py` 增加双 BOM 硬门禁。
+  另修 `services.py` feed 构造失败静默回落为 `[WARN]`。
 - **`config-check` 补 data 轴**：feed 名解析 ＋ `universe.source=explicit` 的
   feed↔标的 路由预检（与 `run` 同源）（19 号 §255；`7d81152`）
 - **`config-check` 失败态不再打印 `[ok]`**：改 `[fail]` ＋ 摘要，RC=0 输出逐字节不变
@@ -27,6 +34,10 @@
 
 ### 变更（Changed）
 
+- **全仓 `ruff format`（btf 238 文件，总计 377）**：纯格式化、无逻辑变更；
+  11 个单 BOM 文件按 `gate.py` 豁免，裸 `ruff format --check` 的告警属已知豁免。
+- **`mirror_json` 退役**：注册名保留，工厂/装配抛 `ConfigError("…已退役")`；
+  3 个工具标注退役并 `return 2`。
 - **`fund_basic` 换源解耦**：由孤儿快照 `fund/fund_basic_E.parquet` 改指日更
   `metadata/fund_basic.parquet`；拆掉为它专设的 `TableMeta.dir_name`/`file_name`
   与 `_file_stem()`；`_fund_meta` 按完整 `ts_code` 索引（19 号 §262；`7a5ec33`）

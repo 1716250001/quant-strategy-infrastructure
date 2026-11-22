@@ -17,6 +17,7 @@
 （DataVersionFingerprint 全库扫描与 B3 性能预算冲突），实测注入归 5.6
 黄金集/CLI dataset 命令。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -57,8 +58,7 @@ def _major(version: str) -> str:
 # ─────────────────────────────────────────────────────────────
 def canonical_json(obj: Any) -> str:
     """规范 JSON（键排序 + 紧凑分隔；确保跨进程同字节）。"""
-    return json.dumps(obj, sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":"), default=str)
+    return json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
 def sha256_hex(text: str, *, length: int | None = None) -> str:
@@ -93,14 +93,20 @@ def collect_code_version() -> dict[str, Any]:
     commit, dirty = "unknown", False
     try:
         head = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True,
-            timeout=5, check=False,
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
         )
         if head.returncode == 0 and head.stdout.strip():
             commit = head.stdout.strip()[:12]
             status = subprocess.run(
-                ["git", "status", "--porcelain"], capture_output=True,
-                text=True, timeout=10, check=False,
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
             )
             dirty = bool(status.returncode == 0 and status.stdout.strip())
     except (OSError, subprocess.SubprocessError):
@@ -108,7 +114,7 @@ def collect_code_version() -> dict[str, Any]:
     try:
         package = f"btf=={pkg_version('btf')}"
     except PackageNotFoundError:
-        package = f"btf=={__version__}"      # 未安装（源码直跑）回退包内版本
+        package = f"btf=={__version__}"  # 未安装（源码直跑）回退包内版本
     return {"git_commit": commit, "dirty": dirty, "package_version": package}
 
 
@@ -119,13 +125,13 @@ def collect_env_version() -> dict[str, Any]:
         try:
             libs[lib] = pkg_version(lib)
         except PackageNotFoundError:
-            continue        # 未安装即不登记（不伪造）
-    return {"python": platform.python_version(), "libs": libs,
-            "platform": sys.platform}
+            continue  # 未安装即不登记（不伪造）
+    return {"python": platform.python_version(), "libs": libs, "platform": sys.platform}
 
 
-def collect_data_version(config: Mapping[str, Any],
-                         fingerprint: str | None = None) -> dict[str, Any]:
+def collect_data_version(
+    config: Mapping[str, Any], fingerprint: str | None = None
+) -> dict[str, Any]:
     """数据版本：配置声明 + 可选实测指纹注入。
 
     **RC-14（2026-10-05）**：声明键归位到 `data.dataset.*`（`anchor_date` /
@@ -137,19 +143,24 @@ def collect_data_version(config: Mapping[str, Any],
     dataset_cfg = data_cfg.get("dataset") or {}
     return {
         "dataset": data_cfg.get("feed", "unknown"),
-        "anchor_date": (dataset_cfg.get("anchor_date")
-                        or data_cfg.get("anchor_date")),
-        "content_hash": (fingerprint or dataset_cfg.get("expected_hash")
-                         or data_cfg.get("expected_hash")
-                         or "sha256:unknown"),
+        "anchor_date": (dataset_cfg.get("anchor_date") or data_cfg.get("anchor_date")),
+        "content_hash": (
+            fingerprint
+            or dataset_cfg.get("expected_hash")
+            or data_cfg.get("expected_hash")
+            or "sha256:unknown"
+        ),
         "tables": list(data_cfg.get("tables") or []),
         "completeness_level": data_cfg.get("completeness_level", "L0"),
+        # G3/D6：记录指纹档位与口径版本（旧 manifest 无这两个键，读取端照常兼容）
+        "mode": str(data_cfg.get("fingerprint_mode") or "meta"),
+        "fingerprint_version": 2,
     }
 
 
-def _merge_data_version(config: Mapping[str, Any],
-                        fingerprint: str | None,
-                        override: Mapping[str, Any] | None) -> dict[str, Any]:
+def _merge_data_version(
+    config: Mapping[str, Any], fingerprint: str | None, override: Mapping[str, Any] | None
+) -> dict[str, Any]:
     """数据版本 = 配置/指纹回退 + **实测覆盖**（BB-1，19 号 §39.4 重路）。
 
     原 `data_version` 恒为占位（`content_hash="sha256:unknown"`）——**空洞披露**
@@ -165,8 +176,11 @@ def _merge_data_version(config: Mapping[str, Any],
 def collect_seed(config: Mapping[str, Any]) -> dict[str, Any]:
     """种子（08 §13.4：未设默认 0——调用方按策略是否含随机性决定是否告警）。"""
     seed = config.get("seed")
-    master = seed if isinstance(seed, int) else (
-        seed.get("master", 0) if isinstance(seed, Mapping) else 0)
+    master = (
+        seed
+        if isinstance(seed, int)
+        else (seed.get("master", 0) if isinstance(seed, Mapping) else 0)
+    )
     return {"master": master, "derived": {}}
 
 
@@ -241,8 +255,7 @@ class RunManifest:
         return cls(
             run_id=run_id or new_run_id(cfg_hash, now),
             status=STATUS_RUNNING,
-            data_version=_merge_data_version(config, data_fingerprint,
-                                             data_version),
+            data_version=_merge_data_version(config, data_fingerprint, data_version),
             code_version=collect_code_version(),
             config_hash=cfg_hash,
             config_effective=mask_config(config),
@@ -256,8 +269,7 @@ class RunManifest:
 
     def completed(self, metrics: Mapping[str, float]) -> RunManifest:
         """结束期补全（status=COMPLETED + metrics_digest=R1 锚）。"""
-        return replace(self, status=STATUS_COMPLETED,
-                       metrics_digest=metrics_digest_of(metrics))
+        return replace(self, status=STATUS_COMPLETED, metrics_digest=metrics_digest_of(metrics))
 
     def failed(self, reason: str) -> RunManifest:
         """失败终态（骨架已落盘——崩溃 run 仍可审计）。"""
@@ -302,9 +314,11 @@ class RunManifest:
         if _major(version) != _major(RUNRESULT_CONTRACT):
             raise ValueError(
                 f"manifest contract_version={version!r} 与本读取器不兼容"
-                f"（支持主版本 {RUNRESULT_CONTRACT!r}）——拒绝解析以免静默错值")
+                f"（支持主版本 {RUNRESULT_CONTRACT!r}）——拒绝解析以免静默错值"
+            )
         return cls(
-            run_id=data["run_id"], status=data.get("status", STATUS_RUNNING),
+            run_id=data["run_id"],
+            status=data.get("status", STATUS_RUNNING),
             contract_version=version,
             btf_contract_version=data.get("btf_contract_version", CONTRACT_VERSION),
             data_version=data.get("data_version") or {},

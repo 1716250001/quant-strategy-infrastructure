@@ -49,6 +49,7 @@ dividend 靠手动续命。危害形态 = 表内「无行」与「真无事件�
 ⚠ 陈旧监控落点：`tools/doctor.py` 第 10 项「事件面表」；
   归宿登记真源：`config.PERIODIC_UPDATE_TARGETS`（回归 R10 校验）。
 """
+
 import argparse
 import json
 import os
@@ -72,8 +73,16 @@ STATE_NAME = ".periodic_state.json"
 MAX_DATES_PER_RUN = 90
 
 #: 日期列归一化目标（源端 dtype 混杂：str / Timestamp / int）
-_DATE_COLS = ("start_date", "end_date", "ann_date", "ex_date",
-              "pay_date", "record_date", "imp_ann_date", "div_listdate")
+_DATE_COLS = (
+    "start_date",
+    "end_date",
+    "ann_date",
+    "ex_date",
+    "pay_date",
+    "record_date",
+    "imp_ann_date",
+    "div_listdate",
+)
 
 
 # ============================================================
@@ -112,11 +121,12 @@ def save_state(state):
 def _days(a, b):
     """YYYYMMDD 差值（b - a，自然日）；任一解析失败返回 None。"""
     try:
-        return (datetime.strptime(str(b), "%Y%m%d")
-                - datetime.strptime(str(a), "%Y%m%d")).days
+        return (datetime.strptime(str(b), "%Y%m%d") - datetime.strptime(str(a), "%Y%m%d")).days
     except Exception as exc:
-        print(f"[fetch.periodic_update] 日期差解析失败 {a!r}/{b!r}: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fetch.periodic_update] 日期差解析失败 {a!r}/{b!r}: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -149,8 +159,10 @@ def data_recency(table, col, max_files=3):
         try:
             s = pd.read_parquet(os.path.join(d, f), columns=[col])[col]
         except Exception as exc:
-            print(f"[fetch.periodic_update] 读分片失败 {f}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[fetch.periodic_update] 读分片失败 {f}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             continue
         if not len(s):
             continue
@@ -193,8 +205,7 @@ def pull_window(spec, recency):
     """
     end = _today()
     lookback = int(spec.get("lookback_days", 60))
-    floor = (datetime.strptime(end, "%Y%m%d")
-             - timedelta(days=lookback)).strftime("%Y%m%d")
+    floor = (datetime.strptime(end, "%Y%m%d") - timedelta(days=lookback)).strftime("%Y%m%d")
     if not recency:
         start = floor
     else:
@@ -278,9 +289,11 @@ def fetch_by_date(pro, limiter, name, spec, start, end, verbose=True):
     """
     dates = _natural_dates(start, end)
     if len(dates) > MAX_DATES_PER_RUN:
-        print(f"    [WARN] 窗口内 {len(dates)} 个自然日 > 单次上限 "
-              f"{MAX_DATES_PER_RUN}，本次只拉最近 {MAX_DATES_PER_RUN} 天"
-              f"（剩余窗口下次运行继续）")
+        print(
+            f"    [WARN] 窗口内 {len(dates)} 个自然日 > 单次上限 "
+            f"{MAX_DATES_PER_RUN}，本次只拉最近 {MAX_DATES_PER_RUN} 天"
+            f"（剩余窗口下次运行继续）"
+        )
         dates = dates[-MAX_DATES_PER_RUN:]
     page = int(spec.get("page_size") or 0)
     frames = []
@@ -323,8 +336,10 @@ def _completed_codes(name, filename=".backfill_checkpoint.json"):
                 data = json.load(f)
             _CKPT_CACHE[filename] = data if isinstance(data, dict) else {}
         except Exception as exc:
-            print(f"[fetch.periodic_update] 读断点失败（按空处理）{p}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[fetch.periodic_update] 读断点失败（按空处理）{p}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             _CKPT_CACHE[filename] = {}
     return set((_CKPT_CACHE[filename].get(name) or {}).get("completed", []))
 
@@ -386,8 +401,9 @@ def fill_missing_codes(name, spec, pro, limiter, dry_run=False, verbose=False):
     failed: list[str] = []
     max_rows = int(conf.get("max_rows", 5000) or 5000)
     for i, code in enumerate(missing, 1):
-        df, ok = ts_fetch(pro, spec.get("api", name), limiter, code,
-                          max_rows=max_rows, verbose=verbose)
+        df, ok = ts_fetch(
+            pro, spec.get("api", name), limiter, code, max_rows=max_rows, verbose=verbose
+        )
         if not ok:
             failed.append(code)
             continue
@@ -397,29 +413,40 @@ def fill_missing_codes(name, spec, pro, limiter, dry_run=False, verbose=False):
             if col in d2.columns:
                 d2 = d2[d2[col].notna()]
                 if len(d2) and not dry_run:
-                    r = upsert_by_year(d2, os.path.join(MARKET_DATA_DIR, name),
-                                       date_col=col, subset=spec["subset"],
-                                       sort_by=col)
+                    r = upsert_by_year(
+                        d2,
+                        os.path.join(MARKET_DATA_DIR, name),
+                        date_col=col,
+                        subset=spec["subset"],
+                        sort_by=col,
+                    )
                     if r.get("fail"):
-                        failed.append(code)     # 分区写失败 ⇒ 计入失败，不记断点
+                        failed.append(code)  # 分区写失败 ⇒ 计入失败，不记断点
                         continue
                     n_rows += int(r.get("added", 0))
-        n_ok += 1                        # 分区失败已在上面 continue，此处才是真成功
+        n_ok += 1  # 分区失败已在上面 continue，此处才是真成功
         if cp is not None:
-            cp.mark_done(name, code)        # 成功（含返空）即记断点
+            cp.mark_done(name, code)  # 成功（含返空）即记断点
         if i % 10 == 0 or i == len(missing):
             print(f"      [{i}/{len(missing)}] 新增 {n_rows} 行")
     if cp is not None:
         cp.save()
-        _CKPT_CACHE.pop(".backfill_checkpoint.json", None)   # 写后失效只读缓存
+        _CKPT_CACHE.pop(".backfill_checkpoint.json", None)  # 写后失效只读缓存
     return n_ok, n_rows, failed
 
 
 # ============================================================
 # 主流程
 # ============================================================
-def run_periodic_update(only=None, dry_run=False, force=False, status_only=False,
-                        verbose=False, quiet=False, record_version=True):
+def run_periodic_update(
+    only=None,
+    dry_run=False,
+    force=False,
+    status_only=False,
+    verbose=False,
+    quiet=False,
+    record_version=True,
+):
     """执行周期性更新。返回 {表名: 结果字典}。
 
     参数:
@@ -447,8 +474,10 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
     if not quiet:
         print("=" * 78)
         print("  事件面表 · 周期性更新（config.PERIODIC_UPDATE_TARGETS）")
-        print(f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-              f"{'  [DRY-RUN]' if dry_run else ''}")
+        print(
+            f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            f"{'  [DRY-RUN]' if dry_run else ''}"
+        )
         print("=" * 78)
         print(f"  {'表':14s} {'库内最新':>10s} {'落后':>5s}  判定")
         print("-" * 78)
@@ -466,9 +495,11 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
             due, why = True, f"未回补标的 {len(miss)} 只（断点口径）"
         if not quiet:
             extra = f" | 未回补 {len(miss)} 只" if miss else ""
-            print(f"  {name:14s} {recency or '无数据':>10s} "
-                  f"{(str(age) if age is not None else '-'):>5s}  "
-                  f"{'[到期]' if due else '[跳过]'} {why}{extra}")
+            print(
+                f"  {name:14s} {recency or '无数据':>10s} "
+                f"{(str(age) if age is not None else '-'):>5s}  "
+                f"{'[到期]' if due else '[跳过]'} {why}{extra}"
+            )
         if due:
             plan.append((name, spec, recency, why, len(miss)))
 
@@ -490,15 +521,24 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
             if not quiet:
                 print(f"\n  [{name}] 已是最新（窗口为空），跳过")
             state.setdefault(name, {}).update(
-                {"last_run": _today(), "last_why": why,
-                 "last_window": None, "last_rows_pulled": 0,
-                 "last_rows_added": 0, "last_requests": 0})
+                {
+                    "last_run": _today(),
+                    "last_why": why,
+                    "last_window": None,
+                    "last_rows_pulled": 0,
+                    "last_rows_added": 0,
+                    "last_requests": 0,
+                }
+            )
             results[name] = {"skipped": "窗口为空"}
             continue
 
         before = limiter.total_requests
         n_pulled = added = 0
         start = end = None
+        window_ok = True  # D4：窗口成功 ∧ _prepare 无 err ∧ 分区 fail=0
+        err_msg = None
+        source_empty = False
         if window is None:
             print(f"\n  [{name}] 事件窗口已最新；仅补未回补标的 — {why}")
         else:
@@ -506,17 +546,27 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
             print(f"\n  [{name}] 窗口 ({start}, {end}] — {why}")
             try:
                 if spec["pull"] == "by_range":
-                    df = fetch_by_range(pro, limiter, name, spec, start, end,
-                                        verbose=verbose)
+                    df = fetch_by_range(pro, limiter, name, spec, start, end, verbose=verbose)
                 else:
-                    df = fetch_by_date(pro, limiter, name, spec, start, end,
-                                       verbose=verbose)
+                    df = fetch_by_date(pro, limiter, name, spec, start, end, verbose=verbose)
             except Exception as e:
-                print(f"    [ERROR] 取数失败: {type(e).__name__}: {str(e)[:100]}")
+                window_ok = False
+                err_msg = f"取数失败: {type(e).__name__}: {str(e)[:100]}"
+                print(f"    [ERROR] {err_msg}")
                 results[name] = {"error": str(e)[:120]}
+                if not dry_run:
+                    state.setdefault(name, {}).update(
+                        {
+                            "last_attempt": _today(),
+                            "last_why": why,
+                            "last_error": err_msg,
+                        }
+                    )
                 continue
             df, n_pulled, n_dropped, err = _prepare(df, spec)
             if err:
+                window_ok = False
+                err_msg = err
                 results[name] = {"error": err}
                 # ⚠ 仍继续到补码段（窗口失败不该连带放弃独立的补码缺口）
                 df = None
@@ -524,21 +574,27 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
                 print(f"    拉到 {n_pulled} 行（丢弃 {n_dropped}）→ 落盘合并")
                 if not dry_run:
                     r = upsert_by_year(
-                        df, os.path.join(MARKET_DATA_DIR, name),
-                        date_col=spec["date_col"], subset=spec["subset"],
-                        sort_by=spec["date_col"])
+                        df,
+                        os.path.join(MARKET_DATA_DIR, name),
+                        date_col=spec["date_col"],
+                        subset=spec["subset"],
+                        sort_by=spec["date_col"],
+                    )
                     added = int(r.get("added", 0))
                     if r.get("fail"):
-                        print(f"    [ERROR] {r['fail']} 个年份分区写入失败")
+                        window_ok = False
+                        err_msg = f"分区写入失败 {r['fail']} 个"
+                        print(f"    [ERROR] {err_msg}")
                         results[name] = {"error": "分区写入失败", **r}
-                        continue
-                    print(f"    新增 {added} 行（幂等：重复拉取不再增行）")
+                    else:
+                        print(f"    新增 {added} 行（幂等：重复拉取不再增行）")
                 else:
                     print("    [DRY-RUN] 不落盘")
             elif not err:
                 # 源端返空（窗口内无公告）与"列缺失"必须分述——前者正常，后者
                 # 已在 `_prepare` 打过 ERROR（2026-10-11：二者混用会让"无公告日"
                 # 被读成"数据损坏"，并连带跳过补码段）。
+                source_empty = True
                 print("    窗口内无数据（源端返空；不落盘）")
 
         # ── 未回补标的补齐（与窗口无关的独立缺口；断点口径）──
@@ -547,29 +603,59 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
         if n_miss:
             try:
                 n_codes, n_code_rows, code_failed = fill_missing_codes(
-                    name, spec, pro, limiter, dry_run=dry_run, verbose=verbose)
+                    name, spec, pro, limiter, dry_run=dry_run, verbose=verbose
+                )
             except Exception as e:
                 print(f"    [ERROR] 补码失败: {type(e).__name__}: {str(e)[:100]}")
                 code_failed = [f"exception: {str(e)[:80]}"]
             if dry_run:
                 print(f"    [DRY-RUN] 未回补标的 {n_miss} 只不写盘/不记断点")
             else:
-                print(f"    补码完成: {n_codes}/{n_miss} 只 | 新增 {n_code_rows} 行"
-                      + (f" | 失败 {len(code_failed)}" if code_failed else ""))
+                print(
+                    f"    补码完成: {n_codes}/{n_miss} 只 | 新增 {n_code_rows} 行"
+                    + (f" | 失败 {len(code_failed)}" if code_failed else "")
+                )
 
         if not dry_run:
             req = limiter.total_requests - before
-            state.setdefault(name, {}).update({
-                "last_run": _today(), "last_why": why,
+            ok_all = window_ok and not code_failed
+            rec = {
+                "last_why": why,
                 "last_window": ([start, end] if start else None),
-                "last_rows_pulled": n_pulled, "last_rows_added": added,
-                "last_codes_filled": n_codes, "last_code_rows_added": n_code_rows,
-                "last_requests": req})
-            results[name] = {"window": ([start, end] if start else None),
-                             "pulled": n_pulled, "added": added,
-                             "codes_filled": n_codes,
-                             "code_rows_added": n_code_rows,
-                             "code_failed": code_failed, "requests": req}
+                "last_rows_pulled": 0 if source_empty else n_pulled,
+                "last_rows_added": added,
+                "last_codes_filled": n_codes,
+                "last_code_rows_added": n_code_rows,
+                "last_requests": req,
+            }
+            st = state.setdefault(name, {})
+            if ok_all:
+                rec.update({"last_run": _today(), "source_empty": bool(source_empty)})
+                st.update(rec)
+                # 成功即清除上次失败痕迹，避免"一次失败永久红"
+                st.pop("last_error", None)
+                st.pop("last_code_failed", None)
+            else:
+                rec.update(
+                    {
+                        "last_attempt": _today(),
+                        "last_error": err_msg
+                        or (f"{len(code_failed)} 只补码失败" if code_failed else "未知失败"),
+                        "last_code_failed": code_failed[:20],
+                    }
+                )
+                st.update(rec)
+            results[name] = {
+                "window": ([start, end] if start else None),
+                "pulled": n_pulled,
+                "added": added,
+                "codes_filled": n_codes,
+                "code_rows_added": n_code_rows,
+                "code_failed": code_failed,
+                "requests": req,
+                "ok": ok_all,
+                "source_empty": source_empty,
+            }
 
     if not dry_run and plan:
         save_state(state)
@@ -577,18 +663,17 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
         # ── 库版本（08 §13.5；仅**独立运行**时记——被日更内嵌时由日更统一记，
         #    见 record_version 参数；只记真正处理过的表，跳过的不算变更）──
         if record_version:
-            changed = [n for n, r in results.items()
-                       if isinstance(r, dict) and "skipped" not in r]
+            changed = [n for n, r in results.items() if isinstance(r, dict) and "skipped" not in r]
             if changed:
                 try:
                     from common.db_version import record as _dbv
+
                     _dbv(changed, note="事件面表周期通道")
                 except Exception as e:
                     print(f"  [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")
 
     if not quiet:
-        print(f"\n  完成: {len(results)}/{len(plan)} 张表 | "
-              f"总耗时 {time.time() - t0:.1f}s")
+        print(f"\n  完成: {len(results)}/{len(plan)} 张表 | 总耗时 {time.time() - t0:.1f}s")
         if hasattr(limiter, "status_str"):
             print(f"  {limiter.status_str()}")
     return results
@@ -599,16 +684,18 @@ def run_periodic_update(only=None, dry_run=False, force=False, status_only=False
 # ============================================================
 def main(argv=None):
     p = argparse.ArgumentParser(
-        description="事件面表周期性更新（fetch/periodic_update；E-01 通道）")
+        description="事件面表周期性更新（fetch/periodic_update；E-01 通道）"
+    )
     p.add_argument("--only", default=None, help="只跑指定表, 逗号分隔")
     p.add_argument("--force", action="store_true", help="无视间隔强制更新")
     p.add_argument("--dry-run", action="store_true", help="取数但不落盘")
     p.add_argument("--status", action="store_true", help="只看状态（零请求）")
     p.add_argument("--verbose", action="store_true", help="打印每次 API 重试日志")
     a = p.parse_args(argv)
-    r = run_periodic_update(only=a.only, dry_run=a.dry_run, force=a.force,
-                            status_only=a.status, verbose=a.verbose)
-    return 0 if not any("error" in v for v in r.values()) else 1
+    r = run_periodic_update(
+        only=a.only, dry_run=a.dry_run, force=a.force, status_only=a.status, verbose=a.verbose
+    )
+    return 0 if all("error" not in v and v.get("ok", True) for v in r.values()) else 1
 
 
 if __name__ == "__main__":

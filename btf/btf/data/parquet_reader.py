@@ -11,8 +11,10 @@
     - 旧写法 glob(dir/*.parquet) 拿到的是年份列表而非数据——本读取器按布局
       显式解析，by_year 目录中的非 YYYY.parquet 文件直接报错。
 """
+
 from __future__ import annotations
 
+import json
 import os
 import re
 from bisect import bisect_right
@@ -54,16 +56,13 @@ _CACHE_TABLES = frozenset({"daily", "fina_indicator", "adj_factor", "fund_adj"})
 #: 整年表会放大内存；它改为"**仅当列组合命中既有整表键**（9 列＝引擎/shm 口径）
 #: 才走缓存"，否则保持 filters 直读（行为与旧版逐位一致）。
 _READ_WHERE_CACHE_TABLES = frozenset({"adj_factor", "fund_adj"})
-_CACHE: OrderedDict[
-    tuple[str, tuple[str, ...] | None], tuple[object, int]] = OrderedDict()
+_CACHE: OrderedDict[tuple[str, int, int, tuple[str, ...] | None], tuple[object, int]] = (
+    OrderedDict()
+)
 _CACHE_BYTES = 0
-_CACHE_HITS = 0
-_CACHE_MISSES = 0
-_CACHE_EVICTIONS = 0
 #: T-1 预算 1024→1536 MB：`daily` 969 ＋ `adj_factor` ~420 ＋ `fina` 14 ≈ 1.4 GB
 #: （实测 §回执）；不提高会把 `daily` 挤出预算（P-1 首版 578 次读盘的教训）。
 _CACHE_MB_DEFAULT = 1536.0
-_CACHE_REJECTED: dict[str, int] = {}
 #: P-7（19 号 §215/§220）：worker 由父进程共享的**只读**年表（键 = 本地缓存键）。
 #: 命中直接返回（零拷贝）；`bt run` 单进程时永远为空（走 P-1″ 原路径）。
 _SHM_TABLES: dict[tuple[str, tuple[str, ...] | None], object] = {}
@@ -95,24 +94,65 @@ def _cache_budget_bytes() -> int:
     return max(0, int(mb * 1024 * 1024))
 
 
-def read_cache_stats() -> dict[str, object]:
-    """缓存自证（P1″-4）：命中/未命中/条目/字节/淘汰/被拒表计数/ shm 条目。"""
-    return {"hits": _CACHE_HITS, "misses": _CACHE_MISSES,
-            "entries": len(_CACHE), "bytes": _CACHE_BYTES,
-            "evictions": _CACHE_EVICTIONS, "shm_entries": len(_SHM_TABLES),
-            "rejected": sorted(_CACHE_REJECTED.items(), key=lambda kv: -kv[1])[:3]}
-
-
 def _cache_key(path: Path, kwargs: dict) -> tuple[str, tuple[str, ...] | None] | None:
     """缓存键；非白名单表/含其它参数（filters 等）→ None（不入缓存也不命中）。"""
     if set(kwargs) - {"columns", "memory_map"}:
         return None
     table_name = path.parent.name
     if table_name not in _CACHE_TABLES:
-        _CACHE_REJECTED[table_name] = _CACHE_REJECTED.get(table_name, 0) + 1
         return None
     cols = kwargs.get("columns")
     return (str(path), None if cols is None else tuple(cols))
+
+
+def _cache_key_with_sig(
+    path: Path,
+    kwargs: dict,
+) -> tuple[tuple[str, int, int, tuple[str, ...] | None], tuple[str, tuple[str, ...] | None]] | None:
+    """D8：缓存键加入 `(size, mtime_ns)`，主库文件被改写后旧缓存自动失效。
+
+    返回 `(带版本键, 原键)`；原键仍供 shm 登记/查询（shm 是进程内冻结快照，
+    键不含 stat——同一路径的 shm 不随磁盘变化，符合「一次 run 内只读」纪律）。
+    """
+    key = _cache_key(path, kwargs)
+    if key is None:
+        return None
+    try:
+        st = path.stat()
+    except OSError:  # 文件消失：退化为直读
+        return None
+    return (key[0], st.st_size, st.st_mtime_ns, key[1]), key
+
+
+#: `db_version.json` 版本戳 memo：键 = 文件路径，值 = ((size, mtime_ns), stamp)。
+#: 每次调用只做一次 stat；日更写入新版本后 stat 变化 ⇒ 重读版本号。
+_STAMP_MEMO: dict[str, tuple[tuple[int, int], tuple[int, int, str]]] = {}
+
+
+def data_stamp(root: Path | str) -> tuple[int, int, str]:
+    """主库版本戳 `(size, mtime_ns, version)`；缺失/不可读 ⇒ `(0, 0, "")`。
+
+    D8：`adjust._SHARED_ROWS` / `feed._CORPORATE_ACTIONS_CACHE` 的键加入本戳，
+    主库日更（`metadata/db_version.json` 更新）后旧缓存自动失效。
+    """
+    path = Path(root) / "metadata" / "db_version.json"
+    try:
+        st = path.stat()
+    except OSError:
+        return (0, 0, "")
+    sig = (st.st_size, st.st_mtime_ns)
+    memo = _STAMP_MEMO.get(str(path))
+    if memo is not None and memo[0] == sig:
+        return memo[1]
+    version = ""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        version = str(payload.get("version") or "") if isinstance(payload, dict) else ""
+    except (OSError, ValueError):
+        version = ""
+    stamp = (sig[0], sig[1], version)
+    _STAMP_MEMO[str(path)] = (sig, stamp)
+    return stamp
 
 
 def _read(path: Path, /, **kwargs):
@@ -132,16 +172,17 @@ def _read(path: Path, /, **kwargs):
 
     try:
         in_master = path.resolve().is_relative_to(Path(MARKET_DATA_DIR).resolve())
-    except OSError:                                  # pragma: no cover
+    except OSError:  # pragma: no cover
         in_master = False
     if in_master:
         kwargs.setdefault("memory_map", True)
-    key = _cache_key(path.resolve(), kwargs) if in_master else None
-    if key is None:                                  # 非主库/白名单外/带 filters → 不缓存
+    keyed = _cache_key_with_sig(path.resolve(), kwargs) if in_master else None
+    if keyed is None:  # 非主库/白名单外/带 filters → 不缓存
         return pq.read_table(path, **kwargs)
-    shm = _SHM_TABLES.get(key)                       # P-7：shm 命中优先（零拷贝）
-    if shm is None:                                  # P-7b：列集子集 → select 投影
-        entry = _SHM_BY_PATH.get(key[0])
+    key, base_key = keyed
+    shm = _SHM_TABLES.get(base_key)  # P-7：shm 命中优先（零拷贝）
+    if shm is None:  # P-7b：列集子集 → select 投影
+        entry = _SHM_BY_PATH.get(base_key[0])
         cols = kwargs.get("columns")
         if entry is not None and cols is not None:
             spec_cols, spec_table = entry
@@ -149,13 +190,11 @@ def _read(path: Path, /, **kwargs):
                 shm = spec_table.select(list(cols))
     if shm is not None:
         return shm
-    global _CACHE_HITS, _CACHE_MISSES, _CACHE_BYTES, _CACHE_EVICTIONS
+    global _CACHE_BYTES
     hit = _CACHE.get(key)
     if hit is not None:
         _CACHE.move_to_end(key)
-        _CACHE_HITS += 1
         return hit[0]
-    _CACHE_MISSES += 1
     table = pq.read_table(path, **kwargs)
     budget = _cache_budget_bytes()
     size = int(getattr(table, "nbytes", 0) or 0)
@@ -165,7 +204,6 @@ def _read(path: Path, /, **kwargs):
         while _CACHE_BYTES > budget and _CACHE:
             _old_key, (_old_table, old_size) = _CACHE.popitem(last=False)
             _CACHE_BYTES -= old_size
-            _CACHE_EVICTIONS += 1
     return table
 
 
@@ -199,11 +237,12 @@ def _concat_unified(parts: list) -> object:
             elif pa.types.is_null(other):
                 continue
             elif {str(cur), str(other)} == {"string", "large_string"}:
-                types[i] = pa.string()          # 互通：统一 string（cast 无损）
+                types[i] = pa.string()  # 互通：统一 string（cast 无损）
             else:
                 raise ReaderError(
                     f"年文件列类型不可统一: {names[i]} {cur} vs {other}"
-                    "（读取器只容忍 null/large_string 异构）")
+                    "（读取器只容忍 null/large_string 异构）"
+                )
     target = pa.schema([pa.field(n, t) for n, t in zip(names, types, strict=True)])
     return pa.concat_tables([p.cast(target) for p in parts])
 
@@ -314,12 +353,17 @@ def read_range(
         if t.num_rows:
             parts.append(t)
 
-
     if not parts:
         # 空结果：以列名构造空表（保持 schema 可预期；调用方按 num_rows==0 处理）
         schema_cols = wanted or peek_columns(table, root)
-        return pa.table({c: pa.array([], type=pa.string()) if c in (date_col, "ts_code")
-                         else pa.array([], type=pa.float64()) for c in schema_cols})
+        return pa.table(
+            {
+                c: pa.array([], type=pa.string())
+                if c in (date_col, "ts_code")
+                else pa.array([], type=pa.float64())
+                for c in schema_cols
+            }
+        )
     return _concat_unified(parts)
 
 
@@ -420,8 +464,7 @@ def sort_by_date_int32(table, date_col: str = "trade_date"):
     import pyarrow as pa
 
     d = table.column(date_col).cast(pa.int32())
-    idx = pc.sort_indices(pa.table({date_col: d}),
-                          sort_keys=[(date_col, "ascending")])
+    idx = pc.sort_indices(pa.table({date_col: d}), sort_keys=[(date_col, "ascending")])
     return table.take(idx)
 
 
@@ -467,8 +510,7 @@ def iter_day_slices(
     if date_col is None:
         raise ReaderError(f"表 {table} 无日期列（静态表）")
     wanted = list(columns) if columns is not None else None
-    subset: list[str] | None = (
-        sorted(set(symbols)) if symbols is not None else None)
+    subset: list[str] | None = sorted(set(symbols)) if symbols is not None else None
 
     y0, y1 = int(start_ymd[:4]), int(end_ymd[:4])
     for year, path in _list_year_files(meta, root):
@@ -480,18 +522,18 @@ def iter_day_slices(
         if subset is not None and "ts_code" in t.column_names:
             import pyarrow as pa
 
-            t = t.filter(pc.is_in(
-                t.column("ts_code"),
-                value_set=pa.array(subset,
-                                   type=t.schema.field("ts_code").type)))
+            t = t.filter(
+                pc.is_in(
+                    t.column("ts_code"),
+                    value_set=pa.array(subset, type=t.schema.field("ts_code").type),
+                )
+            )
             if t.num_rows == 0:
                 continue
         # 快路径（docstring 证据 ①）：ts_code 全局升序 → 稳定单键排序与双键逐行等价
         ts = t.column("ts_code")
         m = ts.length()
-        ts_sorted = m <= 1 or bool(
-            pc.all(pc.less_equal(ts.slice(0, m - 1), ts.slice(1))).as_py()
-        )
+        ts_sorted = m <= 1 or bool(pc.all(pc.less_equal(ts.slice(0, m - 1), ts.slice(1))).as_py())
         keys = (
             [(date_col, "ascending")]
             if ts_sorted
@@ -503,8 +545,8 @@ def iter_day_slices(
             first = str(t.column(date_col)[0].as_py())
             if not first.isdigit() or len(first) != 8:
                 raise ReaderError(
-                    f"{table}/{year}: {date_col} 非 8 位 YYYYMMDD（{first!r}），"
-                    "int32 排序键不安全")
+                    f"{table}/{year}: {date_col} 非 8 位 YYYYMMDD（{first!r}），int32 排序键不安全"
+                )
             t = sort_by_date_int32(t, date_col)
         else:
             # 非升序回退：**保持原双键语义**，不得走 int32 快路径（次键稳定性未证）
@@ -545,8 +587,7 @@ class FileMeta:
     stats: tuple[tuple[int, str, Any, Any], ...]
 
 
-def table_files(table: str, root: Path, *,
-                years: Sequence[int] | None = None) -> list[Path]:
+def table_files(table: str, root: Path, *, years: Sequence[int] | None = None) -> list[Path]:
     """表文件清单（升序；`years` 仅对 by_year 布局生效）。
 
     布局（`tables_meta.Layout`）：BY_YEAR → `root/{table}/YYYY.parquet`；
@@ -568,8 +609,7 @@ def table_files(table: str, root: Path, *,
     return [_resolve_root(meta, root) / f"{table}.parquet"]
 
 
-def file_stems(table: str, root: Path, *,
-               years: Sequence[int] | None = None) -> list[str]:
+def file_stems(table: str, root: Path, *, years: Sequence[int] | None = None) -> list[str]:
     """文件标识清单（by_year 布局 = 年份字符串；single/metadata = 表名）。
 
     供"逐文件读 schema/数据"的调用方（版本指纹 fast/full 档）**不接触 Path**。
@@ -577,8 +617,9 @@ def file_stems(table: str, root: Path, *,
     return [p.stem for p in table_files(table, root, years=years)]
 
 
-def read_file(table: str, root: Path, *, year: int | None = None,
-              columns: Sequence[str] | None = None):
+def read_file(
+    table: str, root: Path, *, year: int | None = None, columns: Sequence[str] | None = None
+):
     """单文件读取（低层；**文件缺失 → None**，不抛——调用方语义自理）。
 
     by_year 布局须给 `year`；single/metadata 布局忽略 `year`。
@@ -597,8 +638,7 @@ def read_file(table: str, root: Path, *, year: int | None = None,
     return _read(path, columns=list(columns) if columns else None)
 
 
-def schema_names(table: str, root: Path, *,
-                 year: int | None = None) -> list[str]:
+def schema_names(table: str, root: Path, *, year: int | None = None) -> list[str]:
     """列名清单（读 schema，零数据代价）；无文件 → `[]`。"""
     meta = TABLES.get(table)
     if meta is None:
@@ -613,8 +653,7 @@ def schema_names(table: str, root: Path, *,
     return []
 
 
-def file_metas(table: str, root: Path, *,
-               years: Sequence[int] | None = None) -> list[FileMeta]:
+def file_metas(table: str, root: Path, *, years: Sequence[int] | None = None) -> list[FileMeta]:
     """逐文件元数据（行数/行组/行组列统计/字节数/mtime）——**不读数据页**。
 
     用于版本指纹 `meta` 档（BB-1）：数据被重写 → mtime/大小/统计至少之一变化。
@@ -634,10 +673,16 @@ def file_metas(table: str, root: Path, *,
                 if s is None or not s.has_min_max:
                     continue
                 stats.append((gi, col.path_in_schema, s.min, s.max))
-        out.append(FileMeta(
-            stem=p.stem, size=st.st_size, mtime_ns=st.st_mtime_ns,
-            num_rows=md.num_rows or 0, num_row_groups=md.num_row_groups or 0,
-            stats=tuple(stats)))
+        out.append(
+            FileMeta(
+                stem=p.stem,
+                size=st.st_size,
+                mtime_ns=st.st_mtime_ns,
+                num_rows=md.num_rows or 0,
+                num_row_groups=md.num_row_groups or 0,
+                stats=tuple(stats),
+            )
+        )
     return out
 
 
@@ -653,8 +698,9 @@ def _stat_text(value: Any) -> str | None:
     return value
 
 
-def column_bounds(table: str, root: Path, *, year: int | None,
-                  column: str) -> tuple[str, str] | None:
+def column_bounds(
+    table: str, root: Path, *, year: int | None, column: str
+) -> tuple[str, str] | None:
     """单列极值：**footer 行组统计聚合**（不读数据页）；不可用 → None。
 
     T-2（19 号 §233-B／§234）：`version.compute` 的 fast 档只需 `date_min`/
@@ -690,7 +736,7 @@ def column_bounds(table: str, root: Path, *, year: int | None,
     idx = schema.names.index(column)
     md = pf.metadata
     if md.num_columns != len(schema.names):
-        return None                      # 嵌套 schema：列序不保证与 arrow 字段一致
+        return None  # 嵌套 schema：列序不保证与 arrow 字段一致
     lo: str | None = None
     hi: str | None = None
     for gi in range(md.num_row_groups or 0):
@@ -711,8 +757,12 @@ def column_bounds(table: str, root: Path, *, year: int | None,
 
 
 def read_year_where(
-    table: str, root: Path, *, year: int,
-    columns: Sequence[str] | None, key_values: Sequence[str],
+    table: str,
+    root: Path,
+    *,
+    year: int,
+    columns: Sequence[str] | None,
+    key_values: Sequence[str],
 ):
     """小标的集整年读取（T-1／19 号 §232-A）：**白名单表走整表缓存＋内存过滤**。
 
@@ -738,16 +788,17 @@ def read_year_where(
         return None
     cols = list(columns) if columns else None
     key = (str(path.resolve()), None if cols is None else tuple(cols))
-    if (table in _READ_WHERE_CACHE_TABLES
-            or key in _SHM_TABLES or key in _CACHE):
+    hit_cache = False
+    if key not in _SHM_TABLES and table not in _READ_WHERE_CACHE_TABLES:
+        keyed = _cache_key_with_sig(Path(key[0]), {"columns": cols})
+        hit_cache = keyed is not None and keyed[0] in _CACHE
+    if table in _READ_WHERE_CACHE_TABLES or key in _SHM_TABLES or hit_cache:
         t = _read(path, columns=cols)
         if t is not None and "ts_code" in t.column_names:
             # P1（§241）：单标的走 `equal`（symbol_range 逐标的一次）；
             # 多标的仍 `is_in`（红线 1：不得只取首元素）
-            return t.filter(_code_mask(t.column("ts_code"),
-                                       sorted(key_values), pa))
-    return pq.read_table(path, columns=cols,
-                         filters=[("ts_code", "in", list(key_values))])
+            return t.filter(_code_mask(t.column("ts_code"), sorted(key_values), pa))
+    return pq.read_table(path, columns=cols, filters=[("ts_code", "in", list(key_values))])
 
 
 __all__ = [

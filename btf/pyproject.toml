@@ -12,9 +12,13 @@ requires-python = ">=3.13"
 # 槽位变更留痕（ADR-11）：matplotlib 预占槽位于 M1 回收（PNG/PDF 导出
 # 属 M2 5.8，届时按 plotly 原生导出 or 预算例外 ADR 重评）；PyYAML
 # 入预算（06 §11.5 用户层 YAML 配置的解析器，07 §12.11 原清单遗漏项）
+# G3/D7 留痕：pyarrow / numpy 为**基础运行时依赖**（Parquet 读写与质检
+# 数值计算），不占 §12.11 的「插件/可选」预算槽位；见 tools/deps_budget.py
 dependencies = [
     "jsonschema>=4.23",        # 1/8 配置校验（ADR-4）
     "pyyaml>=6.0",             # 2/8 用户层 YAML 配置解析（ADR-11）
+    "pyarrow>=15.0",           # 基础运行时：Parquet 读写（11 文件 import）
+    "numpy>=2.1",              # 基础运行时：质检/指标数值计算
 ]
 
 [project.optional-dependencies]
@@ -35,6 +39,15 @@ bt = "btf.cli.main:main"
 
 [tool.setuptools.packages.find]
 include = ["btf*", "examples*"]
+
+# G3/D7：随包资源——JSON Schema 与 btf_datasets（黄金案例 + corp_actions.json）。
+# 体量约 1.3 MB（18 个 JSON），可接受，不做运行时降级。
+[tool.setuptools.package-data]
+btf = [
+    "schemas/*.json",
+    "btf_datasets/*/*.json",
+    "btf_datasets/*/*/*.json",
+]
 
 [tool.setuptools.dynamic]
 # 运行时版本 = 包内唯一真源（纯字面量，setuptools 可静态解析，无需 import 包）

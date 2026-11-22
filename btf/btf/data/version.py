@@ -6,17 +6,23 @@
     固定抽样规则保证确定性（同数据→同指纹；数据变化→指纹变化）。
 
 两档模式（+ BB-1 新增的元数据档）：
-    meta  —— **仅读 Parquet 元数据**（行数 / 行组统计 min-max / 文件大小 / mtime）：
+    meta  —— **仅读 Parquet 元数据**（行数 / 行组统计 min-max / 文件大小；
+             **不含 mtime**，G3/D6 起 fingerprint_version=2）：
              毫秒级、零数据页读取（BB-1 缺省档；"结构 + 文件级"指纹）。
     fast  —— 仅读取 (date_col, ts_code) 两列：行数+日期范围+键列抽样哈希；
              全库 17 表实测秒级（PoC-1 验证点：[待验证] 落定）；大表（千万行级）
              实测 6 表 × 10 年 ≈ 7.2s（BB-1 实测），故不作缺省。
     full  —— 全列抽样哈希（**数据修正检测**用；耗时随列数增长）。
 
+`fingerprint_version=2` 的语义（D9 澄清）：它是**口径/结构版本**，只表示
+meta 档已剔除 mtime（G3/D6）；**fast/full 的抽样算法未变**——同一数据在
+v1 与 v2 下 fast/full 的 `sample_hash` 逐位一致，历史 manifest 仍可按版本号解读。
+
 用法：
     fp = DataVersionFingerprint.compute(["daily", "stk_limit"], root)
     fp.digest  # 合成指纹；fp.tables["daily"].row_count 等明细
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -39,13 +45,18 @@ class TableFingerprint:
     row_count: int
     date_min: str | None
     date_max: str | None
-    sample_hash: str          # 键列抽样哈希（fast）/全列抽样哈希（full）
+    sample_hash: str  # 键列抽样哈希（fast）/全列抽样哈希（full）
+    #: 指纹口径版本（G3/D6）：2 = meta 档不含 mtime；1 = 旧口径（历史产物可读）
+    fingerprint_version: int = 2
 
     def as_dict(self) -> dict[str, object]:
         return {
-            "table": self.table, "row_count": self.row_count,
-            "date_min": self.date_min, "date_max": self.date_max,
+            "table": self.table,
+            "row_count": self.row_count,
+            "date_min": self.date_min,
+            "date_max": self.date_max,
             "sample_hash": self.sample_hash,
+            "fingerprint_version": self.fingerprint_version,
         }
 
 
@@ -74,13 +85,13 @@ class DataVersionFingerprint:
 _SAMPLE_STRIDE = 9973  # 固定等距抽样步长（素数，确定性）
 
 
-def _meta_fingerprint(table: str, metas: Sequence,
-                      date_col: str | None) -> TableFingerprint:
+def _meta_fingerprint(table: str, metas: Sequence, date_col: str | None) -> TableFingerprint:
     """**元数据档**（BB-1）：只读 Parquet footer——毫秒级、不读数据页。
 
     组成（全部确定性、内容相关）：行数 ‖ 行组数 ‖ 每行组每列统计 min/max ‖
-    文件字节数与 **mtime**。用途：默认开工成本 ~0 的数据指纹（数据被重写 →
-    mtime/大小/统计至少之一变化 → 指纹变）；要更严的内容级检测用 fast/full 档。
+    文件字节数。**不含 mtime**（G3/D6）：同一份数据复制/备份恢复/重写年文件
+    不应因 mtime 漂移而误红；要更严的内容级检测用 fast/full 档。
+    输出带 `fingerprint_version=2`（旧口径为 1，历史 manifest 仍可读）。
 
     `metas`：`core.YearTableStore.file_metas(...)`（EX-4 完全体：本模块不再
     认识磁盘——布局解析/文件列举/stat 全在 `core`）。
@@ -91,8 +102,7 @@ def _meta_fingerprint(table: str, metas: Sequence,
     parts: list[str] = []
     for fm in metas:
         row_count += fm.num_rows
-        parts.append(f"{fm.stem}:{fm.num_rows}:{fm.num_row_groups}"
-                     f":{fm.size}:{fm.mtime_ns}")
+        parts.append(f"{fm.stem}:{fm.num_rows}:{fm.num_row_groups}:{fm.size}")
         for gi, col_path, lo, hi in fm.stats:
             parts.append(f"{gi}:{col_path}:{lo!r}:{hi!r}")
             if col_path == date_col:
@@ -100,9 +110,12 @@ def _meta_fingerprint(table: str, metas: Sequence,
                 date_min = lo_s if date_min is None else min(date_min, lo_s)
                 date_max = hi_s if date_max is None else max(date_max, hi_s)
     return TableFingerprint(
-        table=table, row_count=row_count, date_min=date_min,
+        table=table,
+        row_count=row_count,
+        date_min=date_min,
         date_max=date_max,
-        sample_hash=_sample_hash(parts, stride=max(1, len(parts) // 64))[:32])
+        sample_hash=_sample_hash(parts, stride=max(1, len(parts) // 64))[:32],
+    )
 
 
 def _sample_hash(values, stride: int = _SAMPLE_STRIDE) -> str:
@@ -118,10 +131,13 @@ def _sample_hash(values, stride: int = _SAMPLE_STRIDE) -> str:
     h = hashlib.sha256()
     n = len(values)
     if n == 0:
-        return h.hexdigest()          # 与原实现一致：空列返回**未截断**哈希
+        return h.hexdigest()  # 与原实现一致：空列返回**未截断**哈希
     idx = sorted({0, n - 1, *range(0, n, stride)})
-    vals = (values.take(pa.array(idx)).to_pylist()
-            if hasattr(values, "take") else [values[i] for i in idx])
+    vals = (
+        values.take(pa.array(idx)).to_pylist()
+        if hasattr(values, "take")
+        else [values[i] for i in idx]
+    )
     for v in vals:
         h.update(repr(v).encode("utf-8", errors="replace"))
         h.update(b"\x1f")
@@ -152,7 +168,7 @@ def compute(
         raise ValueError(f"mode 须为 meta|fast|full，得 {mode!r}")
     from btf.data.core import YearTableStore
 
-    store = YearTableStore(root)      # EX-4 完全体：**唯一 IO 出口**
+    store = YearTableStore(root)  # EX-4 完全体：**唯一 IO 出口**
     out: dict[str, TableFingerprint] = {}
     for table in tables:
         meta = TABLES.get(table)
@@ -160,8 +176,7 @@ def compute(
             raise KeyError(f"表未登记: {table}")
         date_col = meta.date_col
         if mode == "meta":
-            out[table] = _meta_fingerprint(
-                table, store.file_metas(table, years=years), date_col)
+            out[table] = _meta_fingerprint(table, store.file_metas(table, years=years), date_col)
             continue
 
         row_count = 0
@@ -174,8 +189,7 @@ def compute(
             schema_names = store.schema_names(table, year=year)
             if not schema_names:
                 continue
-            cols = ([date_col, "ts_code"] if mode == "fast"
-                    else [c for c in schema_names])
+            cols = [date_col, "ts_code"] if mode == "fast" else [c for c in schema_names]
             cols = [c for c in cols if c in schema_names]
             t = store.read_file(table, year=year, columns=cols or None)
             if t is None:
@@ -196,14 +210,14 @@ def compute(
             # 键列抽样：跨文件累积行号等距（按文件顺序，确定性）
             # A-1：传 Arrow 列，由 `_sample_hash` 只物化抽样行（不再整列 to_pylist）
             for c in cols:
-                sample_parts.append(
-                    f"{stem}:{c}:{_sample_hash(t.column(c))}"
-                )
+                sample_parts.append(f"{stem}:{c}:{_sample_hash(t.column(c))}")
 
         sample_hash = _sample_hash(sample_parts, stride=max(1, len(sample_parts) // 64))
         out[table] = TableFingerprint(
-            table=table, row_count=row_count,
-            date_min=date_min, date_max=date_max,
+            table=table,
+            row_count=row_count,
+            date_min=date_min,
+            date_max=date_max,
             sample_hash=sample_hash[:32],
         )
     return DataVersionFingerprint(tables=out)

@@ -24,7 +24,9 @@ fetch/backfill_io.py — 补数 IO 层
        None          = 调用失败（限频/网络/无权限）→ 调用方不应记断点
        空 DataFrame  = 调用成功但该日无数据         → 调用方应记断点
 """
+
 import os
+import sys
 from datetime import datetime
 
 import pandas as pd
@@ -39,6 +41,7 @@ from common.parquet_store import (
 from common.paths import ensure_dir
 from config import (
     BACKFILL_PAGE_CONF,
+    BACKFILL_PAGE_DEFAULT,
     BACKFILL_TARGETS,
     DAILY_UPDATE_EXTRA,
     META_DIR,
@@ -178,14 +181,24 @@ class ByCodeBatchWriter:
       被 limiter.wait() 完全掩盖（消费速率 425~103000/min ≫ 限频 170/min），
       对这些表批量落盘**不会缩短总时长** —— 故由 by_code_needs_batch() 决定是否启用。
 
-    断点纪律（与 YearBatchWriter 一致）:
-      on_flushed 在**落盘成功后**触发，调用方应在此回调里标记断点，
-      保证"先落盘、后记断点"，崩溃不会造成"断点说完成但数据没写"。
+    断点纪律（D11 与 `SingleBatchWriter`/`YearBatchWriter` **统一失败语义**）:
+      ① on_flushed 在**落盘成功后**触发，调用方应在此回调里标记断点，
+         保证"先落盘、后记断点"，崩溃不会造成"断点说完成但数据没写"；
+      ② 落盘失败**保留 buffer、不触发 on_flushed**（重试窗口内数据不丢）；
+      ③ 空结果由 `add` 直接 on_flushed([key])（三态纪律）。
     """
 
-    def __init__(self, dir_path, date_col, subset=None, sort_by=None,
-                 flush_codes=500, flush_rows=500_000,
-                 on_flushed=None, on_error=None):
+    def __init__(
+        self,
+        dir_path,
+        date_col,
+        subset=None,
+        sort_by=None,
+        flush_codes=500,
+        flush_rows=500_000,
+        on_flushed=None,
+        on_error=None,
+    ):
         self.dir_path = dir_path
         self.date_col = date_col
         self.subset = subset
@@ -199,18 +212,25 @@ class ByCodeBatchWriter:
         self._nrows = 0
         self.flushed_frames = 0
         self.flushed_rows = 0
+        self.write_fail = 0  # D4/R1：落盘失败计数，供 run_target 传播
 
     def _do_flush(self):
         frames, keys = self._buf, self._keys
-        self._buf, self._keys, self._nrows = [], [], 0
         if not frames:
             return
         try:
             merged = pd.concat(frames, ignore_index=True)
-            r = upsert_by_year(merged, self.dir_path, date_col=self.date_col,
-                               subset=self.subset, sort_by=self.sort_by)
+            r = upsert_by_year(
+                merged,
+                self.dir_path,
+                date_col=self.date_col,
+                subset=self.subset,
+                sort_by=self.sort_by,
+            )
         except Exception as e:
-            # 落盘失败 → 不触发 on_flushed（断点不记），下次续跑重拉
+            # 落盘失败 → **保留 buffer**、不触发 on_flushed（断点不记；D11 与
+            # SingleBatchWriter/YearBatchWriter 统一失败语义：原实现写前清空）
+            self.write_fail += 1
             if self.on_error is not None:
                 self.on_error(None, e)
             else:
@@ -223,13 +243,18 @@ class ByCodeBatchWriter:
         #   ——「有数据但一条没写」。源头 upsert_by_year 已对空日期 fail-loud，
         #   此处再兜一道，防止未来出现别的"该写没写"路径时又静默记断点。
         if r.get("fail") or (r.get("rows") and not r.get("partitions")):
-            msg = (f"批量落盘异常: fail={r.get('fail')} "
-                   f"partitions={r.get('partitions')} rows={r.get('rows')}")
+            msg = (
+                f"批量落盘异常: fail={r.get('fail')} "
+                f"partitions={r.get('partitions')} rows={r.get('rows')}"
+            )
+            self.write_fail += int(r.get("fail") or 1)
             if self.on_error is not None:
                 self.on_error(None, RuntimeError(msg))
             else:
                 print(f"  [ERROR] 批量落盘部分失败: {msg}")
             return
+        # ✅ 落盘成功后才清空（D11）
+        self._buf, self._keys, self._nrows = [], [], 0
         self.flushed_frames += 1
         self.flushed_rows += len(merged)
         if self.on_flushed is not None and keys:
@@ -239,13 +264,12 @@ class ByCodeBatchWriter:
         """累积一个标的的数据；达到阈值则自动落盘。"""
         if df is None or len(df) == 0:
             if self.on_flushed is not None:
-                self.on_flushed([key])       # 空结果：仍需记断点（三态纪律）
+                self.on_flushed([key])  # 空结果：仍需记断点（三态纪律）
             return
         self._buf.append(df)
         self._keys.append(key)
         self._nrows += len(df)
-        if (len(self._keys) >= self.flush_codes
-                or self._nrows >= self.flush_rows):
+        if len(self._keys) >= self.flush_codes or self._nrows >= self.flush_rows:
             self._do_flush()
 
     def flush(self):
@@ -253,7 +277,11 @@ class ByCodeBatchWriter:
         self._do_flush()
 
     def stat(self):
-        return {"frames": self.flushed_frames, "rows": self.flushed_rows}
+        return {
+            "frames": self.flushed_frames,
+            "rows": self.flushed_rows,
+            "write_fail": self.write_fail,
+        }
 
 
 class SingleBatchWriter:
@@ -272,9 +300,16 @@ class SingleBatchWriter:
       ③ 空结果由调用方直接走 on_flushed([key])，不经缓冲
     """
 
-    def __init__(self, path, subset=None, sort_by=None,
-                 flush_frames=500, flush_rows=500_000,
-                 on_flushed=None, on_error=None):
+    def __init__(
+        self,
+        path,
+        subset=None,
+        sort_by=None,
+        flush_frames=500,
+        flush_rows=500_000,
+        on_flushed=None,
+        on_error=None,
+    ):
         self.path = path
         self.subset = subset
         self.sort_by = sort_by
@@ -287,16 +322,17 @@ class SingleBatchWriter:
         self._nrows = 0
         self.flushed_frames = 0
         self.flushed_rows = 0
+        self.write_fail = 0  # D4/R1：落盘失败计数，供 run_target 传播
 
     def _do_flush(self):
         if not self._buf:
             return
         try:
             merged = pd.concat(self._buf, ignore_index=True)
-            merge_append(self.path, merged, subset=self.subset,
-                         sort_by=self.sort_by)
+            merge_append(self.path, merged, subset=self.subset, sort_by=self.sort_by)
         except Exception as e:
             # ⛔ 落盘失败：保留 buffer，不触发 on_flushed（断点不记）
+            self.write_fail += 1
             if self.on_error is not None:
                 self.on_error(None, e)
             else:
@@ -320,8 +356,7 @@ class SingleBatchWriter:
         self._buf.append(df)
         self._keys.append(key)
         self._nrows += len(df)
-        if (len(self._keys) >= self.flush_frames
-                or self._nrows >= self.flush_rows):
+        if len(self._keys) >= self.flush_frames or self._nrows >= self.flush_rows:
             self._do_flush()
 
     def flush(self):
@@ -329,14 +364,19 @@ class SingleBatchWriter:
         self._do_flush()
 
     def stat(self):
-        return {"frames": self.flushed_frames, "rows": self.flushed_rows}
+        return {
+            "frames": self.flushed_frames,
+            "rows": self.flushed_rows,
+            "write_fail": self.write_fail,
+        }
 
 
 # ============================================================
 # 1. 分页拉取
 # ============================================================
-def fetch_paged_by_date(pro, api_name, limiter, trade_date, verbose=False,
-                        date_param="trade_date", fields=None):
+def fetch_paged_by_date(
+    pro, api_name, limiter, trade_date, verbose=False, date_param="trade_date", fields=None
+):
     """按日期 + offset 分页拉全市场数据（防静默截断）。
 
     参数:
@@ -354,16 +394,16 @@ def fetch_paged_by_date(pro, api_name, limiter, trade_date, verbose=False,
       df = 空 DataFrame  调用成功但该日无数据 → 应记断点
       df = 有数据        truncated=True 表示页数触顶, 可能仍不完整
     """
-    page, max_pages = BACKFILL_PAGE_CONF.get(api_name, (5000, 10))
+    page, max_pages = BACKFILL_PAGE_CONF.get(api_name, BACKFILL_PAGE_DEFAULT)
     chunks = []
     offset = 0
     pages = 0
     truncated = False
-    first_ok = False          # 首次调用是否成功(用于区分 失败 vs 无数据)
+    first_ok = False  # 首次调用是否成功(用于区分 失败 vs 无数据)
 
     while pages < max_pages:
         params = {date_param: trade_date, "limit": page, "offset": offset}
-        if fields:                          # 仅在非空才写入，旧调用方零行为变化
+        if fields:  # 仅在非空才写入，旧调用方零行为变化
             params["fields"] = fields
         df = ts_call_with_retry(pro, api_name, limiter, params, verbose=verbose)
         pages += 1
@@ -372,16 +412,16 @@ def fetch_paged_by_date(pro, api_name, limiter, trade_date, verbose=False,
         if df is None or df.empty:
             break
         chunks.append(df)
-        if len(df) < page:          # 最后一页
+        if len(df) < page:  # 最后一页
             break
         offset += page
     else:
-        truncated = True            # 触及页数上限仍满页
+        truncated = True  # 触及页数上限仍满页
 
     if not chunks:
         if not first_ok:
-            return None, pages, truncated          # 失败
-        return pd.DataFrame(), pages, truncated    # 成功但无数据
+            return None, pages, truncated  # 失败
+        return pd.DataFrame(), pages, truncated  # 成功但无数据
 
     out = pd.concat(chunks, ignore_index=True)
     # 分页可能有重叠, 按全列去重
@@ -396,15 +436,13 @@ def _pick_sort_col(df, preferred=None):
     """从已知日期列里挑一个存在的作为排序列"""
     if preferred:
         return preferred
-    for c in ("trade_date", "date", "ipo_date", "issue_date", "end_date",
-              "ann_date", "month"):
+    for c in ("trade_date", "date", "ipo_date", "issue_date", "end_date", "ann_date", "month"):
         if c in df.columns:
             return c
     return None
 
 
-def save_df(target_dir, key, df, layout="single", subset=None, sort_by=None,
-            date_col=None):
+def save_df(target_dir, key, df, layout="single", subset=None, sort_by=None, date_col=None):
     """统一落盘。
 
     参数:
@@ -441,16 +479,24 @@ def save_df(target_dir, key, df, layout="single", subset=None, sort_by=None,
             #   这里默认走全列判重, 语义上"完全相同的行才算重复", 绝对安全。
             sub = subset if subset else "*"
             try:
-                r = upsert_by_year(df, target_dir, date_col=dc,
-                                   subset=sub, sort_by=srt_pref)
+                r = upsert_by_year(df, target_dir, date_col=dc, subset=sub, sort_by=srt_pref)
             except ValueError:
                 # ⛔ 2026-11-18（P0）：数据缺陷（如日期列全空）必须上抛，
                 #   不得回退单文件——回退会在按年目录里写出单文件造成混合布局，
                 #   且把"数据有问题"掩盖成"布局切换"，调用方照样记断点。
                 raise
             except Exception as e:
-                print(f"  [WARN] 按年分区失败, 回退单文件: {str(e)[:70]}")
-                layout = "single"
+                # ⛔ D3（2026-11-21）fail-closed：原实现把任何异常吞成
+                #   `layout="single"`，于是在按年目录写出 `{api}.parquet`：
+                #   ① 混合布局让 reader 探测降级；② 调用方以为落盘成功并
+                #   mark_done ⇒ 数据永久缺失且零 ERROR。非 ValueError 一律
+                #   打印 ERROR 并上抛，调用方不得记断点。
+                print(
+                    f"  [ERROR] 按年分区写入失败（不回退单文件，未记断点）: "
+                    f"{type(e).__name__}: {str(e)[:200]}",
+                    file=sys.stderr,
+                )
+                raise
             else:
                 # ⚠ 2026-09-22 修复（P0）: upsert_by_year 对"个别年份分区写失败"
                 #   不抛异常、只返回 fail 计数 → 原实现直接 return 成功，
@@ -464,10 +510,11 @@ def save_df(target_dir, key, df, layout="single", subset=None, sort_by=None,
                         f"按年分区异常：fail={r.get('fail')} "
                         f"partitions={r.get('partitions')} rows={r.get('rows')}"
                         f"（有数据却 0 分区写入，日期列可能全空），"
-                        f"未回退单文件（避免混合布局）；调用方不得记断点")
+                        f"未回退单文件（避免混合布局）；调用方不得记断点"
+                    )
                 return r["partitions"]
         else:
-            layout = "single"       # 无分区列, 回退
+            layout = "single"  # 无分区列, 回退
 
     # ---- 按标的拆分 ----
     if layout == "by_code" and "ts_code" in df.columns and subset != "*":
@@ -477,8 +524,7 @@ def save_df(target_dir, key, df, layout="single", subset=None, sort_by=None,
         srt = srt_pref or (sub[0] if sub else "trade_date")
         if srt not in df.columns:
             srt = sub[0] if sub else None
-        stat = upsert_grouped(df, target_dir, key_col="ts_code",
-                              subset=sub, sort_by=srt)
+        stat = upsert_grouped(df, target_dir, key_col="ts_code", subset=sub, sort_by=srt)
         return stat["processed"]
 
     # ---- 单文件 ----

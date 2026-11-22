@@ -17,6 +17,7 @@ MVP 纪律（04 §8.5「不做 entry-points 自动发现」）：
     任务 5.5  run_store local_jsonl（experiment/store.py：run 目录产物 +
              原子写 + manifest 四版本，载体留痕见模块 docstring）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -45,9 +46,18 @@ class RegistryError(KeyError):
 
 
 #: 全部扩展点名（静态声明——`points()` 不再靠"装载一次"获得清单）
-_POINTS: tuple[str, ...] = (DATA_FEED, COST_MODEL, SLIPPAGE_MODEL,
-                            EXECUTION_HANDLER, RISK_RULE, REBALANCER, ANALYZER,
-                            RULES_PROVIDER, OPTIMIZER, RUN_STORE)
+_POINTS: tuple[str, ...] = (
+    DATA_FEED,
+    COST_MODEL,
+    SLIPPAGE_MODEL,
+    EXECUTION_HANDLER,
+    RISK_RULE,
+    REBALANCER,
+    ANALYZER,
+    RULES_PROVIDER,
+    OPTIMIZER,
+    RUN_STORE,
+)
 
 
 def _load_point(point: str) -> dict[str, PluginFactory] | None:
@@ -62,9 +72,11 @@ def _load_point(point: str) -> dict[str, PluginFactory] | None:
         from btf.data.feed import MixedDailyFeed, TushareParquetFeed
         from btf.data.memory import MemoryFeed
 
-        return {"tushare_parquet": TushareParquetFeed,
-                "mixed": MixedDailyFeed,     # V3-1（M3 6.3）：股票+ETF+指数
-                "memory": MemoryFeed}
+        return {
+            "tushare_parquet": TushareParquetFeed,
+            "mixed": MixedDailyFeed,  # V3-1（M3 6.3）：股票+ETF+指数
+            "memory": MemoryFeed,
+        }
     if point == COST_MODEL:
         from btf.execution.cost import (
             AShareTieredFeeModel,
@@ -72,9 +84,11 @@ def _load_point(point: str) -> dict[str, PluginFactory] | None:
             ZeroCostModel,
         )
 
-        return {"tiered_v1": AShareTieredFeeModel,
-                "zero": ZeroCostModel,
-                "flat_rate": FlatRateCostModel}
+        return {
+            "tiered_v1": AShareTieredFeeModel,
+            "zero": ZeroCostModel,
+            "flat_rate": FlatRateCostModel,
+        }
     if point == SLIPPAGE_MODEL:
         from btf.execution.cost import (
             FixedSlippage,
@@ -83,9 +97,13 @@ def _load_point(point: str) -> dict[str, PluginFactory] | None:
             SqrtImpactSlippage,
         )
 
-        return {"none": NoSlippage, "fixed": FixedSlippage, "pct": PctSlippage,
-                # RC-12（2026-10-05）：规模相关滑点（研究参数，默认不启用）
-                "sqrt_impact": SqrtImpactSlippage}
+        return {
+            "none": NoSlippage,
+            "fixed": FixedSlippage,
+            "pct": PctSlippage,
+            # RC-12（2026-10-05）：规模相关滑点（研究参数，默认不启用）
+            "sqrt_impact": SqrtImpactSlippage,
+        }
     if point == EXECUTION_HANDLER:
         from btf.execution.handler import NextOpenHandler
 
@@ -93,33 +111,43 @@ def _load_point(point: str) -> dict[str, PluginFactory] | None:
     if point == RISK_RULE:
         from btf.risk.rules import CashCheckRule, MaxWeightRule, TradabilityRule
 
-        return {"max_weight": MaxWeightRule, "cash_check": CashCheckRule,
-                "tradability": TradabilityRule}
+        return {
+            "max_weight": MaxWeightRule,
+            "cash_check": CashCheckRule,
+            "tradability": TradabilityRule,
+        }
     if point == REBALANCER:
         from btf.portfolio.rebalancer import FullRebalancer, ThresholdRebalancer
 
-        return {"full": FullRebalancer,
-                "threshold": ThresholdRebalancer}   # v0.5 V5-5
+        return {"full": FullRebalancer, "threshold": ThresholdRebalancer}  # v0.5 V5-5
     if point == ANALYZER:
         from btf.analytics.metrics import METRICS
 
-        return dict(METRICS)      # M2 任务 5.4：15 项核心指标
+        return dict(METRICS)  # M2 任务 5.4：15 项核心指标
     if point == RULES_PROVIDER:
-        from btf.strategy.rules import (
-            MirrorJsonRulesProvider,
-            StaticRulesProvider,
-        )
+        from btf.strategy.rules import StaticRulesProvider
 
-        return {"static": StaticRulesProvider,       # 非规则源策略
-                "mirror_json": MirrorJsonRulesProvider}  # M3 6.1
+        def _retired_mirror_json(**_params):
+            """G3/D7：v7.7 规则镜像资产已退役（`rules_mirror_v77.json` 不存在）。"""
+            from btf.config.validation import ConfigError
+
+            raise ConfigError(["mirror_json 已随 v7.7 资产退役"])
+
+        # 版本协商在工厂调用前执行（catalog.create），退役工厂仍须声明契约版本
+        _retired_mirror_json.contract_version = "1.0"
+
+        return {
+            "static": StaticRulesProvider,  # 非规则源策略
+            "mirror_json": _retired_mirror_json,
+        }  # 保留名字，工厂显式拒绝
     if point == OPTIMIZER:
         from btf.optimize.grid import GridSearchOptimizer
 
-        return {"grid_search": GridSearchOptimizer}   # v0.5 V5-3
+        return {"grid_search": GridSearchOptimizer}  # v0.5 V5-3
     if point == RUN_STORE:
         from btf.experiment.store import LocalRunStore
 
-        return {"local_jsonl": LocalRunStore}   # M2 任务 5.5
+        return {"local_jsonl": LocalRunStore}  # M2 任务 5.5
     return None
 
 
@@ -131,8 +159,7 @@ def _point_table(point: str) -> dict[str, PluginFactory]:
     if point not in _BUILTIN:
         loaded = _load_point(point)
         if loaded is None:
-            raise RegistryError(
-                f"未知扩展点 {point!r}（合法扩展点: {sorted(_POINTS)}）")
+            raise RegistryError(f"未知扩展点 {point!r}（合法扩展点: {sorted(_POINTS)}）")
         _BUILTIN[point] = loaded
     return _BUILTIN[point]
 
@@ -156,7 +183,8 @@ def resolve(point: str, name: str) -> PluginFactory:
     if factory is None:
         known = sorted({*_BUILTIN.get(point, {}), *_USER.get(point, {})})
         raise RegistryError(
-            f"{point} 未知插件名 {name!r}（可选: {known or '（无——扩展点待实现）'}）")
+            f"{point} 未知插件名 {name!r}（可选: {known or '（无——扩展点待实现）'}）"
+        )
     negotiate(f"{point}:{name}", getattr(factory, "contract_version", None))
     return factory
 

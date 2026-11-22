@@ -17,6 +17,7 @@
 IO-8/IO-9 列为后续可选加项）；LRU 以「已装载年表条目数」为界，默认 4 条
 （覆盖十年以上滚动访问的窗口内复用；超限淘汰最旧）。
 """
+
 from __future__ import annotations
 
 import threading
@@ -26,7 +27,6 @@ from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
-import pyarrow.parquet as pq
 
 from btf.config.paths import MARKET_DATA_DIR
 from btf.data.tables_meta import TABLES
@@ -46,9 +46,30 @@ def sort_by_date_int32(table, date_col: str = "trade_date"):
     return pr.sort_by_date_int32(table, date_col)
 
 
-def day_index(dates: list[str]) -> dict[str, tuple[int, int]]:
-    """已排序日期列的日区间索引 {ymd: (lo, hi)}（一次线性扫描）。"""
+def day_index(dates: list[str] | object) -> dict[str, tuple[int, int]]:
+    """已排序日期列的日区间索引 {ymd: (lo, hi)}（一次线性扫描）。
+
+    两种输入：
+      - `list[str]`（既有调用方）：Python 逐项比较，**一次线性扫描**；
+      - Arrow 列（`Array`/`ChunkedArray`，D11 新增）：`run_end_encode` 在 C 侧
+        做同样的**线性游程编码**，避免 129 万行 `to_pylist`（实测 1.66s →
+        0.018s/年）；输出与 list 路径逐键相同。
+
+    前置条件：输入**已按日期升序**（两处调用方——`_load` 与 `state.*_date_idx`
+    ——均先排序）。未排序输入不会报错但索引无意义，故调用方须自证有序。
+    """
     index: dict[str, tuple[int, int]] = {}
+    if not isinstance(dates, list):
+        import pyarrow.compute as pc
+
+        if hasattr(dates, "combine_chunks"):
+            dates = dates.combine_chunks()
+        rle = pc.run_end_encode(dates)
+        start = 0
+        for day, end in zip(rle.values.to_pylist(), rle.run_ends.to_pylist(), strict=True):
+            index[day] = (start, int(end))
+            start = int(end)
+        return index
     start = 0
     n = len(dates)
     for i in range(1, n + 1):
@@ -86,8 +107,9 @@ class YearTableStore:
         self.hit_count = 0
 
     # ── 装载（唯一 IO 入口）──
-    def load(self, table: str, year: int, columns: Sequence[str], *,
-             sorted_rows: bool = True) -> pa.Table | None:
+    def load(
+        self, table: str, year: int, columns: Sequence[str], *, sorted_rows: bool = True
+    ) -> pa.Table | None:
         """**公开**年表入口（`_load` 薄封装，返回表本体）。
 
         EX-4（19 号 §9.2）：`data.core` 是全系统唯一允许"认识磁盘"的公共模块
@@ -96,7 +118,11 @@ class YearTableStore:
         return self._load(table, year, columns, sorted_rows=sorted_rows)[0]
 
     def _load(
-        self, table: str, year: int, columns: Sequence[str], *,
+        self,
+        table: str,
+        year: int,
+        columns: Sequence[str],
+        *,
         sorted_rows: bool = True,
     ) -> tuple[pa.Table | None, dict[str, tuple[int, int]], str, str]:
         """年表装载（缓存）。返回 (表, 日索引, 日期列, 键列)。
@@ -106,7 +132,7 @@ class YearTableStore:
         不需要有序**，省 1s/年/表——19 号报告 §11 的实测结论）。
         """
         key = (table, year, tuple(columns), sorted_rows)
-        with self._lock:                       # X-9：缓存/计数器临界区
+        with self._lock:  # X-9：缓存/计数器临界区
             cached = self._cache.get(key)
             if cached is not None:
                 self.hit_count += 1
@@ -121,26 +147,37 @@ class YearTableStore:
         path = self.root / table / f"{year}.parquet"
         if not path.is_file():
             entry: tuple[pa.Table | None, dict[str, tuple[int, int]], str, str] = (
-                None, {}, date_col, key_col)
+                None,
+                {},
+                date_col,
+                key_col,
+            )
         else:
-            t = pq.read_table(path, columns=list(columns))
-            if (sorted_rows and t.num_rows and key_col in t.column_names):
+            # D11：年表读取经 `parquet_reader.read_file`（`_read` 单一入口）——
+            # 主库享 memory_map 与 D8 的「路径+size/mtime+列集」只读缓存，
+            # 同一 (表, 年, 列集) 跨 Store 实例只解码一次。
+            from btf.data import parquet_reader as pr
+
+            t = pr.read_file(table, self.root, year=year, columns=list(columns))
+            if t is not None and sorted_rows and t.num_rows and key_col in t.column_names:
                 t = t.sort_by([(date_col, "ascending"), (key_col, "ascending")])
-            dates = (t.column(date_col).to_pylist()
-                     if (sorted_rows and t.num_rows) else [])
+            dates = t.column(date_col) if (sorted_rows and t.num_rows) else []
             entry = (t, day_index(dates), date_col, key_col)
         with self._lock:
-            cached = self._cache.get(key)      # 双检：并发期间他线程可能已装载
+            cached = self._cache.get(key)  # 双检：并发期间他线程可能已装载
             if cached is not None:
                 return cached
             if len(self._cache) >= self.max_entries:
-                self._cache.pop(next(iter(self._cache)))      # FIFO 淘汰
+                self._cache.pop(next(iter(self._cache)))  # FIFO 淘汰
             self._cache[key] = entry
-            self.load_count += 1     # 语义：新建缓存条目数（并发重复不重复计）
+            self.load_count += 1  # 语义：新建缓存条目数（并发重复不重复计）
         return entry
 
     def read_year_where(
-        self, table: str, year: int, columns: Sequence[str],
+        self,
+        table: str,
+        year: int,
+        columns: Sequence[str],
         key_values: Sequence[str],
     ) -> pa.Table | None:
         """小标的集整年读取（报告 §11 IO-8 的最小落地；T-1 改走整表缓存）。
@@ -158,10 +195,11 @@ class YearTableStore:
             if cached is not None:
                 self.hit_count += 1
                 return cached[0]
-        out = pr.read_year_where(table, self.root, year=year,
-                                 columns=columns, key_values=key_values)
+        out = pr.read_year_where(
+            table, self.root, year=year, columns=columns, key_values=key_values
+        )
         with self._lock:
-            cached = self._cache.get(key)      # 双检（同 `_load`）
+            cached = self._cache.get(key)  # 双检（同 `_load`）
             if cached is not None:
                 return cached[0]
             if len(self._cache) >= self.max_entries:
@@ -172,7 +210,12 @@ class YearTableStore:
 
     # ── 查询（O(1)/日；切片 + 单日物化）──
     def day_map(
-        self, table: str, ymd: str, *, key: str = "ts_code", value: str,
+        self,
+        table: str,
+        ymd: str,
+        *,
+        key: str = "ts_code",
+        value: str,
         columns: tuple[str, ...] | None = None,
     ) -> dict[str, float | None]:
         """某日 → {键: 数值列}（当日行物化，~数千项；无该日 → 空 dict）。"""
@@ -191,8 +234,7 @@ class YearTableStore:
 
     def day_codes(self, table: str, ymd: str, *, key: str = "ts_code") -> list[str]:
         """某日键列表（升序——装载时已按 (date, key) 排序）。"""
-        t, index, _date_col, _key_col = self._load(
-            table, int(ymd[:4]), (key, "trade_date"))
+        t, index, _date_col, _key_col = self._load(table, int(ymd[:4]), (key, "trade_date"))
         span = index.get(ymd)
         if t is None or span is None:
             return []
@@ -205,7 +247,11 @@ class YearTableStore:
         return sorted(index)
 
     def load_year(
-        self, table: str, year: int, columns: Sequence[str], *,
+        self,
+        table: str,
+        year: int,
+        columns: Sequence[str],
+        *,
         sorted_rows: bool = True,
     ) -> tuple[pa.Table | None, dict[str, tuple[int, int]]]:
         """公开的年表句柄 (表, 日索引)——供业务模块做 **Arrow 向量化**运算
@@ -214,12 +260,18 @@ class YearTableStore:
 
         `sorted_rows=False`：join/group_by 路径免排序（省 ~1s/年/表）。"""
         t, index, _date_col, _key_col = self._load(
-            table, year, tuple(columns), sorted_rows=sorted_rows)
+            table, year, tuple(columns), sorted_rows=sorted_rows
+        )
         return t, index
 
     def values_by_symbol_day(
-        self, table: str, year: int, symbols: Sequence[str], value: str,
-        *, date_col: str = "trade_date",
+        self,
+        table: str,
+        year: int,
+        symbols: Sequence[str],
+        value: str,
+        *,
+        date_col: str = "trade_date",
     ) -> dict[tuple[str, str], float]:
         """{(标的, 日): 数值}——**小标的集**的整年查询（Arrow `is_in` 过滤后
         仅物化命中行）。语义：缺值跳过（None 不入表）。
@@ -232,16 +284,23 @@ class YearTableStore:
         if t is None or not t.num_rows:
             return {}
         out: dict[tuple[str, str], float] = {}
-        for code, day, item in zip(t.column("ts_code").to_pylist(),
-                                   t.column(date_col).to_pylist(),
-                                   t.column(value).to_pylist(), strict=True):
+        for code, day, item in zip(
+            t.column("ts_code").to_pylist(),
+            t.column(date_col).to_pylist(),
+            t.column(value).to_pylist(),
+            strict=True,
+        ):
             if item is not None:
                 out[(str(code), str(day))] = float(item)
         return out
 
     # ── 研究层：某标的区间（P1-9 反面案例：N 标的不再 N 次全表）──
     def symbol_range(
-        self, table: str, symbol: str, start_ymd: str, end_ymd: str,
+        self,
+        table: str,
+        symbol: str,
+        start_ymd: str,
+        end_ymd: str,
         columns: Sequence[str],
     ) -> pa.Table:
         """某标的日期区间（**谓词下推** + 边界年区间过滤 + 拼接）。
@@ -264,9 +323,12 @@ class YearTableStore:
             if t is None or not t.num_rows:
                 continue
             if year == y0 or year == y1:
-                t = t.filter(pc.and_(
-                    pc.greater_equal(t.column(date_col), start_ymd),
-                    pc.less_equal(t.column(date_col), end_ymd)))
+                t = t.filter(
+                    pc.and_(
+                        pc.greater_equal(t.column(date_col), start_ymd),
+                        pc.less_equal(t.column(date_col), end_ymd),
+                    )
+                )
             if t.num_rows:
                 parts.append(t)
         if not parts:
@@ -274,13 +336,15 @@ class YearTableStore:
         return pa.concat_tables(parts)
 
     # ── 淘汰与统计 ──
-    def evict(self, *, year_below: int | None = None,
-              table: str | None = None) -> int:
+    def evict(self, *, year_below: int | None = None, table: str | None = None) -> int:
         """显式淘汰（报告 §9.1：替代散落各处的 `_evict_year_cache`）。"""
         with self._lock:
-            stale = [k for k in self._cache
-                     if (year_below is not None and k[1] < year_below)
-                     or (table is not None and k[0] == table)]
+            stale = [
+                k
+                for k in self._cache
+                if (year_below is not None and k[1] < year_below)
+                or (table is not None and k[0] == table)
+            ]
             for k in stale:
                 del self._cache[k]
         return len(stale)
@@ -288,8 +352,7 @@ class YearTableStore:
     def stats(self) -> dict[str, Any]:
         """装载/命中统计（性能断言与 `--verbose` 观测用）。"""
         with self._lock:
-            return {"entries": len(self._cache), "loads": self.load_count,
-                    "hits": self.hit_count}
+            return {"entries": len(self._cache), "loads": self.load_count, "hits": self.hit_count}
 
     # ══════════════════════════════════════════════════════════
     # EX-4 完全体（19 号 §9.2 / §47.4 余项 ② / §49）：**全系统唯一 IO 出口**
@@ -302,20 +365,25 @@ class YearTableStore:
     # 为什么值得：IO 的"算术"（谓词下推/布局解析/memory_map/单位换算）此前分散在
     # 7 个模块的 20+ 处调用点，改一处口径要全库搜；收拢后**只有一条路径**。
 
-    def read_full(self, table: str, *, columns: Sequence[str] | None = None,
-                  years: Sequence[int] | None = None):
+    def read_full(
+        self,
+        table: str,
+        *,
+        columns: Sequence[str] | None = None,
+        years: Sequence[int] | None = None,
+    ):
         """全表读取（single/metadata 布局主用；by_year 慎用——全量内存）。"""
         from btf.data import parquet_reader as pr
 
         return pr.read_full(table, self.root, columns=columns, years=years)
 
-    def read_range(self, table: str, start_ymd: str, end_ymd: str, *,
-                   columns: Sequence[str] | None = None):
+    def read_range(
+        self, table: str, start_ymd: str, end_ymd: str, *, columns: Sequence[str] | None = None
+    ):
         """日期区间读取（布局内先按年裁剪，再按日期列过滤）。"""
         from btf.data import parquet_reader as pr
 
-        return pr.read_range(table, self.root, start_ymd, end_ymd,
-                             columns=columns)
+        return pr.read_range(table, self.root, start_ymd, end_ymd, columns=columns)
 
     def peek_columns(self, table: str) -> list[str]:
         """列名探测（零数据代价）；缺失列由调用方语义回退。"""
@@ -323,25 +391,39 @@ class YearTableStore:
 
         return pr.peek_columns(table, self.root)
 
-    def read_codes(self, table: str, symbols: Sequence[str], start_ymd: str,
-                   end_ymd: str, *, columns: Sequence[str] | None = None):
+    def read_codes(
+        self,
+        table: str,
+        symbols: Sequence[str],
+        start_ymd: str,
+        end_ymd: str,
+        *,
+        columns: Sequence[str] | None = None,
+    ):
         """多标的区间读取（谓词下推：`ts_code IN (...) AND 日期区间`）。"""
         from btf.data import parquet_reader as pr
 
-        return pr.read_codes(table, self.root, symbols, start_ymd, end_ymd,
-                             columns=columns)
+        return pr.read_codes(table, self.root, symbols, start_ymd, end_ymd, columns=columns)
 
-    def iter_day_slices(self, table: str, start_ymd: str, end_ymd: str, *,
-                        columns: Sequence[str] | None = None,
-                        symbols: Sequence[str] | None = None):
+    def iter_day_slices(
+        self,
+        table: str,
+        start_ymd: str,
+        end_ymd: str,
+        *,
+        columns: Sequence[str] | None = None,
+        symbols: Sequence[str] | None = None,
+    ):
         """引擎热路径：按年流式 + 列式行区间（零 Python 对象化）。"""
         from btf.data import parquet_reader as pr
 
-        return pr.iter_day_slices(table, self.root, start_ymd, end_ymd,
-                                  columns=columns, symbols=symbols)
+        return pr.iter_day_slices(
+            table, self.root, start_ymd, end_ymd, columns=columns, symbols=symbols
+        )
 
-    def read_file(self, table: str, *, year: int | None = None,
-                  columns: Sequence[str] | None = None):
+    def read_file(
+        self, table: str, *, year: int | None = None, columns: Sequence[str] | None = None
+    ):
         """单文件读取（低层；文件缺失 → None）。状态/质检/指数成分等窄读用。"""
         from btf.data import parquet_reader as pr
 
@@ -359,15 +441,15 @@ class YearTableStore:
 
         return pr.file_metas(table, self.root, years=years)
 
-    def file_stems(self, table: str, *,
-                   years: Sequence[int] | None = None) -> list[str]:
+    def file_stems(self, table: str, *, years: Sequence[int] | None = None) -> list[str]:
         """文件标识清单（by_year = 年份字符串；single/metadata = 表名）。"""
         from btf.data import parquet_reader as pr
 
         return pr.file_stems(table, self.root, years=years)
 
-    def date_bounds(self, table: str, column: str, *,
-                    year: int | None = None) -> tuple[str, str] | None:
+    def date_bounds(
+        self, table: str, column: str, *, year: int | None = None
+    ) -> tuple[str, str] | None:
         """单列极值（footer 行组统计聚合，不读数据页）；不可用 → None。
 
         T-2（19 号 §233-B／§234）：调用方（`version.compute`）据此免去整列

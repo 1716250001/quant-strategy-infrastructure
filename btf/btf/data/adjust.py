@@ -26,6 +26,7 @@
 
 依赖：pyarrow（data 层允许；domain 零依赖纪律不受影响）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,6 +36,7 @@ from pathlib import Path
 from typing import ClassVar, Protocol
 
 from btf.config.paths import MARKET_DATA_DIR
+from btf.data.parquet_reader import data_stamp
 from btf.data.tables_meta import factor_table_of
 from btf.domain.cache import BoundedDict
 from btf.domain.market import Bar
@@ -71,7 +73,7 @@ class TushareAdjustService:
         #: test_adjust.py` 既有契约），自定义调用方亦可注入；未命中才走
         #: **进程级共享缓存**（`_SHARED_ROWS`，R62′）。
         self._cache: dict[str, tuple[list[str], list[float]]] = {}
-        self._tstore: object | None = None      # 表级共享装载（P1-9）
+        self._tstore: object | None = None  # 表级共享装载（P1-9）
         # (symbol, ymd) 命中计数 / 回退计数（降级行为审计，11 §21.1 验证点）
         self.n_missing_fallback = 0
         self.n_fill_forward = 0
@@ -94,7 +96,8 @@ class TushareAdjustService:
     #: 共享后**同进程重复访问 ≈0.04s/标的**（纯换算）。**计数与披露仍 per 实例**
     #: （`missing_factor_symbols`/`n_*` 逐 run 登记——共享缓存不得吞掉降级披露）。
     _SHARED_ROWS: ClassVar[BoundedDict[str, tuple[list[str], list[float]]]] = BoundedDict(
-        maxsize=8_000, name="adjust.factor.shared")
+        maxsize=8_000, name="adjust.factor.shared"
+    )
 
     def _store(self):
         """共享表级资源（19 号审查 P1-9：原实现逐标的 read_range 全历史
@@ -106,8 +109,9 @@ class TushareAdjustService:
             self._tstore = YearTableStore(self.root, max_entries=8)
         return self._tstore
 
-    def _load(self, symbol: str, lo_ymd: str = "19900101",
-              hi_ymd: str = "20991231") -> tuple[list[str], list[float]]:
+    def _load(
+        self, symbol: str, lo_ymd: str = "19900101", hi_ymd: str = "20991231"
+    ) -> tuple[list[str], list[float]]:
         """装载某标的因子行（**第 4 批**：`lo/hi` 区间，缺省＝全历史兜底）。
 
         键**必须含区间**（`{root}|{symbol}|{lo}|{hi}`）——只按 symbol 缓存会让
@@ -119,19 +123,18 @@ class TushareAdjustService:
             return rows
         # ② **R62′**：进程级共享缓存（见 `_SHARED_ROWS` 注）；缺失登记与 WARN
         # 仍**逐实例**（披露不得因缓存命中而丢——RC-04 口径不变）。
-        key = f"{self.root}|{symbol}|{lo_ymd}|{hi_ymd}"
+        # D8：键并入主库版本戳——日更/补数写入 `metadata/db_version.json` 后
+        # 旧共享缓存自动失效（否则长驻进程会返回更新前的因子序列）。
+        key = f"{self.root}|{symbol}|{lo_ymd}|{hi_ymd}|{data_stamp(self.root)}"
         rows = self._SHARED_ROWS.get(key)
         if rows is None:
-            table = factor_table_of(symbol)          # RC-04：股票/ETF 双表路由
+            table = factor_table_of(symbol)  # RC-04：股票/ETF 双表路由
             # KK-1：区间保留全历史（因子表实际覆盖 1991→）；无文件年由
             # YearTableStore.read_year_where 的 path.is_file() 早退，不读盘。
-            t = self._store().symbol_range(
-                table, symbol, lo_ymd, hi_ymd,
-                ["adj_factor"])
+            t = self._store().symbol_range(table, symbol, lo_ymd, hi_ymd, ["adj_factor"])
             if t.num_rows:
                 t = t.sort_by([("trade_date", "ascending")])
-                rows = (t.column("trade_date").to_pylist(),
-                        t.column("adj_factor").to_pylist())
+                rows = (t.column("trade_date").to_pylist(), t.column("adj_factor").to_pylist())
             else:
                 rows = ([], [])
             self._SHARED_ROWS[key] = rows
@@ -145,7 +148,9 @@ class TushareAdjustService:
                     "复权因子缺失：%s 在 `%s` 表无任何行 → 因子按 1.0 回落"
                     "（未复权序列的份额折算跳变**不被抹平**）；"
                     "报告披露见 degraded_notes()（RC-04）",
-                    symbol, factor_table_of(symbol))
+                    symbol,
+                    factor_table_of(symbol),
+                )
         return rows
 
     def _prime(self, symbol: str, lo_ymd: str, hi_ymd: str) -> None:
@@ -156,7 +161,7 @@ class TushareAdjustService:
         收窄，会把历史序列的装载窗口挤成 2 年并反复重装；新区间落在既有窗口内
         ⇒ 跳过，超出则取**并集**重装（一次）。
         """
-        if symbol in self._cache:             # 实例级覆盖（测试注入）优先
+        if symbol in self._cache:  # 实例级覆盖（测试注入）优先
             return
         cur = self._primed.get(symbol)
         if cur is not None:
@@ -181,18 +186,19 @@ class TushareAdjustService:
         """
         rng = self._primed.get(symbol)
         rows = self._load(symbol, rng[0], rng[1]) if rng else self._load(symbol)
-        if (rng and rows[0]
-                and not (rng[0] <= date.to_ymd() <= rng[1])):
+        if rng and rows[0] and not (rng[0] <= date.to_ymd() <= rng[1]):
             old_start = rows[0][0]
             self._primed.pop(symbol, None)
-            rows = self._load(symbol)          # 回退全量（缺省参数）
-            if (rows[0] and rows[0][0] <= date.to_ymd()
-                    and symbol not in self._warned_range):
+            rows = self._load(symbol)  # 回退全量（缺省参数）
+            if rows[0] and rows[0][0] <= date.to_ymd() and symbol not in self._warned_range:
                 self._warned_range.add(symbol)
                 logger.warning(
                     "复权因子越界：%s @ %s 早于装载起点 %s → 已回退全量装载"
                     "（区间收窄的兜底路径，19 号 §199）",
-                    symbol, date.to_ymd(), old_start)
+                    symbol,
+                    date.to_ymd(),
+                    old_start,
+                )
         ymds, factors = rows
         i = bisect_right(ymds, date.to_ymd()) - 1
         if i >= 0:
@@ -201,7 +207,7 @@ class TushareAdjustService:
             return factors[i]
         if ymds:
             self.n_missing_fallback += 1
-            return factors[0]             # 最早行（相对锚，非 1.0 假设）
+            return factors[0]  # 最早行（相对锚，非 1.0 假设）
         self.n_missing_fallback += 1
         return 1.0
 
@@ -250,15 +256,17 @@ class TushareAdjustService:
         base = self._af_ymd(sym, ref)
         out: list[Bar] = []
         for b in bars:
-            f = self._af(b)               # 只调一次；**不预先除 base**（§199 红线）
-            out.append(replace(
-                b,
-                open=b.open * f / base,        # 保持 (a × f) / base
-                high=b.high * f / base,
-                low=b.low * f / base,
-                close=b.close * f / base,
-                pre_close=b.pre_close * f / base,
-            ))
+            f = self._af(b)  # 只调一次；**不预先除 base**（§199 红线）
+            out.append(
+                replace(
+                    b,
+                    open=b.open * f / base,  # 保持 (a × f) / base
+                    high=b.high * f / base,
+                    low=b.low * f / base,
+                    close=b.close * f / base,
+                    pre_close=b.pre_close * f / base,
+                )
+            )
         return out
 
     # ── 内部 ──
@@ -267,7 +275,6 @@ class TushareAdjustService:
 
     def _af_ymd(self, symbol: str, date: TradingDate) -> float:
         return self.adj_factor(symbol, date)
-
 
     # ── 降级披露（RC-04；与 `StateSynthesizer.degraded_notes()` 同机制）──
     def degraded_notes(self) -> tuple[str, ...]:

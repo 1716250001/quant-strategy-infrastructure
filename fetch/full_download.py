@@ -85,19 +85,24 @@ def _guard_overwrite(path, new_df, min_rows_hint=None):
         try:
             old_n = len(pd.read_parquet(path))
         except Exception as exc:
-            print(f"[fetch.full_download] 读旧文件行数失败（跳过比较）{path}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[fetch.full_download] 读旧文件行数失败（跳过比较）{path}: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             old_n = None
         if old_n is not None and len(new_df) < old_n:
             raise RuntimeError(
                 f"拒绝覆盖 {os.path.basename(path)}: 新 {len(new_df):,} 行 "
                 f"< 现有 {old_n:,} 行。疑似分页截断/参数被静默忽略，"
-                f"请检查拉取逻辑。")
+                f"请检查拉取逻辑。"
+            )
     if min_rows_hint is not None and len(new_df) < min_rows_hint:
         raise RuntimeError(
             f"拒绝写入 {os.path.basename(path)}: 新 {len(new_df):,} 行 "
             f"< 下限 {min_rows_hint:,} 行（现有表 "
-            f"{old_n if old_n is not None else '缺失/不可读'}）。")
+            f"{old_n if old_n is not None else '缺失/不可读'}）。"
+        )
 
 
 def _print_metadata_plan(meta_dir):
@@ -105,13 +110,21 @@ def _print_metadata_plan(meta_dir):
     print("\n" + "=" * 60)
     print("  Phase 0: 元数据 [DRY-RUN]")
     print("=" * 60)
-    print("[DRY-RUN] 将拉取: stock_basic×3(L/D/P) + fund_basic 分片(E 1 页 + O ~6 页) "
-          "+ trade_cal×1 = 约 11 次请求（本次一条都不发出）")
-    print("[DRY-RUN] 将写入: " + " | ".join(
-        os.path.join(meta_dir, f) for f in
-        ("stock_basic.parquet", "fund_basic.parquet", "trade_cal.parquet")))
-    print("[DRY-RUN]   覆盖前守卫: 三张表均校验「新行数 ≥ 现有行数」，"
-          "截断拉取会被拒绝覆盖（2026-09-29 事故自愈防线）")
+    print(
+        "[DRY-RUN] 将拉取: stock_basic×3(L/D/P) + fund_basic 分片(E 1 页 + O ~6 页) "
+        "+ trade_cal×1 = 约 11 次请求（本次一条都不发出）"
+    )
+    print(
+        "[DRY-RUN] 将写入: "
+        + " | ".join(
+            os.path.join(meta_dir, f)
+            for f in ("stock_basic.parquet", "fund_basic.parquet", "trade_cal.parquet")
+        )
+    )
+    print(
+        "[DRY-RUN]   覆盖前守卫: 三张表均校验「新行数 ≥ 现有行数」，"
+        "截断拉取会被拒绝覆盖（2026-09-29 事故自愈防线）"
+    )
 
 
 def _load_local_metadata(meta_dir=None):
@@ -159,8 +172,10 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
     stock_list = []
     for list_status in ["L", "D", "P"]:  # 上市/退市/暂停上市
         try:
-            df = pro.stock_basic(list_status=list_status,
-                                 fields="ts_code,symbol,name,area,industry,list_date,delist_date,list_status")
+            df = pro.stock_basic(
+                list_status=list_status,
+                fields="ts_code,symbol,name,area,industry,list_date,delist_date,list_status",
+            )
             limiter.record("stock_basic")
             if df is not None and not df.empty:
                 stock_list.append(df)
@@ -231,14 +246,18 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
         _code_s = fund_df["ts_code"].astype(str)
         _bad = fund_df.loc[~_code_s.str.match(_VALID_FUND_CODE)]
         if len(_bad):
-            print(f"  [护栏] 剔除 {len(_bad)} 个非法基金代码（非 6 位 SZ/SH/OF）: "
-                  f"{sorted(_bad['ts_code'].astype(str).tolist())[:25]}")
+            print(
+                f"  [护栏] 剔除 {len(_bad)} 个非法基金代码（非 6 位 SZ/SH/OF）: "
+                f"{sorted(_bad['ts_code'].astype(str).tolist())[:25]}"
+            )
             fund_df = fund_df.loc[_code_s.str.match(_VALID_FUND_CODE)].reset_index(drop=True)
         path = os.path.join(meta_dir, "fund_basic.parquet")
         _guard_overwrite(path, fund_df)
         _atomic_write_parquet(fund_df, path)
-        print(f"  → 合计 {len(fund_df)} 只基金 (场内E {n_e} + 场外O "
-              f"{n_o_total}/{n_o_pages}页), 已保存")
+        print(
+            f"  → 合计 {len(fund_df)} 只基金 (场内E {n_e} + 场外O "
+            f"{n_o_total}/{n_o_pages}页), 已保存"
+        )
     else:
         fund_df = pd.DataFrame()
         print("  [ERROR] 未获取到任何基金数据!")
@@ -268,9 +287,19 @@ def fetch_metadata(pro, limiter, data_root, dry_run=False):
 # ============================================================
 # 单API批量下载
 # ============================================================
-def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
-                     max_rows=5000, desc="", dry_run=False, workers=None,
-                     refresh_existing=False):
+def download_one_api(
+    pro,
+    api_name,
+    codes,
+    limiter,
+    checkpoint,
+    data_root,
+    max_rows=5000,
+    desc="",
+    dry_run=False,
+    workers=None,
+    refresh_existing=False,
+):
     """
     对一组代码逐一调用同一API, 保存为Parquet。
 
@@ -306,10 +335,14 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
     #   改为一次性取出"库内真的有数据"的代码集合（读年度文件的 ts_code 列）。
     try:
         from common import reader
+
         stored = set(reader.codes_from_store(api_name))
     except Exception as exc:
-        print(f"[fetch.full_download] 取库内代码集失败 {api_name}（按空处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fetch.full_download] 取库内代码集失败 {api_name}（按空处理）: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         stored = set()
     _refresh = bool(refresh_existing)
     n_stored_in_pending = 0
@@ -333,7 +366,16 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
 
     if dry_run:
         print(f"  [DRY-RUN] 待下载 {len(pending)} 只, 跳过 {skipped} 只")
-        return
+        return {
+            "api": api_name,
+            "fail": 0,
+            "ok": 0,
+            "empty": 0,
+            "saved": 0,
+            "save_fail": 0,
+            "skipped": skipped,
+            "dry_run": True,
+        }
 
     counters = {"saved": 0, "save_fail": 0}
 
@@ -363,15 +405,18 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
                     if _key is None:
                         subset = "*"
                     elif _key is _UNSET:
-                        subset = (["ts_code", date_col]
-                                  if "ts_code" in df.columns else [date_col])
-                        print(f"  [提示] {api_name} 未登记 DB_AUDIT_PKEYS，"
-                              f"退化按 {subset} 判重")
+                        subset = ["ts_code", date_col] if "ts_code" in df.columns else [date_col]
+                        print(f"  [提示] {api_name} 未登记 DB_AUDIT_PKEYS，退化按 {subset} 判重")
                     else:
                         subset = list(_key)
-                    _r = upsert_by_year(df, api_dir, date_col=date_col,
-                                        subset=subset, sort_by=date_col,
-                                        on_error=lambda y, e: print(f"  [ERROR] 分区 {y}: {e}"))
+                    _r = upsert_by_year(
+                        df,
+                        api_dir,
+                        date_col=date_col,
+                        subset=subset,
+                        sort_by=date_col,
+                        on_error=lambda y, e: print(f"  [ERROR] 分区 {y}: {e}"),
+                    )
                     # ⚠ 2026-09-22（P0）: fail>0 表示有年份分区没写进去，
                     #   不得记断点（否则该标的数据永不重拉）。抛出后由下方
                     #   except 捕获 → 计入 save_fail 且不标记断点，符合预期。
@@ -392,16 +437,24 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
     def progress(done, tot, stat, elapsed):
         rate = done / elapsed * 60 if elapsed > 0 else 0
         eta_min = (tot - done) / rate if rate > 0 else 0
-        print(f"  [{api_name}] {done}/{tot} | "
-              f"成功={stat['ok']} 空={stat['empty']} 失败={stat['fail']} 跳过={skipped} | "
-              f"速率={rate:.0f}/min | 预估剩余={eta_min:.0f}min | "
-              f"{limiter.status_str()}")
+        print(
+            f"  [{api_name}] {done}/{tot} | "
+            f"成功={stat['ok']} 空={stat['empty']} 失败={stat['fail']} 跳过={skipped} | "
+            f"速率={rate:.0f}/min | 预估剩余={eta_min:.0f}min | "
+            f"{limiter.status_str()}"
+        )
 
     t_start = time.time()
     stat = fetch_codes_parallel(
-        pro, api_name, pending, limiter,
-        max_workers=workers, max_rows=max_rows,
-        on_result=on_result, progress=progress, progress_every=100,
+        pro,
+        api_name,
+        pending,
+        limiter,
+        max_workers=workers,
+        max_rows=max_rows,
+        on_result=on_result,
+        progress=progress,
+        progress_every=100,
         verbose=False,
     )
 
@@ -410,16 +463,28 @@ def download_one_api(pro, api_name, codes, limiter, checkpoint, data_root,
 
     elapsed = time.time() - t_start
     rate = (stat["ok"] + stat["fail"] + stat["empty"]) / elapsed * 60 if elapsed > 0 else 0
-    print(f"\n  [{api_name}] 完成: 成功={stat['ok']} 空={stat['empty']} 失败={stat['fail']} "
-          f"跳过={skipped} | 落盘={counters['saved']} 存盘失败={counters['save_fail']} | "
-          f"耗时={elapsed/60:.1f}min | 稳定速率={rate:.0f}/min")
+    print(
+        f"\n  [{api_name}] 完成: 成功={stat['ok']} 空={stat['empty']} 失败={stat['fail']} "
+        f"跳过={skipped} | 落盘={counters['saved']} 存盘失败={counters['save_fail']} | "
+        f"耗时={elapsed / 60:.1f}min | 稳定速率={rate:.0f}/min"
+    )
+    # D4/F2：失败数 = 取数失败 + 落盘失败；CLI `_failed_count` 直接消费。
+    return {
+        "api": api_name,
+        "fail": int(stat["fail"]) + int(counters["save_fail"]),
+        "ok": int(stat["ok"]),
+        "empty": int(stat["empty"]),
+        "saved": int(counters["saved"]),
+        "save_fail": int(counters["save_fail"]),
+        "skipped": int(skipped),
+        "dry_run": False,
+    }
 
 
 # ============================================================
 # 主流程编排
 # ============================================================
-def run_download(phase="all", reset=False, dry_run=False, workers=None,
-                 refresh_existing=False):
+def run_download(phase="all", reset=False, dry_run=False, workers=None, refresh_existing=False):
     """执行全市场数据下载。
 
     供本文件 CLI 与统一入口 main.py 的 download-full 子命令共用。
@@ -459,7 +524,8 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None,
     #   覆盖写坏了 fund_basic.parquet（15,000 行残缺表）。
     if phase in ("all", "meta"):
         stock_df, fund_df, _trade_dates = fetch_metadata(
-            pro, limiter, MARKET_DATA_DIR, dry_run=dry_run)
+            pro, limiter, MARKET_DATA_DIR, dry_run=dry_run
+        )
     else:
         # 非meta阶段, 从本地读取元数据
         stock_df, fund_df = _load_local_metadata()
@@ -493,20 +559,34 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None,
         fund_codes_listed = []
         dropped = 0
 
-    print(f"\n[代码清单] 个股: {len(stock_codes)} | 基金(场内SH/SZ): {len(fund_codes_listed)}"
-          + (f" | 已剔除场外/退市: {dropped}" if dropped else ""))
+    print(
+        f"\n[代码清单] 个股: {len(stock_codes)} | 基金(场内SH/SZ): {len(fund_codes_listed)}"
+        + (f" | 已剔除场外/退市: {dropped}" if dropped else "")
+    )
 
     # ── Phase: 日线行情 ──
+    api_results = []
     if phase in ("all", "daily"):
         for api_conf in DOWNLOAD_PHASES["daily"]["apis"]:
             api_name = api_conf["api"]
             desc = api_conf["desc"]
             max_rows = api_conf["max_rows"]
             codes = stock_codes if api_name in ("daily", "daily_basic") else fund_codes_listed
-            download_one_api(pro, api_name, codes, limiter, checkpoint,
-                             MARKET_DATA_DIR, max_rows=max_rows, desc=desc,
-                             dry_run=dry_run, workers=workers,
-                             refresh_existing=refresh_existing)
+            api_results.append(
+                download_one_api(
+                    pro,
+                    api_name,
+                    codes,
+                    limiter,
+                    checkpoint,
+                    MARKET_DATA_DIR,
+                    max_rows=max_rows,
+                    desc=desc,
+                    dry_run=dry_run,
+                    workers=workers,
+                    refresh_existing=refresh_existing,
+                )
+            )
 
     # ── Phase: 财务数据 ──
     if phase in ("all", "fina"):
@@ -514,26 +594,46 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None,
             api_name = api_conf["api"]
             desc = api_conf["desc"]
             max_rows = api_conf["max_rows"]
-            download_one_api(pro, api_name, stock_codes, limiter, checkpoint,
-                             MARKET_DATA_DIR, max_rows=max_rows, desc=desc,
-                             dry_run=dry_run, workers=workers,
-                             refresh_existing=refresh_existing)
+            api_results.append(
+                download_one_api(
+                    pro,
+                    api_name,
+                    stock_codes,
+                    limiter,
+                    checkpoint,
+                    MARKET_DATA_DIR,
+                    max_rows=max_rows,
+                    desc=desc,
+                    dry_run=dry_run,
+                    workers=workers,
+                    refresh_existing=refresh_existing,
+                )
+            )
 
     # ── 最终报告 ──
     print("\n" + "=" * 60)
     print("  下载完成 — 统计报告")
     print("=" * 60)
 
-    for api_name in ["daily", "daily_basic", "fund_daily",
-                     "income", "balancesheet", "cashflow", "fina_indicator"]:
+    for api_name in [
+        "daily",
+        "daily_basic",
+        "fund_daily",
+        "income",
+        "balancesheet",
+        "cashflow",
+        "fina_indicator",
+    ]:
         api_dir = os.path.join(MARKET_DATA_DIR, api_name)
         if os.path.isdir(api_dir):
             files = [f for f in os.listdir(api_dir) if f.endswith(".parquet")]
             total_size = sum(os.path.getsize(os.path.join(api_dir, f)) for f in files)
             done = checkpoint.get_completed_count(api_name)
-            print(f"  {api_name:20s}: {len(files):5d}文件 | "
-                  f"{total_size/1024/1024:8.1f}MB | "
-                  f"断点完成={done}")
+            print(
+                f"  {api_name:20s}: {len(files):5d}文件 | "
+                f"{total_size / 1024 / 1024:8.1f}MB | "
+                f"断点完成={done}"
+            )
         else:
             print(f"  {api_name:20s}: 未下载")
 
@@ -547,24 +647,45 @@ def run_download(phase="all", reset=False, dry_run=False, workers=None,
     print(f"  频次统计: {limiter.status_str()}")
     print("=" * 60)
 
+    fail = sum(int((r or {}).get("fail") or 0) for r in api_results)
+    return {
+        "fail": fail,
+        "apis": {r["api"]: r["fail"] for r in api_results if r},
+        "dry_run": dry_run,
+    }
+
 
 def main():
     parser = argparse.ArgumentParser(description="全市场数据下载器（并发版）")
-    parser.add_argument("--reset", action="store_true",
-                        help="清除断点（单独使用不会重拉；需配合 --refresh-existing）")
-    parser.add_argument("--phase", type=str, default="all",
-                        help="指定阶段: meta / daily / fina / all")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="清除断点（单独使用不会重拉；需配合 --refresh-existing）",
+    )
+    parser.add_argument(
+        "--phase", type=str, default="all", help="指定阶段: meta / daily / fina / all"
+    )
     parser.add_argument("--dry-run", action="store_true", help="空跑模式, 只统计不下载")
-    parser.add_argument("--workers", type=int, default=None,
-                        help=f"并发线程数 (默认{FETCH_MAX_WORKERS}, 传1=串行)")
-    parser.add_argument("--refresh-existing", action="store_true",
-                        help="库内已有数据的码也重拉（跳过 codes_from_store 跳过逻辑；"
-                             "断点仍生效，需彻底重来请同时加 --reset）")
+    parser.add_argument(
+        "--workers", type=int, default=None, help=f"并发线程数 (默认{FETCH_MAX_WORKERS}, 传1=串行)"
+    )
+    parser.add_argument(
+        "--refresh-existing",
+        action="store_true",
+        help="库内已有数据的码也重拉（跳过 codes_from_store 跳过逻辑；"
+        "断点仍生效，需彻底重来请同时加 --reset）",
+    )
     args = parser.parse_args()
 
-    run_download(phase=args.phase, reset=args.reset, dry_run=args.dry_run,
-                 workers=args.workers, refresh_existing=args.refresh_existing)
+    result = run_download(
+        phase=args.phase,
+        reset=args.reset,
+        dry_run=args.dry_run,
+        workers=args.workers,
+        refresh_existing=args.refresh_existing,
+    )
+    return 1 if int((result or {}).get("fail") or 0) > 0 else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

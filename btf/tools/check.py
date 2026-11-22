@@ -2,7 +2,7 @@
 """bt check —— 本地架构守护检查（阶段 0 任务 0.2；门禁项数演进：M1 4.4 六项 → 批 8 八项 → EX-4 9 项 → **GG-6② 十项**）。
 
 组合十项检查（对应架构纪律）：
-    1. ruff lint        代码规范 + 随机源禁令（08 §13.4）
+    1. ruff lint + ruff format --check   代码规范 + 随机源禁令（08 §13.4）+ 格式归零（D11）
     2. lint-imports     import-linter 六铁律（03 §7.3 黑名单式）
     3. pytest smoke     冒烟：中文路径/环境自检（06 §11.3）
     4. deps_budget      依赖预算 ≤8（07 §12.11）
@@ -42,6 +42,7 @@
      变量一律 `BTFTOOL_` 前缀——**禁用 `BTF_` 前缀**（会被配置层当覆盖键注入 ⇒ 配置校验失败）。
 退出码: 0=全绿 / 1=有失败项
 """
+
 import os
 import re
 import subprocess
@@ -63,8 +64,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 #: ① 逐项输出**落盘**（`BTFTOOL_CHECK_LOG_DIR` 可覆盖；每次运行一个时间戳子目录）
 #: —— 治"偶发假红无日志可归因"（上一轮两次假红均因无失败日志而无法定论）。
 #: 变量名 `BTFTOOL_` 前缀（**N7**：`BTF_` 前缀＝配置覆盖命名空间 ⇒ 配置校验失败）。
-LOG_DIR = Path(os.environ.get(
-    "BTFTOOL_CHECK_LOG_DIR", ROOT.parent / "logs" / "bt_check"))
+LOG_DIR = Path(os.environ.get("BTFTOOL_CHECK_LOG_DIR", ROOT.parent / "logs" / "bt_check"))
 RUN_STAMP = time.strftime("%Y%m%d-%H%M%S")
 #: ③ **仅在"已知偶发"项上**允许自动复跑一次，且**显式标注**（"首次失败/复跑通过"）——
 #: **不隐藏**偶发；未列此项的失败一律按真失败处置。
@@ -76,9 +76,11 @@ FLAKES_ANNOTATED: list[str] = []
 #: 非零退出。**独立子根** `…/pytest_tmp/check`（`bt test` 用 `…/pytest_tmp/bt_test`）
 #: ⇒ 两通道残留互不污染（原共根时，任一残留 > 守卫阈值会让"清空根"被拦 ⇒ 假红）。
 #: 变量名 `BTFTOOL_` 前缀（**N7**；19 号 §69.4）。
-PYTEST_BASETEMP = Path(os.environ.get(
-    "BTFTOOL_CHECK_PYTEST_BASETEMP",
-    ROOT.parent / "_scratch" / "pytest_tmp" / "check"))
+PYTEST_BASETEMP = Path(
+    os.environ.get(
+        "BTFTOOL_CHECK_PYTEST_BASETEMP", ROOT.parent / "_scratch" / "pytest_tmp" / "check"
+    )
+)
 
 
 def _slug(name: str) -> str:
@@ -88,8 +90,9 @@ def _slug(name: str) -> str:
 def _exec(name: str, cmd: list[str], attempt: int) -> bool:
     """跑一项：**捕获输出**（打印 + 落盘，N4①）＋子进程显式 UTF-8（N4②，06 §11.3）。"""
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", env=env)
+    r = subprocess.run(
+        cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env
+    )
     out = (r.stdout or "") + (r.stderr or "")
     sys.stdout.write(out)
     sys.stdout.flush()
@@ -97,7 +100,7 @@ def _exec(name: str, cmd: list[str], attempt: int) -> bool:
     log.parent.mkdir(parents=True, exist_ok=True)
     try:
         log.write_text(out, encoding="utf-8")
-    except OSError as exc:                     # 日志失败不得掩盖门禁结论
+    except OSError as exc:  # 日志失败不得掩盖门禁结论
         print(f"[warn] 日志写入失败（{exc}）——不影响本项判定")
     return r.returncode == 0
 
@@ -106,12 +109,10 @@ def run(name: str, cmd: list[str], *, retryable: bool = False) -> bool:
     print(f"\n=== {name} ===")
     ok = _exec(name, cmd, 1)
     if not ok and retryable:
-        print(f"--- {name}: FAIL（首次）→ 自动复跑一次"
-              f"（N4 冷启动偶发；两次输出均已留盘）---")
+        print(f"--- {name}: FAIL（首次）→ 自动复跑一次（N4 冷启动偶发；两次输出均已留盘）---")
         if _exec(name, cmd, 2):
             FLAKES_ANNOTATED.append(name)
-            print(f"--- {name}: PASS（**首次失败 / 复跑通过**"
-                  f"——N4 冷启动偶发，已留痕）---")
+            print(f"--- {name}: PASS（**首次失败 / 复跑通过**——N4 冷启动偶发，已留痕）---")
             return True
         print(f"--- {name}: FAIL（复跑亦失败 ⇒ 按**真失败**处置）---")
         return False
@@ -119,31 +120,48 @@ def run(name: str, cmd: list[str], *, retryable: bool = False) -> bool:
     return ok
 
 
+def _ruff_all() -> bool:
+    """第 1 项：ruff lint + **ruff format --check**（D11 格式门禁归零）。
+
+    两者同属"静态规范"，合并为一项以保持 `bt check` 10/10 的口径不变；
+    任一失败即该项失败（`and` 右侧先跑 lint 再跑格式，均留盘）。
+    """
+    lint_ok = run("1a/10 ruff lint", [PY, "-m", "ruff", "check", "btf", "tests", "tools"])
+    fmt_ok = run(
+        "1b/10 ruff format --check",
+        [PY, "-m", "ruff", "format", "--check", "btf", "tests", "tools"],
+    )
+    return lint_ok and fmt_ok
+
+
 def main() -> int:
     results = [
-        run("1/10 ruff lint", [PY, "-m", "ruff", "check", "btf", "tests", "tools"]),
+        _ruff_all(),
         run("2/10 import-linter 架构铁律", [str(LINT_IMPORTS)]),
-        run("3/10 冒烟测试（中文路径/环境）",
-            [PY, "-m", "pytest", "tests", "-m", "smoke", "-v",
-             "--basetemp", str(PYTEST_BASETEMP)],
-            retryable=True),                     # N4③：已知冷启动偶发项
+        run(
+            "3/10 冒烟测试（中文路径/环境）",
+            [PY, "-m", "pytest", "tests", "-m", "smoke", "-v", "--basetemp", str(PYTEST_BASETEMP)],
+            retryable=True,
+        ),  # N4③：已知冷启动偶发项
         run("4/10 依赖预算", [PY, "tools/deps_budget.py"]),
         run("5/10 包可导入", [PY, "-c", "import btf; print('btf', btf.__version__)"]),
         run("6/10 domain 白名单", [PY, "tools/check_domain_whitelist.py"]),
         run("7/10 报告渲染级结构（新 14）", [PY, "tools/check_report_render.py"]),
-        run("8/10 数据不变量校验（CC-6 + 负向对照）",
-            [PY, "tools/check_data_quality.py"]),
-        run("9/10 IO 单一入口（EX-4 完全体）+ 变异性自检",
-            [PY, "tools/check_io_boundary.py", "--self-test"]),
-        run("10/10 插件边界基线（契约 6；GG-6②）",
-            [PY, "tools/check_plugin_boundary.py"]),
+        run("8/10 数据不变量校验（CC-6 + 负向对照）", [PY, "tools/check_data_quality.py"]),
+        run(
+            "9/10 IO 单一入口（EX-4 完全体）+ 变异性自检",
+            [PY, "tools/check_io_boundary.py", "--self-test"],
+        ),
+        run("10/10 插件边界基线（契约 6；GG-6②）", [PY, "tools/check_plugin_boundary.py"]),
     ]
     n_pass = sum(results)
     print(f"\n{'=' * 40}\nbt check: {n_pass}/10 通过")
     print(f"逐项日志（N4①）：{LOG_DIR / RUN_STAMP}")
     if FLAKES_ANNOTATED:
-        print("⚠ 冷启动偶发（N4③，**不隐藏**）："
-              + "；".join(f"{n}（首次失败/复跑通过）" for n in FLAKES_ANNOTATED))
+        print(
+            "⚠ 冷启动偶发（N4③，**不隐藏**）："
+            + "；".join(f"{n}（首次失败/复跑通过）" for n in FLAKES_ANNOTATED)
+        )
     if n_pass != 10:
         print("失败项请附**逐项日志**原样回执（19 号 §67.7 硬约束 5）")
     return 0 if n_pass == 10 else 1

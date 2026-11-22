@@ -7,6 +7,7 @@
 纪律：本文件只**断言**，不改任何生产代码；失败信息必须写清「谁违反了哪条」，
 不要只报 assert False —— 半年后看到红灯的人要能直接定位。
 """
+
 import fnmatch
 import pathlib
 import re
@@ -28,6 +29,12 @@ BASELINE_DIRECT_WRITES = 15
 
 # T3 反向扫描的匹配面（派单 §3.3-T3 原文）
 _CHECKPOINT_PATTERNS = ("*checkpoint*", "*_state.json", "*_progress.json")
+
+# 带精确时间戳的 checkpoint 备份 = 非活断点，不参与反向归属。
+# 来源：D5-D 补拉（2026-11-22 00:03）按纪律生成的
+# `.backfill_checkpoint.json.bak_20261122_000315`；保留不删。
+# ⚠ 只认「原文件名 + .bak_YYYYMMDD_HHMMSS」，不得放宽为任意 `.bak`。
+CHECKPOINT_BACKUP_RE = re.compile(r"^\.backfill_checkpoint\.json\.bak_\d{8}_\d{6}$")
 
 # T3 已知未登记清单：**不是白名单，是待裁定清单**。
 # 新增任何一项都必须先经赤潮裁定，否则 test_t3 会红（防静默放行）。
@@ -62,8 +69,16 @@ def _direct_writes():
     排除：虚拟环境、测试、临时草稿、btf（独立子仓）、缓存，
     以及 `common/parquet_store.py` 本身（它就是唯一允许直写的必经之地）。
     """
-    skip = {"_venv", ".git", "__pycache__", "_scratch", "tests",
-            "btf", ".pytest_cache", "_wt_d3_before"}
+    skip = {
+        "_venv",
+        ".git",
+        "__pycache__",
+        "_scratch",
+        "tests",
+        "btf",
+        ".pytest_cache",
+        "_wt_d3_before",
+    }
     out = []
     for p in CODE_ROOT.rglob("*.py"):
         if any(part in skip for part in p.parts) or p.name == "parquet_store.py":
@@ -82,14 +97,16 @@ def test_t1_describe_summary():
     assert s["n_domains"] == 43
     # DEAD：W-2 补登记 3 张零载体表（bc_bestotcqt/stk_mins/report_rc，§449.4）。
     assert s["by_authority"].get("DEAD", 0) == 3, f"DEAD 应为 3：{s['by_authority']}"
-    for auth, n in {"PRIMARY": 16, "SUPPLEMENTARY": 14,
-                    "LEGACY": 5, "NOT_A_CHECKPOINT": 5}.items():
+    for auth, n in {"PRIMARY": 16, "SUPPLEMENTARY": 14, "LEGACY": 5, "NOT_A_CHECKPOINT": 5}.items():
         assert s["by_authority"].get(auth) == n, f"权威分布漂移：{s['by_authority']}"
     assert set(s["by_authority"]) <= {
-        "PRIMARY", "SUPPLEMENTARY", "LEGACY", "DEAD", "NOT_A_CHECKPOINT"}, \
-        f"出现了未声明的权威等级：{s['by_authority']}"
-    assert s["by_library"] == {"market_data": 21, "alt_data": 22}, \
-        f"库分布漂移：{s['by_library']}"
+        "PRIMARY",
+        "SUPPLEMENTARY",
+        "LEGACY",
+        "DEAD",
+        "NOT_A_CHECKPOINT",
+    }, f"出现了未声明的权威等级：{s['by_authority']}"
+    assert s["by_library"] == {"market_data": 21, "alt_data": 22}, f"库分布漂移：{s['by_library']}"
     assert s["primary_triples"] == 216, f"PRIMARY 三元组应为 216：{s['primary_triples']}"
     assert sum(s["by_key_space"].values()) == s["primary_triples"]
 
@@ -122,10 +139,14 @@ def test_t3_reverse_attribution():
     found = _checkpoint_like(MARKET_DATA_DIR)
     assert len(found) >= 8, f"扫描面异常（只扫到 {len(found)} 个），先确认数据根路径"
     unregistered = [
-        f for f in found
-        if f not in registered and pathlib.PurePosixPath(f).name not in registered
+        f for f in found if f not in registered and pathlib.PurePosixPath(f).name not in registered
     ]
-    unknown = [f for f in unregistered if f not in KNOWN_UNREGISTERED]
+    unknown = [
+        f
+        for f in unregistered
+        if f not in KNOWN_UNREGISTERED
+        and not CHECKPOINT_BACKUP_RE.match(pathlib.PurePosixPath(f).name)
+    ]
     assert not unknown, (
         f"磁盘有 {len(unknown)} 个断点类文件未登记：{unknown}；"
         f"要么在 config/checkpoint_registry.py 补登记，要么由赤潮裁定归 NOT_A_CHECKPOINT"
@@ -143,6 +164,10 @@ def test_t3b_scan_detects_planted_file(tmp_path):
     (tmp_path / "x.lock").write_text("", encoding="utf-8")
     found = _checkpoint_like(tmp_path)
     assert ".fake_checkpoint.json" in found, "假断点文件未被扫出 ⇒ 反向归属失效"
+    assert CHECKPOINT_BACKUP_RE.match(".backfill_checkpoint.json.bak_20261122_000315")
+    assert not CHECKPOINT_BACKUP_RE.match(".backfill_checkpoint.json.bak"), (
+        "备份正则被放宽为任意 .bak"
+    )
     assert "x.lock" not in found, "*.lock 不该进扫描面"
 
 
@@ -150,9 +175,13 @@ def test_t3b_scan_detects_planted_file(tmp_path):
 def test_t4_empty_tables_tolerated():
     """T4：只登记文件、不声明表的 7 个域，describe 不得崩（禁 min()/[0] 取首元素）。"""
     ids = [
-        "market.backfill.bak_20260925", "market.backfill.bak_20261001",
-        "alt.meta.audit_report", "alt.meta.spec_verify_report", "alt.meta.isolation_log",
-        "alt.meta.main_db_snapshot", "market.meta.db_version",
+        "market.backfill.bak_20260925",
+        "market.backfill.bak_20261001",
+        "alt.meta.audit_report",
+        "alt.meta.spec_verify_report",
+        "alt.meta.isolation_log",
+        "alt.meta.main_db_snapshot",
+        "market.meta.db_version",
     ]
     for i in ids:
         one = _pg.describe(i)
@@ -223,7 +252,8 @@ def test_k2_audit_checks_all_carriers(monkeypatch):
 
     monkeypatch.setattr(audit, "_check_carrier", spy)
     errors, _infos = audit.audit_checkpoint(verbose=False)
-    assert len(calls) == len(audit._checkpoint_files()) == 21, \
+    assert len(calls) == len(audit._checkpoint_files()) == 21, (
         f"只核了 {len(calls)} 个载体（应 21）"
+    )
     assert depths.count("deep") >= 6, f"深度核对仅 {depths.count('deep')} 个，K2 要求 ≥6"
     assert not errors, f"真实数据上不应有真异常：{errors}"

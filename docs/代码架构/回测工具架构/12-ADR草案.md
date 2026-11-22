@@ -1,7 +1,7 @@
 > 事实锚点：2026-11-20
 > - 覆盖范围：btf ADR
 > - 事实真源：btf 历史决策
-> - 关键计数：ADR-1 ~ ADR-25（生效 25 条）· btf 7.0.0 · 13 命令族
+> - 关键计数：ADR-1 ~ ADR-25（生效 25 条）· btf 7.0.0 · 14 命令族
 > - 文档版本：v0.4（btf 7.0.0，2026-11-20 校准）
 
 # 12 架构决策记录（ADR）
@@ -21,10 +21,10 @@
 
 ## ADR-2 数据存储：直读现有 Parquet 主库（标准层与 DuckDB 未采纳）
 
-- **决策**：btf **只读**直读 `market_data`（年分区 Parquet）；`tables_meta` 登记 **20 表**三布局（数据字典 21 项——第 21 项 `fund_share` 不注册，仅披露、禁判折算）；读取层统一布局与量纲。
+- **决策**：btf **只读**直读 `market_data`（年分区 Parquet）；`tables_meta` 登记 **21 表**三布局（数据字典 22 项——`fund_share` 不注册，仅披露、禁判折算；第 21 表 `fund_basic` 已登记）；读取层统一布局与量纲。
   （**2026-10-05 修订并已交付（RC-04）**：18 → 19，新增 `fund_adj`（起点 19991022）——ETF 份额折算 / 不定期折算的复权因子**唯一来源**，
   路由见 `tables_meta.factor_table_of`（股票 → `adj_factor`；ETF/LOF → `fund_adj`），见 [05 §9.4](05-数据架构与数据集体系.md)。ADR-2 结论不变，仅登记数变化。
-   **2026-10-07 再扩（DOC-8/ADR-20）**：19 → **21 项**（`tables_meta` 登记 **20 表**）——新增 `fund_div`（ETF/LOF 分红）与 `fund_share`（仅披露，禁判折算）；**R32′ 已交付（2026-10-08）**：`fund_div` 登记为第 20 表、`fund_share` **不注册**（仅披露、禁判折算——ADR-20 第 6 条）；ADR-2 结论仍不变。）
+   **2026-10-07 再扩（DOC-8/ADR-20）**：19 → **21 项**（`tables_meta` 登记 **21 表**）——新增 `fund_div`（ETF/LOF 分红）与 `fund_share`（仅披露，禁判折算）；**R32′ 已交付（2026-10-08）**：`fund_div` 登记为第 20 表、`fund_share` **不注册**（仅披露、禁判折算——ADR-20 第 6 条）；**D-1/D-3**：`fund_basic` 登记为第 21 表；ADR-2 结论仍不变。）
 - **现状**：`btf.data.parquet_reader`（谓词下推、`memory_map` 仅主库）+ `core.YearTableStore`（唯一 IO 入口、有界缓存、线程安全）。
 - **未采纳（保留评估）**：中间"Parquet 标准层"与 DuckDB 查询层——当前规模下 PyArrow 足够，引入即引入第二套口径与额外构建负担。
 - **性能证据**：子集宇宙谓词下推使十年全市场回测 **32.9s**；LIQ 十年预计算 **4.95–4.97s**。
@@ -56,7 +56,7 @@
 ## ADR-7 入口策略：单一 Facade（`BTFRuntime`）+ 应用服务层 + 双入口
 
 - **决策**：装配根唯一（`BTFRuntime`）；CLI 与 API **共用 `btf.app`**（同源实现，天然字节等价）；入口层不得含编排（契约 10）。
-- **现状**：`btf/runtime.py` + `btf/app/services.py` + `btf/cli/main.py`（**13 命令族**，1.1.0 后新增 `validate`、1.3.4 曾新增 `adhoc`（7.0.0 已收敛）、**1.2.3 新增 `data`**——R34′/V1.2.3）+ `btf/api.py`。
+- **现状**：`btf/runtime.py` + `btf/app/services.py` + `btf/cli/main.py`（**14 命令族**，1.1.0 后新增 `validate`、1.3.4 新增 `adhoc`（保留）、**1.2.3 新增 `data`**——R34′/V1.2.3）+ `btf/api.py`。
 - **边界**：不提供 REST/gRPC/Web（非目标）。
 
 ## ADR-8 实验管理：自建轻量 RunStore（不引入 MLflow/W&B）

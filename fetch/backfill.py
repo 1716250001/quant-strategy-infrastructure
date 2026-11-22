@@ -33,6 +33,7 @@ fetch/backfill.py — 通用补数引擎（执行编排层）
   - by_date 用 YearBatchWriter 批量落盘（实测比逐天写入快 17 倍）
   - 断点按 target 名独立记录；**仅"调用成功"才记**，失败留待续跑
 """
+
 import argparse
 import os
 import re
@@ -92,6 +93,7 @@ from fetch.backfill_spec import (  # noqa: F401
 from fetch.base import (
     Checkpoint,
     FileLock,
+    LockTimeout,
     RateLimiter,
     fetch_codes_parallel,  # ts_fetch: DB-R10 R10-1d
     fetch_paged_by_code,  # CC-FIX-4：by_code offset 翻页
@@ -101,7 +103,7 @@ from fetch.base import (
     ts_fetch,
 )
 
-BACKFILL_DIR_ROOT = MARKET_DATA_DIR          # 各 target 在 market_data 下建同名目录
+BACKFILL_DIR_ROOT = MARKET_DATA_DIR  # 各 target 在 market_data 下建同名目录
 
 # codes-file 模式专用独立断点（不污染主 .backfill_checkpoint.json）
 CODES_CHECKPOINT_FILE = ".backfill_checkpoint_codes.json"
@@ -120,14 +122,22 @@ def _load_known_gaps():
     global _KNOWN_GAPS_CACHE
     if _KNOWN_GAPS_CACHE is None:
         import json as _json
-        _p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                          "tools", "db", "data", "known_gaps.json")
+
+        _p = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "tools",
+            "db",
+            "data",
+            "known_gaps.json",
+        )
         try:
             with open(_p, encoding="utf-8") as _f:
                 _KNOWN_GAPS_CACHE = _json.load(_f)
         except Exception as exc:
-            print(f"[fetch.backfill] 读 known_gaps 失败（按空处理）{_p}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[fetch.backfill] 读 known_gaps 失败（按空处理）{_p}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             _KNOWN_GAPS_CACHE = {}
     return _KNOWN_GAPS_CACHE
 
@@ -190,9 +200,15 @@ _T1_PUBLISH_TABLES = frozenset({"margin"})
 # （fund_nav → .backfill_checkpoint_codes.json，hk_daily → .alt_checkpoint.json，
 #  其余 3 张 DEAD 零载体）。接线后 is_done 会返 None / mark_done 会拒写，
 # 表现为「断点永远记不上、每次重拉全量且不报错」⇒ 永不解域参数（保持旧行为）。
-_NON_LOCAL_DOMAIN_TABLES = frozenset({
-    "fund_nav", "hk_daily", "bc_bestotcqt", "report_rc", "stk_mins",
-})
+_NON_LOCAL_DOMAIN_TABLES = frozenset(
+    {
+        "fund_nav",
+        "hk_daily",
+        "bc_bestotcqt",
+        "report_rc",
+        "stk_mins",
+    }
+)
 
 
 def _ks_for(name, kind):
@@ -205,11 +221,16 @@ def _ks_for(name, kind):
     if name in _NON_LOCAL_DOMAIN_TABLES:
         return None, None
     ks = {
-        "date": "date8", "code": "code", "range": "range8",
-        "period": "period", "month": "month6", "param": "param",
-        "paged": "page", "once": "__whole__",
+        "date": "date8",
+        "code": "code",
+        "range": "range8",
+        "period": "period",
+        "month": "month6",
+        "param": "param",
+        "paged": "page",
+        "once": "__whole__",
     }.get(kind)
-    if ks is None:                     # kind == "unknown"/"need_meta"：不接线
+    if ks is None:  # kind == "unknown"/"need_meta"：不接线
         return None, None
     return "market_data", ks
 
@@ -275,8 +296,10 @@ def _load_codes_file(path):
             if not line or line.startswith("#"):
                 continue
             if not _TS_CODE_RE.match(line):
-                print(f"  [FATAL] codes-file 第 {i} 行格式非法: {line!r} "
-                      f"(需匹配 ^\\d{{6,7}}\\.(SH|SZ|BJ)$)")
+                print(
+                    f"  [FATAL] codes-file 第 {i} 行格式非法: {line!r} "
+                    f"(需匹配 ^\\d{{6,7}}\\.(SH|SZ|BJ)$)"
+                )
                 return None
             codes.append(line)
     print(f"  [codes-file] {path}: {len(codes)} 只")
@@ -326,9 +349,9 @@ def _dedup_by_key(df, key, sort_col=None):
     return df.drop_duplicates(subset=list(key), keep="first").reset_index(drop=True)
 
 
-
-def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=False,
-                     ignore_checkpoint=False):
+def _compute_pending(
+    name, conf, tasks, kind, cp, dry_run=False, force_listed=False, ignore_checkpoint=False
+):
     """计算待跑任务清单（pending）与跳过数。
 
     从 run_target 提取，供 dry-run 分支复用（零网络）。
@@ -361,17 +384,22 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
         return list(tasks), 0
 
     if kind in ("month", "range"):
-        pending = [t for t in tasks
-                   if not cp.is_done(name, f"{t[0]}|{t[1]}", library=lib, key_space=ks)]
+        pending = [
+            t for t in tasks if not cp.is_done(name, f"{t[0]}|{t[1]}", library=lib, key_space=ks)
+        ]
     elif kind == "code":
         pending = []
         if table_storage_layout(name) == "by_year":
             from common import reader
+
             try:
                 present = set(reader.codes_from_store(name, root=BACKFILL_DIR_ROOT))
             except Exception as exc:
-                print(f"[fetch.backfill] 取库内代码集失败 {name}（按空处理）: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                print(
+                    f"[fetch.backfill] 取库内代码集失败 {name}（按空处理）: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 present = set()
             for t in tasks:
                 if cp.is_done(name, str(t), library=lib, key_space=ks):
@@ -392,14 +420,24 @@ def _compute_pending(name, conf, tasks, kind, cp, dry_run=False, force_listed=Fa
                     continue
                 pending.append(t)
     else:
-        pending = [t for t in tasks
-                   if not cp.is_done(name, str(t), library=lib, key_space=ks)]
+        pending = [t for t in tasks if not cp.is_done(name, str(t), library=lib, key_space=ks)]
     return pending, len(tasks) - len(pending)
 
 
-def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit=None,
-               date_override=None, ignore_checkpoint=False,
-               listed_codes=None, force_listed=False):
+def run_target(
+    pro,
+    name,
+    conf,
+    cp,
+    workers,
+    dry_run=False,
+    verbose=False,
+    limit=None,
+    date_override=None,
+    ignore_checkpoint=False,
+    listed_codes=None,
+    force_listed=False,
+):
     """执行单个 target。
 
     date_override:    显式指定 by_date 的待跑日期列表（每日增量用）。给定时
@@ -447,24 +485,34 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     # ⭐ CLI-1：--force 的 ignore_checkpoint 也走 _compute_pending 的同一判断
     lib, ks = _ks_for(name, kind)
     pending, skipped = _compute_pending(
-        name, conf, tasks, kind, cp, dry_run=dry_run,
-        force_listed=force_listed, ignore_checkpoint=ignore_checkpoint)
+        name,
+        conf,
+        tasks,
+        kind,
+        cp,
+        dry_run=dry_run,
+        force_listed=force_listed,
+        ignore_checkpoint=ignore_checkpoint,
+    )
     if limit:
         pending = pending[:limit]
     est = estimate_requests(pending, conf)
 
     print(f"\n{'─' * 66}")
     print(f"  [{name}] {desc} | 模式={mode} | 限频={rate}/min | 并发={workers}")
-    print(f"  任务数={len(tasks)} 待跑={len(pending)} 跳过={skipped} "
-          f"| 预估请求≈{est} | 预估耗时≈{est/max(rate,1):.1f}min"
-          + (f" | 限量={limit}" if limit else "")
-          + (" | force_listed" if force_listed else ""))
+    print(
+        f"  任务数={len(tasks)} 待跑={len(pending)} 跳过={skipped} "
+        f"| 预估请求≈{est} | 预估耗时≈{est / max(rate, 1):.1f}min"
+        + (f" | 限量={limit}" if limit else "")
+        + (" | force_listed" if force_listed else "")
+    )
     print(f"{'─' * 66}")
 
     if dry_run or not pending:
         return {"name": name, "est": est, "done": 0}
 
     done_ct = {"n": 0}
+    fail_ct = {"n": 0}  # D4/R1：逐码落盘失败计数
 
     # ── 批量落盘（仅对大文件表启用）──
     # 背景：by_code 模式下每标的调用一次 save_df(layout="by_year")，
@@ -473,12 +521,12 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     #       5882 标的累计 35.7 分钟 > 限频下限 34.6 分钟 → 落盘成真瓶颈。
     #       其余 22 个 by_code 表的落盘被限频完全掩盖，故不启用（避免无谓复杂度）。
     _batch = None
-    if (mode == "by_code" and not date_override
-            and by_code_needs_batch(name, target_dir)):
+    if mode == "by_code" and not date_override and by_code_needs_batch(name, target_dir):
+
         def _on_batch_flushed(keys):
             for _k in keys:
                 cp.mark_done(name, str(_k), library=lib, key_space=ks)
-            cp.mark_fetched(name)   # CC-FIX-7：每次 flush 记一次表级拉取时间
+            cp.mark_fetched(name)  # CC-FIX-7：每次 flush 记一次表级拉取时间
 
         _batch = ByCodeBatchWriter(
             target_dir,
@@ -490,8 +538,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             on_flushed=_on_batch_flushed,
             on_error=lambda _y, e: print(f"  [ERROR] 批量落盘 {name}: {str(e)[:70]}"),
         )
-        print(f"  [批量落盘] {name} 年度文件已超 "
-              f"{BY_CODE_BATCH_THRESHOLD_MB}MB，启用累积落盘")
+        print(f"  [批量落盘] {name} 年度文件已超 {BY_CODE_BATCH_THRESHOLD_MB}MB，启用累积落盘")
 
     def on_result(key, df, ok):
         """by_code 落盘回调(主线程串行执行)。
@@ -516,26 +563,28 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             dc = table_date_col(name)
             if dc and dc in df.columns:
                 if _batch is not None:
-                    _batch.add(df, str(key))         # 累积，落盘后由回调记断点
+                    _batch.add(df, str(key))  # 累积，落盘后由回调记断点
                 else:
                     # ⚠ 2026-09-22（P0）: 落盘失败（含"部分年份分区未写入"）
                     #   不得记断点，否则该标的数据永不重拉。
                     try:
                         save_df(target_dir, key, df, layout="by_year", date_col=dc)
                     except Exception as e:
+                        fail_ct["n"] += 1
                         print(f"  [ERROR] {name} {key} 落盘失败，不记断点: {str(e)[:70]}")
                     else:
                         cp.mark_done(name, str(key), library=lib, key_space=ks)
-                        cp.mark_fetched(name)   # CC-FIX-7：单码落盘成功（rows 未知）
+                        cp.mark_fetched(name)  # CC-FIX-7：单码落盘成功（rows 未知）
             else:
                 # 无分区列 → 按标的单文件（仅 stock_company 这类静态元数据）
                 try:
                     _atomic_write_parquet(df, os.path.join(target_dir, f"{key}.parquet"))
                 except Exception as e:
+                    fail_ct["n"] += 1
                     print(f"  [ERROR] {name} {key} 写文件失败，不记断点: {str(e)[:70]}")
                 else:
                     cp.mark_done(name, str(key), library=lib, key_space=ks)
-                    cp.mark_fetched(name, rows=len(df))   # F3/R10 + CC-FIX-7 行数
+                    cp.mark_fetched(name, rows=len(df))  # F3/R10 + CC-FIX-7 行数
         elif ok:
             # 调用成功但无数据（EE-FUND-4 G3 三级语义）:
             # - codes-file 模式（§25 R4）：**不记断点**——逐码重拉场景下空返回
@@ -565,12 +614,14 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     def progress(done, tot, stat, elapsed):
         r = done / elapsed * 60 if elapsed > 0 else 0
         eta = (tot - done) / r if r > 0 else 0
-        print(f"    {name} {done}/{tot} | 成功={stat['ok']} 空={stat['empty']} "
-              f"失败={stat['fail']} | {r:.0f}/min | 剩余≈{eta:.0f}min")
+        print(
+            f"    {name} {done}/{tot} | 成功={stat['ok']} 空={stat['empty']} "
+            f"失败={stat['fail']} | {r:.0f}/min | 剩余≈{eta:.0f}min"
+        )
 
     if conf["mode"] == "once":
         _once = {}
-        if conf.get("fields"):              # DB-R10 R10-1d：fields 透传
+        if conf.get("fields"):  # DB-R10 R10-1d：fields 透传
             _once["fields"] = conf["fields"]
         df = ts_call_with_retry(pro, conf["api"], limiter, _once, verbose=verbose)
         # ⚠ 2026-09-22 修复（P0）: 断点必须"先落盘、后记"。
@@ -581,7 +632,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         #        → 该表永远不会被重拉。
         if df is None:
             print(f"    {name} 调用失败，不记断点，留待续跑")
-            return {"name": name, "est": est, "done": 0}
+            return {"name": name, "est": est, "done": 0, "fail": 1}
         n = 0
         if not df.empty:
             ensure_dir(target_dir)
@@ -592,17 +643,19 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         # 该标记只作历史标记，**不用于跳过**（once 跳过由调度层 is_due 判定，
         # CC-FIX-16 §0.2；切勿据此提前 return，否则全量快照表永不刷新）
         cp.mark_done(name, "once", library=lib, key_space=ks)
-        cp.mark_fetched(name, rows=n)          # F3/R10 + CC-FIX-7 行数
+        cp.mark_fetched(name, rows=n)  # F3/R10 + CC-FIX-7 行数
         cp.save()
-        return {"name": name, "est": est, "done": n}
+        return {"name": name, "est": est, "done": n, "fail": 0}
 
     if conf["mode"] == "by_period":
         # 按报告期精确匹配拉取(disclosure_date 专用)
         pm = conf.get("period_param", "end_date")
         dc = conf.get("date_col", "end_date")
-        cap = conf.get("cap", 0)          # 该接口的单次返回上限, 用于截断告警
+        cap = conf.get("cap", 0)  # 该接口的单次返回上限, 用于截断告警
         truncated = []
         n_ok = 0
+        n_partial = 0
+        n_fail = 0
         for i, per in enumerate(pending, 1):
             # ⚠ 不要在此 wait —— ts_call_with_retry 内部已按同速率 wait（第365行），
             #   外层再 wait 会**双重计数**：预约式限频器会连续占用两个槽位，
@@ -610,11 +663,12 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             #   低限频接口更会直接阻塞：shibor_lpr(0.02/min, interval=3000s)
             #   第二次 wait 会睡满 50 分钟。
             _pp = {pm: per}
-            if conf.get("fields"):          # DB-R10 R10-1d：fields 透传
+            if conf.get("fields"):  # DB-R10 R10-1d：fields 透传
                 _pp["fields"] = conf["fields"]
-            df = ts_call_with_retry(pro, conf["api"], limiter,
-                                    _pp, verbose=verbose)
+            df = ts_call_with_retry(pro, conf["api"], limiter, _pp, verbose=verbose)
             nrow = 0 if df is None else len(df)
+            if df is None:
+                n_fail += 1
             if df is not None and not df.empty:
                 if cap and nrow >= cap:
                     truncated.append((per, nrow))
@@ -624,25 +678,48 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                         #   disclosure_date 用 end_date；top10_holders 用 period。
                         #   默认写死 trade_date 会让参数被静默忽略
                         #   → 每页返回同样的数据（看起来"分页了"但全是重复）。
-                        df2, _, _ = fetch_paged_by_date(pro, conf["api"], limiter,
-                                                        per, verbose=verbose,
-                                                        date_param=pm,
-                                                        fields=conf.get("fields"))
+                        df2, _, _ = fetch_paged_by_date(
+                            pro,
+                            conf["api"],
+                            limiter,
+                            per,
+                            verbose=verbose,
+                            date_param=pm,
+                            fields=conf.get("fields"),
+                        )
                         if df2 is not None and len(df2) > nrow:
                             df = df2
                             truncated[-1] = (per, f"{nrow}→{len(df2)}")
-                _save_df(target_dir, conf["api"], df, layout="by_year",
-                         subset=conf.get("subset"), date_col=dc)
-            if df is not None:      # 仅调用成功才记断点
-                cp.mark_done(name, per, library=lib, key_space=ks)
-                n_ok += 1
-            print(f"    {name} {i}/{len(pending)} | 报告期={per} | {len(df) if df is not None else 0}行")
+                _save_df(
+                    target_dir,
+                    conf["api"],
+                    df,
+                    layout="by_year",
+                    subset=conf.get("subset"),
+                    date_col=dc,
+                )
+            # D4：分页补齐后仍触顶 ⇒ partial（不得记 done）
+            _still_capped = bool(cap and df is not None and not df.empty and len(df) >= cap)
+            if df is not None:
+                if _still_capped:
+                    cp.mark_partial(name, per, library=lib, key_space=ks)
+                    n_partial += 1
+                else:
+                    cp.mark_done(name, per, library=lib, key_space=ks)
+                    n_ok += 1
+            print(
+                f"    {name} {i}/{len(pending)} | 报告期={per} | {len(df) if df is not None else 0}行"
+                + (" | ⚠ 触顶 partial" if _still_capped else "")
+            )
         if n_ok:
-            cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
+            cp.mark_fetched(name)  # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
         if truncated:
             print(f"    [警告] {len(truncated)} 个报告期触及上限 {cap}: {truncated[:5]}")
-        return {"name": name, "est": est, "done": len(pending)}
+            print(f"    [partial] {n_partial} 个报告期分页后仍触顶 ⇒ 下次重拉")
+        # G1 计数口径（D10）：done = **实际成功数**（mark_done 的次数），
+        # 不再用 len(pending)（那会把调用失败/触顶 partial 也计成完成）。
+        return {"name": name, "est": est, "done": n_ok, "fail": n_fail + n_partial}
 
     if conf["mode"] == "by_param":
         # 按枚举参数逐个拉取 + offset 分页（fut_basic / opt_basic 专用）
@@ -658,44 +735,63 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         page = conf.get("page_size", 2000)
         max_pages = conf.get("max_pages", 100)
         n_ok = 0
+        n_partial = 0
+        n_fail = 0
         for i, val in enumerate(pending, 1):
             chunks, offset, pages = [], 0, 0
             first_ok = False
+            failed = False
             truncated = False
             while pages < max_pages:
                 # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
                 _p = {pn: val, "limit": page, "offset": offset}
-                if conf.get("fields"):      # DB-R10 R10-1d：fields 透传
+                if conf.get("fields"):  # DB-R10 R10-1d：fields 透传
                     _p["fields"] = conf["fields"]
-                df = ts_call_with_retry(pro, conf["api"], limiter,
-                                        _p,
-                                        verbose=verbose)
+                df = ts_call_with_retry(pro, conf["api"], limiter, _p, verbose=verbose)
                 pages += 1
                 if pages == 1:
                     first_ok = df is not None
-                if df is None or df.empty:
+                if df is None:
+                    # G1 R3（D10）：分页中途失败同样是**取数失败** —— 原实现只在
+                    # 首页失败时计 n_fail，中途 None 会被 break 当"末页"并
+                    # mark_done，把截断数据固化成完成。现：计 fail、不落盘、不记断点。
+                    failed = True
+                    break
+                if df.empty:
                     break
                 chunks.append(df)
-                if len(df) < page:      # 最后一页
+                if len(df) < page:  # 最后一页
                     break
                 offset += page
             else:
-                truncated = True        # 触及页数上限仍满页
+                truncated = True  # 触及页数上限仍满页
+            if failed:
+                n_fail += 1
             nrow = sum(len(c) for c in chunks)
-            if chunks:
-                merged = _concat_pages(chunks)      # 分页去重（见 _concat_pages）
-                _save_df(target_dir, conf["api"], merged, layout="single",
-                         subset=conf.get("subset"))
-            if first_ok:                # 调用成功(含"确实无数据")→ 记断点
+            if chunks and not failed:
+                merged = _concat_pages(chunks)  # 分页去重（见 _concat_pages）
+                _save_df(
+                    target_dir, conf["api"], merged, layout="single", subset=conf.get("subset")
+                )
+            if truncated:
+                # D4：页数触顶仍满页 ⇒ partial，下次重拉；不得记完成
+                cp.mark_partial(name, val, library=lib, key_space=ks)
+                n_partial += 1
+                print(
+                    f"    [{name}] {pn}={val}: 页数触顶 max_pages={max_pages} ⇒ partial（下次重拉）"
+                )
+            elif first_ok and not failed:  # 调用成功(含"确实无数据")→ 记断点
                 cp.mark_done(name, val, library=lib, key_space=ks)
                 n_ok += 1
-            flag = "  [警告] 页数触顶, 可能不完整" if truncated else ""
-            print(f"    {name} {i}/{len(pending)} | {pn}={val} | "
-                  f"{nrow}行 | 页={pages}{flag}")
+            flag = "  [警告] 页数触顶, 标记 partial" if truncated else ""
+            if failed:
+                flag = "  [失败] 分页中途调用失败, 不记断点"
+            print(f"    {name} {i}/{len(pending)} | {pn}={val} | {nrow}行 | 页={pages}{flag}")
         if n_ok:
-            cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
+            cp.mark_fetched(name)  # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
-        return {"name": name, "est": est, "done": len(pending)}
+        # G1 计数口径（D10）：done = 实际成功数（mark_done 次数）。
+        return {"name": name, "est": est, "done": n_ok, "fail": n_fail + n_partial}
 
     if conf["mode"] == "paged":
         # 按 limit/offset 逐页遍历（全量元数据表：us_basic / fund_manager 等）
@@ -709,25 +805,34 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         #   调用失败（None）不记，留待续跑
         page = conf.get("page_size", 5000)
         chunks = []
-        done_pages = []                    # 暂存成功页号，落盘成功后才记断点
+        done_pages = []  # 暂存成功页号，落盘成功后才记断点
         n_ok = 0
+        n_fail = 0
         for i, pg in enumerate(pending, 1):
             # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
-            df = ts_call_with_retry(pro, conf["api"], limiter,
-                                    {"limit": page, "offset": pg * page,
-                                     **({"fields": conf["fields"]} if conf.get("fields") else {})},
-                                    verbose=verbose)
-            if df is None:                     # 调用失败: 不记断点
+            df = ts_call_with_retry(
+                pro,
+                conf["api"],
+                limiter,
+                {
+                    "limit": page,
+                    "offset": pg * page,
+                    **({"fields": conf["fields"]} if conf.get("fields") else {}),
+                },
+                verbose=verbose,
+            )
+            if df is None:  # 调用失败: 不记断点
+                n_fail += 1
                 print(f"    {name} 第{pg}页 调用失败，留待续跑")
                 continue
             n_ok += 1
             nrow = len(df)
-            done_pages.append(str(pg))         # 成功（含空页）→ 暂存，不立即记
+            done_pages.append(str(pg))  # 成功（含空页）→ 暂存，不立即记
             if nrow:
                 chunks.append(df)
-            print(f"    {name} {i}/{len(pending)} | offset={pg*page} | {nrow} 行")
-            if nrow < page:                    # 不足一页 = 已到末尾
-                for rest in pending[i:]:       # 剩余页不可能有数据，一并暂存
+            print(f"    {name} {i}/{len(pending)} | offset={pg * page} | {nrow} 行")
+            if nrow < page:  # 不足一页 = 已到末尾
+                for rest in pending[i:]:  # 剩余页不可能有数据，一并暂存
                     done_pages.append(str(rest))
                 break
         # ⚠ 2026-09-22 修复（P0）: 断点必须在**落盘成功之后**才记。
@@ -738,38 +843,40 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         #   仅 paged / once 相反，属遗漏。
         if chunks:
             try:
-                merged = _concat_pages(chunks)      # 分页去重（见 _concat_pages）
-                _save_df(target_dir, conf["api"], merged, layout="single",
-                         subset=conf.get("subset"))
+                merged = _concat_pages(chunks)  # 分页去重（见 _concat_pages）
+                _save_df(
+                    target_dir, conf["api"], merged, layout="single", subset=conf.get("subset")
+                )
                 print(f"    [落盘] {name} 共 {len(merged):,} 行")
             except Exception as e:
                 print(f"    [ERROR] {name} 落盘失败，断点未记，留待续跑: {str(e)[:80]}")
                 cp.save()
-                return {"name": name, "est": est, "done": 0}
-        for k in done_pages:               # 落盘成功后统一记断点
+                return {"name": name, "est": est, "done": 0, "fail": n_fail + 1}
+        for k in done_pages:  # 落盘成功后统一记断点
             cp.mark_done(name, k, library=lib, key_space=ks)
         if n_ok:
-            cp.mark_fetched(name)          # CC-FIX-7：至少一页调用成功即记拉取时间
+            cp.mark_fetched(name)  # CC-FIX-7：至少一页调用成功即记拉取时间
         cp.save()
-        return {"name": name, "est": est, "done": len(pending)}
+        # G1 计数口径（D10）：done = 实际成功页数（落盘失败时已在上方返回 0）。
+        return {"name": name, "est": est, "done": n_ok, "fail": n_fail}
 
     if conf["mode"] == "by_range":
         sp = conf.get("start_param", "start_date")
         ep = conf.get("end_param", "end_date")
-        cap = conf.get("max_rows", 0)               # DB-R3
-        _trunc_hard = []                            # 确凿触顶（未落盘）
-        _trunc_soft = []                            # 仅疑似（已落盘）
+        cap = conf.get("max_rows", 0)  # DB-R3
+        _trunc_hard = []  # 确凿触顶（未落盘）
+        _trunc_soft = []  # 仅疑似（已落盘）
         n_ok = 0
+        n_fail = 0
         for i, (s, e) in enumerate(pending, 1):
             # 同上：wait 由 ts_call_with_retry 内部保证，勿重复
             _r = {sp: s, ep: e}
-            if conf.get("fields"):          # DB-R10 R10-1d：fields 透传
+            if conf.get("fields"):  # DB-R10 R10-1d：fields 透传
                 _r["fields"] = conf["fields"]
-            df = ts_call_with_retry(pro, conf["api"], limiter,
-                                    _r, verbose=verbose)
+            df = ts_call_with_retry(pro, conf["api"], limiter, _r, verbose=verbose)
             nrow = 0 if df is None else len(df)
-            if df is not None:
-                n_ok += 1
+            if df is None:
+                n_fail += 1
 
             # ---- DB-R3 截断检测 ----
             # 为什么要"触顶不落盘"而不是"落盘+告警"：
@@ -781,16 +888,19 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             soft = (not hard) and bool(nrow) and is_possibly_truncated(nrow, cap)
             if hard:
                 _trunc_hard.append((s, e, nrow, cap))
-                print(f"    [警告] {name} {i}/{len(pending)} | {s}~{e} | {nrow}行 "
-                      f"触顶 max_rows={cap} ⇒ **未落盘、未记断点**（数据不完整）")
-                continue                            # 不落盘、不记断点
+                print(
+                    f"    [警告] {name} {i}/{len(pending)} | {s}~{e} | {nrow}行 "
+                    f"触顶 max_rows={cap} ⇒ **未落盘、未记断点**（数据不完整）"
+                )
+                continue  # 不落盘、不记断点
             if soft:
                 _trunc_soft.append((s, e, nrow))
+            if df is not None:
+                n_ok += 1  # 实际成功数（触顶未落盘的已在上方 continue）
 
             if df is not None and not df.empty:
-                _save_df(target_dir, conf["api"], df, layout="single",
-                         subset=conf.get("subset"))
-            if df is not None:      # 仅调用成功才记断点, 失败留待续跑
+                _save_df(target_dir, conf["api"], df, layout="single", subset=conf.get("subset"))
+            if df is not None:  # 仅调用成功才记断点, 失败留待续跑
                 # ⚠ 日更场景（date_override 非空）**不记断点**（2026-09-21）:
                 #   by_range 的断点键是 "start|end"，而日更的 end 端点每天漂移
                 #   → 会积累大量一次性条目（每年约 365 条/表）。
@@ -809,9 +919,10 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             for s, e, n in _trunc_soft:
                 print(f"        {s}~{e}  {n}行")
         if n_ok:
-            cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
+            cp.mark_fetched(name)  # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
-        return {"name": name, "est": est, "done": len(pending)}
+        # G1 计数口径（D10）：done = 实际成功段数（hard 截断段未落盘、不计数）。
+        return {"name": name, "est": est, "done": n_ok, "fail": n_fail + len(_trunc_hard)}
 
     if conf["mode"] == "by_date":
         # 2026-09-17 优化: "按日并发 + 按年批量落盘"
@@ -834,7 +945,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         dp = conf.get("date_param", "trade_date")
         dc = conf.get("date_col") or "trade_date"
         paged = conf["api"] in BACKFILL_PAGED
-        meta = {}              # {日期: (页数, 是否触顶)}
+        meta = {}  # {日期: (页数, 是否触顶)}
         meta_lock = threading.Lock()
         flush_conf = BACKFILL_FLUSH_CONF.get(conf["api"], BACKFILL_FLUSH_DEFAULT)
         # R6-Final（2026-11-08）：per-table 白名单。配了 dedup_key 的表按业务键
@@ -845,9 +956,16 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
 
         _flushed_seen = [0]
 
-        def _on_date_flushed(keys):
-            for _k in keys:
+        def _on_date_flushed(done_keys, partial_keys):
+            for _k in done_keys:
                 cp.mark_done(name, _k, library=lib, key_space=ks)
+            for _k in partial_keys:
+                cp.mark_partial(name, _k, library=lib, key_space=ks)
+            if partial_keys:
+                print(
+                    f"    [partial] {name}: {len(partial_keys)} 天不完整"
+                    f"（分页触顶，下次重拉）: {partial_keys[:5]}"
+                )
             # CC-FIX-7：每次 flush 记一次拉取时间 + 本次落盘行数增量
             _n = writer.flushed_rows - _flushed_seen[0]
             _flushed_seen[0] = writer.flushed_rows
@@ -877,9 +995,15 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
 
         def fetch_fn(_pro, _lim, dt):
             if paged:
-                df, pg, trunc = fetch_paged_by_date(_pro, conf["api"], _lim, dt,
-                                                    verbose=verbose, date_param=dp,
-                                                    fields=conf.get("fields"))
+                df, pg, trunc = fetch_paged_by_date(
+                    _pro,
+                    conf["api"],
+                    _lim,
+                    dt,
+                    verbose=verbose,
+                    date_param=dp,
+                    fields=conf.get("fields"),
+                )
                 with meta_lock:
                     meta[dt] = (pg, trunc)
                 return df
@@ -889,8 +1013,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             # DB-R10 R10-1b：fields 仅在配置了才写入（未配 ⇒ 参数逐字段不变）
             if conf.get("fields"):
                 params["fields"] = conf["fields"]
-            return ts_call_with_retry(_pro, conf["api"], _lim,
-                                      params, verbose=verbose)
+            return ts_call_with_retry(_pro, conf["api"], _lim, params, verbose=verbose)
 
         # ⚠ EE-FUND-9A (2026-10-18): fund_daily by_date 入口过滤 market=O 场外码。
         #   根因: tushare fund_daily(trade_date=X) 返回全市场（含 .OF），
@@ -907,33 +1030,39 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         _fund_daily_o_codes = None
         if conf["api"] == "fund_daily":
             from config import META_DIR as _META_DIR
+
             _p_fb = os.path.join(_META_DIR, "fund_basic.parquet")
             if os.path.exists(_p_fb):
                 try:
-                    _fb_df = pd.read_parquet(_p_fb, columns=['ts_code', 'market'])
-                    _fund_daily_o_codes = set(_fb_df[_fb_df['market'] == 'O']['ts_code'])
-                    print(f"  [护栏] fund_daily market=O 过滤启用，共 {len(_fund_daily_o_codes)} 只场外码")
+                    _fb_df = pd.read_parquet(_p_fb, columns=["ts_code", "market"])
+                    _fund_daily_o_codes = set(_fb_df[_fb_df["market"] == "O"]["ts_code"])
+                    print(
+                        f"  [护栏] fund_daily market=O 过滤启用，共 {len(_fund_daily_o_codes)} 只场外码"
+                    )
                 except Exception as exc:
-                    print(f"[fetch.backfill] 读 fund_basic 失败（关护栏）: "
-                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                    print(
+                        f"[fetch.backfill] 读 fund_basic 失败（关护栏）: "
+                        f"{type(exc).__name__}: {exc}",
+                        file=sys.stderr,
+                    )
                     _fund_daily_o_codes = None
 
         struct_ct = {"n": 0}
 
         def on_result(dt, df, ok):
             if df is None:
-                return              # 调用失败: 不落盘、不记断点, 留待续跑
+                return  # 调用失败: 不落盘、不记断点, 留待续跑
             if df.empty:
                 # ⛔ 2026-11-11 P3-8 A单：by_date 待跑清单已由 open_dates 过滤为交易日，
                 #    "休市日"理由不成立；空返回更可能是限频/重试耗尽 ⇒ 仅**已登记空日**
                 #    （或显式 empty_as_done 的乙/丙档表）才记 done，其余留待续跑。
                 # ⭐ §417 F-1 / §418 F-1b：未来日、已实证 T+1 发布表的当日空算结构性空。
                 _resolve_empty_date(name, dt, cp, struct_ct, kind=kind)
-                cp.mark_fetched(name, rows=0)   # CC-FIX-7：成功但返空也要记
+                cp.mark_fetched(name, rows=0)  # CC-FIX-7：成功但返空也要记
             else:
                 # EE-FUND-9A: 过滤 market=O 场外码（仅 fund_daily 生效）
-                if _fund_daily_o_codes is not None and 'ts_code' in df.columns:
-                    _mask = ~df['ts_code'].isin(_fund_daily_o_codes)
+                if _fund_daily_o_codes is not None and "ts_code" in df.columns:
+                    _mask = ~df["ts_code"].isin(_fund_daily_o_codes)
                     _n_before = len(df)
                     _n_filtered = _n_before - _mask.sum()
                     if _n_filtered > 0:
@@ -943,11 +1072,16 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                     df = df[_mask]
                 if df.empty:
                     _resolve_empty_date(name, dt, cp, struct_ct, kind=kind)
-                    cp.mark_fetched(name, rows=0)   # CC-FIX-7：过滤后为空同样记
+                    cp.mark_fetched(name, rows=0)  # CC-FIX-7：过滤后为空同样记
                 else:
                     # R6-Final：白名单表按业务键去重（adj 保留 end_date 最大行）
                     df = _dedup_by_key(df, dedup_key, dedup_sort)
-                    writer.add(df, dt)       # 累积; 内部 flush 成功后才记断点
+                    # D4：paged 触顶的日期写入数据但记 partial，下次重拉
+                    _partial = False
+                    if paged:
+                        with meta_lock:
+                            _partial = bool(meta.get(dt, (0, False))[1])
+                    writer.add(df, dt, partial=_partial)  # 累积; flush 成功后才记断点
             done_ct["n"] += 1
 
         def progress(done, tot, stat, elapsed):
@@ -956,30 +1090,46 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             with meta_lock:
                 pg_sum = sum(v[0] for v in meta.values())
             extra = f" | 页数={pg_sum}" if paged else ""
-            print(f"    {name} {done}/{tot} | 成功={stat['ok']} 空={stat['empty']} "
-                  f"失败={stat['fail']} | {r:.0f}天/min | 剩余≈{eta:.0f}min{extra}")
+            print(
+                f"    {name} {done}/{tot} | 成功={stat['ok']} 空={stat['empty']} "
+                f"失败={stat['fail']} | {r:.0f}天/min | 剩余≈{eta:.0f}min{extra}"
+            )
 
         stat = fetch_codes_parallel(
-            pro, conf["api"], pending, limiter,
-            fetch_fn=fetch_fn, max_workers=workers,
-            on_result=on_result, progress=progress,
-            progress_every=50, verbose=verbose,
+            pro,
+            conf["api"],
+            pending,
+            limiter,
+            fetch_fn=fetch_fn,
+            max_workers=workers,
+            on_result=on_result,
+            progress=progress,
+            progress_every=50,
+            verbose=verbose,
         )
-        writer.flush()          # 收尾: 落盘剩余缓冲
+        writer.flush()  # 收尾: 落盘剩余缓冲
         cp.save()
         if struct_ct["n"]:
-            print(f"    [结构性空] {name}: {struct_ct['n']} 天"
-                  f"（未来日 / 已实证 T+1 发表当日，记 done 不入注册表）")
+            print(
+                f"    [结构性空] {name}: {struct_ct['n']} 天"
+                f"（未来日 / 已实证 T+1 发表当日，记 done 不入注册表）"
+            )
 
         with meta_lock:
             trunc_days = [d for d, v in meta.items() if v[1]]
         if trunc_days:
-            print(f"    [警告] {len(trunc_days)} 天页数触顶, 可能仍不完整: "
-                  f"{trunc_days[:5]}")
+            print(f"    [警告] {len(trunc_days)} 天页数触顶, 可能仍不完整: {trunc_days[:5]}")
         ws = writer.stat()
-        print(f"    [落盘] 批量写入 {ws['frames']} 次, 共 {ws['rows']:,} 行 "
-              f"(对比逐天写入约 {len(pending)} 次)")
-        return {"name": name, "est": est, "done": stat["ok"]}
+        print(
+            f"    [落盘] 批量写入 {ws['frames']} 次, 共 {ws['rows']:,} 行 "
+            f"(对比逐天写入约 {len(pending)} 次)"
+        )
+        return {
+            "name": name,
+            "est": est,
+            "done": stat["ok"],
+            "fail": int(stat.get("fail") or 0) + int(getattr(writer, "write_fail", 0)),
+        }
 
     # by_code / by_month: 复用并发框架
     if conf["mode"] == "by_month":
@@ -995,7 +1145,7 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
                 params["month"] = dval[:6]
             else:
                 params["trade_date"] = dval
-            if conf.get("fields"):          # DB-R10 R10-1d：fields 透传
+            if conf.get("fields"):  # DB-R10 R10-1d：fields 透传
                 params["fields"] = conf["fields"]
             return ts_call_with_retry(_pro, conf["api"], _lim, params, verbose=verbose)
 
@@ -1016,32 +1166,44 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
             flush_frames=500,
             flush_rows=500_000,
             on_flushed=_on_flushed,
-            on_error=lambda _k, e: print(
-                f"  [ERROR] {name} 落盘失败: {str(e)[:70]}"),
+            on_error=lambda _k, e: print(f"  [ERROR] {name} 落盘失败: {str(e)[:70]}"),
         )
 
         def on_result_month(pair, df, ok):
             key = f"{pair[0]}|{pair[1]}"
             if not ok:
                 done_ct["n"] += 1
-                return                          # 调用失败：不缓冲、不记断点
+                return  # 调用失败：不缓冲、不记断点
             if df is None or len(df) == 0:
-                _on_flushed([key])              # 空结果：仍记断点（三态纪律）
+                _on_flushed([key])  # 空结果：仍记断点（三态纪律）
             else:
                 writer.add(df, key)
             done_ct["n"] += 1
             if done_ct["n"] % 50 == 0:
                 cp.save()
 
-        stat = fetch_codes_parallel(pro, conf["api"], pending, limiter,
-                                    fetch_fn=fetch_fn, max_workers=workers,
-                                    on_result=on_result_month, progress=progress,
-                                    progress_every=50, verbose=verbose)
-        writer.flush()          # ⛔ 收尾必须 flush，否则尾部数据全丢
+        stat = fetch_codes_parallel(
+            pro,
+            conf["api"],
+            pending,
+            limiter,
+            fetch_fn=fetch_fn,
+            max_workers=workers,
+            on_result=on_result_month,
+            progress=progress,
+            progress_every=50,
+            verbose=verbose,
+        )
+        writer.flush()  # ⛔ 收尾必须 flush，否则尾部数据全丢
         if n_ok:
-            cp.mark_fetched(name)   # CC-FIX-7：至少一次调用成功即记拉取时间
+            cp.mark_fetched(name)  # CC-FIX-7：至少一次调用成功即记拉取时间
         cp.save()
-        return {"name": name, "est": est, "done": stat["ok"]}
+        return {
+            "name": name,
+            "est": est,
+            "done": stat["ok"],
+            "fail": int(stat.get("fail") or 0) + int(getattr(writer, "write_fail", 0)),
+        }
 
     # DB-R10 R10-1d：by_code 的默认拉取走 fetch.base.ts_fetch（其 extra_params 支持
     #   透传 fields），而 fetch_codes_parallel 没有 extra_params 通道 ⇒ 仅在配置了
@@ -1050,10 +1212,17 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
     _bc_page = conf.get("page_size")
     _bc_fetch_fn = None
     if _bc_fields:
+
         def _bc_fetch_fn(_pro, _lim, code, _f=_bc_fields):
-            df, _ok = ts_fetch(_pro, conf["api"], _lim, code,
-                               max_rows=conf.get("max_rows", 0),
-                               extra_params={"fields": _f}, verbose=verbose)
+            df, _ok = ts_fetch(
+                _pro,
+                conf["api"],
+                _lim,
+                code,
+                max_rows=conf.get("max_rows", 0),
+                extra_params={"fields": _f},
+                verbose=verbose,
+            )
             # ⚠ 必须回 None：ts_fetch 失败时返回 (空 DataFrame, False)，
             #   而 fetch_codes_parallel 的判据是 `df is not None`（base.py L707）。
             #   若把空 df 直接 return，失败会被计成「空」→ on_result 的 `elif ok:`
@@ -1065,28 +1234,42 @@ def run_target(pro, name, conf, cp, workers, dry_run=False, verbose=False, limit
         #   by_code 必须走 limit/offset 翻页，否则静默截断在 6,000 行。
         #   未配 page_size 的表仍走原路径（fetch_codes_parallel 默认 ts_fetch），
         #   参数与行为逐字不变。fields 与 page_size 互斥，fields 优先。
-        def _bc_fetch_fn(_pro, _lim, code, _page=int(_bc_page),
-                         _max_pages=None):
+        def _bc_fetch_fn(_pro, _lim, code, _page=int(_bc_page), _max_pages=None):
             # RUFF-1 B008：默认值里调 conf.get 改为函数体内求值（行为等价：
             #   conf 在 run_target 内是闭包常量；调用方都不传该参数）
             if _max_pages is None:
                 _max_pages = int(conf.get("max_pages", 20))
-            return fetch_paged_by_code(_pro, conf["api"], _lim, code,
-                                       page=_page, max_pages=_max_pages,
-                                       verbose=verbose)
+            return fetch_paged_by_code(
+                _pro, conf["api"], _lim, code, page=_page, max_pages=_max_pages, verbose=verbose
+            )
 
-    stat = fetch_codes_parallel(pro, conf["api"], pending, limiter,
-                                fetch_fn=_bc_fetch_fn,
-                                max_workers=workers, max_rows=conf.get("max_rows", 0),
-                                on_result=on_result, progress=progress,
-                                progress_every=100, verbose=verbose)
+    stat = fetch_codes_parallel(
+        pro,
+        conf["api"],
+        pending,
+        limiter,
+        fetch_fn=_bc_fetch_fn,
+        max_workers=workers,
+        max_rows=conf.get("max_rows", 0),
+        on_result=on_result,
+        progress=progress,
+        progress_every=100,
+        verbose=verbose,
+    )
     if _batch is not None:
-        _batch.flush()          # 收尾：落盘剩余缓冲（落盘后才记断点）
+        _batch.flush()  # 收尾：落盘剩余缓冲（落盘后才记断点）
         bs = _batch.stat()
-        print(f"    [批量落盘] {bs['frames']} 次写入, 共 {bs['rows']:,} 行 "
-              f"(对比逐标的写入约 {len(pending)} 次)")
+        print(
+            f"    [批量落盘] {bs['frames']} 次写入, 共 {bs['rows']:,} 行 "
+            f"(对比逐标的写入约 {len(pending)} 次)"
+        )
     cp.save()
-    return {"name": name, "est": est, "done": stat["ok"]}
+    return {
+        "name": name,
+        "est": est,
+        "done": stat["ok"],
+        "fail": int(stat.get("fail") or 0) + fail_ct["n"] + int(getattr(_batch, "write_fail", 0)),
+    }
 
 
 # ============================================================
@@ -1122,27 +1305,31 @@ def list_targets():
         try:
             cp = _json.load(open(cp_path, encoding="utf-8"))
         except Exception as exc:
-            print(f"[fetch.backfill] 读断点失败（按空处理）{cp_path}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[fetch.backfill] 读断点失败（按空处理）{cp_path}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             cp = {}
 
     _banner("backfill 补数目标清单")
     print(f"  存储: {MARKET_DATA_DIR}")
     print(f"  目标数: {len(BACKFILL_TARGETS)}")
     print()
-    print(f"  {'接口':20s} {'档':3s} {'模式':9s} {'布局':8s} "
-          f"{'断点':>8s} {'每日更新':10s} 说明")
+    print(f"  {'接口':20s} {'档':3s} {'模式':9s} {'布局':8s} {'断点':>8s} {'每日更新':10s} 说明")
     print("  " + "-" * 92)
 
-    for name, conf in sorted(BACKFILL_TARGETS.items(),
-                             key=lambda kv: (str(kv[1].get("tier", "Z")), kv[0])):
+    for name, conf in sorted(
+        BACKFILL_TARGETS.items(), key=lambda kv: (str(kv[1].get("tier", "Z")), kv[0])
+    ):
         tier = conf.get("tier", "-")
         mode = conf.get("mode", "?")
         try:
             layout = table_storage_layout(name)
         except Exception as exc:
-            print(f"[fetch.backfill] 布局探测失败 {name}（显示 ?）: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[fetch.backfill] 布局探测失败 {name}（显示 ?）: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             layout = "?"
         done = len(cp.get(name, {}).get("completed", []))
         # 每日更新归属（语义要区分"不适用"与"漏登"）
@@ -1153,26 +1340,33 @@ def list_targets():
         elif name in DAILY_UPDATE_EXEMPT:
             daily = "豁免"
         elif conf.get("mode") == "by_date" and conf.get("freq", "day") == "day":
-            daily = "⚠漏登"          # 日频却无归宿 —— 异常（R10 会拦）
+            daily = "⚠漏登"  # 日频却无归宿 —— 异常（R10 会拦）
         elif conf.get("mode") == "by_date":
-            daily = "周/月线"        # freq != day，机制上不属日更
+            daily = "周/月线"  # freq != day，机制上不属日更
         else:
-            daily = "n/a"            # 非日更形态（by_code/once/paged 等），本就不适用
+            daily = "n/a"  # 非日更形态（by_code/once/paged 等），本就不适用
         desc = conf.get("desc", "")[:20]
-        print(f"  {name:20s} {tier!s:3s} {mode:9s} {layout:8s} "
-              f"{done:8,d} {daily:10s} {desc}")
+        print(f"  {name:20s} {tier!s:3s} {mode:9s} {layout:8s} {done:8,d} {daily:10s} {desc}")
 
     print("  " + "-" * 92)
-    print("  每日更新组: " +
-          " / ".join(f"{g}={len(m)}" for g, m in DAILY_UPDATE_GROUPS.items()))
+    print("  每日更新组: " + " / ".join(f"{g}={len(m)}" for g, m in DAILY_UPDATE_GROUPS.items()))
     print(f"  豁免清单: {len(DAILY_UPDATE_EXEMPT)} 项（已在 config 注明原因）")
     print("\n  提示: 断点数为 0 但不代表未拉 —— once/single 类可能已完成（见 db-audit）")
     print("        数据新鲜度与缺口请用: python main.py freshness / db-audit --section gap")
 
 
-def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
-                 verbose=False, parallel_targets=None, limit=None, force=False,
-                 codes_file=None, force_listed=False):
+def run_backfill(
+    tiers=("A", "B"),
+    only=None,
+    dry_run=False,
+    workers=None,
+    verbose=False,
+    parallel_targets=None,
+    limit=None,
+    force=False,
+    codes_file=None,
+    force_listed=False,
+):
     if workers is None:
         workers = FETCH_MAX_WORKERS
     if parallel_targets is None:
@@ -1180,7 +1374,9 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
 
     # ── O-8 硬约束：force_listed 必须带 codes-file ──
     if force_listed and not codes_file:
-        print("  [FATAL] --force-listed 必须与 --codes-file 联用（否则会把全库 2,963 只计入 pending）")
+        print(
+            "  [FATAL] --force-listed 必须与 --codes-file 联用（否则会把全库 2,963 只计入 pending）"
+        )
         sys.exit(2)
 
     # ── codes-file 模式前置处理 ──
@@ -1189,25 +1385,32 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
     if codes_file:
         listed_codes = _load_codes_file(codes_file)
         if listed_codes is None:
-            sys.exit(2)                       # 格式非法 fail-closed
+            sys.exit(2)  # 格式非法 fail-closed
         import hashlib
+
         with open(codes_file, "rb") as f:
             codes_sha = hashlib.sha1(f.read()).hexdigest()[:8]
         print(f"  [codes-file] sha1={codes_sha} | force_listed={force_listed}")
 
     _banner("通用补数 — backfill")
     print(f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  并发: 每接口 {workers} 线程 | 同时跑 {parallel_targets} 个接口 "
-          f"→ 总线程 ≈ {workers * max(parallel_targets, 1)}")
+    print(
+        f"  并发: 每接口 {workers} 线程 | 同时跑 {parallel_targets} 个接口 "
+        f"→ 总线程 ≈ {workers * max(parallel_targets, 1)}"
+    )
     print("  限频: 按接口独立(实测按接口计, 多接口可叠加)")
     print(f"  存储: {os.path.abspath(BACKFILL_DIR_ROOT)}")
     print(f"  模式: {'DRY-RUN (只估算, 不发请求)' if dry_run else '正式拉取'}")
     if force:
-        print("  ⚠ --force: 忽略断点与「库内已有标的」，全部重拉"
-              "（用于修复「断点说完成但数据不完整」的历史遗留）")
+        print(
+            "  ⚠ --force: 忽略断点与「库内已有标的」，全部重拉"
+            "（用于修复「断点说完成但数据不完整」的历史遗留）"
+        )
     if force_listed:
-        print("  ⚠ --force-listed: codes-file 清单内代码即使库内已有也计入待跑"
-              "（B 类缺口补数专用，不影响断点）")
+        print(
+            "  ⚠ --force-listed: codes-file 清单内代码即使库内已有也计入待跑"
+            "（B 类缺口补数专用，不影响断点）"
+        )
 
     # 选中目标
     sel = []
@@ -1223,12 +1426,11 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
 
     if not sel:
         print("\n  没有匹配的目标")
-        return
+        return {"fail": 0, "targets": 0, "failed": [], "dry_run": dry_run}
 
     # C5: codes-file 只允许 by_code 目标（或 allow_codes_file=True 特例，如 fund_adj）
     if listed_codes is not None:
-        bad = [n for n, c in sel
-               if c.get("mode") != "by_code" and not c.get("allow_codes_file")]
+        bad = [n for n, c in sel if c.get("mode") != "by_code" and not c.get("allow_codes_file")]
         if bad:
             print(f"  [FATAL] --codes-file 仅支持 by_code 目标，以下不兼容: {bad}")
             sys.exit(2)
@@ -1236,7 +1438,7 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
     total_est = 0
     print(f"\n[选中目标] {len(sel)} 个")
     for name, conf in sel:
-        print(f"  {name:20s} {conf.get('desc',''):24s} tier={conf.get('tier','-')}")
+        print(f"  {name:20s} {conf.get('desc', ''):24s} tier={conf.get('tier', '-')}")
 
     # 断点：codes-file 用独立断点（不污染主 checkpoint）
     cp_filename = CODES_CHECKPOINT_FILE if listed_codes is not None else ".backfill_checkpoint.json"
@@ -1257,8 +1459,15 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
                     tasks = list(listed_codes)
                     kind = "code"
                 pending, skipped = _compute_pending(
-                    name, conf, tasks, kind, cp, dry_run=True,
-                    force_listed=force_listed, ignore_checkpoint=force)
+                    name,
+                    conf,
+                    tasks,
+                    kind,
+                    cp,
+                    dry_run=True,
+                    force_listed=force_listed,
+                    ignore_checkpoint=force,
+                )
                 est = estimate_requests(pending, conf)
             except Exception as e:
                 print(f"  {name:20s} [估算失败] {type(e).__name__}: {str(e)[:60]}")
@@ -1267,41 +1476,76 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
             total_est += est
             eta_min = est / rate if rate > 0 else 0.0
             rows.append((name, len(tasks), len(pending), est, rate, eta_min))
-            print(f"  {name:20s} 任务={len(tasks):6d} 待跑={len(pending):6d} "
-                  f"跳过={skipped:6d} 请求≈{est:6d} "
-                  f"限频={rate:g}/min 耗时≈{eta_min:6.1f}min")
+            print(
+                f"  {name:20s} 任务={len(tasks):6d} 待跑={len(pending):6d} "
+                f"跳过={skipped:6d} 请求≈{est:6d} "
+                f"限频={rate:g}/min 耗时≈{eta_min:6.1f}min"
+            )
         serial_min = sum(r[5] for r in rows)
         par = max(parallel_targets, 1)
         print(f"\n  合计: 请求≈{total_est} 次 | 接口数={len(rows)}")
-        print(f"  串行等效耗时 ≈ {serial_min:.0f} 分钟 ({serial_min/60:.1f} 小时)")
-        print(f"  按 {par} 接口并行 ≈ {serial_min/par:.0f} 分钟 "
-              f"({serial_min/par/60:.1f} 小时) — 上限受最慢接口 "
-              f"{max((r[5] for r in rows), default=0):.0f} 分钟约束")
-        return
+        print(f"  串行等效耗时 ≈ {serial_min:.0f} 分钟 ({serial_min / 60:.1f} 小时)")
+        print(
+            f"  按 {par} 接口并行 ≈ {serial_min / par:.0f} 分钟 "
+            f"({serial_min / par / 60:.1f} 小时) — 上限受最慢接口 "
+            f"{max((r[5] for r in rows), default=0):.0f} 分钟约束"
+        )
+        return {"fail": 0, "targets": len(sel), "failed": [], "dry_run": True}
 
     # ── 跨进程互斥（2026-11-16 P0 后加）──
     # 断点写是 cp.save() 全量覆盖，数据写是 merge_append 全文件读改写，
     # 两者都无跨进程保护（现有 threading.Lock 仅进程内有效）。双开时后写者
     # 读到旧文件 ⇒ 前者整批数据被静默覆盖，而断点两边各记 ⇒ 键数翻倍、
     # dry-run 报「待跑=0」假绿。详见 fetch/base.py:FileLock 的实证记录。
-    _lock = FileLock(os.path.join(MARKET_DATA_DIR, ".backfill.lock"))
+    _lock = FileLock(os.path.join(MARKET_DATA_DIR, ".backfill.lock"), timeout=0)
+    try:
+        _lock.acquire()
+    except LockTimeout:
+        # D3：FileLock 统一为超时抛 LockTimeout；整批互斥保持「立即失败」，
+        # 提示人工确认（不自动删残锁）。
+        print(
+            f"[backfill] ⛔ 已有实例在跑（锁文件 {_lock.path}）；"
+            f"确认无进程后手动删除该文件再试（删前先看 tasklist 有无 python）",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
     with _lock:
         pro = get_pro()
         print("\n[OK] Tushare Pro API 已连接")
         cp = Checkpoint(MARKET_DATA_DIR, filename=cp_filename)
 
         results = []
+        failed_targets = []
         t_all = time.time()
         try:
             if parallel_targets and parallel_targets > 1:
                 # 多接口并行: 每个 target 一个外层线程, target 内部再开 workers 个线程
                 from concurrent.futures import ThreadPoolExecutor, as_completed
-                print(f"\n[并行模式] {parallel_targets} 个接口同时拉取"
-                      + (f" | 每接口限量 {limit}" if limit else "") + "\n")
+
+                print(
+                    f"\n[并行模式] {parallel_targets} 个接口同时拉取"
+                    + (f" | 每接口限量 {limit}" if limit else "")
+                    + "\n"
+                )
                 with ThreadPoolExecutor(max_workers=parallel_targets) as ex:
-                    futs = {ex.submit(run_target, pro, n, c, cp, workers, False, verbose, limit,
-                                      None, force, listed_codes, force_listed): n
-                            for n, c in sel}
+                    futs = {
+                        ex.submit(
+                            run_target,
+                            pro,
+                            n,
+                            c,
+                            cp,
+                            workers,
+                            False,
+                            verbose,
+                            limit,
+                            None,
+                            force,
+                            listed_codes,
+                            force_listed,
+                        ): n
+                        for n, c in sel
+                    }
                     for fut in as_completed(futs):
                         n = futs[fut]
                         try:
@@ -1309,19 +1553,30 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
                             if r:
                                 results.append(r)
                         except Exception as e:
+                            failed_targets.append(n)
                             print(f"  [ERROR] {n}: {str(e)[:120]}")
             else:
                 for name, conf in sel:
                     try:
-                        r = run_target(pro, name, conf, cp, workers,
-                                       dry_run=False, verbose=verbose, limit=limit,
-                                       ignore_checkpoint=force,
-                                       listed_codes=listed_codes, force_listed=force_listed)
+                        r = run_target(
+                            pro,
+                            name,
+                            conf,
+                            cp,
+                            workers,
+                            dry_run=False,
+                            verbose=verbose,
+                            limit=limit,
+                            ignore_checkpoint=force,
+                            listed_codes=listed_codes,
+                            force_listed=force_listed,
+                        )
                         if r:
                             results.append(r)
                     except KeyboardInterrupt:
                         raise
                     except Exception as e:
+                        failed_targets.append(name)
                         print(f"  [ERROR] {name}: {str(e)[:120]}")
         except KeyboardInterrupt:
             print("\n  [中断] 已保存断点, 下次可续跑")
@@ -1329,7 +1584,7 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
             cp.save()
 
     _banner("补数完成 — 汇总")
-    print(f"  总耗时: {(time.time()-t_all)/60:.1f} 分钟")
+    print(f"  总耗时: {(time.time() - t_all) / 60:.1f} 分钟")
     for r in sorted(results, key=lambda x: x["name"]):
         print(f"  {r['name']:20s} 完成={r['done']}")
     print(f"  断点文件: {cp.path}")
@@ -1340,10 +1595,29 @@ def run_backfill(tiers=("A", "B"), only=None, dry_run=False, workers=None,
     if not dry_run and any((r or {}).get("done") for r in results):
         try:
             from common.db_version import record as _dbv
-            _dbv([r["name"] for r in results if (r or {}).get("done")],
-                 note="补数/回补")
+
+            _dbv([r["name"] for r in results if (r or {}).get("done")], note="补数/回补")
         except Exception as e:
             print(f"  [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")
+
+    # D4/R1：失败数 = 逃出 run_target 的异常 + 各 target 内部回报的 fail
+    # （取数失败/落盘失败/截断 partial），CLI `_failed_count` 读 `fail`。
+    inner_fail = sum(int((r or {}).get("fail") or 0) for r in results)
+    total_fail = len(failed_targets) + inner_fail
+    if total_fail:
+        print(
+            f"  [ERROR] 失败数 {total_fail}"
+            f"（接口异常 {len(failed_targets)} + 内部失败 {inner_fail}）"
+            f"；异常接口: {', '.join(sorted(failed_targets)) or '无'}",
+            file=sys.stderr,
+        )
+    return {
+        "fail": total_fail,
+        "targets": len(sel),
+        "failed": sorted(failed_targets),
+        "dry_run": False,
+        "done": sum(int((r or {}).get("done") or 0) for r in results),
+    }
 
 
 def main():
@@ -1352,38 +1626,58 @@ def main():
     p.add_argument("--only", default=None, help="只跑指定接口, 逗号分隔")
     p.add_argument("--dry-run", action="store_true", help="只估算请求数, 不发请求")
     p.add_argument("--workers", type=int, default=None, help="每接口并发线程数 (默认4)")
-    p.add_argument("--parallel-targets", type=int, default=None,
-                   help=f"同时跑几个接口 (默认{BACKFILL_PARALLEL_TARGETS})")
+    p.add_argument(
+        "--parallel-targets",
+        type=int,
+        default=None,
+        help=f"同时跑几个接口 (默认{BACKFILL_PARALLEL_TARGETS})",
+    )
     p.add_argument("--verbose", action="store_true", help="打印重试日志")
-    p.add_argument("--limit", type=int, default=None,
-                   help="每个接口最多跑 N 个任务 (用于微量验证/分批拉取)")
+    p.add_argument(
+        "--limit", type=int, default=None, help="每个接口最多跑 N 个任务 (用于微量验证/分批拉取)"
+    )
     p.add_argument("--list", action="store_true", help="列出目标清单后退出")
-    p.add_argument("--force", action="store_true",
-                   help="忽略断点与'库内已有标的'，全部重拉"
-                        "（修复'断点说完成但数据不完整'）")
-    p.add_argument("--codes-file", default=None,
-                   help="代码清单文件（UTF-8，一行一个 ts_code，# 注释）。"
-                        "替代 resolve_codes，绕过 fund_etf 白名单；仅允许 by_code 目标")
-    p.add_argument("--force-listed", action="store_true",
-                   help="与 --codes-file 联用：清单内代码即使库内已有也计入待跑")
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="忽略断点与'库内已有标的'，全部重拉（修复'断点说完成但数据不完整'）",
+    )
+    p.add_argument(
+        "--codes-file",
+        default=None,
+        help="代码清单文件（UTF-8，一行一个 ts_code，# 注释）。"
+        "替代 resolve_codes，绕过 fund_etf 白名单；仅允许 by_code 目标",
+    )
+    p.add_argument(
+        "--force-listed",
+        action="store_true",
+        help="与 --codes-file 联用：清单内代码即使库内已有也计入待跑",
+    )
     args = p.parse_args()
 
     if args.list:
         print(f"{'接口':22s} {'说明':26s} {'模式':10s} {'tier':4s}")
         for n, c in BACKFILL_TARGETS.items():
             en = "" if c.get("enabled", True) else " [关闭]"
-            print(f"{n:22s} {c.get('desc',''):26s} {c['mode']:10s} "
-                  f"{c.get('tier','-'):4s}{en}")
+            print(f"{n:22s} {c.get('desc', ''):26s} {c['mode']:10s} {c.get('tier', '-'):4s}{en}")
         return
 
     tiers = tuple(t.strip() for t in args.tier.split(",") if t.strip())
     only = tuple(x.strip() for x in args.only.split(",")) if args.only else None
-    run_backfill(tiers=tiers, only=only, dry_run=args.dry_run,
-                 workers=args.workers, verbose=args.verbose,
-                 parallel_targets=args.parallel_targets, limit=args.limit,
-                 force=args.force,
-                 codes_file=args.codes_file, force_listed=args.force_listed)
+    result = run_backfill(
+        tiers=tiers,
+        only=only,
+        dry_run=args.dry_run,
+        workers=args.workers,
+        verbose=args.verbose,
+        parallel_targets=args.parallel_targets,
+        limit=args.limit,
+        force=args.force,
+        codes_file=args.codes_file,
+        force_listed=args.force_listed,
+    )
+    return 1 if int((result or {}).get("fail") or 0) > 0 else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

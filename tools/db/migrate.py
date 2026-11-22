@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-tools/db_migrate.py — 存储布局迁移（by_code → by_year）
+tools/db/migrate.py — 存储布局迁移（by_code → by_year）
 =======================================================
 把"一标的一文件"的表迁移为"一年一文件"。
 
@@ -27,6 +27,7 @@ by_code 布局下，每日增量要给数千个文件各做一次 read→concat�
   python main.py db-migrate --all                     # 迁移全部 5 个核心表
   python main.py db-migrate --cleanup                 # 校验无误后清除备份
 """
+
 import argparse
 import os
 import shutil
@@ -48,17 +49,31 @@ DEFAULT_TABLES = ["daily", "daily_basic", "fund_daily", "cb_daily", "index_daily
 DAILY_TABLES = [*DEFAULT_TABLES, "adj_factor", "stk_limit", "fund_nav"]
 PERIODIC_TABLES = [
     # 财务
-    "income", "balancesheet", "cashflow", "fina_indicator",
-    "fina_audit", "fina_mainbz",
+    "income",
+    "balancesheet",
+    "cashflow",
+    "fina_indicator",
+    "fina_audit",
+    "fina_mainbz",
     # 事件面
-    "dividend", "forecast", "stk_holdernumber", "stk_holdertrade",
-    "pledge_stat", "share_float", "repurchase", "namechange",
+    "dividend",
+    "forecast",
+    "stk_holdernumber",
+    "stk_holdertrade",
+    "pledge_stat",
+    "share_float",
+    "repurchase",
+    "namechange",
     # 基金口径
-    "fund_adj", "fund_share",
+    "fund_adj",
+    "fund_share",
     # 跨品种 / 指数
-    "fx_daily", "index_dailybasic",
+    "fx_daily",
+    "index_dailybasic",
     # 可转债静态
-    "cb_issue", "cb_rating", "cb_share",
+    "cb_issue",
+    "cb_rating",
+    "cb_share",
 ]
 PENDING_TABLES = DAILY_TABLES + PERIODIC_TABLES
 
@@ -67,16 +82,22 @@ PENDING_TABLES = DAILY_TABLES + PERIODIC_TABLES
 # 注意: 单元素列表表示该表只有这一个可用日期列。
 DATE_COL = {
     # ── 已迁移的 5 个核心表（保留兼容）──
-    "daily": ["trade_date"], "daily_basic": ["trade_date"],
-    "fund_daily": ["trade_date"], "cb_daily": ["trade_date"],
+    "daily": ["trade_date"],
+    "daily_basic": ["trade_date"],
+    "fund_daily": ["trade_date"],
+    "cb_daily": ["trade_date"],
     "index_daily": ["trade_date"],
     # ── 每日更新链路 ──
-    "adj_factor": ["trade_date"], "stk_limit": ["trade_date"],
+    "adj_factor": ["trade_date"],
+    "stk_limit": ["trade_date"],
     "fund_nav": ["nav_date"],
     # ── 财务（报告期）──
-    "income": ["end_date"], "balancesheet": ["end_date"],
-    "cashflow": ["end_date"], "fina_indicator": ["end_date"],
-    "fina_audit": ["end_date"], "fina_mainbz": ["end_date"],
+    "income": ["end_date"],
+    "balancesheet": ["end_date"],
+    "cashflow": ["end_date"],
+    "fina_indicator": ["end_date"],
+    "fina_audit": ["end_date"],
+    "fina_mainbz": ["end_date"],
     # ── 事件面 ──
     "dividend": ["end_date", "ann_date"],
     "forecast": ["end_date", "ann_date"],
@@ -87,9 +108,11 @@ DATE_COL = {
     "repurchase": ["ann_date", "end_date"],
     "namechange": ["start_date", "ann_date"],
     # ── 基金口径 ──
-    "fund_adj": ["trade_date"], "fund_share": ["trade_date"],
+    "fund_adj": ["trade_date"],
+    "fund_share": ["trade_date"],
     # ── 跨品种 / 指数 ──
-    "fx_daily": ["trade_date"], "index_dailybasic": ["trade_date"],
+    "fx_daily": ["trade_date"],
+    "index_dailybasic": ["trade_date"],
     # ── 可转债静态 ──
     "cb_issue": ["ann_date"],
     "cb_rating": ["rating_date", "ann_date"],
@@ -98,13 +121,14 @@ DATE_COL = {
 
 # 明确不迁移的表（按年分区对其无意义或有副作用）
 NO_MIGRATE = {
-    "stock_company": ("一标的一行的静态元数据（18列，无任何日期列）；"
-                      "按年分区只能塞进单一 0000 分区，且会让 read_code 传入"
-                      "日期参数时静默读空。文件数虽多但从不每日重写，无落盘成本。"),
+    "stock_company": (
+        "一标的一行的静态元数据（18列，无任何日期列）；"
+        "按年分区只能塞进单一 0000 分区，且会让 read_code 传入"
+        "日期参数时静默读空。文件数虽多但从不每日重写，无落盘成本。"
+    ),
 }
 
-BACKUP_ROOT = os.path.join(os.path.dirname(MARKET_DATA_DIR.rstrip("\\/")),
-                           "_migrate_backup")
+BACKUP_ROOT = os.path.join(os.path.dirname(MARKET_DATA_DIR.rstrip("\\/")), "_migrate_backup")
 
 # 累积多少行落一次盘（控制内存；一年文件约 80 万行）
 FLUSH_ROWS = 400_000
@@ -145,6 +169,7 @@ def _flush_year(tmp_dir, year, frames, stats):
     if not frames:
         return
     from common.parquet_store import merge_append
+
     merged = pd.concat(frames, ignore_index=True)
     n_in = len(merged)
     # 同批内先去重（全列判重，安全）
@@ -156,6 +181,7 @@ def _flush_year(tmp_dir, year, frames, stats):
     if os.path.exists(path):
         try:
             import pyarrow.parquet as pq
+
             n_before = pq.ParquetFile(path).metadata.num_rows
         except Exception:
             pass
@@ -163,6 +189,7 @@ def _flush_year(tmp_dir, year, frames, stats):
     n_after = 0
     try:
         import pyarrow.parquet as pq
+
         n_after = pq.ParquetFile(path).metadata.num_rows
     except Exception:
         pass
@@ -186,9 +213,14 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
     # 已是年布局则跳过
     year_like = [f for f in files if len(f) == 12 and f[:4].isdigit()]
     if len(year_like) == len(files):
-        return {"ok": True, "msg": "已是 by_year 布局，跳过",
-                "rows_before": 0, "rows_after": 0,
-                "files_before": len(files), "files_after": len(files)}
+        return {
+            "ok": True,
+            "msg": "已是 by_year 布局，跳过",
+            "rows_before": 0,
+            "rows_after": 0,
+            "files_before": len(files),
+            "files_after": len(files),
+        }
 
     date_col = DATE_COL.get(table, ["trade_date"])
     if isinstance(date_col, str):
@@ -197,8 +229,10 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
     samp = pd.read_parquet(os.path.join(d, files[0]))
     usable = [c for c in date_col if c in samp.columns]
     if not usable:
-        return {"ok": False,
-                "msg": f"候选日期列均不存在 {date_col}，实际列={list(samp.columns)[:6]}"}
+        return {
+            "ok": False,
+            "msg": f"候选日期列均不存在 {date_col}，实际列={list(samp.columns)[:6]}",
+        }
 
     t0 = time.time()
     if verbose:
@@ -209,17 +243,23 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
 
     # ── 统计源行数（用 pyarrow 元数据，快）──
     import pyarrow.parquet as pq
+
     rows_before = 0
     bad_files = []
     for f in files:
         try:
             rows_before += pq.ParquetFile(os.path.join(d, f)).metadata.num_rows
         except Exception as exc:
-            print(f"[db.migrate] 文件不可读，计入坏文件 {f}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[db.migrate] 文件不可读，计入坏文件 {f}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             bad_files.append(f)
     if verbose:
-        print(f"  源总行数: {rows_before:,}" + (f" | ⚠ 无法读元数据 {len(bad_files)} 个" if bad_files else ""))
+        print(
+            f"  源总行数: {rows_before:,}"
+            + (f" | ⚠ 无法读元数据 {len(bad_files)} 个" if bad_files else "")
+        )
 
     if dry_run:
         # 预估年度文件数（读一个样本文件的年份跨度不够，改用文件名推断不了）
@@ -234,9 +274,14 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
         print(f"  抽样年份: {sorted(years)}")
         print(f"  预计产出: 约 {len(years) or '?'} 个年度文件（实际按全量数据年份数）")
         print(f"  → 行数不变，文件数 {len(files):,} → 约 10~30")
-        return {"ok": True, "msg": "dry-run", "rows_before": rows_before,
-                "rows_after": rows_before, "files_before": len(files),
-                "files_after": 0}
+        return {
+            "ok": True,
+            "msg": "dry-run",
+            "rows_before": rows_before,
+            "rows_after": rows_before,
+            "files_before": len(files),
+            "files_after": 0,
+        }
 
     # ── 实际迁移：写入临时目录 ──
     tmp_dir = d + "__new"
@@ -266,8 +311,7 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
                 _flush_year(tmp_dir, year, buckets[year], stats)
                 nrows[year] = 0
         if verbose and (i % 1000 == 0 or i == len(files)):
-            print(f"    {i:6,d}/{len(files):,}  已写 {stats['rows']:,} 行  "
-                  f"{time.time()-t0:.0f}s")
+            print(f"    {i:6,d}/{len(files):,}  已写 {stats['rows']:,} 行  {time.time() - t0:.0f}s")
 
     # 收尾 flush
     for year in list(buckets.keys()):
@@ -286,8 +330,10 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
             pass
 
     if verbose:
-        print(f"\n  源行数 {rows_before:,} | 新行数 {rows_after:,} | "
-              f"文件 {len(files):,} → {len(new_files)}")
+        print(
+            f"\n  源行数 {rows_before:,} | 新行数 {rows_after:,} | "
+            f"文件 {len(files):,} → {len(new_files)}"
+        )
         if stats["dedup_removed"]:
             print(f"  全列去重移除: {stats['dedup_removed']:,} 行（原数据含整行重复）")
 
@@ -296,14 +342,21 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
     #   否则 → 说明丢数据，必须回滚
     unexplained = rows_before - rows_after - stats["dedup_removed"]
     if unexplained != 0:
-        msg = (f"行数校验失败! 源={rows_before:,} 新={rows_after:,} "
-               f"去重={stats['dedup_removed']:,} 未解释差异={unexplained:,} "
-               f"—— 已回滚，原文件未动")
+        msg = (
+            f"行数校验失败! 源={rows_before:,} 新={rows_after:,} "
+            f"去重={stats['dedup_removed']:,} 未解释差异={unexplained:,} "
+            f"—— 已回滚，原文件未动"
+        )
         print(f"  ⛔ {msg}")
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        return {"ok": False, "msg": msg, "rows_before": rows_before,
-                "rows_after": rows_after, "files_before": len(files),
-                "files_after": len(new_files)}
+        return {
+            "ok": False,
+            "msg": msg,
+            "rows_before": rows_before,
+            "rows_after": rows_after,
+            "files_before": len(files),
+            "files_after": len(new_files),
+        }
 
     # ── 原子替换：原文件移入备份，新文件就位 ──
     bk = os.path.join(BACKUP_ROOT, table)
@@ -334,9 +387,14 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
                 except Exception:
                     pass
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        return {"ok": False, "msg": f"替换失败已回滚: {str(e)[:60]}",
-                "rows_before": rows_before, "rows_after": rows_after,
-                "files_before": len(files), "files_after": len(new_files)}
+        return {
+            "ok": False,
+            "msg": f"替换失败已回滚: {str(e)[:60]}",
+            "rows_before": rows_before,
+            "rows_after": rows_after,
+            "files_before": len(files),
+            "files_after": len(new_files),
+        }
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -348,16 +406,24 @@ def migrate_table(table, dry_run=False, keep_backup=True, verbose=True):
     dedup_note = ""
     if stats["dedup_removed"]:
         dedup_note = f"（另去重移除 {stats['dedup_removed']:,} 行整行重复）"
-    msg = (f"迁移成功: {len(files):,} 文件 → {len(new_files)} 年度文件, "
-           f"{rows_after:,} 行无损{dedup_note}, 耗时 {el:.0f}s")
+    msg = (
+        f"迁移成功: {len(files):,} 文件 → {len(new_files)} 年度文件, "
+        f"{rows_after:,} 行无损{dedup_note}, 耗时 {el:.0f}s"
+    )
     if verbose:
         print(f"  ✓ {msg}")
         if bk:
             print(f"  备份: {bk}")
-    return {"ok": True, "msg": msg, "rows_before": rows_before,
-            "rows_after": rows_after, "dedup_removed": stats["dedup_removed"],
-            "files_before": len(files), "files_after": len(new_files),
-            "backup": bk}
+    return {
+        "ok": True,
+        "msg": msg,
+        "rows_before": rows_before,
+        "rows_after": rows_after,
+        "dedup_removed": stats["dedup_removed"],
+        "files_before": len(files),
+        "files_after": len(new_files),
+        "backup": bk,
+    }
 
 
 def run_migrate(tables=None, dry_run=False, keep_backup=True):
@@ -403,7 +469,7 @@ def run_migrate(tables=None, dry_run=False, keep_backup=True):
     print("=" * 78)
     for t, r in results:
         flag = "✓" if r.get("ok") else "✗"
-        print(f"  [{flag}] {t:18s} {r.get('msg','')}")
+        print(f"  [{flag}] {t:18s} {r.get('msg', '')}")
     print(f"\n  成功={ok_n} 失败={fail_n} 跳过={skipped_n} | 迁移行数合计={total_rows:,}")
     return results
 
@@ -416,25 +482,28 @@ def cleanup_backup(tables=None):
         bk = os.path.join(BACKUP_ROOT, t)
         if os.path.isdir(bk):
             n = count_parquet_files(bk)
-            sz = sum(os.path.getsize(os.path.join(bk, f))
-                     for f in list_parquet_files(bk))
+            sz = sum(os.path.getsize(os.path.join(bk, f)) for f in list_parquet_files(bk))
             shutil.rmtree(bk, ignore_errors=True)
             total += sz
-            print(f"  已删除备份 {t}: {n:,} 文件 / {sz/1024/1024:.1f} MB")
+            print(f"  已删除备份 {t}: {n:,} 文件 / {sz / 1024 / 1024:.1f} MB")
     if os.path.isdir(BACKUP_ROOT) and not os.listdir(BACKUP_ROOT):
         os.rmdir(BACKUP_ROOT)
-    print(f"\n共释放 {total/1024/1024/1024:.2f} GB")
+    print(f"\n共释放 {total / 1024 / 1024 / 1024:.2f} GB")
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        description="存储布局迁移（by_code → by_year）")
-    ap.add_argument("--tables", default=None,
-                    help=f"指定表，逗号分隔（默认 {','.join(DEFAULT_TABLES)}）")
-    ap.add_argument("--all", action="store_true",
-                    help=f"迁移全部待迁移表（{len(PENDING_TABLES)} 个）")
-    ap.add_argument("--daily", action="store_true",
-                    help="只迁移每日更新链路（core + adj_factor/stk_limit/fund_nav）")
+    ap = argparse.ArgumentParser(description="存储布局迁移（by_code → by_year）")
+    ap.add_argument(
+        "--tables", default=None, help=f"指定表，逗号分隔（默认 {','.join(DEFAULT_TABLES)}）"
+    )
+    ap.add_argument(
+        "--all", action="store_true", help=f"迁移全部待迁移表（{len(PENDING_TABLES)} 个）"
+    )
+    ap.add_argument(
+        "--daily",
+        action="store_true",
+        help="只迁移每日更新链路（core + adj_factor/stk_limit/fund_nav）",
+    )
     ap.add_argument("--dry-run", action="store_true", help="只报告计划，不改动")
     ap.add_argument("--no-backup", action="store_true", help="不留备份（不推荐）")
     ap.add_argument("--cleanup", action="store_true", help="清除迁移备份后退出")
@@ -452,8 +521,7 @@ def main(argv=None):
         tables = [x.strip() for x in a.tables.split(",") if x.strip()]
     else:
         tables = None
-    run_migrate(tables=tables, dry_run=a.dry_run,
-                keep_backup=not a.no_backup)
+    run_migrate(tables=tables, dry_run=a.dry_run, keep_backup=not a.no_backup)
 
 
 if __name__ == "__main__":

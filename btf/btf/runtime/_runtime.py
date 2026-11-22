@@ -10,12 +10,14 @@ manifest 落 FAILED 终态（崩溃 run 可审计，08 §13.2）。
 
 留白显式化（防止静默跳过——装配期显式日志/报错；M1 留白已随 M2/M3 兑现）：
     - risk.rules 装配为规则链 + 引擎⑧步接线（M2 5.2 已交付；非空链 → info 日志）；
-    - rules.source：static / mirror_json（M3 6.1 已交付；缺参数显式报错）；
+    - rules.source：static（可用）/ mirror_json（**G3/D7 起退役**，工厂显式
+      ConfigError「mirror_json 已随 v7.7 资产退役」；缺参数仍先报 rules.path）；
     - seed 记录进 manifest，引擎确定性；随机策略消费路径 M2 起；
     - universe 源支持 explicit/all；hs300 等指数成分（index_weight 机器复算）归 v0.5。
 
 分层：本模块属外层（cli | viz | registry | runtime），可组装全部内层。
 """
+
 from __future__ import annotations
 
 import importlib
@@ -29,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from btf import registry
+from btf.analytics.metrics import DEFAULT_ANNUALIZATION
 from btf.analytics.run_metrics import compute_run_metrics
 from btf.config.paths import RUNS_DIR
 from btf.config.validation import ConfigError
@@ -53,7 +56,7 @@ from btf.runtime.config_resolver import ConfigResolver
 from btf.runtime.run_orchestrator import RunOrchestrator
 from btf.runtime.universe_resolver import UniverseResolver
 from btf.strategy.base import StrategyBase
-from btf.strategy.rules import MirrorJsonRulesProvider, StaticRulesProvider
+from btf.strategy.rules import StaticRulesProvider
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +77,8 @@ SHORT_PERIOD_TRADING_DAYS = 20
 #: 与 `SHORT_PERIOD_TRADING_DAYS`（20，**告警**、不阻断）语义正交、互不改动。
 MIN_OPTIMIZE_TRADING_DAYS = 250
 
-#: 数据指纹**进程内 memo**（BB-1）：键 = (root, tables, years, mode)。
-#: 为什么需要：指纹是**披露字段**，同一进程内重复 build/run（网格搜索、批量
-#: `--set` 扫描、测试）不应重复付算力；进程生命周期内数据视为不变（跨进程
-#: 的 `bt run` 会重新实算，故数据重写仍可被检出——见 tests 的变异性检查）。
-_FINGERPRINT_MEMO: dict[tuple, Any] = {}
+#: 数据指纹进程内 memo 的唯一归属在 `btf.runtime.component_assembler`
+#: （D11：原此处同名副本零引用，已删除——双份 memo 会各自缓存、互相不可见）。
 
 
 def _ymd(s: str) -> TradingDate:
@@ -98,26 +98,34 @@ def fee_segments() -> list[dict[str, Any]]:
     """
     from btf.execution.cost import A_SHARE_SEGMENTS
 
-    return [{
-        "effective_from": (s.effective_from.to_ymd() if s.effective_from else None),
-        "stamp_duty_sell": s.stamp_duty_sell,
-        "transfer_fee_rate": s.transfer_fee_rate,
-        "transfer_scope": s.transfer_scope,
-        "transfer_basis": s.transfer_basis,
-    } for s in A_SHARE_SEGMENTS]
+    return [
+        {
+            "effective_from": (s.effective_from.to_ymd() if s.effective_from else None),
+            "stamp_duty_sell": s.stamp_duty_sell,
+            "transfer_fee_rate": s.transfer_fee_rate,
+            "transfer_scope": s.transfer_scope,
+            "transfer_basis": s.transfer_basis,
+        }
+        for s in A_SHARE_SEGMENTS
+    ]
 
 
 def _fill_from_row(row: Mapping[str, Any]) -> Fill:
     """落盘 fills 行 → Fill（R1 复核重算用）。"""
     fee = row.get("fee") or {}
     return Fill(
-        fill_id=row["fill_id"], order_id=row.get("order_id", ""),
-        symbol=row["symbol"], side=OrderSide(row["side"]), qty=int(row["qty"]),
+        fill_id=row["fill_id"],
+        order_id=row.get("order_id", ""),
+        symbol=row["symbol"],
+        side=OrderSide(row["side"]),
+        qty=int(row["qty"]),
         price=float(row["price"]),
-        fee=Fee(commission=float(fee.get("commission", 0.0)),
-                stamp_duty=float(fee.get("stamp_duty", 0.0)),
-                transfer_fee=float(fee.get("transfer_fee", 0.0)),
-                total=float(fee.get("total", 0.0))),
+        fee=Fee(
+            commission=float(fee.get("commission", 0.0)),
+            stamp_duty=float(fee.get("stamp_duty", 0.0)),
+            transfer_fee=float(fee.get("transfer_fee", 0.0)),
+            total=float(fee.get("total", 0.0)),
+        ),
         fill_date=TradingDate.from_ymd(row["fill_date"]),
         fill_timing=row.get("fill_timing", "open"),
     )
@@ -136,12 +144,10 @@ def inject_strategy_paths(run_cfg: Mapping[str, Any]) -> list[Path]:
     for raw in run_cfg.get("strategy_paths") or []:
         path = Path(str(raw))
         if not path.is_absolute():
-            raise ConfigError(
-                [f"run.strategy_paths: 须为绝对路径，得 {raw!r}"])
+            raise ConfigError([f"run.strategy_paths: 须为绝对路径，得 {raw!r}"])
         path = path.resolve()
         if not path.is_dir():
-            raise ConfigError(
-                [f"run.strategy_paths: 路径不存在或不是目录 {path}"])
+            raise ConfigError([f"run.strategy_paths: 路径不存在或不是目录 {path}"])
         if str(path) not in sys.path:
             sys.path.insert(0, str(path))
         injected.append(path)
@@ -169,7 +175,7 @@ class BTFRuntime:
         self.risk_manager: RuleChainManager | None = None
         self.rules_provider: Any = None
         self.instruments: dict[str, Instrument] = {}
-        self.last_run_id: str | None = None      # 最近一次落盘 run（M2 5.5）
+        self.last_run_id: str | None = None  # 最近一次落盘 run（M2 5.5）
         # 披露与守卫状态（19 号审查：P1-11 覆盖度 / P1-6 成本 / P0-3 风控）
         self.coverage: Any = None
         self.cost_model_name: str = "zero"
@@ -223,12 +229,18 @@ class BTFRuntime:
 
         R4 拆分：逻辑下沉到 `ConfigResolver`（本方法只做状态赋值与链式返回）。
         """
-        self.config = ConfigResolver().resolve(
-            source, environ=environ, overrides=overrides)
+        self.config = ConfigResolver().resolve(source, environ=environ, overrides=overrides)
         return self
 
     # ── ② 组装 ──
-    def build(self) -> BTFRuntime:
+    def build(self, *, quality: bool = True) -> BTFRuntime:
+        """组装运行时。
+
+        `quality=False`（**D8**）：跳过装配期数据质检（CC-1..CC-5）——供
+        `persist=False` 的网格/内存回测路径使用（质检只对落盘产物有意义）。
+        默认 `quality=True`，与既有单跑/落盘路径逐字一致；跳过时
+        `data_quality` 显式置空字典（RunOrchestrator 仅在落盘路径写载荷）。
+        """
         if self.config is None:
             raise RuntimeError("先 load_config 再 build")
         cfg = self.config
@@ -237,7 +249,8 @@ class BTFRuntime:
         from time import perf_counter as _pc
 
         self.feed = registry.create(
-            registry.DATA_FEED, data_cfg["feed"], data_cfg.get("feed_params"))
+            registry.DATA_FEED, data_cfg["feed"], data_cfg.get("feed_params")
+        )
         # ── 状态面板**构造期注入**（R4；19 号 §47.4 余项 ①）─────────────
         # 反转 `feed → state` 例外边（契约新 8 的最后一条豁免）：feed 不再
         # import state，改由装配根注入 `StateSynthesizer` —— 状态面板是撮合
@@ -248,7 +261,7 @@ class BTFRuntime:
             from btf.data.state import StateSynthesizer
 
             attach(StateSynthesizer(getattr(self.feed, "root", None)))
-        self.step_timings.clear()          # R5-4：重复 build 不累积（幂等）
+        self.step_timings.clear()  # R5-4：重复 build 不累积（幂等）
         _t = _pc()
 
         run_cfg = cfg["run"]
@@ -257,18 +270,21 @@ class BTFRuntime:
         # stk_limit 20080102）默认 **ConfigError**——原实现对数据起点零校验，
         # 2008 年前的涨跌停约束静默失效（成交系统性偏乐观且不披露）；
         # 显式 `data.allow_degraded_limit=true` 可放行（报告强制披露）
-        self.coverage = check_coverage(
-            _ymd(period["start"]).to_ymd(), _ymd(period["end"]).to_ymd())
-        allow_degraded = bool((cfg.get("data") or {}).get(
-            "allow_degraded_limit", False))
+        self.coverage = check_coverage(_ymd(period["start"]).to_ymd(), _ymd(period["end"]).to_ymd())
+        allow_degraded = bool((cfg.get("data") or {}).get("allow_degraded_limit", False))
         if self.coverage.fatal:
             if not allow_degraded:
-                raise ConfigError([
-                    f"回测区间覆盖度校验失败：{note}（如确需降级运行，显式设置 "
-                    f"data.allow_degraded_limit=true——报告将披露该降级）"
-                    for note in self.coverage.fatal])
-            logger.warning("区间覆盖度降级运行（allow_degraded_limit=true）：%s",
-                           "；".join(self.coverage.fatal))
+                raise ConfigError(
+                    [
+                        f"回测区间覆盖度校验失败：{note}（如确需降级运行，显式设置 "
+                        f"data.allow_degraded_limit=true——报告将披露该降级）"
+                        for note in self.coverage.fatal
+                    ]
+                )
+            logger.warning(
+                "区间覆盖度降级运行（allow_degraded_limit=true）：%s",
+                "；".join(self.coverage.fatal),
+            )
         elif self.coverage.degraded:
             logger.info("区间覆盖度提示：%s", "；".join(self.coverage.degraded))
 
@@ -280,13 +296,15 @@ class BTFRuntime:
         from btf.analytics.windows import intersect as _crisis_intersect
 
         _crisis_hits = _crisis_intersect(
-            str(period["start"]), str(period["end"]), _crisis_from_config(cfg))
+            str(period["start"]), str(period["end"]), _crisis_from_config(cfg)
+        )
         if _crisis_hits:
             self.assembly_notes.append(
-                "危机区间覆盖（RC-13）：本次区间与 " + "、".join(
-                    f"{w.name}（{w.start}~{w.end}）" for w in _crisis_hits)
+                "危机区间覆盖（RC-13）：本次区间与 "
+                + "、".join(f"{w.name}（{w.start}~{w.end}）" for w in _crisis_hits)
                 + " 重叠——**跨危机/平静期的结论不可直接对比**"
-                  "（分段解读或配合危机窗清单；窗口可经 analysis.crisis_windows 覆盖）")
+                "（分段解读或配合危机窗清单；窗口可经 analysis.crisis_windows 覆盖）"
+            )
 
         # 基准装配期守卫（P1-NEW-6，19 号 §23.1/§23.3）：基准号拼错/区间不覆盖
         # 原须**跑完整段回测**才在 `_benchmark_metrics` 报错（长区间 = 白烧）；
@@ -303,10 +321,10 @@ class BTFRuntime:
         # 之后 → 注入恒不生效；该路径从未端到端跑通故未暴露）
         if isinstance(cfg.get("rules"), dict):
             self.rules_provider = self._build_rules_provider(cfg["rules"])
-        self.index_universe: dict[str, list[str]] | None = None   # V5-4
+        self.index_universe: dict[str, list[str]] | None = None  # V5-4
         self.instruments = self._resolve_instruments(
-            run_cfg.get("universe") or {}, _ymd(period["start"]),
-            _ymd(period["end"]))
+            run_cfg.get("universe") or {}, _ymd(period["start"]), _ymd(period["end"])
+        )
 
         # RC-14（2026-10-05）：数据版本门禁——声明版本/水位才生效（opt-in）。
         # **MM-7 顺序订正**：本守卫原在 `_resolve_instruments` **之前**调用，
@@ -325,21 +343,19 @@ class BTFRuntime:
         self.assembly_notes.append(
             "is_suspended 口径：v7.0.0（仅 `suspend_type=S` 且 `suspend_timing` "
             "为空 ⇒ 不可交易；`R` 复牌与盘中停牌放行）——**跨 7.0.0 边界回测"
-            "结果不可直接比较**")
+            "结果不可直接比较**"
+        )
 
         # ETF 复权因子覆盖守卫（**RC-04，2026-10-05**）：**条件降级**——仅当
         # 宇宙含 ETF 时检查 `fund_adj` 起点（19991022）。为什么不并入
         # `DEGRADED_TABLES`：该表与股票结论无关，无条件检查会让 1999 年前的
         # **纯股票**回测误报降级。命中 ⇒ warn + 降级登记 + 装配披露，不阻断
         # （与 `etf_limit` 同机制）。
-        if any(inst.asset_class is AssetClass.ETF
-               for inst in self.instruments.values()):
+        if any(inst.asset_class is AssetClass.ETF for inst in self.instruments.values()):
             _fa_note = check_etf_adjust_coverage(_ymd(period["start"]).to_ymd())
             if _fa_note:
                 logger.warning("ETF 复权因子覆盖降级：%s", _fa_note)
-                self.coverage = replace(
-                    self.coverage,
-                    degraded=(*self.coverage.degraded, _fa_note))
+                self.coverage = replace(self.coverage, degraded=(*self.coverage.degraded, _fa_note))
                 self.assembly_notes.append(_fa_note)
 
         # 数据不变量校验（**批 8：CC-1..CC-6**，§39.2 裁决六-1）：装配期**一次**
@@ -350,7 +366,9 @@ class BTFRuntime:
         # ⚠ 必须在 `self.instruments` 解析**之后**（依赖宇宙标的；首版置于
         # `_guard_benchmark` 之后 → 宇宙为空 → 空标集短路、校验静默退化为 0 行，
         # 由集成测试 `test_default_records_and_discloses` 抓出）。
-        self.data_quality = self._run_data_quality(period)
+        # D8：`quality=False` 时跳过（网格/内存回测不付质检成本）；
+        # 落盘路径由 run_orchestrator 只读 `data_quality`，空字典即不写载荷。
+        self.data_quality = self._run_data_quality(period) if quality else {}
         self.step_timings["装配·数据质检"] = _pc() - _t
         _t = _pc()
 
@@ -363,7 +381,8 @@ class BTFRuntime:
         if self.cost_model_name == "zero":
             logger.warning(
                 "execution.cost_model 未配置（默认 zero）：本回测为**零费用"
-                "基线**，实盘需按分段费率（tiered_v1）重估——报告将披露")
+                "基线**，实盘需按分段费率（tiered_v1）重估——报告将披露"
+            )
         # 成本模型构造参数（**RC-05，2026-10-05**）：原实现调 `registry.create`
         # 不传 params ⇒ "把成本翻倍跑一遍"只能靠写插件代码（schema 亦无参数位）。
         # `zero` 是"零费用基线"调试模型（无字段）⇒ 传参无意义且会 TypeError，
@@ -372,10 +391,11 @@ class BTFRuntime:
         if self.cost_model_name == "zero" and cost_params:
             logger.warning(
                 "execution.cost_model=zero 时忽略 cost_model_params（%s）："
-                "零费用模型无参数（报告将披露零成本口径）", sorted(cost_params))
+                "零费用模型无参数（报告将披露零成本口径）",
+                sorted(cost_params),
+            )
             cost_params = None
-        self.cost_model = registry.create(
-            registry.COST_MODEL, self.cost_model_name, cost_params)
+        self.cost_model = registry.create(registry.COST_MODEL, self.cost_model_name, cost_params)
         # 滑点显式化（**RC-01，2026-10-05**）：默认层已改 `pct 0.001`（非零
         # 摩擦），故 `model == "none"` 只可能来自**用户显式声明**（或旧配置
         # 继承）—— 与 `cost_model == "zero"` 同款对称告警 + 报告披露
@@ -390,27 +410,28 @@ class BTFRuntime:
         # （NoSlippage 无参 / FixedSlippage 用 amount）——透传即 `TypeError`。
         # 规则：**模型非 pct ⇒ 剥离 params 中的 `pct` 键**（用户显式给的
         # 其它键原样保留；剥空则视为无参数）。
-        if (slip_model_name != "pct" and isinstance(slip_params, dict)
-                and "pct" in slip_params):
-            slip_params = {k: v for k, v in slip_params.items()
-                           if k != "pct"} or None
+        if slip_model_name != "pct" and isinstance(slip_params, dict) and "pct" in slip_params:
+            slip_params = {k: v for k, v in slip_params.items() if k != "pct"} or None
         if slip_model_name == "none":
             logger.warning(
                 "execution.slippage.model=none（显式声明）：本回测为**零摩擦"
-                "基线**——默认已为 pct 0.001（单边 10bp）；报告将披露该口径")
-        self.slippage = registry.create(
-            registry.SLIPPAGE_MODEL, slip_model_name, slip_params)
+                "基线**——默认已为 pct 0.001（单边 10bp）；报告将披露该口径"
+            )
+        self.slippage = registry.create(registry.SLIPPAGE_MODEL, slip_model_name, slip_params)
         handler_cls = registry.resolve(
-            registry.EXECUTION_HANDLER, exec_cfg.get("handler", "next_open"))
+            registry.EXECUTION_HANDLER, exec_cfg.get("handler", "next_open")
+        )
         self.handler = handler_cls(
-            cost_model=self.cost_model, slippage_model=self.slippage,
+            cost_model=self.cost_model,
+            slippage_model=self.slippage,
             instruments=self.instruments,
-            **(exec_cfg.get("handler_params") or {}))
+            **(exec_cfg.get("handler_params") or {}),
+        )
         rebalancer_params = {"instruments": self.instruments}
         rebalancer_params.update(exec_cfg.get("rebalancer_params") or {})
         self.rebalancer = registry.create(
-            registry.REBALANCER, exec_cfg.get("rebalancer", "full"),
-            rebalancer_params)
+            registry.REBALANCER, exec_cfg.get("rebalancer", "full"), rebalancer_params
+        )
 
         risk_cfg = cfg.get("risk", {}) or {}
         rules = [
@@ -424,27 +445,30 @@ class BTFRuntime:
         # manifest 配置回显 + 报告假设章节披露（`viz.report._derived_disclosures`）
         self.risk_allow_empty = bool(risk_cfg.get("allow_empty_chain", False))
         if not rules and not self.risk_allow_empty:
-            raise ConfigError([
-                "risk.rules 为空且 risk.allow_empty_chain=false：拒绝以无风控"
-                "状态运行（fail-closed）。如确需裸奔回测（仅调试），"
-                "显式设置 risk.allow_empty_chain=true——该标记将在报告中披露。"])
+            raise ConfigError(
+                [
+                    "risk.rules 为空且 risk.allow_empty_chain=false：拒绝以无风控"
+                    "状态运行（fail-closed）。如确需裸奔回测（仅调试），"
+                    "显式设置 risk.allow_empty_chain=true——该标记将在报告中披露。"
+                ]
+            )
         self.risk_manager = RuleChainManager(rules)
         if rules:
-            logger.info(
-                "风控链已装配（%d 条，M2 5.2 引擎时序已接线）", len(rules))
+            logger.info("风控链已装配（%d 条，M2 5.2 引擎时序已接线）", len(rules))
         elif self.risk_allow_empty:
             logger.warning(
-                "风控链为空且 risk.allow_empty_chain=true：全部订单放行"
-                "（调试模式，报告将披露）")
+                "风控链为空且 risk.allow_empty_chain=true：全部订单放行（调试模式，报告将披露）"
+            )
 
         if "seed" in cfg:
-            logger.info("seed=%s 已记录（引擎确定性路径——随机策略 M2 起消费）",
-                        cfg["seed"])
+            logger.info("seed=%s 已记录（引擎确定性路径——随机策略 M2 起消费）", cfg["seed"])
         self.step_timings["装配·组件与策略"] = _pc() - _t
         return self
 
     def _resolve_instruments(
-        self, universe_cfg: Mapping[str, Any], start: TradingDate,
+        self,
+        universe_cfg: Mapping[str, Any],
+        start: TradingDate,
         end: TradingDate | None = None,
     ) -> dict[str, Instrument]:
         """宇宙解析（explicit / all / index——v0.5 V5-4 指数成分）。
@@ -452,14 +476,12 @@ class BTFRuntime:
         R4 拆分：三种口径与两条回退/披露路径已下沉到 `UniverseResolver`；
         本方法只做**委托 + 回写** `index_universe`（月度 PIT 映射）。
         """
-        instruments, monthly = UniverseResolver(
-            self.feed, notes=self.assembly_notes).resolve(
-                universe_cfg, start, end)
+        instruments, monthly = UniverseResolver(self.feed, notes=self.assembly_notes).resolve(
+            universe_cfg, start, end
+        )
         if monthly is not None:
             self.index_universe = monthly
         return instruments
-
-
 
     def _load_strategy(self, run_cfg: Mapping[str, Any]) -> StrategyBase:
         """module:Class 动态加载 + 构造参数注入（装配期，非 doc 的 init 期）。"""
@@ -481,24 +503,24 @@ class BTFRuntime:
             top = module_name.partition(".")[0]
             cached = sys.modules.get(top)
             if cached is not None:
-                known = [Path(p).resolve()
-                         for p in getattr(cached, "__path__", [])]
+                known = [Path(p).resolve() for p in getattr(cached, "__path__", [])]
                 origin = getattr(cached, "__file__", None)
                 if origin is not None:
                     known.append(Path(origin).resolve().parent)
-                same_origin = any(p.is_relative_to(root)
-                                  for p in known for root in injected)
+                same_origin = any(p.is_relative_to(root) for p in known for root in injected)
                 if not same_origin:
-                    raise ConfigError([
-                        f"run.strategy: 包名冲突：顶层包 {top!r} 已从"
-                        f" {[str(p) for p in known]} 缓存装载，与配置声明的"
-                        f" strategy_paths={[str(p) for p in injected]} 不符；"
-                        f"包名冲突：请使用唯一包名（拒载，不静默沿用缓存）"])
+                    raise ConfigError(
+                        [
+                            f"run.strategy: 包名冲突：顶层包 {top!r} 已从"
+                            f" {[str(p) for p in known]} 缓存装载，与配置声明的"
+                            f" strategy_paths={[str(p) for p in injected]} 不符；"
+                            f"包名冲突：请使用唯一包名（拒载，不静默沿用缓存）"
+                        ]
+                    )
         try:
             cls = getattr(importlib.import_module(module_name), class_name)
         except (ImportError, AttributeError) as exc:
-            raise ConfigError(
-                [f"run.strategy: 加载失败 {spec!r}（{exc}）"]) from exc
+            raise ConfigError([f"run.strategy: 加载失败 {spec!r}（{exc}）"]) from exc
         # 版本协商（19 号审查 P1-2/EX-2）：策略是最高频扩展点，原实现
         # importlib 直载**不校验 contract_version**（版本不兼容静默通过）；
         # 与 registry 插件同口径——未声明/主版本不符 → 拒载
@@ -516,19 +538,21 @@ class BTFRuntime:
             params["index_universe"] = self.index_universe
         # LIQ 序列预计算（19 号报告 P0-1/§9.2）：策略声明 liq_series → 注入
         # 区间序列（阈值取 RulesProvider「L0_LIQ」，与策略消费同源）
-        if ("liq_series" in signature and self.rules_provider is not None
-                and "run" in self.config):
+        if "liq_series" in signature and self.rules_provider is not None and "run" in self.config:
             thresholds = self.rules_provider.get("L0_LIQ")
             period = (self.config.get("run") or {}).get("period") or {}
             if thresholds and period.get("start") and period.get("end"):
                 from btf.data.liq import precompute_liq_series
 
                 params["liq_series"] = precompute_liq_series(
-                    _ymd(period["start"]).to_ymd(), _ymd(period["end"]).to_ymd(),
-                    thresholds)
-                logger.info("LIQ 序列预计算注入：%d 交易日（%s~%s）",
-                            len(params["liq_series"]), period["start"],
-                            period["end"])
+                    _ymd(period["start"]).to_ymd(), _ymd(period["end"]).to_ymd(), thresholds
+                )
+                logger.info(
+                    "LIQ 序列预计算注入：%d 交易日（%s~%s）",
+                    len(params["liq_series"]),
+                    period["start"],
+                    period["end"],
+                )
         return cls(**params)
 
     def _build_rules_provider(self, rules_cfg: Mapping[str, Any]) -> Any:
@@ -537,23 +561,29 @@ class BTFRuntime:
         src = rules_cfg.get("source")
         if src == "static":
             # 保留既有无参构造语义（version/params 由名字表工厂默认值决定）
-            return StaticRulesProvider(
-                params={}, version=rules_cfg.get("rules_version", "static"))
+            return StaticRulesProvider(params={}, version=rules_cfg.get("rules_version", "static"))
         if src == "mirror_json":
             path = rules_cfg.get("path")
             if not path:
-                raise ConfigError(["rules.path 必填（source=mirror_json）："
-                                   "镜像 JSON 由 tools/export_rules_mirror.py 导出"])
-            return MirrorJsonRulesProvider(path, overrides=self._rules_overrides())
+                raise ConfigError(
+                    [
+                        "rules.path 必填（source=mirror_json）："
+                        "镜像 JSON 由 tools/export_rules_mirror.py 导出"
+                    ]
+                )
+            raise ConfigError(["mirror_json 已随 v7.7 资产退役"])
         # 扩展点兜底（19 号 P1-1/EX-1）：自定义 provider 经
         # `registry.register(RULES_PROVIDER, name, factory)` 注册后，
         # 配置 `rules.source: <name>` **零源码改动即生效**
         try:
             return registry.create(registry.RULES_PROVIDER, str(src), rules_cfg)
         except Exception as exc:
-            raise ConfigError([
-                f"rules.source: {src!r} 未支持（内置: static | mirror_json；"
-                f"扩展：经 registry.register 注册后即可用）：{exc}"]) from exc
+            raise ConfigError(
+                [
+                    f"rules.source: {src!r} 未支持（内置: static | mirror_json；"
+                    f"扩展：经 registry.register 注册后即可用）：{exc}"
+                ]
+            ) from exc
 
     # ── ③ 执行 ──
     def _guard_feed_routing(self) -> None:
@@ -567,18 +597,20 @@ class BTFRuntime:
     def _guard_dataset_version(self, period: Mapping[str, Any]) -> None:
         """数据版本门禁（**RC-14**；R4：逻辑下沉到 `component_assembler`）。"""
         return ComponentAssembler(self).guard_dataset_version(period)
+
     def _data_tables(self) -> list[str]:
         """本次实际用到的表集（R4：逻辑下沉到 `component_assembler`）。"""
         return ComponentAssembler(self).data_tables()
+
     def _run_data_quality(self, period: Mapping[str, Any]) -> dict[str, Any]:
         """数据不变量校验（R4：逻辑下沉到 `component_assembler`）。"""
         return ComponentAssembler(self).run_data_quality(period)
+
     def _compute_data_version(self, period: Mapping[str, Any]) -> dict[str, Any]:
         """数据内容指纹（R4：逻辑下沉到 `component_assembler`）。"""
         return ComponentAssembler(self).compute_data_version(period)
 
-    def dataset_fingerprint(self, period: Mapping[str, Any] | None = None
-                            ) -> dict[str, Any]:
+    def dataset_fingerprint(self, period: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """数据指纹（BB-1 **实算**）只读入口——**CL-4** 冻结清单与 manifest 同源。
 
         为什么公开：`_compute_data_version` 原为落盘编排的内部步骤（只在
@@ -595,15 +627,13 @@ class BTFRuntime:
             raise ConfigError(["run.period 未声明：无法确定冻结口径（CL-4）"])
         return self._compute_data_version(period)
 
-    def run(self, *, store: LocalRunStore | None = None,
-            persist: bool = True) -> Any:
+    def run(self, *, store: LocalRunStore | None = None, persist: bool = True) -> Any:
         """Engine 执行 + RunStore 落盘（04 §8.3.8；08 §13.3）。
 
         R4 第二刀：落盘编排已下沉到 `RunOrchestrator`（本方法只做委托）；
         时序、异常终态与产物纪律见该类文档。
         """
         return RunOrchestrator(self).run(store=store, persist=persist)
-
 
     @staticmethod
     def _warn_if_short_period(result: Any) -> None:
@@ -617,12 +647,15 @@ class BTFRuntime:
         if n_days == 0:
             logger.warning(
                 "未读到任何交易日（检查 feed↔标的路由/数据区间）——"
-                "本次运行不含策略信息（C-3 / 19 号 §163）")
+                "本次运行不含策略信息（C-3 / 19 号 §163）"
+            )
         elif n_days < SHORT_PERIOD_TRADING_DAYS:
             logger.warning(
                 "极短区间：%d 个交易日（< %d）——部分指标数学有定义但业务无意义，"
                 "勿用于 optimize --objective 排序（19 号 OBS-1/BB-4）",
-                n_days, SHORT_PERIOD_TRADING_DAYS)
+                n_days,
+                SHORT_PERIOD_TRADING_DAYS,
+            )
 
     def _analyzer_names(self) -> list[str] | None:
         """`analysis.metrics` 名字表（19 号 EX-1：注册自定义 Analyzer 后
@@ -633,8 +666,6 @@ class BTFRuntime:
     #: 基准代码形制（schema 同步：`^\d{6}\.(SH|SZ|BJ)$`）
     _BENCHMARK_RE = re.compile(r"^\d{6}\.(SH|SZ|BJ)$")
 
-
-
     def step_timings_line(self) -> str:
         """分步耗时单行摘要（R5-4：`bt run --verbose` 消费；**不得恒空**）。"""
         if not self.step_timings:
@@ -642,8 +673,6 @@ class BTFRuntime:
         parts = [f"{k}={v:.2f}s" for k, v in self.step_timings.items()]
         parts.append(f"合计={sum(self.step_timings.values()):.2f}s")
         return " | ".join(parts)
-
-
 
     def _table_store(self) -> Any:
         """共享表级缓存（Z-3）：懒建一次，基准守卫与取数共用（免双重 IO）。
@@ -654,8 +683,7 @@ class BTFRuntime:
         if self._data_store is None:
             from btf.data.core import YearTableStore
 
-            self._data_store = YearTableStore(
-                root=getattr(self.feed, "root", None), max_entries=16)
+            self._data_store = YearTableStore(root=getattr(self.feed, "root", None), max_entries=16)
         return self._data_store
 
     @staticmethod
@@ -712,7 +740,10 @@ class BTFRuntime:
         return metrics
 
     def _relative_metrics_for(
-        self, symbol: Any, snapshots: Sequence[Any], *,
+        self,
+        symbol: Any,
+        snapshots: Sequence[Any],
+        *,
         analysis: Mapping[str, Any] | None = None,
     ) -> dict[str, float]:
         """数值型相对指标（**元信息已剥离**；run 与 R1 复核共用同一实现）。
@@ -734,7 +765,10 @@ class BTFRuntime:
         return metrics
 
     def _compute_relative(
-        self, symbol: Any, snapshots: Sequence[Any], *,
+        self,
+        symbol: Any,
+        snapshots: Sequence[Any],
+        *,
         analysis: Mapping[str, Any] | None = None,
     ) -> dict[str, float]:
         """单个基准的数值型相对指标（MM-6 拆出的纯计算半边，无身份副作用）。"""
@@ -748,22 +782,25 @@ class BTFRuntime:
         # TradingDate）——与 `compute_all` 的双形态容忍口径一致
         days = [self._snapshot_ymd(s) for s in snapshots]
         _days, bench_closes = load_index_closes(
-            str(symbol), days[0], days[-1], trading_days=days,
-            store=self._table_store())
+            str(symbol), days[0], days[-1], trading_days=days, store=self._table_store()
+        )
         navs = [self._snapshot_value(s) for s in snapshots]
         # 配置来源双通道：run 取当前 config；**verify** 取 manifest 生效配置
         # （复核路径 `self.config` 为 None——原写法会 AttributeError）
         if analysis is None:
             analysis = dict((self.config or {}).get("analysis") or {})
         metrics = relative_metrics(
-            navs, bench_closes, symbol=str(symbol),
+            navs,
+            bench_closes,
+            symbol=str(symbol),
             risk_free_rate=float(analysis.get("risk_free_rate", 0.0)),
-            annualization_factor=int(analysis.get("annualization_factor", 252)))
-        metrics.pop("benchmark_symbol", None)      # 元信息剥离（P0-NEW-7）
-        logger.info("基准对比：%s（%d 日对齐）→ %d 项相对指标已计算",
-                    symbol, len(days), len(metrics))
+            annualization_factor=int(analysis.get("annualization_factor", DEFAULT_ANNUALIZATION)),
+        )
+        metrics.pop("benchmark_symbol", None)  # 元信息剥离（P0-NEW-7）
+        logger.info(
+            "基准对比：%s（%d 日对齐）→ %d 项相对指标已计算", symbol, len(days), len(metrics)
+        )
         return metrics
-
 
     def _run_engine(self, event_log_path) -> Any:
         """Engine 构造与执行（落盘与否共用）。"""
@@ -777,10 +814,13 @@ class BTFRuntime:
         # 现状口径：截面恒 = 装配期宇宙（静态），跨期新增由装配期披露。
         cross = sorted(self.instruments) if self.instruments else None
         engine = Engine(
-            self.feed, self.strategy,
-            start=_ymd(period["start"]), end=_ymd(period["end"]),
+            self.feed,
+            self.strategy,
+            start=_ymd(period["start"]),
+            end=_ymd(period["end"]),
             initial_cash=run_cfg.get("initial_cash", 1_000_000.0),
-            handler=self.handler, rebalancer=self.rebalancer,
+            handler=self.handler,
+            rebalancer=self.rebalancer,
             risk_manager=self.risk_manager,
             instruments=self.instruments,
             cross_section=cross,
@@ -788,8 +828,7 @@ class BTFRuntime:
             # CL-3（19 号 §72.4 Q-2(b)）：退市清算口径（schema 声明；默认 carry
             # ＝ 现状，零回归；writeoff 供压力口径显式选择——CLI
             # `--delisted-settlement writeoff` / `--set run__delisted_settlement=…`）
-            delisted_settlement=str(
-                run_cfg.get("delisted_settlement") or "carry"),
+            delisted_settlement=str(run_cfg.get("delisted_settlement") or "carry"),
             # **R62′（N64，19 号 §118）**：消费侧价格视图（schema 声明；
             # 缺省 `adjusted`＝喂给策略的 bar 走 qfq（ref＝区间起点）——
             # 记账侧恒名义价（ADR-6 不动）；`nominal` 供对照与回归比对。
@@ -813,19 +852,16 @@ class BTFRuntime:
         return dict(self.config.get("analysis") or {})
 
     # ── ④ 加载历史 run ──
-    def load_run(self, run_id: str, *, store: LocalRunStore | None = None
-                 ) -> RunBundle:
+    def load_run(self, run_id: str, *, store: LocalRunStore | None = None) -> RunBundle:
         """产物重载（04 §8.3.8；报告再生成与 R1 对账入口）。"""
         return (store or LocalRunStore()).load(run_id)
 
-    def load_manifest(self, run_id: str,
-                      store: LocalRunStore | None = None) -> RunManifest:
+    def load_manifest(self, run_id: str, store: LocalRunStore | None = None) -> RunManifest:
         """只读取 manifest（R1 复核：四版本 + metrics_digest 比对）。"""
         return (store or LocalRunStore()).read_manifest(run_id)
 
     # ── ⑤ R1 复核（08 §13.1）──
-    def verify_run(self, run_id: str, *, store: LocalRunStore | None = None
-                   ) -> dict[str, Any]:
+    def verify_run(self, run_id: str, *, store: LocalRunStore | None = None) -> dict[str, Any]:
         """R1 复核：从**落盘产物**重算指标 → 与 manifest.metrics_digest 比对。
 
         复核路径与 run() 的落盘路径分离（报告/归档后仍可自校验）：产物
@@ -840,8 +876,7 @@ class BTFRuntime:
         # metrics 只含主基准数值，其余基准在披露区（不进 digest）。
         from btf.config.loader import benchmark_symbols
 
-        symbols = benchmark_symbols(
-            bundle.manifest.config_effective.get("report") or {})
+        symbols = benchmark_symbols(bundle.manifest.config_effective.get("report") or {})
         symbol = symbols[0] if symbols else None
 
         # **R61′（N63；§114.2 第 1 条）**：复核路径的折算序列**从产物还原**
@@ -850,13 +885,16 @@ class BTFRuntime:
         from btf.runtime.run_orchestrator import consolidations_from_events
 
         metrics = compute_run_metrics(
-            bundle.snapshots, fills, self._metrics_config(bundle),
+            bundle.snapshots,
+            fills,
+            self._metrics_config(bundle),
             analyzer_names=self._analyzer_names(),
             resolver=lambda name: registry.resolve(registry.ANALYZER, name),
             extras=lambda snaps: self._relative_metrics_for(
-                symbol, snaps, analysis=self._metrics_config(bundle)),
-            consolidations=consolidations_from_events(
-                store.events_path(run_id)))
+                symbol, snaps, analysis=self._metrics_config(bundle)
+            ),
+            consolidations=consolidations_from_events(store.events_path(run_id)),
+        )
         digest = metrics_digest_of(metrics)
         expected = bundle.manifest.metrics_digest
         # 产物完整性：metrics.json 回读的摘要亦须与 manifest 一致（篡改可检出）

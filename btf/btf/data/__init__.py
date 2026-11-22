@@ -4,7 +4,7 @@
 模块清单（与 `btf/data/` 实存一一对应；分节便于定位）：
     —— 存储与登记 ——
     parquet_reader   三布局（by_year/single/metadata）统一读取 + 谓词下推 + 单位换算单点
-    tables_meta      **18 表**元数据登记（05 §9.4 字典数字化：起点/单位换算标记/标的路由）
+    tables_meta      **21 表**元数据登记（05 §9.4 字典数字化：起点/单位换算标记/标的路由）
     core             YearTableStore：**唯一 IO 入口**（年表缓存/按日索引/线程安全）
     —— 数据源（DataFeed 协议实现）——
     feed             DataFeed 协议 + TushareParquetFeed + MixedDailyFeed（股票/ETF 混合表路由）
@@ -20,12 +20,13 @@
     etf_corp_actions  ETF/LOF 分红/折算事件（ADR-20）
     —— 治理 ——
     coverage         回测区间覆盖度守卫（必需表起点 / 降级表）
-    quality          数据不变量校验 CC-1..CC-5（装配期门 + 产物 + 披露）
+    quality          数据不变量校验 CC-1..CC-5 + CC-7（跳过 CC-6：产物编号；装配期门 + 产物 + 披露）
     version          数据内容指纹 DataVersion（meta/fast/full 三档）
 
 策略专用数据口（`ava_inputs`/`dv_inputs`/`event_inputs`）已迁**仓外**
 `赤潮/研究/cc_strategies/`（LL-1，2026-10-24；本包不再提供）。
 
 纪律：只读主库；禁止反向依赖引擎层（契约 4）；上层不得直接 import `parquet_reader`（契约 9）；
-`core` 不得依赖本包其它领域模块（契约 7）；域内模块互不依赖（契约 8，唯一已知例外 feed→state）。
+`core` 不得依赖本包其它领域模块（契约 7）；域内模块互不依赖（契约 8，**零例外**——
+原 feed→state 例外已由 R4 反转：装配根注入 `StateSynthesizer`）。
 """

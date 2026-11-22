@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-config_wind.py — Wind 第三库独立配置（WIND-LIB W-0，2026-10-22）
+wind/config.py — Wind 第三库独立配置（WIND-LIB W-0，2026-10-22）
 （原 代码/config_wind.py，2026-11-05 W3-NAME-04 下沉至 wind/config.py）
 ===============================================================
 设计原则（严格遵守§69/§70）：
@@ -25,6 +25,7 @@ config_wind.py — Wind 第三库独立配置（WIND-LIB W-0，2026-10-22）
 用法：
     from wind.config import WIND_DATA_DIR, assert_writable, WIND_API_KEY, ...
 """
+
 import datetime as _dt
 import os
 
@@ -49,7 +50,7 @@ WIND_CATALOG_FILE = os.path.join(WIND_CATALOG_DIR, "wind_catalog.parquet")
 # ── 元数据（写权 + 预算台账）─────────────────────────────────
 WIND_META_DIR = os.path.join(WIND_DATA_DIR, "_meta")
 WIND_BUDGET_FILE = os.path.join(WIND_META_DIR, "budget_ledger.jsonl")
-WIND_SNAP_META_DIR = os.path.join(WIND_SNAP_DIR, "_meta")   # 快照覆盖冲突记录
+WIND_SNAP_META_DIR = os.path.join(WIND_SNAP_DIR, "_meta")  # 快照覆盖冲突记录
 
 # ── 日志 ─────────────────────────────────────────────────
 WIND_LOG_DIR = os.path.join(WIND_DATA_DIR, "_logs")
@@ -61,8 +62,14 @@ WIND_TMP_DIR = os.path.join(TEMP_DIR, "wind_run")
 def ensure_wind_dirs():
     """确保 wind_data 目录树存在（8 项）"""
     for d in (
-        WIND_DATA_DIR, WIND_RAW_DIR, WIND_NORM_DIR, WIND_SERIES_DIR,
-        WIND_SNAP_DIR, WIND_CATALOG_DIR, WIND_META_DIR, WIND_LOG_DIR,
+        WIND_DATA_DIR,
+        WIND_RAW_DIR,
+        WIND_NORM_DIR,
+        WIND_SERIES_DIR,
+        WIND_SNAP_DIR,
+        WIND_CATALOG_DIR,
+        WIND_META_DIR,
+        WIND_LOG_DIR,
     ):
         os.makedirs(d, exist_ok=True)
 
@@ -73,9 +80,9 @@ def ensure_wind_dirs():
 ALLOWED_WRITE_ROOTS = (WIND_DATA_DIR, WIND_TMP_DIR)
 
 FORBIDDEN_WRITE_ROOTS = (
-    MARKET_DATA_DIR,              # 主库根（alt 也禁写 Wind）
-    ALT_DATA_DIR,                 # alt 库根（新增：三库隔离）
-    os.path.join(PROJECT_DIR, "备份"),   # 全局备份区（绝对保护）
+    MARKET_DATA_DIR,  # 主库根（alt 也禁写 Wind）
+    ALT_DATA_DIR,  # alt 库根（新增：三库隔离）
+    os.path.join(PROJECT_DIR, "备份"),  # 全局备份区（绝对保护）
     os.path.join(DATA_ROOT, "_migrate_backup"),
     os.path.join(DATA_ROOT, "_backup_corrupt_20260917"),
 )
@@ -98,12 +105,14 @@ def violation_records():
 
 
 def _record_violation(kind, path, forbidden):
-    _VIOLATION_LOG.append({
-        "at": _dt.datetime.now().isoformat(timespec="seconds"),
-        "kind": kind,
-        "path": str(path),
-        "forbidden": str(forbidden) if forbidden else "",
-    })
+    _VIOLATION_LOG.append(
+        {
+            "at": _dt.datetime.now().isoformat(timespec="seconds"),
+            "kind": kind,
+            "path": str(path),
+            "forbidden": str(forbidden) if forbidden else "",
+        }
+    )
 
 
 def assert_writable(path):
@@ -120,12 +129,13 @@ def assert_writable(path):
             raise WindPathViolationError(
                 f"拒绝写入 Wind 授权区：目标位于禁区\n  目标: {p}\n  禁区: {b}"
             )
-    if not any(p == os.path.abspath(r) or p.startswith(os.path.abspath(r) + os.sep)
-               for r in ALLOWED_WRITE_ROOTS):
+    if not any(
+        p == os.path.abspath(r) or p.startswith(os.path.abspath(r) + os.sep)
+        for r in ALLOWED_WRITE_ROOTS
+    ):
         _record_violation("outside", p, "")
         raise WindPathViolationError(
-            f"拒绝写入：目标不在 Wind 授权区\n  目标: {p}\n"
-            f"  授权: {ALLOWED_WRITE_ROOTS}"
+            f"拒绝写入：目标不在 Wind 授权区\n  目标: {p}\n  授权: {ALLOWED_WRITE_ROOTS}"
         )
     return p
 
@@ -140,22 +150,22 @@ WIND_API_KEY = os.environ.get("WIND_API_KEY", "").strip()
 # 四、端点（实测仅两个）
 # ============================================================
 WIND_ENDPOINTS = {
-    "analytics": "vserver_analytics_data/mcp/",   # 自然语言 get_financial_data
-    "index":      "vserver_index_data/mcp/",      # get_index_kline
+    "analytics": "vserver_analytics_data/mcp/",  # 自然语言 get_financial_data
+    "index": "vserver_index_data/mcp/",  # get_index_kline
 }
 
 
 # ============================================================
 # 五、限流与预算（软闸，CLI 无 balance 命令）
 # ============================================================
-WIND_CALL_INTERVAL = 0.6          # 两次调用间至少 0.6 秒
-WIND_QPS_LIMIT = 2                # QPS 上限（保守：避免 37 分钟卡死）
-WIND_MAX_RETRY = 3                # 拒单重试次数
-WIND_RPC_TIMEOUT = 60             # RPC 超时秒（⚠ 禁设 200，曾致 GL8 卡死 37 分钟）
+WIND_CALL_INTERVAL = 0.6  # 两次调用间至少 0.6 秒
+WIND_QPS_LIMIT = 2  # QPS 上限（保守：避免 37 分钟卡死）
+WIND_MAX_RETRY = 3  # 拒单重试次数
+WIND_RPC_TIMEOUT = 60  # RPC 超时秒（⚠ 禁设 200，曾致 GL8 卡死 37 分钟）
 
 # 预算软闸（超出仅告警不阻断；CLI 无 balance 命令且 QUOTA_ERROR 是复合码）
-WIND_DAILY_CALL_SOFT_LIMIT = 200           # 每日软闸：调用次数
-WIND_DAILY_POINT_SOFT_LIMIT = 5000         # 每日软闸：积分消耗
+WIND_DAILY_CALL_SOFT_LIMIT = 200  # 每日软闸：调用次数
+WIND_DAILY_POINT_SOFT_LIMIT = 5000  # 每日软闸：积分消耗
 
 
 # ============================================================
@@ -180,9 +190,12 @@ def normalize_date_iso8601(s):
 # ============================================================
 # 七、自检：三库路径必须两两不等
 # ============================================================
-assert os.path.abspath(WIND_DATA_DIR) != os.path.abspath(MARKET_DATA_DIR), \
+assert os.path.abspath(WIND_DATA_DIR) != os.path.abspath(MARKET_DATA_DIR), (
     "wind_data 不得与主库同路径"
-assert os.path.abspath(WIND_DATA_DIR) != os.path.abspath(ALT_DATA_DIR), \
+)
+assert os.path.abspath(WIND_DATA_DIR) != os.path.abspath(ALT_DATA_DIR), (
     "wind_data 不得与 alt 库同路径"
-assert os.path.abspath(MARKET_DATA_DIR) != os.path.abspath(ALT_DATA_DIR), \
+)
+assert os.path.abspath(MARKET_DATA_DIR) != os.path.abspath(ALT_DATA_DIR), (
     "主库与 alt 库路径异常（自检）"
+)

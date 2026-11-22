@@ -29,10 +29,10 @@ bt --version          # btf 7.0.0
 bt check              # 十项质量门，须 10/10
 
 # 3) 跑一个自带示例
-bt run -c examples/config_rotation.yaml
+bt run --config examples/config_rotation.yaml
 
 # 4) 复核产物（digest 一致才算可复现）
-bt verify <run_id>
+bt verify --run <run_id>
 ```
 
 产物落在 `BTF_OUTPUT_DIR`（默认工作区 `回测产物/runs/<run_id>/`）：
@@ -51,7 +51,7 @@ btf/
 ├─ schemas/          配置 JSON Schema（backtest.v1.json，唯一一份）
 ├─ examples/         示例策略 rotation.py + 示例配置（不进 wheel）
 ├─ tools/            常驻工具 28 个（门禁脚本 / 对账 / 复跑 / 冷备 / 审计）
-├─ tests/            1306 项（l1–l5 + smoke 五层）
+├─ tests/            1320 项（l1–l5 + smoke 五层）
 ├─ benchmarks/       B1–B5 基准留档
 ├─ CHANGELOG.md      版本留痕（Keep a Changelog）
 └─ pyproject.toml    ruff + import-linter 十契约 + pytest 标记
@@ -91,21 +91,26 @@ run:
 
 ## 6. 常用命令
 
+**14 命令族**（单一真源 `btf/cli/main.py::COMMANDS`，含 `adhoc`——7.x 保留、仍可用）。
+
 | 命令 | 用途 |
 |---|---|
 | `bt check` | 十项质量门（改代码前后都跑） |
-| `bt run -c <yaml>` | 跑回测 |
+| `bt run --config <yaml>` | 跑回测（`--delisted-settlement carry\|writeoff\|writeoff_at_delist` 三档） |
 | `bt runs --latest 5` | 列最近几个 run 的摘要（只读） |
 | `bt show --run <id>` | 单 run 的 manifest + 指标摘要（只读） |
-| `bt verify <run_id>` | 复核 metric digest 与产物完整性 |
-| `bt report <run_id>` | 生成 HTML/Markdown 报告（幂等） |
+| `bt verify --run <run_id>` | 复核 metric digest 与产物完整性 |
+| `bt report --run <run_id>` | 生成 HTML/Markdown 报告（幂等） |
 | `bt test` | 按层跑测试（`--layer`） |
-| `bt dataset freeze --config <yaml>` | 冻结数据集指纹（`content_hash` 与门禁同源） |
-| `bt dataset refresh-hash --dry-run --config <yaml>` | 实算数据指纹并列出**旧值→新值**（`--dry-run` 不写盘；写回时行级替换，不重排 YAML） |
-| `bt data quality --start <d> --end <d> [--price-table T] [--limit-table T] [--symbols A,B] [--json] [--out P]` | 区间质检明细（CC-1～CC-7）；RC **0**=无阻断型 finding／**1**=有／**2**=用法错 |
+| `bt dataset build-golden\|verify\|refcalc\|freeze\|refresh-hash` | 黄金集 5 个动作：构建 / 主库对账 / 内嵌重算 / 冻结清单 / 实算指纹写回配置 |
+| `bt dataset freeze --config <yaml>` | 冻结数据集指纹（`content_hash` 与门禁同源；落点缺省 `BTFTOOL_FREEZE_DIR`＝`代码\_freeze\<anchor_date>.json`） |
+| `bt dataset refresh-hash --dry-run --config <yaml>` | 实算数据指纹并列出**旧值→新值**（`--dry-run` 不写盘；写回时行级替换，不重排 YAML；批量用 `--dir`） |
+| `bt data scan-consolidation --config <yaml> [--out P]` | ETF/LOF 份额折算双证据扫描（`--out` 缺省只打印） |
+| `bt data quality --start <d> --end <d> [--price-table T] [--limit-table T] [--symbols A,B] [--json] [--out P]` | 区间质检明细（CC-1～CC-7）；三项缺省：`--price-table daily`、`--limit-table stk_limit`、`--symbols 全库`；`--out` 缺省只打印；RC **0**=无阻断型 finding／**1**=有／**2**=用法错 |
 | `bt optimize` | 网格搜索 |
-| `bt validate` | walk-forward / 蒙特卡洛 |
+| `bt validate` | walk-forward / 蒙特卡洛（`--warmup N\|auto`：缺省 `auto` 按策略 `lookback_bars` 推导，未声明 ⇒ 252＋WARN） |
 | `bt adhoc` | **一次性/外部回测脚本**的产物契约封装（跑仓外策略时用它最省事） |
+| `bt cold-backup` | 跨版本源码冷备（`--verify DIR` 校验既有冷备） |
 | `bt config-check <yaml>` | 仅校验配置（不跑） |
 
 工具类（`tools/`）：`schema_guard.py` 配置键一致性 · `feed_universe_check.py` feed↔标的路由预检 · `zero_fill_check.py` 零成交普查 · `stkdiv_audit.py` 送转审计 · `delist_audit.py` 退市残仓审计 · `cold_backup.py` 冷备。
