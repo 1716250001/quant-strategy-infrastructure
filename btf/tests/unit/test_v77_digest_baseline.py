@@ -6,13 +6,13 @@
 本用例仅保留文件结构守卫，断言零改动。现行校验对象为 `赤潮/AGENTS.md`，
 基线 `tools/agents_digest_baseline.json`（REQ-20261121-01）。
 """
+
 from __future__ import annotations
 
 import json
 import pathlib
 
-BASELINE = (pathlib.Path(__file__).resolve().parents[2]
-            / "tools" / "v77_digest_baseline.json")
+BASELINE = pathlib.Path(__file__).resolve().parents[2] / "tools" / "v77_digest_baseline.json"
 
 
 def test_baseline_shape_and_old_values_kept():
@@ -24,11 +24,9 @@ def test_baseline_shape_and_old_values_kept():
         for k in ("excess", "ir", "total_return", "n_fills", "n_days"):
             assert k in ref, f"{prof} 缺 {k}"
     # 旧值留痕（N43：口径变更理由与旧 digest 必须可追溯）
-    assert set(data["previous_baseline"]) == {
-        "era", "preRC", "delivered", "stress"}
+    assert set(data["previous_baseline"]) == {"era", "preRC", "delivered", "stress"}
     assert data["previous_baseline"]["era"].startswith("2e8f933")
     # 新旧必须不同（旧＝全样本口径；新＝在场日口径——N43 根因）
     for prof in ("preRC", "delivered", "stress"):
-        assert (data["baselines"][prof]["metrics_digest"]
-                != data["previous_baseline"][prof])
+        assert data["baselines"][prof]["metrics_digest"] != data["previous_baseline"][prof]
     assert "在场日口径" in data["reason"]

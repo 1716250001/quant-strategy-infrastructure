@@ -1,13 +1,13 @@
 > 事实锚点：2026-11-20
 > - 覆盖范围：btf CLI 手册
 > - 事实真源：btf CLI 注册
-> - 关键计数：1306（非 L5 1284 ＋ L5 22）＝工作区 2026-11-12 · 13 命令族 · `bt check` 10/10
+> - 关键计数：1320（非 L5 1298 ＋ L5 22）＝工作区 2026-11-12 · 14 命令族 · `bt check` 10/10
 
 # btf 回测平台 · CLI 功能手册（**v0.4（btf 7.0.0，2026-11-20 校准）**；策略出仓＋性能/披露治理收口——KK/LL/MM 全批，7.0.0＝停牌判定修复＋CC-7）
 
 > **定位**：`bt` 命令行的**完整功能参考**——逐命令给出用途、语法、参数表、行为分步、输出样例、退出码与限制。
 > **只用工具**请看 [18-回测平台使用指引.md](18-回测平台使用指引.md)（5 分钟上手向；旧 20 号）；本手册面向「查参数、排故障、写自动化脚本」。
-> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **7.0.0**；7.0.0 定版 2026-10-27）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**；**2026-10-10 复核实测**（`bt --version` → `btf 1.2.4`；13 命令族含 `data`）；**2026-10-11 复核实测**（`bt --version` → `btf 1.3.1`——版本统一推进，无功能变更；**现版本见本手册头部，不在此行随批漂移**）。**2026-10-14 增量：`adhoc` 收编（HH-3，14 命令族；§4.14）——该命令已于 7.0.0 移除，现为 13 命令族**。**2026-10-25 增量（2.0.0）：策略出仓（`run.strategy_paths`，§4.2）／多基准（§7.2）／`bt dataset freeze` 清单契约与 MM-7 自锁修复（§4.8）／性能门槛 MM-8（§5.3）**。**2026-11-20 全量校准至 7.0.0**。
+> **口径来源**：实现 `代码/btf/btf/cli/main.py`（btf **7.0.0**；7.0.0 定版 2026-10-27）；全部命令帮助与只读命令输出于 **2026-09-30 在本机实测**复现，2026-10-06/07 增量命令（`freeze` / `--allow-short` / `--delisted-settlement`）随批实测，**2026-10-09 复核实测**；**2026-10-10 复核实测**（`bt --version` → `btf 1.2.4`；14 命令族含 `data`）；**2026-10-11 复核实测**（`bt --version` → `btf 1.3.1`——版本统一推进，无功能变更；**现版本见本手册头部，不在此行随批漂移**）。**2026-10-14 增量：`adhoc` 收编（HH-3，14 命令族；§4.14）——`adhoc` 保留（7.x 仍在用）**。**2026-10-25 增量（2.0.0）：策略出仓（`run.strategy_paths`，§4.2）／多基准（§7.2）／`bt dataset freeze` 清单契约与 MM-7 自锁修复（§4.8）／性能门槛 MM-8（§5.3）**。**2026-11-20 全量校准至 7.0.0**；**2026-11-22 D9 补 `bt data quality`、`bt dataset refresh-hash`、`validate --warmup`、`--delisted-settlement writeoff_at_delist` 第 3 档**。
 > **维护**：CLI 改动必须同步本手册；相邻文档：装配/引擎语义见 04/06 号，产物契约见 08 号，门禁口径见 09 号。
 > 2026-10-05 补 §0「输出解读纪律」（Q3 裁决 · 纪律类立即生效）。
 
@@ -56,7 +56,7 @@
 
 | 覆盖 | 不覆盖 |
 |---|---|
-| `bt` 全部 13 个子命令的语法 / 参数 / 默认值 / 退出码 | 策略编写（→ 18 号 §10（旧 20 号）） |
+| `bt` 全部 14 个子命令（含 `adhoc`）的语法 / 参数 / 默认值 / 退出码 | 策略编写（→ 18 号 §10（旧 20 号）） |
 | 每个命令的行为分步与输出格式 | 引擎撮合/成本/风控内部语义（→ 04/06 号） |
 | 环境变量、产物目录契约、配置速查 | 架构决策与演进历史（→ 01-19 号） |
 | 典型工作流、故障排查 | Python API（`btf.api`）用法 |
@@ -72,17 +72,18 @@
 
 ## 2. 全局概览
 
-### 2.1 命令族地图（13 命令，按场景分组）
+### 2.1 命令族地图（14 命令，按场景分组）
 
 ```
 ① 核心回测链路   config-check → run → runs → show → report → verify
 ② 研究调优       optimize
-③ 数据资产       dataset / data（专项扫描 scan-consolidation；R34′）
+③ 数据资产       dataset（5 动作）/ data（2 动作：scan-consolidation / quality）
 ④ 工程门禁       check / test / cold-backup
 ⑤ 推断校验       validate（walk-forward | mc；RC-15/16）
+⑥ 外部脚本       adhoc（HH-3；保留，7.x 仍在用）
 ```
 
-> `adhoc`（HH-3 于 1.3.4 收编）已自 7.0.0 起从命令族移除；§4.14 仅存档历史说明。
+> `adhoc`（HH-3 于 1.3.4 收编）保留（7.x 仍在用）；§4.14 仅存档历史说明。
 
 ### 2.2 命令总表
 
@@ -95,12 +96,13 @@
 | `report` | 由产物再生成 HTML 报告（幂等） | `--run` `--out` `--out-dir` | 写 `report.html` | 0/1/2 |
 | `verify` | R1 复核：产物重算指标 vs `manifest.metrics_digest` | `--run` `--out-dir` | 否 | 0/1/2 |
 | `optimize` | 参数网格搜索（`grid_search` 进程池） | `--config` `--grid` `--objective` `--workers` `--top` `--out` `--allow-short` | **是**（多次 run） | 0/1/2/**3** |
-| `dataset` | 黄金集：构建 / 主库对账 / 内嵌重算 / **数据冻结清单** | `build-golden\|verify\|refcalc\|freeze` `--cases` `--list` `--force` `--config` `--mode` `--out` | 视动作（`freeze` 写只读清单） | 0/1/2 |
-| `data` | 数据专项扫描（`scan-consolidation`：ETF/LOF 份额折算**双证据互校** ＋ fail-closed；R34′ 已交付） | `scan-consolidation` `--config` `--out` `--tolerance` | 写结果 JSON（`--out`） | 0/1/2 |
+| `dataset` | 黄金集：构建 / 主库对账 / 内嵌重算 / **数据冻结清单** / **refresh-hash** | `build-golden\|verify\|refcalc\|freeze\|refresh-hash` `--cases` `--list` `--force` `--config` `--mode` `--out` `--dir` `--dry-run` `--backup-dir` | 视动作（`freeze` 写只读清单；`refresh-hash` 写回 YAML） | 0/1/2 |
+| `data` | 数据专项（2 动作）：`scan-consolidation`（ETF/LOF 折算双证据）/ `quality`（区间质检 CC-1～CC-7） | `scan-consolidation\|quality` `--config` `--out` `--tolerance` `--start` `--end` `--price-table` `--limit-table` `--symbols` `--root` `--json` | 写结果 JSON（`--out`；缺省只打印） | 0/1/2 |
 | `test` | 运行测试层（pytest 执行器） | `--layer` `--pattern` `--path` | 否 | pytest 码 |
 | `check` | 十项架构门禁（提交前必跑，无参数） | — | 否 | 0/1 |
-| `validate` | 滚动验证 / 蒙特卡洛（`walk-forward` / `mc`） | `walk-forward\\|mc` `--config` `--window` `--test` `--step` `--mode` `--purge` `--embargo` `--no-persist` `--run` `--n` `--seed` `--out` `--out-dir` `--set` | `mc` 否；`walk-forward` **是**（每折落盘） | 0/1/2 |
+| `validate` | 滚动验证 / 蒙特卡洛（`walk-forward` / `mc`） | `walk-forward\\|mc` `--config` `--window` `--test` `--step` `--mode` `--purge` `--embargo` `--warmup` `--no-persist` `--run` `--n` `--seed` `--out` `--out-dir` `--set` | `mc` 否；`walk-forward` **是**（每折落盘） | 0/1/2 |
 | `cold-backup` | 跨版本源码冷备 / 校验既有冷备 | `--reason` `--out` `--verify DIR` | **是**（写备份） | 0/1/2 |
+| `adhoc` | 一次性/外部脚本的产物契约封装（HH-3；保留） | `--name` `--script` `--params` `--tables` `--list` `--register-only` | **是**（写登记台） | 0/1/2 |
 
 > **易混对**：`check` ≠ `test`（门禁 vs 回归测试层）；`show` ≠ `verify`（读事实 vs 重算对账）；
 > `run --dry-run` ≠ `config-check`（装配期硬门 vs Schema 校验）。
@@ -274,7 +276,7 @@ $ bt config-check config.yaml --dump > merged.yaml               # 留档合并�
 
 ```bash
 bt run --config <config.yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
-       [--delisted-settlement carry|writeoff]
+       [--delisted-settlement carry|writeoff|writeoff_at_delist]
 ```
 
 **参数**
@@ -286,7 +288,7 @@ bt run --config <config.yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 | `--dry-run` | | 关 | 只装配：**不建 run 目录、不执行引擎、不落盘**，打印装配计划 |
 | `--out` | | `BTF_OUTPUT_DIR\runs` | 产物根目录（本次 run 目录在其下） |
 | `--verbose` | | 关 | 额外打印分步耗时 / 数据质检结论 / 数据指纹 |
-| `--delisted-settlement` | | `carry` | **CL-3**：退市持仓残值口径——`carry` 残值按区间内末次可用收盘价**携带**（＝现状，零回归）；`writeoff` **按 0 核销**（压力口径：仅末日快照清零并下调 NAV）；进 `config_effective` 可追溯（等价 `--set run__delisted_settlement=writeoff`） |
+| `--delisted-settlement` | | `carry` | **CL-3 / K-2**：退市持仓残值口径三档——`carry` 残值按区间内末次可用收盘价**携带**（＝现状，零回归）；`writeoff` **按 0 核销**（压力口径：仅末日快照清零并下调 NAV）；`writeoff_at_delist` **自末次 bar 次一交易日起逐日核销**（终值同 `writeoff`）；进 `config_effective` 可追溯（等价 `--set run__delisted_settlement=...`） |
 
 **行为**
 
@@ -295,9 +297,10 @@ bt run --config <config.yaml> [--set K=V]... [--dry-run] [--out DIR] [--verbose]
 3. `build()` 装配期硬门（见 §7.4），任一不过 → `[error] 装配失败：...` 且**不建 run 目录**；
 4. `--dry-run`：打印装配计划后结束；正式执行：`create_run`（写 `manifest.json` 骨架，状态 `RUNNING`）
    → 引擎日循环 → 快照/成交/拒单/事件落盘 → 指标计算 → `metrics.json` + manifest 补全（`COMPLETED`）；
-5. 退市清算口径（**CL-3**，19 号 §72.4）：`--delisted-settlement writeoff` ⇒ 覆盖 `run.delisted_settlement`
+5. 退市清算口径（**CL-3 / K-2**，19 号 §72.4/§163）：`--delisted-settlement writeoff` ⇒ 覆盖 `run.delisted_settlement`
    （进 `config_effective`）；区间末按 0 核销退市持仓残值（末日快照市值/权重/数量清零、NAV 下调核销额，
-   四式重算保一致；核销基准 = **区间内末次可用收盘价**，不取区间外价——防前视）；披露文案随口径变化
+   四式重算保一致；核销基准 = **区间内末次可用收盘价**，不取区间外价——防前视）；`writeoff_at_delist`
+   自末次 bar 次一交易日起逐日核销（终值同 `writeoff`）。披露文案随口径变化
    （三要素保留：标的 / 末次交易日 / 残值口径）。默认 `carry` ＝ 现状（数值零回归）；
 6. 打印 `run_id`、产物路径、5 项关键指标；`--verbose` 追加诊断行。
 
@@ -382,9 +385,10 @@ $ bt run --config config.yaml --out E:\bt_runs --verbose         # 换产物根 
 
 - **类型推断不做布尔化**：`--set data.quality.strict=true` 会以**字符串** `"true"` 进入合并 →
   Schema 类型校验**报错**。布尔开关请走环境变量（`BTF_DATA__QUALITY__STRICT=true`）或直接改 YAML；
-- **退市清算口径（CL-3；19 号 §72.4 Q-1(a)/Q-2(b)）**：默认 `carry`（残值按区间内末次可用收盘价携带、
+- **退市清算口径（CL-3 / K-2；19 号 §72.4/§163 Q-1(a)/Q-2(b)）**：默认 `carry`（残值按区间内末次可用收盘价携带、
   未清算——数值与改动前逐位一致）；`writeoff` 为**压力档**：只在**末日快照**按 0 核销（市值/权重/数量清零、
-  NAV 下调核销额；核销基准不取区间外价——防前视）。二者差异**只出现在 writeoff**；披露文案随口径变化；
+  NAV 下调核销额；核销基准不取区间外价——防前视）；`writeoff_at_delist` 自末次 bar 次一交易日起逐日核销
+  （终值同 `writeoff`）。三者差异只出现在 `writeoff` / `writeoff_at_delist`；披露文案随口径变化；
 - 装配期失败**不留半成品 run 目录**；引擎期失败会留下 `manifest.json`（状态 `FAILED` + error），可用 `bt show` 复盘；
 - 长回测观测耗时分布用 `--verbose`；失败后先 `bt check` 排除环境问题，再 `--dry-run` 定位装配期硬门。
 
@@ -702,27 +706,31 @@ $ bt optimize --config config.yaml --grid "run.params.top_k=5" --workers 0   # �
 
 ### 4.8 `bt dataset` —— 黄金集（构建 / 对账 / 重算）
 
-**用途**：回归测试的黄金数据集三条路——构建写盘、与主库对账、只用案例内嵌数据独立重算；外加**数据冻结清单**（`freeze`，CL-4 / MM-7）：对回测所用区间落一份只读、不可变的「表清单＋content_hash＋anchor_date」快照。
+**用途**：回归测试的黄金数据集三条路——构建写盘、与主库对账、只用案例内嵌数据独立重算；外加**数据冻结清单**（`freeze`，CL-4 / MM-7）与**指纹写回**（`refresh-hash`）：前者对回测所用区间落一份只读、不可变的「表清单＋content_hash＋anchor_date」快照，后者实算当前数据指纹并把 `data.dataset.expected_hash` 行级写回配置。
 
 **语法**
 
 ```bash
 bt dataset [build-golden|verify|refcalc] [--cases g1|all|id,id] [--list] [--verify] [--force] [--out DIR]
 bt dataset freeze --config <config.yaml> [--mode meta|fast|full] [--out DIR]     # CL-4；产物 <anchor_date>.json（只读）
+bt dataset refresh-hash (--config <config.yaml> | --dir <配置目录>) [--mode meta|fast|full] [--dry-run] [--backup-dir DIR]
 ```
 
 **参数**
 
 | 参数 | 必填 | 默认 | 说明 |
 |---|---|---|---|
-| `action`（位置） | | `build-golden` | 子动作（choices）：`build-golden` / `verify` / `refcalc` / `freeze`（CL-4） |
+| `action`（位置） | | `build-golden` | 子动作（choices，**5 个**）：`build-golden` / `verify` / `refcalc` / `freeze`（CL-4） / `refresh-hash` |
 | `--cases` | | `g1` | 案例选择：单组（`g1`）、`all`、逗号分隔 case_id |
 | `--list` | | 关 | 列出案例与待补组（**不写盘**） |
 | `--verify` | | 关 | 只校验不写（等价 `action=verify`） |
 | `--force` | | 关 | 显式覆盖已构建案例（留痕） |
-| `--config` | | — | **freeze**：回测配置 YAML（冻结口径随它：区间 / 表集 / 档位）；缺 ⇒ 退出码 2 |
-| `--mode` | | 随 `data.fingerprint_mode`（`meta`） | **freeze**：指纹档位 `meta|fast|full` |
+| `--config` | | — | **freeze / refresh-hash**：回测配置 YAML（冻结口径随它：区间 / 表集 / 档位）；缺 ⇒ 退出码 2 |
+| `--mode` | | 随 `data.fingerprint_mode`（`meta`） | **freeze / refresh-hash**：指纹档位 `meta|fast|full` |
 | `--out` | | `BTF_DATASETS_DIR\golden_v1\cases`（`freeze`：`BTFTOOL_FREEZE_DIR`） | 输出目录；`freeze` 在该目录落 `<anchor_date>.json` |
+| `--dir` | | — | **refresh-hash**：配置目录（批量 `*.yaml`；与 `--config` 二选一） |
+| `--dry-run` | | 关 | **refresh-hash**：只列出将改什么，不写盘 |
+| `--backup-dir` | | 与配置文件同目录 | **refresh-hash**：写回前备份目录 |
 
 **动作语义**
 
@@ -732,6 +740,7 @@ bt dataset freeze --config <config.yaml> [--mode meta|fast|full] [--out DIR]    
 | `verify` | ✅ | ❌ | 现有案例与主库对账（主库变了/案例陈旧即暴露） |
 | `refcalc` | ❌ | ❌ | 只用**案例文件内嵌数据**独立重算断言（黄金集自洽性） |
 | `freeze`（**CL-4**） | ✅（只读指纹） | ✅（**只读清单** `<anchor_date>.json`） | 落「表清单（名＋行数＋日期域）＋ content_hash ＋ anchor_date」不可变清单（S-2；19 号 §72.5）；`content_hash` 与 `manifest.data_version` / RC-14 门禁**同源**（BB-1 实算）；同 `anchor_date` 重复冻结 ⇒ **幂等**（哈希一致**不覆写**，返回 `action=idempotent`）/ **显式冲突**（哈希不同 ⇒ `FileExistsError`，退出 1，不覆写不追加版本）；内存 Feed 拒绝冻结（退出 1，不产假清单）；MM-7：冻结时**进程内**临时放开 `data.dataset.{expected_hash,version}`（不落盘、不改配置），已钉旧指纹不再反噬 |
+| `refresh-hash` | ✅（实算指纹） | ✅（**写回配置**；`--dry-run` 不写） | 实算当前 `content_hash` 并**行级替换**配置里的 `data.dataset.expected_hash`（不重排 YAML、不动其他行）；`--dir` 批量处理 `*.yaml`；写回前按 `--backup-dir` 备份；输出逐文件 `updated/current/dry-run/skipped/failed` 与 summary，任一 `failed` ⇒ 退出 1 |
 
 **`freeze` 产物（清单契约 `freeze.v1`）**
 
@@ -810,6 +819,9 @@ $ bt dataset refcalc --cases all                 # 内嵌数据重算（不读�
 $ bt dataset build-golden --cases g1 --force     # 显式覆盖（留痕）
 $ bt dataset freeze --config config.yaml         # CL-4：冻结点（默认 meta 档）
 $ bt dataset freeze --config config.yaml --mode fast --out E:\freeze   # 显式档位/目录
+$ bt dataset refresh-hash --config config.yaml --dry-run   # 先看旧值→新值，不写盘
+$ bt dataset refresh-hash --config config.yaml             # 实算并写回 expected_hash
+$ bt dataset refresh-hash --dir examples --mode fast       # 批量处理目录下 *.yaml
 ```
 
 **注意**
@@ -822,6 +834,9 @@ $ bt dataset freeze --config config.yaml --mode fast --out E:\freeze   # 显式�
   旧清单不可自证（登记要求见 08 号与 [18 号纪律](18-回测平台使用指引.md)（旧 20 号））。
 - **`freeze` 幂等/冲突**：同 `anchor_date` 且 `content_hash` 一致 ⇒ 幂等（**不覆写**、退出 0）；同 anchor 异哈希
   ⇒ **显式冲突**（退出 1），**不静默覆写、不追加版本**——需先归档旧清单。
+- **`refresh-hash`**：`--config` 与 `--dir` 二选一（同时给或都不给 ⇒ 退出 2）；默认**写回**，`--dry-run` 只列
+  旧值→新值；写回是**行级替换**（只动 `data.dataset.expected_hash`，不重排 YAML）；`--backup-dir` 缺省与配置
+  文件同目录；任一行 `failed` ⇒ 退出 1。
 - **MM-7 自锁修复（2.0.0）**：配置里已钉 `data.dataset.expected_hash` / `version` 时，冻结入口在**进程内**
   临时放开这两个键（只在内存、不落盘、不改配置、不影响 `bt run`），故换档（meta→fast）或重冻结可用。
 - **研究批次**：仓外 `scripts/freeze_batch.py --batch <batch_id> [--apply]` 逐份冻结并生成
@@ -1001,7 +1016,8 @@ $ bt cold-backup --verify "D:\量化策略\备份\20260930-1509-btf-1.1.0-cold" 
 
 ```bash
 bt validate walk-forward --config <yaml> --window N [--test N] [--step N] [--mode rolling|anchored] \
-                         [--purge N] [--embargo N] [--no-persist] [--set K=V] [--out F] [--out-dir DIR]
+                         [--purge N] [--embargo N] [--warmup N|auto] [--no-persist] \
+                         [--set K=V] [--out F] [--out-dir DIR]
 bt validate mc --run <run_id> [--n N] [--seed N] [--out F] [--out-dir DIR]
 ```
 
@@ -1014,6 +1030,7 @@ bt validate mc --run <run_id> [--n N] [--seed N] [--out F] [--out-dir DIR]
 | `--window` / `--test` / `--step` | wf | 训练窗长 / 测试窗长 / 滚动步长（交易日）；`--test` 缺省 = `--step`，`--step` 缺省 = `--test` | — |
 | `--mode` | wf | `rolling`（滚动）/ `anchored`（锚定加长） | `rolling` |
 | `--purge` / `--embargo` | wf | 训练/测试间隔与测试前缓冲（交易日；合并计入 gap） | 0 |
+| `--warmup N\|auto` | wf | OOS 折热身交易日（**R58′/N60**）：缺省 `auto` 按策略声明 `lookback_bars` 推导，未声明 ⇒ 252＋WARN；`--warmup 0` ＝旧行为对照档（长 lookback 策略可能样本外假阴性） | `auto` |
 | `--no-persist` | wf | 不落盘（缺省每折落盘，窗口信息入 manifest） | 落盘 |
 | `--set K=V` | wf | 配置覆盖（与 `bt run` 同则） | — |
 | `--run` | mc | run_id（读回产物，**不重跑引擎**） | 必填 |
@@ -1047,7 +1064,8 @@ bootstrap（200 次重采样）:
 
 > ✅ **已交付**（CL-2-H 第二阶段/R34′，2026-10-08；19 号 §97.3/§97.5-1 实跑取证——本机
 > `510310.SH 20240923 R=2.000625` 与 §92.3 文档锚点逐位吻合）。本条目**已计入** §2 命令总表
-> 与「13 命令」计数；退出码 0/1/2 已实测（含 `--config` 缺失与未知动作的用法拦截）。
+> 与「14 命令」计数；退出码 0/1/2 已实测（含 `--config` 缺失与未知动作的用法拦截）。
+> **D9 补**：`data` 共 **2 个动作**——`scan-consolidation`（下文 4.13.1）与 `quality`（4.13.2，D-6）。
 
 **用途**：数据层专项扫描（首个子命令 `scan-consolidation`）：对配置宇宙逐标的检出 **ETF/LOF 份额折算**事件，
 **双证据互校**（证据 1＝`pre_close(t) ÷ close(t−1)`；证据 2＝`fund_adj` 因子跳变），容差 **0.5%**，
@@ -1056,17 +1074,26 @@ bootstrap（200 次重采样）:
 **语法**
 
 ```bash
+bt data [scan-consolidation|quality] [...]
 bt data scan-consolidation --config <yaml> [--out <json>] [--tolerance 0.005]
+bt data quality --start YYYYMMDD --end YYYYMMDD [--price-table T] [--limit-table T] \
+                [--symbols A,B] [--root DIR] [--json] [--out <json>]
 ```
 
 **参数**
 
 | 参数 | 说明 | 缺省 |
 |---|---|---|
-| `action`（位置） | `scan-consolidation`（数据专项扫描，后续可扩） | 必填 |
-| `--config` | 配置（取 `run.universe` 与区间） | 必填 |
-| `--out` | 结果 JSON 路径 | 产物目录 |
-| `--tolerance` | 双证据偏差容差 | `0.005`（0.5%） |
+| `action`（位置） | `scan-consolidation` / `quality`（2 个动作） | `scan-consolidation` |
+| `--config` | **scan-consolidation**：配置（取 `run.universe` 与区间） | 必填 |
+| `--out` | 结果 JSON 路径 | **缺省只打印**（不落盘） |
+| `--tolerance` | scan-consolidation：双证据偏差容差 | `0.005`（0.5%） |
+| `--start` / `--end` | quality：区间起/止（含，`YYYYMMDD`） | 必填 |
+| `--price-table` | quality：价格表（可重复） | `daily` |
+| `--limit-table` | quality：涨跌停表（可重复） | `stk_limit` |
+| `--symbols` | quality：逗号分隔 `ts_code` | **全库** |
+| `--root` | quality：数据根 | `paths.MARKET_DATA_DIR` |
+| `--json` | quality：stdout 只输出 JSON（人话走 stderr） | 关 |
 
 **输出（字段）**：逐事件 `ts_code / 事件日 / R / 证据1 / 证据2 / 偏差 / 结论（一致｜fail-closed）`；
 汇总含**未建模项清单**（供报告披露段消费）。
@@ -1093,11 +1120,26 @@ bt data scan-consolidation --config <yaml> [--out <json>] [--tolerance 0.005]
   515880＝0.33323＋**0.50032**／515580＝0.51003（复现脚本 `_scratch/audit_etf_corp_action.py`；二次值经 DOC-13 订正——
   2026-10-07，N39：原引 0.50013 系早期估计，实测 `pre_close÷前收` ＝ **0.50032**，容差内但以实测为准）。
 
+#### 4.13.2 `bt data quality` —— 区间质检明细（D-6；19 号 §275）
+
+**用途**：把引擎内 `quality.run_checks` 的 CC-1～CC-7 规则**零改动**暴露为 CLI，输出逐规则明细与结论。
+校验区间必须显式给 `--start/--end`（`YYYYMMDD`）。
+
+**输出与退出码**：
+- stdout 打印逐规则行（`规则名 ok/fail n_findings / checked_rows 行`），**末行**为 `[ok]`/`[fail]` 结论；
+- `--out` 给路径时另存完整 JSON（缺省只打印）；`--json` 时 stdout **只留一个 JSON 对象**，人话全部走 stderr；
+- RC：**0** = `report.ok`（CC-7 属 `NON_BLOCKING_RULES`，只报不阻断）；**1** = `report.ok` 为假；
+  **2** = 用法或前置错误（日期格式、`start > end`、数据根不可用、指定表磁盘无分片/未登记）。
+- ⛔ 禁用 `n_findings > 0` 判 0/1——该求和含 CC-7，会把「仅 CC-7」误判 RC=1。
+
+**注意**：未提供 ST 名单时 CC-2 的 ST 分支不生效（主板 ST 股 5%~10% 越界会漏检，假阴性方向），
+命令会显式 `[warn]` 披露。
+
 ---
 
-### 4.14 `bt adhoc` —— 一次性/外部脚本的产物契约封装（HH-3，2026-10-14；**7.0.0 起已移除，以下为历史存档**）
+### 4.14 `bt adhoc` —— 一次性/外部脚本的产物契约封装（HH-3，2026-10-14；**保留；7.x 仍在用**）
 
-> **现状（2026-11-20）**：`adhoc` 已不在 `bt` 命令族内（现 13 命令族）；本节仅保留历史说明，命令实际不可用。
+> **现状（2026-11-22）**：`adhoc` 仍在 `bt` 命令族内（现 14 命令族），**保留且可用**（7.x 仍在使用）；本节为功能说明，不是退役存档。
 
 **用途**：给**非 btf 引擎**的回测脚本（如 round2 外部方法论复现）套同一套产物契约
 （`manifest.json` 与真入口 run 同结构：脚本指纹 / 参数哈希 / 数据锚 / 代码版本 /
@@ -1207,9 +1249,11 @@ $ bt adhoc --list
 ├── fills.jsonl        成交明细（含费用分项）
 ├── rejections.jsonl   拒单（order + code/message）
 ├── events.jsonl       事件溯源日志（引擎直写；可采样降级）
-├── metrics.json       全部绩效指标（15 项）
-└── report.html        HTML 报告（`bt report` 生成，可删可重建）
+├── metrics.json       全部绩效指标（默认 15 项；可选 2 项 = `METRICS` 17）
+└── data_quality_report.json   数据不变量校验报告（第 8 个 run 产物；启用 data.quality 时）
 ```
+
+> `report.html` **不在** `run` 的 8 个落盘产物内，由 `bt report --run <id>` 幂等生成（可删可重建）。
 
 `run_id` 格式：`YYYYMMDD_HHMMSS_<config_hash 前 6 位>`（如 `20260927_163148_7ecdb4`）——同一配置重跑，
 时间戳不同、短哈希相同。
@@ -1278,16 +1322,20 @@ L1 内置默认  →  L2 环境变量 BTF_*  →  L3 用户 YAML  →  L4 CLI --
 
 ### 7.3 插件注册名速查（配置里可写的值）
 
+**10 个注册点 / 37 个内置名**（`registry.points()` + `registry.available(p)`；`analyzer` 一点即 `METRICS` 17 名）。
+
 | 扩展点（配置键） | 注册名 |
 |---|---|
 | `data.feed` | `tushare_parquet` / `mixed` / `memory` |
 | `execution.handler` | `next_open` |
 | `execution.cost_model` | `tiered_v1` / `zero` / `flat_rate` |
-| `execution.slippage.model` | `none` / `fixed` / `pct` |
+| `execution.slippage.model` | `none` / `fixed` / `pct` / `sqrt_impact`（4 个滑点名） |
 | `execution.rebalancer` | `full` / `threshold` |
 | `risk.rules[].name` | `max_weight` / `cash_check` / `tradability` |
-| `rules.source` | `static` / `mirror_json` |
+| `rules.source` | `static` / `mirror_json`（退役名字，工厂显式拒绝） |
+| `analysis.metrics`（analyzer） | `METRICS` 17 名（默认 15 + 可选 `sharpe_stderr` / `win_rate_trades`） |
 | optimizer 名（内部） | `grid_search` |
+| run_store（内部） | `local_jsonl` |
 
 > 注册表在 `btf/registry/catalog.py`：未知名字报错并列出可选项；所有插件经契约版本协商（`negotiate`）后才装配。
 
@@ -1405,22 +1453,23 @@ bt cold-backup [--reason R] [--out DIR] [--verify DIR]
 
 | 命令 | 处理器（行号） | 参数注册（行号） |
 |---|---|---|
-| `config-check` | `_cmd_config_check` 83-134 | `_args_config_check` 164-175 |
-| `run` | `_cmd_run` 183-255 | `_args_run` 258-271 |
-| `report` | `_cmd_report` 272-285 | `_args_report` 288-296 |
-| `verify` | `_cmd_verify` 297-319 | `_args_verify` 322-329 |
-| `test` | `_cmd_test` 330-364 | `_args_test` 367-376 |
-| `dataset` | `_cmd_dataset` 377-397 | `_args_dataset` 400-415 |
-| `optimize` | `_cmd_optimize` 472-535 | `_args_optimize` 538-558（`_parse_grid` 416-436） |
-| `validate` | `_cmd_validate` 693-786 | `_args_validate` 789-819（`_VALIDATE_ACTIONS` 690） |
-| `check` | `_cmd_check` 559-568 | `_args_check` 571-572（无参数） |
-| `cold-backup` | `_cmd_cold_backup` 575-583 | `_args_cold_backup` 586-589 |
-| `runs` | `_cmd_runs` 608-628 | `_args_runs` 631-634 |
-| `show` | `_cmd_show` 637-681 | `_args_show` 684-690 |
-| 注册表 / 分发 | `COMMANDS` 820-846 / `main()` 849-864 | — |
+| `config-check` | `_cmd_config_check` 83-209 | `_args_config_check` 210-228 |
+| `run` | `_cmd_run` 229-319 | `_args_run` 320-340 |
+| `report` | `_cmd_report` 341-356 | `_args_report` 357-365 |
+| `verify` | `_cmd_verify` 366-390 | `_args_verify` 391-398 |
+| `test` | `_cmd_test` 399-466 | `_args_test` 467-476 |
+| `dataset` | `_cmd_dataset` 477-555 | `_args_dataset` 730-757 |
+| `data` | `_cmd_data` 556-626 / `_cmd_data_quality` 627-704 | `_args_data` 705-729 |
+| `optimize` | `_cmd_optimize` 814-909 | `_args_optimize` 910-938（`_parse_grid` 758-813） |
+| `check` | `_cmd_check` 939-950 | `_args_check` 951-954（无参数） |
+| `cold-backup` | `_cmd_cold_backup` 955-965 | `_args_cold_backup` 966-987 |
+| `runs` | `_cmd_runs` 988-1010 | `_args_runs` 1011-1016 |
+| `show` | `_cmd_show` 1017-1063 | `_args_show` 1064-1072 |
+| `validate` | `_cmd_validate` 1073-1188 | `_args_validate` 1189-1226 |
+| `adhoc` | `_cmd_adhoc` 1227-1244 | `_args_adhoc` 1245-1259 |
+| 注册表 / 分发 | `COMMANDS` 1262-1298 / `main()` 1301-1316 | — |
 
-> **行号为 2026-10-06 实测**（原表为 1.1.0 收编时快照，本批全员复测后刷新——RC 批次与 CLI 收编使多数行号漂移；
-> 维护时按附录 C-1 重新实测，**不得沿用**）。
+> **行号为 2026-11-22 D9 实测**（`btf/cli/main.py` 当前切面；维护时按附录 C-1 重新实测，**不得沿用**）。
 
 > 编排实现委托 `btf/app/services.py`（CLI 与 API 同源）：`run_backtest` / `build_report_file` /
 > `build_dataset` / `run_gate_check` / `cold_backup` / `list_runs` / `run_detail`。
@@ -1434,4 +1483,4 @@ bt cold-backup [--reason R] [--out DIR] [--verify DIR]
 
 ---
 
-*本手册覆盖 `bt` 全部 13 命令；任意命令加 `--help` 可获得与本文一致的即时参数说明。*
+*本手册覆盖 `bt` 全部 14 命令（含 `adhoc`）；任意命令加 `--help` 可获得与本文一致的即时参数说明。*

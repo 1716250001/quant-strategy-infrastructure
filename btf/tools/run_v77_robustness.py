@@ -26,6 +26,7 @@
 曾使"对账入口"静默漂移（P1-NEW-12：`--ee1` 必红）；`--ee1` 现按 **preRC /
 delivered 双锚**各跑一次并分别比对冻结参照（§63.2）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,7 +38,7 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:                     # 脚本自举（btf 包）
+if str(ROOT) not in sys.path:  # 脚本自举（btf 包）
     sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
@@ -45,7 +46,7 @@ from btf.config.paths import OUTPUT_DIR  # 产物路径单一真源（paths.py�
 
 from _paths import RULES_MIRROR, STRATEGY_ROOT
 
-OUT_DEFAULT = OUTPUT_DIR / "v77-robustness"       # = 工作区根/回测产物/v77-robustness
+OUT_DEFAULT = OUTPUT_DIR / "v77-robustness"  # = 工作区根/回测产物/v77-robustness
 
 #: 分段区间（覆盖不同市场环境：熔断后修复 / 结构牛 / 熊市与波动 / 当前）
 PERIODS: list[tuple[str, str, str]] = [
@@ -59,28 +60,43 @@ PERIODS: list[tuple[str, str, str]] = [
 K_VALUES = (10, 5)
 #: **EE-1 对照区间**（原 §23.2 唯一可采信结论的区间）——`--ee1` 直接复跑该单格，
 #: 与双路径参照值逐位比对（P1-NEW-9 的可复现入口；19 号 §55.1.3 / §63.2）
-EE1 = {"label": "EE-1 Z-6 对照（原 §23.2 区间）",
-       "start": "2023-01-01", "end": "2026-09-23", "top_k": 10}
+EE1 = {
+    "label": "EE-1 Z-6 对照（原 §23.2 区间）",
+    "start": "2023-01-01",
+    "end": "2026-09-23",
+    "top_k": 10,
+}
 #: **成本口径档**（GG-1a；19 号 §63.1）：两档**均显式声明**、绝不依赖全局默认——
 #: RC-02 变更默认（`pct 0.001` + VPP 0.05）曾让本工具"对账语义"静默漂移
 #: （P1-NEW-12），显式声明是结构性防复发。
 COST_PROFILES: dict[str, dict] = {
-    "preRC": {"slippage": {"model": "none"},
-              "handler_params": {"volume_participation": None}},
-    "delivered": {"slippage": {"model": "pct", "params": {"pct": 0.001}},
-                  "handler_params": {"volume_participation": 0.05}},
+    "preRC": {"slippage": {"model": "none"}, "handler_params": {"volume_participation": None}},
+    "delivered": {
+        "slippage": {"model": "pct", "params": {"pct": 0.001}},
+        "handler_params": {"volume_participation": 0.05},
+    },
 }
 #: **双锚参照值**（GG-1b；冻结于 19 号 §63.2；容差 1e-4）：
 #: `preRC` = 对账口径（赤潮 §54.3.1 双路径，零摩擦）｜
 #: `delivered` = 交付默认口径（0.1% 滑点 + 5% 参与率，**现实语义锚**）。
 #: `--ee1` 两档各跑一次、分别比对——**两个世界都绿灯才算通过**。
 EE1_REFS: dict[str, dict[str, float]] = {
-    "preRC": {"000300.SH|return": 0.161882, "000300.SH|excess": 0.071938,
-              "000300.SH|ir": 0.050426, "total_return": 0.233820,
-              "n_fills": 441, "n_days": 904},
-    "delivered": {"000300.SH|return": 0.161882, "000300.SH|excess": 0.060720,
-                  "000300.SH|ir": 0.030531, "total_return": 0.222602,
-                  "n_fills": 451, "n_days": 904},
+    "preRC": {
+        "000300.SH|return": 0.161882,
+        "000300.SH|excess": 0.071938,
+        "000300.SH|ir": 0.050426,
+        "total_return": 0.233820,
+        "n_fills": 441,
+        "n_days": 904,
+    },
+    "delivered": {
+        "000300.SH|return": 0.161882,
+        "000300.SH|excess": 0.060720,
+        "000300.SH|ir": 0.030531,
+        "total_return": 0.222602,
+        "n_fills": 451,
+        "n_days": 904,
+    },
 }
 #: 基准（须在 index_daily 内可读）
 BENCHMARKS = ("000300.SH", "000905.SH")
@@ -92,8 +108,7 @@ def _config(start: str, end: str, top_k: int, cost: str = "delivered") -> dict:
     `cost` ∈ `COST_PROFILES`（**显式**成本口径）：默认 `"delivered"` 与 RC-02 后的
     全局默认等值 ⇒ 矩阵既有语义不变；`--ee1` 双锚各取一档**显式**跑（GG-1）。
     """
-    execution = {"handler": "next_open", "cost_model": "flat_rate",
-                 "rebalancer": "full"}
+    execution = {"handler": "next_open", "cost_model": "flat_rate", "rebalancer": "full"}
     execution.update(COST_PROFILES[cost])
     return {
         "schema_version": "backtest.v1",
@@ -107,8 +122,9 @@ def _config(start: str, end: str, top_k: int, cost: str = "delivered") -> dict:
         },
         "data": {"feed": "tushare_parquet"},
         "execution": execution,
-        "risk": {"rules": [{"name": "tradability"}, {"name": "max_weight"},
-                           {"name": "cash_check"}]},
+        "risk": {
+            "rules": [{"name": "tradability"}, {"name": "max_weight"}, {"name": "cash_check"}]
+        },
         "rules": {"source": "mirror_json", "path": str(RULES_MIRROR)},
         "report": {"benchmark": BENCHMARKS[0]},
     }
@@ -138,35 +154,48 @@ def _bench_series(symbol: str, start: str, end: str) -> dict[str, float]:
     store = YearTableStore(Path(MARKET_DATA_DIR))
     out: dict[str, float] = {}
     for year in range(int(start_c[:4]), int(end_c[:4]) + 1):
-        t = store.read_file("index_daily", year=year,
-                            columns=["ts_code", "trade_date", "close"])
+        t = store.read_file("index_daily", year=year, columns=["ts_code", "trade_date", "close"])
         if t is None:
             continue
-        for code, day, close in zip(t.column("ts_code").to_pylist(),
-                                    t.column("trade_date").to_pylist(),
-                                    t.column("close").to_pylist(), strict=True):
+        for code, day, close in zip(
+            t.column("ts_code").to_pylist(),
+            t.column("trade_date").to_pylist(),
+            t.column("close").to_pylist(),
+            strict=True,
+        ):
             if code == symbol and start_c <= _ymd(str(day)) <= end_c and close:
                 out[_ymd(str(day))] = float(close)
     return dict(sorted(out.items()))
 
 
-def _excess_ir(nav: list[tuple[str, float]], bench: dict[str, float]
-               ) -> dict[str, float | None]:
+def _excess_ir(nav: list[tuple[str, float]], bench: dict[str, float]) -> dict[str, float | None]:
     """相对基准：区间收益差 / 日频 IR（年化）/ 基准区间收益 + **端点留痕**。
 
     端点（`strat_first/last`、`bench_first/last`）一并返回并落盘（`run_cell`）：
     P1-NEW-9 的教训是"**两侧端点不一致**会被静默算成一个数"，故端点必须可核。
     """
     if not nav or not bench:
-        return {"excess_return": None, "information_ratio": None,
-                "benchmark_return": None, "strat_first": None,
-                "strat_last": None, "bench_first": None, "bench_last": None}
+        return {
+            "excess_return": None,
+            "information_ratio": None,
+            "benchmark_return": None,
+            "strat_first": None,
+            "strat_last": None,
+            "bench_first": None,
+            "bench_last": None,
+        }
     days = [d for d, _ in nav]
     bench_days = sorted(d for d in bench if days[0] <= d <= days[-1])
     if len(bench_days) < 2:
-        return {"excess_return": None, "information_ratio": None,
-                "benchmark_return": None, "strat_first": days[0],
-                "strat_last": days[-1], "bench_first": None, "bench_last": None}
+        return {
+            "excess_return": None,
+            "information_ratio": None,
+            "benchmark_return": None,
+            "strat_first": days[0],
+            "strat_last": days[-1],
+            "bench_first": None,
+            "bench_last": None,
+        }
     b0, b1 = bench[bench_days[0]], bench[bench_days[-1]]
     bench_ret = b1 / b0 - 1.0
     strat_ret = nav[-1][1] / nav[0][1] - 1.0
@@ -188,15 +217,20 @@ def _excess_ir(nav: list[tuple[str, float]], bench: dict[str, float]
         var = sum((x - mean) ** 2 for x in diff) / (len(diff) - 1)
         sd = math.sqrt(var)
         ir = (mean / sd * math.sqrt(252)) if sd > 0 else None
-    return {"excess_return": strat_ret - bench_ret,
-            "information_ratio": ir,
-            "benchmark_return": bench_ret,
-            "strat_first": days[0], "strat_last": days[-1],
-            "bench_first": bench_days[0], "bench_last": bench_days[-1]}
+    return {
+        "excess_return": strat_ret - bench_ret,
+        "information_ratio": ir,
+        "benchmark_return": bench_ret,
+        "strat_first": days[0],
+        "strat_last": days[-1],
+        "bench_first": bench_days[0],
+        "bench_last": bench_days[-1],
+    }
 
 
-def run_cell(label: str, start: str, end: str, top_k: int,
-             out_dir: Path, cost: str = "delivered") -> dict:
+def run_cell(
+    label: str, start: str, end: str, top_k: int, out_dir: Path, cost: str = "delivered"
+) -> dict:
     """单格：真入口（`persist=True`）跑一次 → metrics.json + 相对基准。"""
     from btf.runtime import BTFRuntime, make_store
 
@@ -205,13 +239,31 @@ def run_cell(label: str, start: str, end: str, top_k: int,
     result = rt.run(store=make_store(out_dir / "runs"))
     wall = time.perf_counter() - t0
     nav = [(s.date.to_ymd(), s.total_value) for s in result.snapshots]
-    row: dict = {"cell": f"{label} | top_k={top_k}", "start": start,
-                 "end": end, "top_k": top_k, "wall_s": round(wall, 1),
-                 "n_days": result.n_days, "n_fills": len(result.fills),
-                 "run_id": result.run_id}
-    row.update({k: result.metrics.get(k) for k in (
-        "total_return", "annualized_return", "sharpe_ratio", "max_drawdown",
-        "calmar_ratio", "total_turnover", "fee_ratio", "n_fills")})
+    row: dict = {
+        "cell": f"{label} | top_k={top_k}",
+        "start": start,
+        "end": end,
+        "top_k": top_k,
+        "wall_s": round(wall, 1),
+        "n_days": result.n_days,
+        "n_fills": len(result.fills),
+        "run_id": result.run_id,
+    }
+    row.update(
+        {
+            k: result.metrics.get(k)
+            for k in (
+                "total_return",
+                "annualized_return",
+                "sharpe_ratio",
+                "max_drawdown",
+                "calmar_ratio",
+                "total_turnover",
+                "fee_ratio",
+                "n_fills",
+            )
+        }
+    )
     for bench in BENCHMARKS:
         series = _bench_series(bench, start, end)
         extra = _excess_ir(nav, series)
@@ -225,7 +277,8 @@ def run_cell(label: str, start: str, end: str, top_k: int,
         row[f"{bench}|bench_last"] = extra["bench_last"]
         row[f"{bench}|aligned"] = bool(
             extra["strat_first"] == extra["bench_first"]
-            and extra["strat_last"] == extra["bench_last"])
+            and extra["strat_last"] == extra["bench_last"]
+        )
     return row
 
 
@@ -238,13 +291,23 @@ def _fmt(value: object, pct: bool = False, digits: int = 3) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # D9/G3 O1：本工具依赖 `rules.source=mirror_json`，该资产已随 v7.7 退役
+    # （工厂显式 ConfigError）——标注退役并退出，避免误以为仍可复跑。
+    print(
+        "[retired] rules.source=mirror_json 已随 v7.7 资产退役（G3/D7）；"
+        "run_v77_robustness 仅存档，不再可运行。",
+        file=sys.stderr,
+    )
+    return 2
     parser = argparse.ArgumentParser(description="v7.7 多区间稳健性验证")
     parser.add_argument("--out", default=str(OUT_DEFAULT))
     parser.add_argument("--params", default="", help="逗号分隔 top_k（默认 10,5）")
     parser.add_argument("--periods", default="", help="逗号分隔区间索引（默认全部）")
-    parser.add_argument("--ee1", action="store_true",
-                        help="复跑 EE-1 对照区间：双锚（preRC/delivered）各跑一次，"
-                             "与 §63.2 冻结参照逐位比对")
+    parser.add_argument(
+        "--ee1",
+        action="store_true",
+        help="复跑 EE-1 对照区间：双锚（preRC/delivered）各跑一次，与 §63.2 冻结参照逐位比对",
+    )
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -259,31 +322,31 @@ def main(argv: list[str] | None = None) -> int:
         out_dir.mkdir(parents=True, exist_ok=True)
         bad: list[str] = []
         for profile, refs in EE1_REFS.items():
-            row = run_cell(EE1["label"], EE1["start"], EE1["end"],
-                           EE1["top_k"], out_dir, cost=profile)
-            print(f"[ee1/{profile}] run_id={row['run_id']} | "
-                  f"成本 {COST_PROFILES[profile]} | 端点 "
-                  f"策略 {row['000300.SH|strat_first']}→"
-                  f"{row['000300.SH|strat_last']}"
-                  f" / 基准 {row['000300.SH|bench_first']}→"
-                  f"{row['000300.SH|bench_last']} | aligned="
-                  f"{row['000300.SH|aligned']}")
+            row = run_cell(
+                EE1["label"], EE1["start"], EE1["end"], EE1["top_k"], out_dir, cost=profile
+            )
+            print(
+                f"[ee1/{profile}] run_id={row['run_id']} | "
+                f"成本 {COST_PROFILES[profile]} | 端点 "
+                f"策略 {row['000300.SH|strat_first']}→"
+                f"{row['000300.SH|strat_last']}"
+                f" / 基准 {row['000300.SH|bench_first']}→"
+                f"{row['000300.SH|bench_last']} | aligned="
+                f"{row['000300.SH|aligned']}"
+            )
             for key, ref in refs.items():
                 got = row.get(key)
                 ok = got is not None and abs(float(got) - float(ref)) <= 1e-4
-                print(f"  {key:24s} 本机 {got!r:24s} 参照 {ref!r:14s} "
-                      f"{'✅' if ok else '❌'}")
+                print(f"  {key:24s} 本机 {got!r:24s} 参照 {ref!r:14s} {'✅' if ok else '❌'}")
                 if not ok:
                     bad.append(f"{profile}:{key}")
         if bad:
             print(f"[ee1] ❌ 与冻结参照不一致：{bad}")
             return 1
-        print("[ee1] ✅ 双锚（preRC / delivered）与 §63.2 冻结参照逐位一致"
-              "（容差 1e-4）")
+        print("[ee1] ✅ 双锚（preRC / delivered）与 §63.2 冻结参照逐位一致（容差 1e-4）")
         return 0
     ks = [int(x) for x in args.params.split(",") if x.strip()] or list(K_VALUES)
-    idx = ([int(x) for x in args.periods.split(",") if x.strip()]
-           or list(range(len(PERIODS))))
+    idx = [int(x) for x in args.periods.split(",") if x.strip()] or list(range(len(PERIODS)))
 
     rows: list[dict] = []
     fails: list[str] = []
@@ -292,33 +355,45 @@ def main(argv: list[str] | None = None) -> int:
         for top_k in ks:
             try:
                 row = run_cell(label, start, end, top_k, out_dir)
-            except Exception as exc:                    # 如实登记，不吞
+            except Exception as exc:  # 如实登记，不吞
                 fails.append(f"{label} | top_k={top_k}: {type(exc).__name__}: {exc}")
                 print(f"[fail] {label} | top_k={top_k} → {exc}")
                 continue
             rows.append(row)
-            print(f"[ok] {row['cell']}: 交易日 {row['n_days']} | "
-                  f"收益 {_fmt(row['total_return'], pct=True)} | "
-                  f"夏普 {_fmt(row['sharpe_ratio'])} | 回撤 "
-                  f"{_fmt(row['max_drawdown'], pct=True)} | "
-                  f"vs 000300 超额 {_fmt(row['000300.SH|excess'], pct=True)} | "
-                  f"IR {_fmt(row['000300.SH|ir'])} | {row['wall_s']}s")
+            print(
+                f"[ok] {row['cell']}: 交易日 {row['n_days']} | "
+                f"收益 {_fmt(row['total_return'], pct=True)} | "
+                f"夏普 {_fmt(row['sharpe_ratio'])} | 回撤 "
+                f"{_fmt(row['max_drawdown'], pct=True)} | "
+                f"vs 000300 超额 {_fmt(row['000300.SH|excess'], pct=True)} | "
+                f"IR {_fmt(row['000300.SH|ir'])} | {row['wall_s']}s"
+            )
             if not row.get("000300.SH|aligned", True):
-                print(f"     ⚠ 端点不一致（P1-NEW-9 族）："
-                      f"策略 {row['000300.SH|strat_first']}→"
-                      f"{row['000300.SH|strat_last']} vs 基准 "
-                      f"{row['000300.SH|bench_first']}→"
-                      f"{row['000300.SH|bench_last']}")
+                print(
+                    f"     ⚠ 端点不一致（P1-NEW-9 族）："
+                    f"策略 {row['000300.SH|strat_first']}→"
+                    f"{row['000300.SH|strat_last']} vs 基准 "
+                    f"{row['000300.SH|bench_first']}→"
+                    f"{row['000300.SH|bench_last']}"
+                )
 
-    misaligned = [r["cell"] for r in rows
-                  if not all(r.get(f"{b}|aligned", True) for b in BENCHMARKS)]
+    misaligned = [
+        r["cell"] for r in rows if not all(r.get(f"{b}|aligned", True) for b in BENCHMARKS)
+    ]
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
-    payload = {"generated_at": stamp, "engine": "btf",
-               "periods": [p[0] for p in PERIODS], "k_values": ks,
-               "benchmarks": list(BENCHMARKS), "rows": rows, "fails": fails,
-               "endpoint_misaligned": misaligned}
+    payload = {
+        "generated_at": stamp,
+        "engine": "btf",
+        "periods": [p[0] for p in PERIODS],
+        "k_values": ks,
+        "benchmarks": list(BENCHMARKS),
+        "rows": rows,
+        "fails": fails,
+        "endpoint_misaligned": misaligned,
+    }
     (out_dir / f"v77-robustness-{stamp}.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     print(f"\n[summary] {len(rows)} 格完成 / {len(fails)} 格失败 → {out_dir}")
     return 1 if fails else 0

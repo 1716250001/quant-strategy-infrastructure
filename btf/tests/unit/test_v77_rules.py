@@ -4,6 +4,7 @@
 单测用**合成输入**（classify 纯函数 + 注入 screen_fn/liq_fn），真实主库
 对账归集成测试（tests/integration/test_v77_align.py，A1/A2）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -21,18 +22,26 @@ from btf.domain.types import TradingDate
 
 pytestmark = [pytest.mark.l1]
 
-TH = {"sh_crisis": -5.0, "sh_watch": -3.0, "small_crisis": -6.0,
-      "small_watch": -4.0, "down_crisis": 800, "down_watch": 300,
-      "ratio_crisis": 10.0, "ratio_watch": 5.0}
+TH = {
+    "sh_crisis": -5.0,
+    "sh_watch": -3.0,
+    "small_crisis": -6.0,
+    "small_watch": -4.0,
+    "down_crisis": 800,
+    "down_watch": 300,
+    "ratio_crisis": 10.0,
+    "ratio_watch": 5.0,
+}
 
 
 class FakeRules:
     """最小 RulesProvider（镜像 JSON 两组规则）。"""
 
     def __init__(self, l2=None, liq=None):
-        self._rules = {"L2_filter": l2 or {"pe_max": 30.0, "pb_max": 3.0,
-                                           "roe_min": 5.0, "dv_min": 1.0},
-                       "L0_LIQ": liq or dict(TH)}
+        self._rules = {
+            "L2_filter": l2 or {"pe_max": 30.0, "pb_max": 3.0, "roe_min": 5.0, "dv_min": 1.0},
+            "L0_LIQ": liq or dict(TH),
+        }
 
     def rules_version(self) -> str:
         return "v7.7@sha256:test"
@@ -57,41 +66,46 @@ def _day(ymd: str) -> TradingDate:
 
 class TestLiqClassify:
     def test_crisis_by_down_count(self):
-        status, triggers = classify(sh_pct=-1.0, small_pct=-1.0, down_cnt=900,
-                                    down_ratio=2.0, thresholds=TH)
+        status, triggers = classify(
+            sh_pct=-1.0, small_pct=-1.0, down_cnt=900, down_ratio=2.0, thresholds=TH
+        )
         assert status == CRISIS and triggers == ("down_cnt≥800",)
 
     def test_crisis_by_small_cap(self):
-        status, _ = classify(sh_pct=-1.0, small_pct=-6.5, down_cnt=10,
-                             down_ratio=1.0, thresholds=TH)
+        status, _ = classify(
+            sh_pct=-1.0, small_pct=-6.5, down_cnt=10, down_ratio=1.0, thresholds=TH
+        )
         assert status == CRISIS
 
     def test_crisis_by_sh_and_ratio(self):
-        status, _ = classify(sh_pct=-5.2, small_pct=-2.0, down_cnt=100,
-                             down_ratio=11.0, thresholds=TH)
+        status, _ = classify(
+            sh_pct=-5.2, small_pct=-2.0, down_cnt=100, down_ratio=11.0, thresholds=TH
+        )
         assert status == CRISIS
 
     def test_sh_alone_is_watch(self):
         """上证 ≤-5% 但占比 <10% → WATCH（非 CRISIS）。"""
-        status, triggers = classify(sh_pct=-5.5, small_pct=0.0, down_cnt=10,
-                                    down_ratio=2.0, thresholds=TH)
+        status, triggers = classify(
+            sh_pct=-5.5, small_pct=0.0, down_cnt=10, down_ratio=2.0, thresholds=TH
+        )
         assert status == WATCH and any("sh≤-3.0" in t for t in triggers)
 
     def test_watch_by_ratio(self):
-        status, _ = classify(sh_pct=-1.0, small_pct=-1.0, down_cnt=50,
-                             down_ratio=5.5, thresholds=TH)
+        status, _ = classify(
+            sh_pct=-1.0, small_pct=-1.0, down_cnt=50, down_ratio=5.5, thresholds=TH
+        )
         assert status == WATCH
 
     def test_normal(self):
-        status, triggers = classify(sh_pct=0.5, small_pct=1.0, down_cnt=5,
-                                    down_ratio=0.1, thresholds=TH)
+        status, triggers = classify(
+            sh_pct=0.5, small_pct=1.0, down_cnt=5, down_ratio=0.1, thresholds=TH
+        )
         assert status == NORMAL and triggers == ()
 
     def test_missing_small_skips_branch(self):
         """中证2000 基期前缺失 → 小盘分支 fail-closed（不误判 CRISIS）。"""
-        status, _ = classify(sh_pct=-7.0, small_pct=None, down_cnt=0,
-                             down_ratio=0.0, thresholds=TH)
-        assert status == WATCH          # 仅上证触发 WATCH
+        status, _ = classify(sh_pct=-7.0, small_pct=None, down_cnt=0, down_ratio=0.0, thresholds=TH)
+        assert status == WATCH  # 仅上证触发 WATCH
 
 
 class TestRecoverySequence:
@@ -111,15 +125,15 @@ class TestRecoverySequence:
         RECOVERY；**确认期内状态按 CRISIS 约束（0 成）**」+「RECOVERY 3 日 → NORMAL」。
         X-1 修复前实测为 `RECOVERY × 12`（自我维持、永不退出）。
         """
-        days = [f"202401{d:02d}" for d in range(2, 14)]     # 12 个交易日
+        days = [f"202401{d:02d}" for d in range(2, 14)]  # 12 个交易日
         crisis_day = days[0]
         monkeypatch.setattr(
             "btf.data.liq.index_pct",
-            lambda _sym, ymd, root=None: -9.0 if ymd == crisis_day else 1.0)
-        monkeypatch.setattr(
-            "btf.data.liq.limit_stats", lambda _ymd, root=None: (0, 100, 0.0))
+            lambda _sym, ymd, root=None: -9.0 if ymd == crisis_day else 1.0,
+        )
+        monkeypatch.setattr("btf.data.liq.limit_stats", lambda _ymd, root=None: (0, 100, 0.0))
 
-        prev = None                       # 单步递推（Z-6：机器记忆随状态回传）
+        prev = None  # 单步递推（Z-6：机器记忆随状态回传）
         statuses: list[str] = []
         raws: list[str] = []
         phases: list[str] = []
@@ -130,7 +144,7 @@ class TestRecoverySequence:
             phases.append(f"{state.phase}:{state.phase_days}")
             prev = state
 
-        assert raws == [CRISIS] + [NORMAL] * 11        # 原始判定序列
+        assert raws == [CRISIS] + [NORMAL] * 11  # 原始判定序列
         assert statuses[0] == CRISIS
         # 入闸确认期：平静日 1/2 日仍按 CRISIS（0 成）；第 3 个平静日**入闸**
         assert statuses[1:3] == [CRISIS] * 2, statuses
@@ -138,9 +152,15 @@ class TestRecoverySequence:
         assert statuses[6:] == [NORMAL] * 6, statuses
         assert RECOVERY not in statuses[6:], "RECOVERY 自我维持（X-1 回归）"
         # 相位证据链（铁律新 16：披露字段不得恒空）
-        assert phases[:7] == ["CONFIRM:0", "CONFIRM:1", "CONFIRM:2",
-                              "RECOVERY:0", "RECOVERY:1", "RECOVERY:2",
-                              "IDLE:0"], phases
+        assert phases[:7] == [
+            "CONFIRM:0",
+            "CONFIRM:1",
+            "CONFIRM:2",
+            "RECOVERY:0",
+            "RECOVERY:1",
+            "RECOVERY:2",
+            "IDLE:0",
+        ], phases
 
     def test_watch_interrupts_confirmation(self, monkeypatch):
         """确认期内出现 WATCH → 计时归零重计；**当日恒按 CRISIS（0 成）**。
@@ -149,15 +169,15 @@ class TestRecoverySequence:
         当日最终态与原始判定**不同**（`raw=WATCH` / `status=CRISIS`），两字段
         同时披露（Z-6 落地要求）。
         """
-        days = [f"202401{d:02d}" for d in range(2, 12)]     # 10 个交易日
+        days = [f"202401{d:02d}" for d in range(2, 12)]  # 10 个交易日
         crisis_day, watch_day = days[0], days[3]
         monkeypatch.setattr(
             "btf.data.liq.index_pct",
             lambda _sym, ymd, root=None: (
-                -9.0 if ymd == crisis_day else (-4.0 if ymd == watch_day
-                                                else 1.0)))
-        monkeypatch.setattr(
-            "btf.data.liq.limit_stats", lambda _ymd, root=None: (0, 100, 0.0))
+                -9.0 if ymd == crisis_day else (-4.0 if ymd == watch_day else 1.0)
+            ),
+        )
+        monkeypatch.setattr("btf.data.liq.limit_stats", lambda _ymd, root=None: (0, 100, 0.0))
 
         prev = None
         out: list[tuple[str, str, str, int]] = []
@@ -169,17 +189,23 @@ class TestRecoverySequence:
         assert out[3][0] == WATCH and out[3][1] == CRISIS, out[3]
         assert out[3][2:] == (CONFIRM, 0), "WATCH 打断后确认计数须归零"
         assert [s for _r, s, _p, _d in out] == [
-            CRISIS, CRISIS, CRISIS, CRISIS, CRISIS, CRISIS,
-            RECOVERY, RECOVERY, RECOVERY, NORMAL], out
+            CRISIS,
+            CRISIS,
+            CRISIS,
+            CRISIS,
+            CRISIS,
+            CRISIS,
+            RECOVERY,
+            RECOVERY,
+            RECOVERY,
+            NORMAL,
+        ], out
 
     def test_recovery_window_is_bounded_under_long_calm(self, monkeypatch):
         """长平静期（60 日）不产生任何 RECOVERY（窗口有界，非自维持）。"""
-        days = [f"2024{m:02d}{d:02d}" for m in range(1, 4)
-                for d in range(1, 21)][:60]
-        monkeypatch.setattr(
-            "btf.data.liq.index_pct", lambda _sym, ymd, root=None: 1.0)
-        monkeypatch.setattr(
-            "btf.data.liq.limit_stats", lambda _ymd, root=None: (0, 100, 0.0))
+        days = [f"2024{m:02d}{d:02d}" for m in range(1, 4) for d in range(1, 21)][:60]
+        monkeypatch.setattr("btf.data.liq.index_pct", lambda _sym, ymd, root=None: 1.0)
+        monkeypatch.setattr("btf.data.liq.limit_stats", lambda _ymd, root=None: (0, 100, 0.0))
         prev = None
         for day in days:
             state = state_of(day, TH, prev=prev)

@@ -12,6 +12,7 @@
       对账以"当日"为准（同一交易日两者应一致，历史回测日可能分化）。
 A3/A4 依赖的 v7.7 镜像已退役；类级 skipif 保留历史用例（REQ-20261121-02）。
 """
+
 from __future__ import annotations
 
 import json
@@ -32,8 +33,7 @@ ROOT = Path(MARKET_DATA_DIR)
 MIRROR_JSON = RULES_MIRROR
 #: v7.7 规则镜像已退役（REQ-20261121-01/02）；类级 skipif 按文件存在性动态判定
 _MIRROR_RETIRED = not MIRROR_JSON.is_file()
-_MIRROR_RETIRED_REASON = (
-    f"v7.7 规则镜像已退役（REQ-20261121-01/02）：{MIRROR_JSON}")
+_MIRROR_RETIRED_REASON = f"v7.7 规则镜像已退役（REQ-20261121-01/02）：{MIRROR_JSON}"
 TRADE_DATE = "20260923"
 
 VALID_STATES = {NORMAL, WATCH, CRISIS, RECOVERY}
@@ -46,9 +46,18 @@ def _skip_if_no_data() -> None:
 
 def _prev(phase: str, days: int, status: str = CRISIS) -> LiqState:
     """合成前一日状态（Z-6 单步递推测试用；抽掉真实数据依赖）。"""
-    return LiqState(date="20260922", status=status, sh_pct=0.0, small_pct=0.0,
-                    down_cnt=0, down_ratio=0.0, triggers=(),
-                    raw=status, phase=phase, phase_days=days)
+    return LiqState(
+        date="20260922",
+        status=status,
+        sh_pct=0.0,
+        small_pct=0.0,
+        down_cnt=0,
+        down_ratio=0.0,
+        triggers=(),
+        raw=status,
+        phase=phase,
+        phase_days=days,
+    )
 
 
 def _load_rules() -> tuple[dict, dict]:
@@ -69,7 +78,7 @@ def _mdcore():
         sys.path.insert(0, str(CHICHAO_ROOT))
     try:
         import md_core as md
-    except Exception as exc:                       # 环境差异（依赖/联网）
+    except Exception as exc:  # 环境差异（依赖/联网）
         pytest.skip(f"md_core 不可用：{exc}")
     return md
 
@@ -104,30 +113,40 @@ class TestA1Selection:
         roes = roe_pit_of(TRADE_DATE, ROOT)
         assert roes
         table = pr.read_range(
-            "fina_indicator", ROOT, f"{int(TRADE_DATE[:4]) - 3}0101", TRADE_DATE,
-            columns=["ts_code", "ann_date", "end_date", "roe_waa"])
+            "fina_indicator",
+            ROOT,
+            f"{int(TRADE_DATE[:4]) - 3}0101",
+            TRADE_DATE,
+            columns=["ts_code", "ann_date", "end_date", "roe_waa"],
+        )
         rows = table.to_pylist()
         for code in sorted(roes)[:20]:
             visible = {
-                str(r["end_date"]) for r in rows
-                if r.get("ts_code") == code and r.get("roe_waa") is not None
+                str(r["end_date"])
+                for r in rows
+                if r.get("ts_code") == code
+                and r.get("roe_waa") is not None
                 and str(r.get("ann_date") or "") <= TRADE_DATE
                 and str(r.get("end_date") or "").endswith("1231")
             }
-            assert roes[code][1] in visible, (
-                f"{code} 采信了未公告年报 {roes[code][1]}（前视）")
+            assert roes[code][1] in visible, f"{code} 采信了未公告年报 {roes[code][1]}（前视）"
 
     def test_a1_matches_md_core(self):
         """A1：同日选股名单与 md_core `screen_stocks_v75` 完全一致。"""
         _skip_if_no_data()
-        _mdcore()                     # 确保 md_core 可导入（不可用则 skip）
+        _mdcore()  # 确保 md_core 可导入（不可用则 skip）
         l2, _ = _load_rules()
         btf_picks = screen_l2(TRADE_DATE, l2, root=ROOT)
         try:
             from md_core.screening import screen_stocks_v75
+
             table = screen_stocks_v75(
-                trade_date=TRADE_DATE, pe_max=l2["pe_max"], pb_max=l2["pb_max"],
-                roe_min=l2["roe_min"], dv_min=l2["dv_min"])
+                trade_date=TRADE_DATE,
+                pe_max=l2["pe_max"],
+                pb_max=l2["pb_max"],
+                roe_min=l2["roe_min"],
+                dv_min=l2["dv_min"],
+            )
             md_picks = sorted(table["ts_code"].tolist())
         except Exception as exc:
             pytest.skip(f"md_core 选股失败：{exc}")
@@ -135,7 +154,8 @@ class TestA1Selection:
         only_md = sorted(set(md_picks) - set(btf_picks))
         assert not only_btf and not only_md, (
             f"A1 名单差异：仅 btf {len(only_btf)} 只{only_btf[:5]}；"
-            f"仅 md_core {len(only_md)} 只{only_md[:5]}")
+            f"仅 md_core {len(only_md)} 只{only_md[:5]}"
+        )
 
 
 class TestA2Liq:
@@ -159,8 +179,7 @@ class TestA2Liq:
         _, liq = _load_rules()
         base = state_of(TRADE_DATE, liq, root=ROOT)
         # ① 前一日为危机 → 今日：原始判定 WATCH 也按 CRISIS（确认期禁止新增风险）
-        after = state_of(TRADE_DATE, liq, root=ROOT,
-                         prev=_prev(CONFIRM, 0))
+        after = state_of(TRADE_DATE, liq, root=ROOT, prev=_prev(CONFIRM, 0))
         assert after.status == CRISIS, (base.status, after.status)
         assert after.raw == base.status, (after.raw, base.status)
         if base.status == NORMAL:
@@ -178,16 +197,18 @@ class TestA2Liq:
     def test_a2_matches_md_core(self):
         """A2：同日状态与 md_core `get_l0_liq_state` 一致。"""
         _skip_if_no_data()
-        _mdcore()                     # 确保 md_core 可导入（不可用则 skip）
+        _mdcore()  # 确保 md_core 可导入（不可用则 skip）
         _, liq = _load_rules()
         btf_state = state_of(TRADE_DATE, liq, root=ROOT)
         try:
             from md_core.market_state import get_l0_liq_state
+
             md_status = get_l0_liq_state(trade_date=TRADE_DATE).get("status")
         except Exception as exc:
             pytest.skip(f"md_core 状态失败：{exc}")
         assert md_status == btf_state.status, (
-            f"A2 状态不一致：btf={btf_state.status} md_core={md_status}")
+            f"A2 状态不一致：btf={btf_state.status} md_core={md_status}"
+        )
 
 
 @pytest.mark.skipif(_MIRROR_RETIRED, reason=_MIRROR_RETIRED_REASON)
@@ -227,7 +248,7 @@ class TestA4UpgradeRegression:
 
         basics = daily_basic_of(TRADE_DATE, ROOT)
         dropped = sorted(set(before) - set(after))
-        for code in dropped:                       # 仅阈值边界内的标的受影响
+        for code in dropped:  # 仅阈值边界内的标的受影响
             pe = basics[code]["pe_ttm"]
             assert 25.0 <= pe < base["pe_max"], f"{code} pe={pe} 不应受影响"
         survivors = {c for c in before if basics[c]["pe_ttm"] < 25.0}

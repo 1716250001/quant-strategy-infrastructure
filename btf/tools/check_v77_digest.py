@@ -24,6 +24,7 @@ digest 口径：整文件 sha256（**CRLF → LF 归一化后**；与
     python tools/check_v77_digest.py [--baseline PATH] [--out JSON]
     python tools/check_v77_digest.py --update --reason "规则版本变更说明"
 """
+
 from __future__ import annotations
 
 import argparse
@@ -97,22 +98,29 @@ def load_baseline(path: Path) -> dict:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise BaselineError(str(path)) from exc
-    if (not isinstance(data, dict)
-            or data.get("schema") != BASELINE_SCHEMA
-            or not isinstance(data.get("target"), str) or not data["target"]
-            or not isinstance(data.get("frozen_at"), str) or not data["frozen_at"]
-            or not isinstance(data.get("reason"), str) or not data["reason"]
-            or not isinstance(data.get("sha256"), str)
-            or not _SHA256_RE.match(data["sha256"])
-            or not _is_pos_int(data.get("size_bytes"))
-            or not _is_pos_int(data.get("line_count"))
-            or not isinstance(data.get("previous"), list)):
+    if (
+        not isinstance(data, dict)
+        or data.get("schema") != BASELINE_SCHEMA
+        or not isinstance(data.get("target"), str)
+        or not data["target"]
+        or not isinstance(data.get("frozen_at"), str)
+        or not data["frozen_at"]
+        or not isinstance(data.get("reason"), str)
+        or not data["reason"]
+        or not isinstance(data.get("sha256"), str)
+        or not _SHA256_RE.match(data["sha256"])
+        or not _is_pos_int(data.get("size_bytes"))
+        or not _is_pos_int(data.get("line_count"))
+        or not isinstance(data.get("previous"), list)
+    ):
         raise BaselineError(str(path))
     for entry in data["previous"]:
-        if (not isinstance(entry, dict)
-                or not _SHA256_RE.match(str(entry.get("sha256", "")))
-                or not isinstance(entry.get("frozen_at"), str)
-                or not isinstance(entry.get("reason"), str)):
+        if (
+            not isinstance(entry, dict)
+            or not _SHA256_RE.match(str(entry.get("sha256", "")))
+            or not isinstance(entry.get("frozen_at"), str)
+            or not isinstance(entry.get("reason"), str)
+        ):
             raise BaselineError(str(path))
     return data
 
@@ -121,8 +129,7 @@ def _write_json(path: Path, payload: dict) -> None:
     """同目录临时文件 ＋ `os.replace` 原子替换（F3；失败不破坏正式文件）。"""
     tmp = path.with_name(path.name + ".tmp")
     try:
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                       encoding="utf-8")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         os.replace(tmp, path)
     finally:
         if tmp.exists():
@@ -134,20 +141,23 @@ def _write_json(path: Path, payload: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _harden_stdout()
-    ap = argparse.ArgumentParser(
-        description="赤潮 AGENTS.md 整文件 digest 校验（REQ-20261121-01）")
-    ap.add_argument("--baseline", default=str(BASELINE),
-                    help="基线 JSON 路径（默认 tools/agents_digest_baseline.json）")
-    ap.add_argument("--out", default=None,
-                    help="实测 JSON 输出路径（校验模式，可选）")
-    ap.add_argument("--update", action="store_true",
-                    help="重冻结基线（必须同时给 --reason；旧值追加进 previous）")
+    ap = argparse.ArgumentParser(description="赤潮 AGENTS.md 整文件 digest 校验（REQ-20261121-01）")
+    ap.add_argument(
+        "--baseline",
+        default=str(BASELINE),
+        help="基线 JSON 路径（默认 tools/agents_digest_baseline.json）",
+    )
+    ap.add_argument("--out", default=None, help="实测 JSON 输出路径（校验模式，可选）")
+    ap.add_argument(
+        "--update",
+        action="store_true",
+        help="重冻结基线（必须同时给 --reason；旧值追加进 previous）",
+    )
     ap.add_argument("--reason", default="", help="重冻结依据（--update 必填）")
     args = ap.parse_args(argv)
 
     if args.update and args.out:
-        print("[error] --out 仅用于校验模式，不能与 --update 同用",
-              file=sys.stderr)
+        print("[error] --out 仅用于校验模式，不能与 --update 同用", file=sys.stderr)
         return 2
 
     if args.update and not args.reason.strip():
@@ -167,16 +177,17 @@ def main(argv: list[str] | None = None) -> int:
         try:
             old = load_baseline(baseline_path) if baseline_path.exists() else None
         except BaselineError:
-            print(f"[error] 基线不可读或 schema 非法：{baseline_path}",
-                  file=sys.stderr)
+            print(f"[error] 基线不可读或 schema 非法：{baseline_path}", file=sys.stderr)
             return 2
         previous = list(old.get("previous", [])) if old else []
         if old:
-            previous.append({
-                "sha256": old["sha256"],
-                "frozen_at": old.get("frozen_at"),
-                "reason": old.get("reason"),
-            })
+            previous.append(
+                {
+                    "sha256": old["sha256"],
+                    "frozen_at": old.get("frozen_at"),
+                    "reason": old.get("reason"),
+                }
+            )
         payload = {
             "schema": BASELINE_SCHEMA,
             "target": TARGET,
@@ -193,23 +204,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[error] 基线写入失败：{baseline_path}", file=sys.stderr)
             return 2
         old_digest = old["sha256"] if old else "(new)"
-        print(f"[ok] baseline updated: {old_digest} -> {actual['digest']}",
-              flush=True)
+        print(f"[ok] baseline updated: {old_digest} -> {actual['digest']}", flush=True)
         return 0
 
     try:
         base = load_baseline(baseline_path)
     except BaselineError:
-        print(f"[error] 基线不可读或 schema 非法：{baseline_path}",
-              file=sys.stderr)
+        print(f"[error] 基线不可读或 schema 非法：{baseline_path}", file=sys.stderr)
         return 2
 
     base_digest = base["sha256"]
     ok = actual["digest"] == base_digest
     if ok:
         print(f"[ok] source = {source}", flush=True)
-        print(f"[ok] size = {actual['size_bytes']} B | lines = "
-              f"{actual['line_count']}", flush=True)
+        print(f"[ok] size = {actual['size_bytes']} B | lines = {actual['line_count']}", flush=True)
         print(f"digest = {actual['digest']}", flush=True)
         print(f"baseline = {base_digest}", flush=True)
         print("[ok] AGENTS.md digest 校验通过", flush=True)
@@ -217,22 +225,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[mismatch] source = {source}", flush=True)
         print(f"digest = {actual['digest']}", flush=True)
         print(f"baseline = {base_digest}", flush=True)
-        print("[mismatch] AGENTS.md digest 不匹配（如属规则变更，请 "
-              "--update --reason 重冻结）", flush=True)
+        print(
+            "[mismatch] AGENTS.md digest 不匹配（如属规则变更，请 --update --reason 重冻结）",
+            flush=True,
+        )
 
     if args.out:
         try:
-            _write_json(Path(args.out), {
-                "schema": CHECK_SCHEMA,
-                "source": str(source),
-                "digest": actual["digest"],
-                "size_bytes": actual["size_bytes"],
-                "line_count": actual["line_count"],
-                "baseline": str(baseline_path),
-                "baseline_digest": base_digest,
-                "ok": ok,
-                "checked_at": _now(),
-            })
+            _write_json(
+                Path(args.out),
+                {
+                    "schema": CHECK_SCHEMA,
+                    "source": str(source),
+                    "digest": actual["digest"],
+                    "size_bytes": actual["size_bytes"],
+                    "line_count": actual["line_count"],
+                    "baseline": str(baseline_path),
+                    "baseline_digest": base_digest,
+                    "ok": ok,
+                    "checked_at": _now(),
+                },
+            )
         except OSError:
             print(f"[error] 实测 JSON 写入失败：{args.out}", file=sys.stderr)
             return 2

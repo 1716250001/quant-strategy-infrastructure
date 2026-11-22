@@ -20,16 +20,17 @@ A2 状态一致：btf `state_of`（L0-LIQ）与 md_core `get_l0_liq_state` 同�
 
 退出码：0 = 全一致；1 = 有差异；3 = 环境缺失（md_core/主库/镜像 JSON）。
 """
+
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent      # 代码/btf
-if str(_PROJECT_ROOT) not in sys.path:                      # 脚本自举（btf 包）
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent  # 代码/btf
+if str(_PROJECT_ROOT) not in sys.path:  # 脚本自举（btf 包）
     sys.path.insert(0, str(_PROJECT_ROOT))
-sys.path.insert(0, str(Path(__file__).resolve().parent))    # tools/_paths（平级）
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # tools/_paths（平级）
 
 from _paths import CHICHAO_ROOT, RULES_MIRROR
 
@@ -64,8 +65,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--date", required=True, help="对账交易日 YYYYMMDD")
     parser.add_argument("--root", default=DEFAULT_ROOT, help="赤潮根目录")
     parser.add_argument("--json", default=DEFAULT_JSON, help="规则镜像 JSON")
-    parser.add_argument("--skip-mdcore", action="store_true",
-                        help="只跑 btf 侧（md_core 不可用/避免联网）")
+    parser.add_argument(
+        "--skip-mdcore", action="store_true", help="只跑 btf 侧（md_core 不可用/避免联网）"
+    )
     args = parser.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -93,14 +95,18 @@ def main(argv: list[str] | None = None) -> int:
     print(f"A1 btf 选股: {len(btf_picks)} 只")
     if not args.skip_mdcore:
         try:
-            _mdcore(Path(args.root))                 # 确保 md_core 可导入
+            _mdcore(Path(args.root))  # 确保 md_core 可导入
             from md_core.screening import screen_stocks_v75
+
             table = screen_stocks_v75(
-                trade_date=args.date, pe_max=l2_params["pe_max"],
-                pb_max=l2_params["pb_max"], roe_min=l2_params["roe_min"],
-                dv_min=l2_params["dv_min"])
+                trade_date=args.date,
+                pe_max=l2_params["pe_max"],
+                pb_max=l2_params["pb_max"],
+                roe_min=l2_params["roe_min"],
+                dv_min=l2_params["dv_min"],
+            )
             md_picks = sorted(table["ts_code"].tolist())
-        except Exception as exc:                     # md_core 环境/数据异常
+        except Exception as exc:  # md_core 环境/数据异常
             print(f"[error] md_core 选股失败：{exc}", file=sys.stderr)
             return EXIT_ERROR
         print(f"A1 md_core 选股: {len(md_picks)} 只")
@@ -109,19 +115,23 @@ def main(argv: list[str] | None = None) -> int:
         if only_btf or only_md:
             diffs.append(
                 f"A1 名单差异：仅 btf {len(only_btf)} 只{only_btf[:5]}；"
-                f"仅 md_core {len(only_md)} 只{only_md[:5]}")
+                f"仅 md_core {len(only_md)} 只{only_md[:5]}"
+            )
         else:
             print(f"A1 [PASS] 名单一致（{len(btf_picks)} 只）")
 
     # ── A2 L0-LIQ 状态 ──
     state = _btf_liq(args.date, liq_th)
-    print(f"A2 btf 状态: {state.status}（上证 {state.sh_pct}% / "
-          f"小盘 {state.small_pct}% / 跌停 {state.down_cnt} 家 "
-          f"{state.down_ratio:.2f}%）")
+    print(
+        f"A2 btf 状态: {state.status}（上证 {state.sh_pct}% / "
+        f"小盘 {state.small_pct}% / 跌停 {state.down_cnt} 家 "
+        f"{state.down_ratio:.2f}%）"
+    )
     if not args.skip_mdcore:
         try:
-            _mdcore(Path(args.root))                 # 确保 md_core 可导入
+            _mdcore(Path(args.root))  # 确保 md_core 可导入
             from md_core.market_state import get_l0_liq_state
+
             md_status = get_l0_liq_state(trade_date=args.date).get("status")
         except Exception as exc:
             print(f"[error] md_core 状态失败：{exc}", file=sys.stderr)
