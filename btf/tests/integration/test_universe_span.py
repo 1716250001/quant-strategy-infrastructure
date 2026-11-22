@@ -15,6 +15,7 @@ delist_date`），但 `source=all` 原只在**起点**求值一次 → 期间新
 注：既有验收之所以抓不到，是因为它们只断言 `fills > 100` / `n_days > 800`
 （有成交即绿）——故本测试断言"宇宙完整性"这一独立维度（X-12 铁律同族）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,7 +29,8 @@ pytestmark = [pytest.mark.l4]
 ROOT = Path(MARKET_DATA_DIR)
 requires_mainlib = pytest.mark.skipif(
     not (ROOT / "stock_basic").is_file() and not (ROOT / "daily").is_dir(),
-    reason=f"主库不可用: {ROOT}")
+    reason=f"主库不可用: {ROOT}",
+)
 
 # 十年窗口（与审查 §20.3.2 同口径：2016-01-04 → 2025-09-23）
 START_YMD, END_YMD = "20160104", "20250923"
@@ -62,8 +64,7 @@ class TestUniverseSpan:
         span = {i.symbol for i in feed.universe_span(start, end)}
 
         assert MID_IPO not in at_start, "锚点须为**期间**新上市（否则断言无意义）"
-        assert MID_IPO in span, (
-            f"{MID_IPO}（期间新上市）仍不可见 → 宇宙在起点冻结回归（P0-NEW-4）")
+        assert MID_IPO in span, f"{MID_IPO}（期间新上市）仍不可见 → 宇宙在起点冻结回归（P0-NEW-4）"
 
     def test_span_single_read_is_exact(self):
         """并集 = ∃d∈[start,end] 在市——与"逐日并集"同解（抽样日期校验）。"""
@@ -102,8 +103,10 @@ class TestRuntimeAllUniverse:
 
         assert len(rt.instruments) > at_start, (
             f"source=all 宇宙未跨期扩张（{len(rt.instruments)} ≤ 起点 {at_start}）"
-            f"—— 起点冻结回归（P0-NEW-4）")
+            f"—— 起点冻结回归（P0-NEW-4）"
+        )
         assert MID_IPO in rt.instruments, f"{MID_IPO} 期间新上市仍缺席"
         notes = " ".join(rt.assembly_notes)
         assert "跨期新增" in notes and str(len(rt.instruments)) in notes, (
-            f"装配期未披露跨期新增数量：{rt.assembly_notes}")
+            f"装配期未披露跨期新增数量：{rt.assembly_notes}"
+        )

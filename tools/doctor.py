@@ -28,6 +28,7 @@ tools/doctor.py — 环境自检
   python main.py doctor --network        # 追加 tushare 连通性实测（消耗 1 次调用）
   python main.py doctor --json           # 输出 JSON（供程序消费）
 """
+
 import argparse
 import json
 import os
@@ -60,8 +61,7 @@ class Report:
         self.n_warn = 0
 
     def add(self, group, name, status, detail=""):
-        self.items.append({"group": group, "name": name,
-                           "status": status, "detail": str(detail)})
+        self.items.append({"group": group, "name": name, "status": status, "detail": str(detail)})
         if status == FAIL:
             self.n_fail += 1
         elif status == WARN:
@@ -87,9 +87,13 @@ def check_env(r):
     py = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     r.ok("环境", "Python 版本", py)
 
-    deps = [("pandas", "数据帧"), ("pyarrow", "parquet 引擎"),
-            ("tushare", "数据源"), ("akshare", "兜底数据源"),
-            ("numpy", "数值计算")]
+    deps = [
+        ("pandas", "数据帧"),
+        ("pyarrow", "parquet 引擎"),
+        ("tushare", "数据源"),
+        ("akshare", "兜底数据源"),
+        ("numpy", "数值计算"),
+    ]
     for mod, desc in deps:
         try:
             m = __import__(mod)
@@ -125,6 +129,7 @@ def check_paths(r):
 
     # 临时目录（可不存在，能创建即可）
     from config import TEMP_DIR
+
     try:
         os.makedirs(TEMP_DIR, exist_ok=True)
         r.ok("路径", "临时目录", TEMP_DIR)
@@ -139,10 +144,9 @@ def check_disk(r):
     try:
         drive = os.path.splitdrive(MARKET_DATA_DIR)[0] + "\\"
         total, used, free = shutil.disk_usage(drive)
-        free_gb = free / 1024 ** 3
+        free_gb = free / 1024**3
         pct = used / total * 100
-        d = (f"{drive} 剩余 {free_gb:.1f}GB / 共 {total/1024**3:.1f}GB "
-             f"(已用 {pct:.0f}%)")
+        d = f"{drive} 剩余 {free_gb:.1f}GB / 共 {total / 1024**3:.1f}GB (已用 {pct:.0f}%)"
         if free_gb < 5:
             r.fail("磁盘", "剩余空间", d + " —— 空间紧张，写入可能失败")
         elif free_gb < 20:
@@ -161,19 +165,21 @@ def check_checkpoints(r):
         r.fail("断点", "库根", "不存在，无法检查断点")
         return
     found = False
-    for fn in [".checkpoint.json", ".cb_checkpoint.json",
-               ".backfill_checkpoint.json"]:
+    for fn in [".checkpoint.json", ".cb_checkpoint.json", ".backfill_checkpoint.json"]:
         p = os.path.join(MARKET_DATA_DIR, fn)
         if not os.path.exists(p):
             continue
         found = True
         try:
             data = json.load(open(p, encoding="utf-8"))
-            total = sum(len(v.get("completed", [])) if isinstance(v, dict) else 0
-                        for v in data.values())
-            r.ok("断点", fn,
-                 f"{len(data)} 个接口 / {total:,} 条完成记录 / "
-                 f"{os.path.getsize(p)/1024:.0f}KB")
+            total = sum(
+                len(v.get("completed", [])) if isinstance(v, dict) else 0 for v in data.values()
+            )
+            r.ok(
+                "断点",
+                fn,
+                f"{len(data)} 个接口 / {total:,} 条完成记录 / {os.path.getsize(p) / 1024:.0f}KB",
+            )
         except Exception as e:
             r.fail("断点", fn, f"⛔ JSON 损坏: {str(e)[:60]}")
     if not found:
@@ -215,8 +221,17 @@ def check_data(r, top_n=8):
         r.ok("数据", "布局一致性", "无混合布局")
 
     # 核心表最新日期
-    core = ["daily", "daily_basic", "fund_daily", "cb_daily", "index_daily",
-            "moneyflow", "margin", "adj_factor", "stk_limit"]
+    core = [
+        "daily",
+        "daily_basic",
+        "fund_daily",
+        "cb_daily",
+        "index_daily",
+        "moneyflow",
+        "margin",
+        "adj_factor",
+        "stk_limit",
+    ]
     latest = []
     for name in core:
         if not any(t[0] == name for t in tables):
@@ -232,8 +247,7 @@ def check_data(r, top_n=8):
         mx = max(d for _, d in latest)
         stale = [f"{n}={d}" for n, d in latest if d < mx]
         if stale:
-            r.warn("数据", "核心表新鲜度",
-                   f"最新 {mx}；落后: {', '.join(stale[:6])}")
+            r.warn("数据", "核心表新鲜度", f"最新 {mx}；落后: {', '.join(stale[:6])}")
         else:
             r.ok("数据", "核心表新鲜度", f"全部 {mx}")
 
@@ -253,15 +267,21 @@ def check_credentials(r, network=False):
         r.warn("凭据", "pushplus token", "未配置（推送功能不可用）")
 
     if not network:
-        r.items.append({"group": "凭据", "name": "tushare 连通性",
-                        "status": "－", "detail": "未测（加 --network 实测）"})
+        r.items.append(
+            {
+                "group": "凭据",
+                "name": "tushare 连通性",
+                "status": "－",
+                "detail": "未测（加 --network 实测）",
+            }
+        )
         return
     # 实测连通性（仅 1 次调用，不写数据）
     try:
         from fetch.base import get_pro
+
         pro = get_pro()
-        df = pro.trade_cal(exchange="SSE", start_date="20260101",
-                           end_date="20260110")
+        df = pro.trade_cal(exchange="SSE", start_date="20260101", end_date="20260110")
         n = 0 if df is None else len(df)
         r.ok("凭据", "tushare 连通性", f"调用成功（返回 {n} 行）")
     except Exception as e:
@@ -284,6 +304,7 @@ def check_config_integrity(rep):
     """
     try:
         from tools.config_check import check_config as _cc
+
         res = _cc()
     except Exception as e:
         rep.warn("配置", "完整性", f"检查未执行: {str(e)[:60]}")
@@ -305,12 +326,12 @@ def check_dead_config_revival(rep):
     与 G1（2026-09-25 三重核实）同一判据；标记清单单一真源在 config.py 注释本身。"""
     import re
     from pathlib import Path
+
     try:
         cfg = Path(__file__).resolve().parent.parent / "config" / "__init__.py"
         text = cfg.read_text(encoding="utf-8")
         # [ARCHIVED ...] 注释的下一行 = 死配置定义
-        dead_names = re.findall(
-            r"^# \[ARCHIVED[^\]]*\].*\n^([A-Z_]+)\s*=", text, re.M)
+        dead_names = re.findall(r"^# \[ARCHIVED[^\]]*\].*\n^([A-Z_]+)\s*=", text, re.M)
         if not dead_names:
             rep.warn("配置", "死配置复活检测", "config.py 无 [ARCHIVED] 标记（G1 标记丢失？）")
             return
@@ -325,7 +346,9 @@ def check_dead_config_revival(rep):
                 if p == cfg:
                     continue  # 定义处自身（W3 包化后定义在 config/__init__.py）
                 try:
-                    for i, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                    for i, line in enumerate(
+                        p.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+                    ):
                         if pat.search(line):
                             revived.append(f"{name} ← {p.name}:{i}")
                             break
@@ -337,7 +360,9 @@ def check_dead_config_revival(rep):
             for x in revived[:8]:
                 rep.fail("配置", "死配置复活检测", f"被引用: {x}")
         else:
-            rep.ok("配置", "死配置复活检测", f"{len(set(dead_names))} 个 [ARCHIVED] 死配置均无新引用")
+            rep.ok(
+                "配置", "死配置复活检测", f"{len(set(dead_names))} 个 [ARCHIVED] 死配置均无新引用"
+            )
     except Exception as e:
         rep.warn("配置", "死配置复活检测", f"检查未执行: {str(e)[:60]}")
 
@@ -382,8 +407,9 @@ def check_leaky_permissions(rep):
         try:
             return (datetime.strptime(b, "%Y%m%d") - datetime.strptime(a, "%Y%m%d")).days
         except Exception as exc:
-            print(f"[doctor] 日期解析失败 {a!r}/{b!r}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[doctor] 日期解析失败 {a!r}/{b!r}: {type(exc).__name__}: {exc}", file=sys.stderr
+            )
             return None
 
     idle, stale, no_table, undated, healthy, exempted = [], [], [], [], [], []
@@ -399,7 +425,7 @@ def check_leaky_permissions(rep):
         #   （实证 share_float 有目录，只是无 trade_date 列，不能当"无表"放过去）
         has_dir = os.path.isdir(os.path.join(MARKET_DATA_DIR, api))
         if not has_dir:
-            no_table.append(api)          # 本地无表（如 hk_daily/us_daily 走 akshare）
+            no_table.append(api)  # 本地无表（如 hk_daily/us_daily 走 akshare）
             # ⚠ 不进 idle 判定：它们本就不走 Tushare 日更那条路（替代源自建），
             #    "不在日更组"不构成风险，报出来只是噪音。真风险在"应该日更却没日更"。
             continue
@@ -408,8 +434,7 @@ def check_leaky_permissions(rep):
             reader.clear_cache(api)
             latest = reader.latest_date(api)
         except Exception as exc:
-            print(f"[doctor] 读最新日期失败 {api}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(f"[doctor] 读最新日期失败 {api}: {type(exc).__name__}: {exc}", file=sys.stderr)
             latest = None
         gap = _days(latest, base) if (base and latest) else None
         if latest is None:
@@ -422,30 +447,49 @@ def check_leaky_permissions(rep):
             healthy.append(api)
 
     if idle:
-        rep.warn("漏网接口", "监控空转",
-                 f"⛔ {len(idle)} 个漏网接口**不在任何日更组** ⇒ 每日零调用 ⇒ "
-                 f"失效无法自动发现: {', '.join(idle)}"
-                 f"（登记 monitor=True 只在被调用失败时才告警）")
+        rep.warn(
+            "漏网接口",
+            "监控空转",
+            f"⛔ {len(idle)} 个漏网接口**不在任何日更组** ⇒ 每日零调用 ⇒ "
+            f"失效无法自动发现: {', '.join(idle)}"
+            f"（登记 monitor=True 只在被调用失败时才告警）",
+        )
     else:
-        rep.ok("漏网接口", "监控空转",
-               f"{len(healthy)} 个受监控漏网接口均纳入日更（失效可被日发现）")
+        rep.ok(
+            "漏网接口", "监控空转", f"{len(healthy)} 个受监控漏网接口均纳入日更（失效可被日发现）"
+        )
     if exempted:
-        rep.items.append({
-            "group": "漏网接口", "name": "设计豁免（非真空转）", "status": "－",
-            "detail": f"{len(exempted)} 个按设计不日更（接口语义/代价所限，"
-                      f"原因见 config.LEAKY_IDLE_EXEMPT）: {', '.join(exempted)}"})
+        rep.items.append(
+            {
+                "group": "漏网接口",
+                "name": "设计豁免（非真空转）",
+                "status": "－",
+                "detail": f"{len(exempted)} 个按设计不日更（接口语义/代价所限，"
+                f"原因见 config.LEAKY_IDLE_EXEMPT）: {', '.join(exempted)}",
+            }
+        )
     if stale:
         rep.warn("漏网接口", "新鲜度", f"落后: {', '.join(stale)}")
     elif base:
         rep.ok("漏网接口", "新鲜度", f"在库漏网表均不落后于基准 {base}")
     if no_table:
-        rep.items.append({
-            "group": "漏网接口", "name": "本地无表", "status": "－",
-            "detail": f"{len(no_table)} 个走替代源/未建库: {', '.join(no_table)}"})
+        rep.items.append(
+            {
+                "group": "漏网接口",
+                "name": "本地无表",
+                "status": "－",
+                "detail": f"{len(no_table)} 个走替代源/未建库: {', '.join(no_table)}",
+            }
+        )
     if undated:
-        rep.items.append({
-            "group": "漏网接口", "name": "无日期列", "status": "－",
-            "detail": f"{len(undated)} 个有表但无日期列，无法判新鲜度: {', '.join(undated)}"})
+        rep.items.append(
+            {
+                "group": "漏网接口",
+                "name": "无日期列",
+                "status": "－",
+                "detail": f"{len(undated)} 个有表但无日期列，无法判新鲜度: {', '.join(undated)}",
+            }
+        )
 
 
 # ============================================================
@@ -498,17 +542,24 @@ def check_periodic_tables(rep):
             fresh.append(f"{label}(落后{age}天)")
 
     if stale:
-        rep.warn("事件面表", "陈旧", "⚠ " + ", ".join(stale)
-                 + " —— 近端回测的公司行动/ST 判定可能静默缺失，结论须降级；"
-                   "运行 `python -m fetch.periodic_update` 补齐")
+        rep.warn(
+            "事件面表",
+            "陈旧",
+            "⚠ " + ", ".join(stale) + " —— 近端回测的公司行动/ST 判定可能静默缺失，结论须降级；"
+            "运行 `python -m fetch.periodic_update` 补齐",
+        )
     if due:
-        rep.items.append({
-            "group": "事件面表", "name": "到期未跑", "status": "－",
-            "detail": f"{len(due)} 张表可按周期补: {', '.join(due)}"
-                      f"（python -m fetch.periodic_update）"})
+        rep.items.append(
+            {
+                "group": "事件面表",
+                "name": "到期未跑",
+                "status": "－",
+                "detail": f"{len(due)} 张表可按周期补: {', '.join(due)}"
+                f"（python -m fetch.periodic_update）",
+            }
+        )
     if not stale and not due:
-        rep.ok("事件面表", "周期通道",
-               f"{len(fresh)} 张表均新鲜: {', '.join(fresh)}")
+        rep.ok("事件面表", "周期通道", f"{len(fresh)} 张表均新鲜: {', '.join(fresh)}")
     elif not stale:
         rep.ok("事件面表", "陈旧", "无落后超阈值的表")
 
@@ -529,20 +580,32 @@ def check_db_version(rep):
         return
     rec = show()
     if not rec:
-        rep.items.append({
-            "group": "库版本", "name": "db_version", "status": "－",
-            "detail": "未生成（08 §13.5；接线后由日更/回补/结构性变更自动写入）"
-                      f" — {version_path()}"})
+        rep.items.append(
+            {
+                "group": "库版本",
+                "name": "db_version",
+                "status": "－",
+                "detail": "未生成（08 §13.5；接线后由日更/回补/结构性变更自动写入）"
+                f" — {version_path()}",
+            }
+        )
         return
-    detail = (f"{rec.get('version')} @ {rec.get('generated_at')}"
-              f" | 变更表 {len(rec.get('tables_changed') or [])} 个"
-              f" | checkpoint_rev={rec.get('checkpoint_rev')}")
+    detail = (
+        f"{rec.get('version')} @ {rec.get('generated_at')}"
+        f" | 变更表 {len(rec.get('tables_changed') or [])} 个"
+        f" | checkpoint_rev={rec.get('checkpoint_rev')}"
+    )
     rep.ok("库版本", str(rec.get("version")), detail)
     hist = rec.get("history") or []
     if hist:
-        rep.items.append({
-            "group": "库版本", "name": "历史", "status": "－",
-            "detail": " → ".join(h.get("version", "?") for h in hist[-6:])})
+        rep.items.append(
+            {
+                "group": "库版本",
+                "name": "历史",
+                "status": "－",
+                "detail": " → ".join(h.get("version", "?") for h in hist[-6:]),
+            }
+        )
 
 
 # ============================================================
@@ -551,22 +614,31 @@ def check_db_version(rep):
 def check_scheduler(r):
     """列出已登记的定时任务（只读 TeleAgent 的 scheduler.db）"""
     home = os.path.expanduser("~")
-    db = os.path.join(home, ".local", "share", "TeleAgent", "scheduler",
-                      "scheduler.db")
+    db = os.path.join(home, ".local", "share", "TeleAgent", "scheduler", "scheduler.db")
     if not os.path.exists(db):
-        r.items.append({"group": "定时任务", "name": "调度库", "status": "－",
-                        "detail": "未找到 scheduler.db（非 TeleAgent 环境属正常）"})
+        r.items.append(
+            {
+                "group": "定时任务",
+                "name": "调度库",
+                "status": "－",
+                "detail": "未找到 scheduler.db（非 TeleAgent 环境属正常）",
+            }
+        )
         return
     try:
         import sqlite3
+
         conn = sqlite3.connect(db)
         cur = conn.cursor()
         cur.execute("SELECT name, enabled FROM jobs")
         rows = cur.fetchall()
         conn.close()
         enabled = [n for n, e in rows if e]
-        r.ok("定时任务", "已登记任务",
-             f"{len(rows)} 个（启用 {len(enabled)}）: {', '.join(enabled[:8])}")
+        r.ok(
+            "定时任务",
+            "已登记任务",
+            f"{len(rows)} 个（启用 {len(enabled)}）: {', '.join(enabled[:8])}",
+        )
     except Exception as e:
         r.warn("定时任务", "调度库", f"读取失败: {str(e)[:60]}")
 
@@ -580,15 +652,24 @@ def backup_status(daily_root=None):
     返回 dict：root / exists / latest / stale_days / n_versions / keep / sha_ok / sha_rows
     """
     base = daily_root or os.path.join(os.path.dirname(MARKET_DATA_DIR), "_backup", "daily")
-    st = {"root": base, "exists": os.path.isdir(base), "latest": None,
-          "stale_days": None, "n_versions": 0, "keep": 7,
-          "sha_ok": False, "sha_rows": 0}
+    st = {
+        "root": base,
+        "exists": os.path.isdir(base),
+        "latest": None,
+        "stale_days": None,
+        "n_versions": 0,
+        "keep": 7,
+        "sha_ok": False,
+        "sha_rows": 0,
+    }
     if not st["exists"]:
         return st
     try:
-        days = sorted(d for d in os.listdir(base)
-                      if len(d) == 8 and d.isdigit()
-                      and os.path.isdir(os.path.join(base, d)))
+        days = sorted(
+            d
+            for d in os.listdir(base)
+            if len(d) == 8 and d.isdigit() and os.path.isdir(os.path.join(base, d))
+        )
     except OSError:
         return st
     st["n_versions"] = len(days)
@@ -596,8 +677,7 @@ def backup_status(daily_root=None):
         return st
     st["latest"] = days[-1]
     try:
-        st["stale_days"] = (datetime.now() -
-                            datetime.strptime(days[-1], "%Y%m%d")).days
+        st["stale_days"] = (datetime.now() - datetime.strptime(days[-1], "%Y%m%d")).days
     except ValueError:
         pass
     sha = os.path.join(base, days[-1], "sha256.jsonl")
@@ -634,8 +714,7 @@ def check_backup(r):
     elif d <= 6:
         r.warn("备份", "日备", f"日备已停 {d} 天（最新 {st['latest']}，版本 {ver}）{one}")
     else:
-        r.fail("备份", "日备",
-               f"日备已停 {d} 天（最新 {st['latest']}，轮转池已全空 KEEP_DAILY=7）")
+        r.fail("备份", "日备", f"日备已停 {d} 天（最新 {st['latest']}，轮转池已全空 KEEP_DAILY=7）")
     if not st["sha_ok"]:
         r.warn("备份", "校验", f"最新快照缺 sha256.jsonl 或为空（{st['latest']}）")
 
@@ -679,9 +758,18 @@ def run_doctor(network=False, as_json=False):
     check_backup(r)
 
     if as_json:
-        print(json.dumps({"generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                          "n_fail": r.n_fail, "n_warn": r.n_warn,
-                          "items": r.items}, ensure_ascii=False, indent=1))
+        print(
+            json.dumps(
+                {
+                    "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "n_fail": r.n_fail,
+                    "n_warn": r.n_warn,
+                    "items": r.items,
+                },
+                ensure_ascii=False,
+                indent=1,
+            )
+        )
         return r
 
     sep = "=" * 92
@@ -718,10 +806,10 @@ def run_doctor(network=False, as_json=False):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="环境自检")
-    ap.add_argument("--network", action="store_true",
-                    help="追加 tushare 连通性实测（消耗 1 次 API 调用）")
-    ap.add_argument("--json", action="store_true", dest="as_json",
-                    help="输出 JSON（供程序消费）")
+    ap.add_argument(
+        "--network", action="store_true", help="追加 tushare 连通性实测（消耗 1 次 API 调用）"
+    )
+    ap.add_argument("--json", action="store_true", dest="as_json", help="输出 JSON（供程序消费）")
     a = ap.parse_args(argv)
     r = run_doctor(network=a.network, as_json=a.as_json)
     return 0 if r.n_fail == 0 else 1

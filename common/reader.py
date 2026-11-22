@@ -40,6 +40,7 @@ common/reader.py — 全量库统一读取层（布局无关）
     for year, path in reader.iter_year_files("moneyflow"):
         ...
 """
+
 import os
 import sys
 
@@ -58,31 +59,31 @@ _CODES_CACHE = {}
 # 各表「代码清单」的元数据来源
 # by_year 布局下无法再从文件名取代码，改为读元数据表（含退市，更完整）
 META_SOURCE = {
-    "daily":          ("stock_basic.parquet", "ts_code", None),
-    "daily_basic":    ("stock_basic.parquet", "ts_code", None),
-    "adj_factor":     ("stock_basic.parquet", "ts_code", None),
-    "stk_limit":      ("stock_basic.parquet", "ts_code", None),
-    "moneyflow":      ("stock_basic.parquet", "ts_code", None),
-    "margin_detail":  ("stock_basic.parquet", "ts_code", None),
-    "fund_daily":     ("fund_basic.parquet",  "ts_code", None),
-    "fund_adj":       ("fund_basic.parquet",  "ts_code", None),
-    "fund_share":     ("fund_basic.parquet",  "ts_code", None),
-    "fund_nav":       ("fund_basic.parquet",  "ts_code", None),
-    "cb_daily":       ("cb_basic.parquet",    "ts_code", None),
-    "index_daily":    ("index_basic.parquet", "ts_code", None),
+    "daily": ("stock_basic.parquet", "ts_code", None),
+    "daily_basic": ("stock_basic.parquet", "ts_code", None),
+    "adj_factor": ("stock_basic.parquet", "ts_code", None),
+    "stk_limit": ("stock_basic.parquet", "ts_code", None),
+    "moneyflow": ("stock_basic.parquet", "ts_code", None),
+    "margin_detail": ("stock_basic.parquet", "ts_code", None),
+    "fund_daily": ("fund_basic.parquet", "ts_code", None),
+    "fund_adj": ("fund_basic.parquet", "ts_code", None),
+    "fund_share": ("fund_basic.parquet", "ts_code", None),
+    "fund_nav": ("fund_basic.parquet", "ts_code", None),
+    "cb_daily": ("cb_basic.parquet", "ts_code", None),
+    "index_daily": ("index_basic.parquet", "ts_code", None),
     "index_dailybasic": ("index_basic.parquet", "ts_code", None),
-    "fx_daily":       ("fx_obasic.parquet",   "ts_code", None),
-    "hk_hold":        ("hk_basic.parquet",    "ts_code", None),
+    "fx_daily": ("fx_obasic.parquet", "ts_code", None),
+    "hk_hold": ("hk_basic.parquet", "ts_code", None),
 }
 
 # 「在市」判定列（不同元数据表列名不同）
 LISTED_COL = {
     "stock_basic.parquet": ("list_status", "L"),
-    "fund_basic.parquet":  ("market", "E"),      # 场内才有行情
-    "cb_basic.parquet":    ("delist_date", None),  # 空值=在市
+    "fund_basic.parquet": ("market", "E"),  # 场内才有行情
+    "cb_basic.parquet": ("delist_date", None),  # 空值=在市
     "index_basic.parquet": (None, None),
-    "fx_obasic.parquet":   (None, None),
-    "hk_basic.parquet":    (None, None),
+    "fx_obasic.parquet": (None, None),
+    "hk_basic.parquet": (None, None),
 }
 
 # 元数据缺「在场」列时的 ts_code 后缀兜底（2026-09-30 R12 事故修复）:
@@ -107,9 +108,13 @@ VENUE_SUFFIX = {
 _DEDUPE_NA = "__NA__"
 
 
-def dedupe_of_fund_codes(df, code_col="ts_code", date_col=None,
-                         value_cols=("unit_nav", "accum_nav"),
-                         return_dropped=False):
+def dedupe_of_fund_codes(
+    df,
+    code_col="ts_code",
+    date_col=None,
+    value_cols=("unit_nav", "accum_nav"),
+    return_dropped=False,
+):
     """剔除"畸形 `.OF` 码 ↔ 6 位同胞"的**同日同值**重复行。
 
     规则（保守口径，只删证据确凿的重复）:
@@ -146,8 +151,9 @@ def dedupe_of_fund_codes(df, code_col="ts_code", date_col=None,
         return (df, 0) if return_dropped else df
 
     if date_col is None:
-        date_col = next((c for c in ("nav_date", "trade_date", "end_date")
-                         if c in df.columns), None)
+        date_col = next(
+            (c for c in ("nav_date", "trade_date", "end_date") if c in df.columns), None
+        )
     if date_col is None:
         raise ValueError(f"dedupe_of_fund_codes: 找不到日期列（{list(df.columns)}）")
     miss = [c for c in value_cols if c not in df.columns]
@@ -171,8 +177,9 @@ def dedupe_of_fund_codes(df, code_col="ts_code", date_col=None,
         return list(frame[cols].fillna(_DEDUPE_NA).itertuples(index=False, name=None))
 
     sib_set = set(_keys(df[sib].assign(_p=stem[sib].str[:6]), "_p"))
-    drop_mask = [k in sib_set for k in
-                 _keys(df[malformed].assign(_p=stem[malformed].str[:6]), "_p")]
+    drop_mask = [
+        k in sib_set for k in _keys(df[malformed].assign(_p=stem[malformed].str[:6]), "_p")
+    ]
 
     # 保持原行序（只做过滤，不重排）
     keep_mask = ~malformed
@@ -226,7 +233,7 @@ def detect_layout(table, refresh=False, root=None):
     year_like = [f for f in files if len(f) == 12 and f[:4].isdigit()]
     if len(year_like) == len(files):
         layout = "by_year"
-    elif any("." in f[:-8] for f in files):     # xxx.SH.parquet
+    elif any("." in f[:-8] for f in files):  # xxx.SH.parquet
         layout = "by_code"
     else:
         layout = "single"
@@ -295,9 +302,16 @@ def inspect_layout(table, root=None):
     d = table_dir(table, root)
     files = list_parquet_files(d)
     if not files:
-        return {"layout": "none", "display": "none", "npart": 0,
-                "is_mixed": False, "year_files": 0, "code_files": 0,
-                "other_files": 0, "files": 0}
+        return {
+            "layout": "none",
+            "display": "none",
+            "npart": 0,
+            "is_mixed": False,
+            "year_files": 0,
+            "code_files": 0,
+            "other_files": 0,
+            "files": 0,
+        }
 
     year_like = [f for f in files if len(f) == 12 and f[:4].isdigit()]
     code_like = [f for f in files if "." in f[:-8]]
@@ -443,8 +457,7 @@ def iter_year_files(table, root=None):
 # ============================================================
 # 读取
 # ============================================================
-def _filters(code=None, code_col="ts_code", start_date=None, end_date=None,
-             date_col="trade_date"):
+def _filters(code=None, code_col="ts_code", start_date=None, end_date=None, date_col="trade_date"):
     """构造 parquet 谓词下推过滤器（减少读入量）"""
     flt = []
     if code is not None:
@@ -471,14 +484,19 @@ def _read_one(path, columns=None, flt=None):
     except TypeError:
         return _read_one_manual(path, columns, flt)
     except Exception as exc:
-        print(f"[common.reader] 谓词下推读取失败 {path}，改内存筛选: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[common.reader] 谓词下推读取失败 {path}，改内存筛选: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         if flt:
             try:
                 return _read_one_manual(path, columns, flt)
             except Exception as exc2:
-                print(f"[common.reader] 内存筛选也失败 {path}（返回空表）: "
-                      f"{type(exc2).__name__}: {exc2}", file=sys.stderr)
+                print(
+                    f"[common.reader] 内存筛选也失败 {path}（返回空表）: "
+                    f"{type(exc2).__name__}: {exc2}",
+                    file=sys.stderr,
+                )
                 return pd.DataFrame()
         return pd.DataFrame()
 
@@ -499,8 +517,16 @@ def _read_one_manual(path, columns=None, flt=None):
     return df
 
 
-def read_code(table, code, columns=None, start_date=None, end_date=None,
-              date_col="trade_date", code_col="ts_code", root=None):
+def read_code(
+    table,
+    code,
+    columns=None,
+    start_date=None,
+    end_date=None,
+    date_col="trade_date",
+    code_col="ts_code",
+    root=None,
+):
     """读单个标的的数据（布局无关）。
 
     参数:
@@ -525,8 +551,7 @@ def read_code(table, code, columns=None, start_date=None, end_date=None,
         path = os.path.join(d, f"{code}.parquet")
         if not os.path.exists(path):
             return pd.DataFrame()
-        flt = _filters(None, start_date=start_date, end_date=end_date,
-                       date_col=date_col)
+        flt = _filters(None, start_date=start_date, end_date=end_date, date_col=date_col)
         df = _read_one(path, columns=columns, flt=flt)
         return _sort(df, date_col)
 
@@ -544,8 +569,9 @@ def read_code(table, code, columns=None, start_date=None, end_date=None,
         return _sort(df, date_col)
 
     # by_year：按年份逐个读，谓词下推到行组
-    flt = _filters(code, code_col=code_col,
-                   start_date=start_date, end_date=end_date, date_col=date_col)
+    flt = _filters(
+        code, code_col=code_col, start_date=start_date, end_date=end_date, date_col=date_col
+    )
     parts = []
     for year, path in iter_year_files(table, root=root):
         if start_date is not None and year < str(start_date)[:4]:
@@ -560,8 +586,9 @@ def read_code(table, code, columns=None, start_date=None, end_date=None,
     return _sort(pd.concat(parts, ignore_index=True), date_col)
 
 
-def read_range(table, columns=None, start_date=None, end_date=None,
-               date_col="trade_date", root=None):
+def read_range(
+    table, columns=None, start_date=None, end_date=None, date_col="trade_date", root=None
+):
     """读某段日期的全市场数据（用于截面扫描 / 区间回测）。
 
     by_year 布局下这是**顺序读年度文件**，比遍历数千小文件快得多。
@@ -573,8 +600,7 @@ def read_range(table, columns=None, start_date=None, end_date=None,
         return pd.DataFrame()
 
     if layout == "by_year":
-        flt = _filters(None, start_date=start_date, end_date=end_date,
-                       date_col=date_col)
+        flt = _filters(None, start_date=start_date, end_date=end_date, date_col=date_col)
         parts = []
         for year, path in iter_year_files(table, root=root):
             if start_date is not None and year < str(start_date)[:4]:
@@ -661,14 +687,17 @@ def latest_date(table, date_col="trade_date", root=None):
                 if len(s):
                     return str(s.max())
             except Exception as exc:
-                print(f"[common.reader] 读日期列失败 {f}: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                print(
+                    f"[common.reader] 读日期列失败 {f}: {type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 continue
         return None
 
     # by_code / single：优先采样标的
     try:
         from config import GAP_UPDATE_SAMPLE_CODES
+
         for code in GAP_UPDATE_SAMPLE_CODES.get(table, []):
             p = os.path.join(d, f"{code}.parquet")
             if os.path.exists(p):
@@ -677,8 +706,10 @@ def latest_date(table, date_col="trade_date", root=None):
                     if len(s):
                         return str(s.max())
                 except Exception as exc:
-                    print(f"[common.reader] 读样本代码日期失败 {p}: "
-                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                    print(
+                        f"[common.reader] 读样本代码日期失败 {p}: {type(exc).__name__}: {exc}",
+                        file=sys.stderr,
+                    )
                     continue
     except Exception:
         pass
@@ -693,7 +724,9 @@ def latest_date(table, date_col="trade_date", root=None):
                 if best is None or mx > best:
                     best = mx
         except Exception as exc:
-            print(f"[common.reader] 兜底扫描读日期失败 {f}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[common.reader] 兜底扫描读日期失败 {f}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             continue
     return best

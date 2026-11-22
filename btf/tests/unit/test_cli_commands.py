@@ -12,6 +12,7 @@
        委托 `tools/*.py`（本文件只验**转发与退出码**，不在此跑真门禁）、
        `bt runs`/`bt show` 只读查询（含坏 manifest 可见性）。
 """
+
 from __future__ import annotations
 
 import json
@@ -72,10 +73,22 @@ class TestCommandRegistry:
         # `bt data scan-consolidation`，ADR-20/21 号 §4.13）。
         # **HH-3（2026-10-14）**：13 → 14——新增 `adhoc`（一次性/外部脚本产物
         # 契约封装；19 号 §128，L2 复算报告 §9 待办第 6 条）。
-        assert set(COMMANDS) == {"config-check", "run", "report", "verify",
-                                 "test", "dataset", "optimize", "check",
-                                 "cold-backup", "runs", "show", "validate",
-                                 "data", "adhoc"}
+        assert set(COMMANDS) == {
+            "config-check",
+            "run",
+            "report",
+            "verify",
+            "test",
+            "dataset",
+            "optimize",
+            "check",
+            "cold-backup",
+            "runs",
+            "show",
+            "validate",
+            "data",
+            "adhoc",
+        }
 
     def test_each_command_has_help_and_args(self):
         for name, (handler, help_text, add_args) in COMMANDS.items():
@@ -100,16 +113,14 @@ class TestRunCommand:
     def test_dry_run_writes_nothing(self, config_path, tmp_path, capsys):
         """--dry-run：装配完成，不建 run 目录、不落盘。"""
         out_dir = tmp_path / "runs"
-        assert main(["run", "--config", str(config_path), "--dry-run",
-                     "--out", str(out_dir)]) == 0
+        assert main(["run", "--config", str(config_path), "--dry-run", "--out", str(out_dir)]) == 0
         text = capsys.readouterr().out
         assert "dry-run" in text and "装配完成" in text
-        assert not out_dir.exists()          # 不落盘
+        assert not out_dir.exists()  # 不落盘
 
     def test_run_creates_artifacts(self, config_path, tmp_path, capsys):
         out_dir = tmp_path / "runs"
-        assert main(["run", "--config", str(config_path),
-                     "--out", str(out_dir)]) == 0
+        assert main(["run", "--config", str(config_path), "--out", str(out_dir)]) == 0
         text = capsys.readouterr().out
         assert "run_id" in text
         runs = list(out_dir.iterdir())
@@ -128,28 +139,25 @@ class TestRunCommand:
 
 class TestReportAndVerify:
     def _run_id(self, config_path, out_dir) -> str:
-        assert main(["run", "--config", str(config_path),
-                     "--out", str(out_dir)]) == 0
+        assert main(["run", "--config", str(config_path), "--out", str(out_dir)]) == 0
         runs = sorted(p for p in out_dir.iterdir() if p.is_dir())
         return runs[-1].name
 
     def test_report_generates_html(self, config_path, tmp_path, capsys):
         out_dir = tmp_path / "runs"
         run_id = self._run_id(config_path, out_dir)
-        assert main(["report", "--run", run_id, "--out-dir",
-                     str(out_dir)]) == 0
+        assert main(["report", "--run", run_id, "--out-dir", str(out_dir)]) == 0
         text = capsys.readouterr().out
         assert "报告" in text
         html = out_dir / run_id / "report.html"
         assert html.is_file() and html.stat().st_size > 10_000
         content = html.read_text(encoding="utf-8")
-        assert 'id="assumptions"' in content          # 强制章节
+        assert 'id="assumptions"' in content  # 强制章节
 
     def test_verify_r1_pass(self, config_path, tmp_path, capsys):
         out_dir = tmp_path / "runs"
         run_id = self._run_id(config_path, out_dir)
-        assert main(["verify", "--run", run_id, "--out-dir",
-                     str(out_dir)]) == 0
+        assert main(["verify", "--run", run_id, "--out-dir", str(out_dir)]) == 0
         assert "R1 复核通过" in capsys.readouterr().out
 
     def test_verify_tampered_digest_fails(self, config_path, tmp_path):
@@ -159,15 +167,12 @@ class TestReportAndVerify:
         metrics_path = out_dir / run_id / "metrics.json"
         payload = json.loads(metrics_path.read_text(encoding="utf-8"))
         payload["metrics"]["total_return"] = 0.999
-        metrics_path.write_text(json.dumps(payload, ensure_ascii=False),
-                                encoding="utf-8")
+        metrics_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         assert main(["verify", "--run", run_id, "--out-dir", str(out_dir)]) == 1
 
     def test_unknown_run_exits_one(self, tmp_path):
-        assert main(["report", "--run", "nope", "--out-dir",
-                     str(tmp_path / "runs")]) == 1
-        assert main(["verify", "--run", "nope", "--out-dir",
-                     str(tmp_path / "runs")]) == 1
+        assert main(["report", "--run", "nope", "--out-dir", str(tmp_path / "runs")]) == 1
+        assert main(["verify", "--run", "nope", "--out-dir", str(tmp_path / "runs")]) == 1
 
 
 class TestTestCommand:
@@ -183,11 +188,12 @@ class TestTestCommand:
         """
         nested_root = tmp_path / "bt_test_root"
         monkeypatch.setenv("BTFTOOL_TEST_PYTEST_BASETEMP", str(nested_root))
-        code = main(["test", "--layer", "all", "--pattern", "smoke",
-                     "--path", "tests/test_smoke.py"])
+        code = main(
+            ["test", "--layer", "all", "--pattern", "smoke", "--path", "tests/test_smoke.py"]
+        )
         assert code == 0
         out = capsys.readouterr().out
-        assert str(nested_root) in out          # N8：嵌套 basetemp 已隔离（不回项目根）
+        assert str(nested_root) in out  # N8：嵌套 basetemp 已隔离（不回项目根）
 
 
 class TestDatasetCommand:
@@ -207,7 +213,7 @@ class TestDatasetCommand:
     def test_unknown_action_rejected(self, capsys):
         """动作白名单（choices）：拼错动作必须是参数错误，不能退化成构建。"""
         with pytest.raises(SystemExit) as excinfo:
-            main(["dataset", "refcal"])         # 拼写错
+            main(["dataset", "refcal"])  # 拼写错
         assert excinfo.value.code == 2
 
 
@@ -249,7 +255,7 @@ class TestGateAndBackupDelegation:
         assert len(calls) == 1
         assert calls[0][0] == sys.executable
         assert calls[0][1] == str(ROOT / "tools" / "check.py")
-        assert Path(calls[0][1]).is_file()      # 单一真源确实存在
+        assert Path(calls[0][1]).is_file()  # 单一真源确实存在
 
     def test_check_passes_exit_code_through(self, monkeypatch):
         from btf.app import services
@@ -259,18 +265,20 @@ class TestGateAndBackupDelegation:
 
     def test_cold_backup_forwards_reason_and_out(self, monkeypatch):
         calls = self._spy(monkeypatch)
-        assert main(["cold-backup", "--reason", "收编留痕",
-                     "--out", "X:/backup"]) == 0
-        assert calls[0][1:] == [str(ROOT / "tools" / "cold_backup.py"),
-                                "--reason", "收编留痕", "--out", "X:/backup"]
+        assert main(["cold-backup", "--reason", "收编留痕", "--out", "X:/backup"]) == 0
+        assert calls[0][1:] == [
+            str(ROOT / "tools" / "cold_backup.py"),
+            "--reason",
+            "收编留痕",
+            "--out",
+            "X:/backup",
+        ]
 
     def test_cold_backup_verify_excludes_new_backup(self, monkeypatch):
         """`--verify` 与新建互斥：只转发 --verify（不传 --reason/--out）。"""
         calls = self._spy(monkeypatch)
-        assert main(["cold-backup", "--verify", "X:/old",
-                     "--reason", "应被忽略"]) == 0
-        assert calls[0][1:] == [str(ROOT / "tools" / "cold_backup.py"),
-                                "--verify", "X:/old"]
+        assert main(["cold-backup", "--verify", "X:/old", "--reason", "应被忽略"]) == 0
+        assert calls[0][1:] == [str(ROOT / "tools" / "cold_backup.py"), "--verify", "X:/old"]
 
 
 class TestAdhocDelegation:
@@ -295,32 +303,73 @@ class TestAdhocDelegation:
 
     def test_adhoc_forwards_execute_args(self, monkeypatch):
         calls = self._spy(monkeypatch)
-        assert main(["adhoc", "--name", "rrg", "--script", "X:/s.py",
-                     "--tables", "daily,index_daily", "--as-of", "20260923",
-                     "--", "--k", "10"]) == 0
+        assert (
+            main(
+                [
+                    "adhoc",
+                    "--name",
+                    "rrg",
+                    "--script",
+                    "X:/s.py",
+                    "--tables",
+                    "daily,index_daily",
+                    "--as-of",
+                    "20260923",
+                    "--",
+                    "--k",
+                    "10",
+                ]
+            )
+            == 0
+        )
         assert calls[0][1] == str(ROOT / "tools" / "adhoc_run.py")
         assert calls[0][1:] == [
             str(ROOT / "tools" / "adhoc_run.py"),
-            "--name", "rrg", "--script", "X:/s.py",
-            "--tables", "daily,index_daily", "--as-of", "20260923",
-            "--", "--k", "10",
+            "--name",
+            "rrg",
+            "--script",
+            "X:/s.py",
+            "--tables",
+            "daily,index_daily",
+            "--as-of",
+            "20260923",
+            "--",
+            "--k",
+            "10",
         ]
 
     def test_adhoc_register_only_and_watch_dir(self, monkeypatch):
         calls = self._spy(monkeypatch)
-        assert main(["adhoc", "--name", "legacy", "--register-only",
-                     "--script", "X:/s.py", "--watch-dir", "X:/out"]) == 0
+        assert (
+            main(
+                [
+                    "adhoc",
+                    "--name",
+                    "legacy",
+                    "--register-only",
+                    "--script",
+                    "X:/s.py",
+                    "--watch-dir",
+                    "X:/out",
+                ]
+            )
+            == 0
+        )
         assert calls[0][1:] == [
             str(ROOT / "tools" / "adhoc_run.py"),
-            "--name", "legacy", "--script", "X:/s.py",
-            "--watch-dir", "X:/out", "--register-only",
+            "--name",
+            "legacy",
+            "--script",
+            "X:/s.py",
+            "--watch-dir",
+            "X:/out",
+            "--register-only",
         ]
 
     def test_adhoc_list_only(self, monkeypatch):
         calls = self._spy(monkeypatch)
         assert main(["adhoc", "--list"]) == 0
-        assert calls[0][1:] == [str(ROOT / "tools" / "adhoc_run.py"),
-                                "--list"]
+        assert calls[0][1:] == [str(ROOT / "tools" / "adhoc_run.py"), "--list"]
 
     def test_adhoc_passes_exit_code_through(self, monkeypatch):
         from btf.app import services
@@ -334,14 +383,13 @@ class TestRunsAndShowCommands:
 
     @staticmethod
     def _make_run(config_path, out_dir) -> str:
-        assert main(["run", "--config", str(config_path),
-                     "--out", str(out_dir)]) == 0
+        assert main(["run", "--config", str(config_path), "--out", str(out_dir)]) == 0
         return sorted(p.name for p in out_dir.iterdir() if p.is_dir())[-1]
 
     def test_runs_lists_run_id_status_metrics(self, config_path, tmp_path, capsys):
         out_dir = tmp_path / "runs"
         run_id = self._make_run(config_path, out_dir)
-        capsys.readouterr()                      # 丢弃 bt run 的输出
+        capsys.readouterr()  # 丢弃 bt run 的输出
         assert main(["runs", "--out-dir", str(out_dir)]) == 0
         text = capsys.readouterr().out
         assert run_id in text and "COMPLETED" in text
@@ -353,8 +401,7 @@ class TestRunsAndShowCommands:
         second = self._make_run(config_path, out_dir)
         capsys.readouterr()
         assert main(["runs", "--out-dir", str(out_dir), "--latest", "1"]) == 0
-        rows = [ln for ln in capsys.readouterr().out.splitlines()
-                if "COMPLETED" in ln]
+        rows = [ln for ln in capsys.readouterr().out.splitlines() if "COMPLETED" in ln]
         assert len(rows) == 1 and second in rows[0]
 
     def test_runs_empty_dir_is_ok(self, tmp_path, capsys):
@@ -381,12 +428,10 @@ class TestRunsAndShowCommands:
         assert "metrics_digest" in text and "sharpe_ratio" in text
 
     def test_show_unknown_run_exits_one(self, tmp_path, capsys):
-        assert main(["show", "--run", "nope",
-                     "--out-dir", str(tmp_path / "runs")]) == 1
+        assert main(["show", "--run", "nope", "--out-dir", str(tmp_path / "runs")]) == 1
         assert "[error]" in capsys.readouterr().err
 
-    def test_show_failed_run_warns_but_exits_zero(self, config_path, tmp_path,
-                                                  capsys):
+    def test_show_failed_run_warns_but_exits_zero(self, config_path, tmp_path, capsys):
         """FAILED run 仍可看（审计价值），仅 stderr 告警——不伪装成"查不到"。"""
         out_dir = tmp_path / "runs"
         run_id = self._make_run(config_path, out_dir)
@@ -394,8 +439,7 @@ class TestRunsAndShowCommands:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
         payload["status"] = "FAILED"
         payload["error"] = "注入：测试用"
-        manifest_path.write_text(json.dumps(payload, ensure_ascii=False),
-                                 encoding="utf-8")
+        manifest_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         capsys.readouterr()
         assert main(["show", "--run", run_id, "--out-dir", str(out_dir)]) == 0
         captured = capsys.readouterr()

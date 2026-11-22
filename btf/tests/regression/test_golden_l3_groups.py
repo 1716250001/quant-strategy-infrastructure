@@ -16,6 +16,7 @@
 对账容差 1e-10（09 §14.3）；两侧共享外部条件（tiered_v1 / next_open / full /
 空风控链），差异只能归因于实现。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -25,13 +26,24 @@ from tests.fixtures.golden import CASES_DIR, case_to_feed, load_case, run_case
 pytestmark = [pytest.mark.l3]
 
 TOL = 1e-10
-ORDER_CASES = ["g2_limit_up_buy_rejected", "g2_limit_down_sell_rejected",
-               "g3_suspension_buy_rejected", "g4_t1_same_day_sell_rejected",
-               "g4_t0_etf_same_day_roundtrip", "g6_delist_last_day",
-               "g7_lot_and_min_commission", "g7_fee_segments_pre2015",
-               "g10_vpp_partial_fill", "g10_vpp_volume_cap_rejected"]
-ALL_GROUPS = [*ORDER_CASES, "g5_st_interval", "g8_calendar_spring_festival",
-              "g9_dividend_chain_hfq"]
+ORDER_CASES = [
+    "g2_limit_up_buy_rejected",
+    "g2_limit_down_sell_rejected",
+    "g3_suspension_buy_rejected",
+    "g4_t1_same_day_sell_rejected",
+    "g4_t0_etf_same_day_roundtrip",
+    "g6_delist_last_day",
+    "g7_lot_and_min_commission",
+    "g7_fee_segments_pre2015",
+    "g10_vpp_partial_fill",
+    "g10_vpp_volume_cap_rejected",
+]
+ALL_GROUPS = [
+    *ORDER_CASES,
+    "g5_st_interval",
+    "g8_calendar_spring_festival",
+    "g9_dividend_chain_hfq",
+]
 
 
 def _require_cases() -> None:
@@ -51,8 +63,10 @@ def reconciled() -> dict[str, dict]:
 
 def _codes(result) -> list[tuple[str, str, int, str]]:
     """引擎拒单 → (symbol, side, qty, code) 序列。"""
-    return [(order.symbol, order.side.value, order.qty, rejection.code.value)
-            for order, rejection in result.rejections]
+    return [
+        (order.symbol, order.side.value, order.qty, rejection.code.value)
+        for order, rejection in result.rejections
+    ]
 
 
 class TestRejectionReconciliation:
@@ -61,8 +75,10 @@ class TestRejectionReconciliation:
     @pytest.mark.parametrize("case_id", ORDER_CASES)
     def test_rejections_match(self, reconciled, case_id):
         pkg = reconciled[case_id]
-        want = [(r["symbol"], r["side"], r["qty"], r["code"])
-                for r in pkg["case"]["assertions"]["rejections"]]
+        want = [
+            (r["symbol"], r["side"], r["qty"], r["code"])
+            for r in pkg["case"]["assertions"]["rejections"]
+        ]
         assert _codes(pkg["engine"]) == want
 
     @pytest.mark.parametrize("case_id", ORDER_CASES)
@@ -83,14 +99,22 @@ class TestRejectionReconciliation:
             assert fill.qty == expected["qty"]
             assert fill.price == pytest.approx(expected["price"], abs=TOL)
             for part in ("commission", "stamp_duty", "transfer_fee", "total"):
-                assert getattr(fill.fee, part) == pytest.approx(
-                    expected["fee"][part], abs=TOL), part
+                assert getattr(fill.fee, part) == pytest.approx(expected["fee"][part], abs=TOL), (
+                    part
+                )
         for snap, expected in zip(got.snapshots, want["snapshots"], strict=True):
             assert snap.date.to_ymd() == expected["date"]
-            for field in ("cash", "market_value", "total_value", "daily_return",
-                          "cumulative_return", "drawdown"):
-                assert getattr(snap, field) == pytest.approx(
-                    expected[field], abs=TOL), f"{expected['date']}.{field}"
+            for field in (
+                "cash",
+                "market_value",
+                "total_value",
+                "daily_return",
+                "cumulative_return",
+                "drawdown",
+            ):
+                assert getattr(snap, field) == pytest.approx(expected[field], abs=TOL), (
+                    f"{expected['date']}.{field}"
+                )
             assert dict(snap.positions_qty) == expected["positions_qty"]
 
 
@@ -123,11 +147,11 @@ class TestGroup2And3Semantics:
         case = reconciled["g3_suspension_buy_rejected"]["case"]
         dates = set(case["data"]["dates"])
         bars = {b["date"] for b in case["data"]["bars"]}
-        suspended = {d for d, flag in
-                     case["assertions"]["state_expectations"]["suspended"].items()
-                     if flag}
+        suspended = {
+            d for d, flag in case["assertions"]["state_expectations"]["suspended"].items() if flag
+        }
         assert len(suspended) >= 10, "案例须含长停牌区间"
-        assert suspended <= dates                       # 停牌日在日历内
+        assert suspended <= dates  # 停牌日在日历内
         with_bar = suspended & bars
         assert len(with_bar) <= 1, f"仅复牌日可有 bar，实测 {sorted(with_bar)}"
         assert case["assertions"]["rejected_counts"] == {"suspended": 1}
@@ -216,12 +240,9 @@ class TestGroup7LotsAndFees:
         """2015-08-01 前：过户费按**面额**万分之 6（沪市），印花税卖出千分之 1。"""
         pkg = reconciled["g7_fee_segments_pre2015"]
         for fill in pkg["case"]["assertions"]["fills"]:
-            assert fill["fee"]["transfer_fee"] == pytest.approx(
-                1000 * 1.0 * 0.0006, abs=1e-9)
-            expected_stamp = (fill["price"] * fill["qty"] * 0.001
-                              if fill["side"] == "sell" else 0.0)
-            assert fill["fee"]["stamp_duty"] == pytest.approx(
-                round(expected_stamp, 2), abs=1e-9)
+            assert fill["fee"]["transfer_fee"] == pytest.approx(1000 * 1.0 * 0.0006, abs=1e-9)
+            expected_stamp = fill["price"] * fill["qty"] * 0.001 if fill["side"] == "sell" else 0.0
+            assert fill["fee"]["stamp_duty"] == pytest.approx(round(expected_stamp, 2), abs=1e-9)
 
     def test_sell_before_buy_cash_chain(self, reconciled):
         """同日卖+买：卖单在前（回笼资金供买单）——不出现资金不足拒单。"""
@@ -232,8 +253,7 @@ class TestGroup7LotsAndFees:
         by_day: dict[str, list[str]] = {}
         for fill in result.fills:
             by_day.setdefault(fill.fill_date.to_ymd(), []).append(fill.side.value)
-        both = [sides for sides in by_day.values()
-                if "sell" in sides and "buy" in sides]
+        both = [sides for sides in by_day.values() if "sell" in sides and "buy" in sides]
         assert both, "案例须含同日卖+买（资金链断言前提）"
         assert both[0][:2] == ["sell", "buy"], f"卖先买后失效：{both[0]}"
 
@@ -264,9 +284,9 @@ class TestGroup9HfqChain:
         snaps = {s.date.to_ymd(): s for s in pkg["engine"].snapshots}
         frm, to = hfq["from"], hfq["to"]
         engine_return = snaps[to].total_value / snaps[frm].total_value - 1.0
-        assert engine_return == pytest.approx(hfq["return"],
-                                              abs=hfq["tolerance"]), (
-            f"事件链 {engine_return:.6f} vs hfq {hfq['return']:.6f}")
+        assert engine_return == pytest.approx(hfq["return"], abs=hfq["tolerance"]), (
+            f"事件链 {engine_return:.6f} vs hfq {hfq['return']:.6f}"
+        )
 
     def test_window_has_two_dividends(self, reconciled):
         case = reconciled["g9_dividend_chain_hfq"]["case"]
@@ -301,4 +321,5 @@ class TestGroup10Vpp:
         assert engine_fill.qty == expected["qty"]
         assert engine_fill.price == pytest.approx(expected["price"], abs=TOL)
         assert engine_fill.qty < next(
-            o.qty for o in pkg["engine"].orders if o.symbol == engine_fill.symbol)
+            o.qty for o in pkg["engine"].orders if o.symbol == engine_fill.symbol
+        )

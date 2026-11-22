@@ -15,6 +15,7 @@ engine/events_log.py（domain 零依赖纪律：不 import json）。
     → OrderSubmittedEvent*（步骤⑨入队）
     → SessionEndEvent（步骤⑩快照后，当日最后一事件）
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -68,7 +69,7 @@ class CorporateActionEvent(EngineEvent):
 
 @dataclass(frozen=True)
 class SessionEndEvent(EngineEvent):
-    date: TradingDate    # 快照/费用结算时点
+    date: TradingDate  # 快照/费用结算时点
 
 
 #: 类型标签 ↔ 事件类注册表（codec 单点映射；新事件=新文件+此处登记）

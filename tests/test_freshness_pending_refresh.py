@@ -7,6 +7,7 @@ T3 正常不受染：命中登记但判定正常 → 仍「正常」（补拉后
 T4 strict    ：全部为「待补拉」时 run(strict=True) 返回 0
 T5 strict 未改：真黄表仍使 strict 返回 1（strict 逻辑本身未被改写）
 """
+
 import time
 from datetime import date, timedelta
 
@@ -17,10 +18,17 @@ from config.tables import PENDING_REFRESH
 def _row(name, ds_days=71, dw_days=54, lib="market", tier="backfill"):
     """构造一条 market 行：内容日期 ds_days 天前、文件 mtime dw_days 天前。"""
     as_of = (date.today() - timedelta(days=ds_days)).strftime("%Y%m%d")
-    return {"lib": lib, "table": name, "as_of": as_of, "last_pull": None,
-            "last_pull_rows": None, "tier": tier,
-            "newest_mtime": time.time() - dw_days * 86400,
-            "source": "single", "stale_days": None}
+    return {
+        "lib": lib,
+        "table": name,
+        "as_of": as_of,
+        "last_pull": None,
+        "last_pull_rows": None,
+        "tier": tier,
+        "newest_mtime": time.time() - dw_days * 86400,
+        "source": "single",
+        "stale_days": None,
+    }
 
 
 def _build(monkeypatch, rows):
@@ -51,20 +59,28 @@ def test_t3_registered_but_normal_untouched(monkeypatch):
 
 
 def test_t4_strict_ignores_pending(monkeypatch):
-    monkeypatch.setattr(fr, "build_rows", lambda only=None: [
-        {"table": "cn_ppi", "verdict": "待补拉"},
-        {"table": "cn_m", "verdict": "待补拉"},
-    ])
+    monkeypatch.setattr(
+        fr,
+        "build_rows",
+        lambda only=None: [
+            {"table": "cn_ppi", "verdict": "待补拉"},
+            {"table": "cn_m", "verdict": "待补拉"},
+        ],
+    )
     monkeypatch.setattr(fr, "render", lambda rows: "")
     assert fr.run(strict=True) == 0
 
 
 def test_t5_strict_still_catches_yellow(monkeypatch):
     """strict 逻辑本身未改：真黄仍 RC=1。"""
-    monkeypatch.setattr(fr, "build_rows", lambda only=None: [
-        {"table": "cn_ppi", "verdict": "待补拉"},
-        {"table": "other", "verdict": "黄"},
-    ])
+    monkeypatch.setattr(
+        fr,
+        "build_rows",
+        lambda only=None: [
+            {"table": "cn_ppi", "verdict": "待补拉"},
+            {"table": "other", "verdict": "黄"},
+        ],
+    )
     monkeypatch.setattr(fr, "render", lambda rows: "")
     assert fr.run(strict=True) == 1
 

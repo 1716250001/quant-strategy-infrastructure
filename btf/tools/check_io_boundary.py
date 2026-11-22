@@ -20,6 +20,7 @@
       （= `bt check` 第 9/10 项，带 --self-test 编排；单跑仅用于定位）
 退出码：0=通过 / 1=违例（或自检失败）
 """
+
 from __future__ import annotations
 
 import ast
@@ -32,8 +33,9 @@ ROOT = Path(__file__).resolve().parents[1]
 IO_OWNERS = {"btf/data/parquet_reader.py", "btf/data/core.py"}
 
 #: `import pyarrow.parquet as pq` 之后禁止出现的属性（其余文件命中即违例）
-_PQ_ATTRS = frozenset({"read_table", "read_schema", "ParquetFile", "write_table",
-                       "write_to_dataset"})
+_PQ_ATTRS = frozenset(
+    {"read_table", "read_schema", "ParquetFile", "write_table", "write_to_dataset"}
+)
 
 #: 禁止的 import 形态（例外见 IO_OWNERS）
 _FORBIDDEN_IMPORTS = ("pyarrow.parquet", "btf.data.parquet_reader")
@@ -44,7 +46,7 @@ def _rel(path: Path) -> str:
     s = str(path).replace("\\", "/")
     root = str(ROOT).replace("\\", "/")
     if s.startswith(root + "/"):
-        s = s[len(root) + 1:]
+        s = s[len(root) + 1 :]
     return s.lstrip("./")
 
 
@@ -64,19 +66,22 @@ def scan(path: Path, src: str) -> list[str]:
         if isinstance(node, ast.Import):
             for a in node.names:
                 if a.name in _FORBIDDEN_IMPORTS:
-                    out.append(f"{rel}:{node.lineno}: import {a.name}"
-                               f"（IO 只允许 {sorted(IO_OWNERS)}）")
+                    out.append(
+                        f"{rel}:{node.lineno}: import {a.name}（IO 只允许 {sorted(IO_OWNERS)}）"
+                    )
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
             if mod in _FORBIDDEN_IMPORTS:
-                out.append(f"{rel}:{node.lineno}: from {mod} import …"
-                           f"（IO 只允许 {sorted(IO_OWNERS)}）")
-        elif (isinstance(node, ast.Attribute)
-              and isinstance(node.value, ast.Name)
-              and node.value.id == "pq"
-              and node.attr in _PQ_ATTRS):
-            out.append(f"{rel}:{node.lineno}: 直接调用 pyarrow.parquet 接口："
-                       f"pq.{node.attr}")
+                out.append(
+                    f"{rel}:{node.lineno}: from {mod} import …（IO 只允许 {sorted(IO_OWNERS)}）"
+                )
+        elif (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "pq"
+            and node.attr in _PQ_ATTRS
+        ):
+            out.append(f"{rel}:{node.lineno}: 直接调用 pyarrow.parquet 接口：pq.{node.attr}")
     return out
 
 
@@ -110,8 +115,10 @@ def _self_test() -> int:
         if found:
             print(f"[self-test:FAIL] 合规样本被误报：{rel} :: {found}")
             return 1
-    print(f"[self-test:ok] 注入违例 {len(bad_cases)} 例全部检出；"
-          f"合规样本 {len(good_cases)} 例全部通过")
+    print(
+        f"[self-test:ok] 注入违例 {len(bad_cases)} 例全部检出；"
+        f"合规样本 {len(good_cases)} 例全部通过"
+    )
     return 0
 
 
@@ -125,8 +132,7 @@ def main(argv: list[str]) -> int:
             print(f"  - {p}")
         return 1
     n = len(list((ROOT / "btf").rglob("*.py")))
-    print(f"[ok] IO 单一入口检查通过（{n} 个文件扫描；"
-          f"仅 {', '.join(sorted(IO_OWNERS))} 可触磁盘）")
+    print(f"[ok] IO 单一入口检查通过（{n} 个文件扫描；仅 {', '.join(sorted(IO_OWNERS))} 可触磁盘）")
     return 0
 
 

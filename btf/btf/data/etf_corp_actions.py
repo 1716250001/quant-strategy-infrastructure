@@ -37,6 +37,7 @@
 **R45′（N49，2026-10-08）**：同日同标的**顺序＝先折算后分红**（ADR-20 第 ⑩ 条；
 分红现金按折算后份额计）。
 """
+
 from __future__ import annotations
 
 import bisect
@@ -61,15 +62,14 @@ logger = logging.getLogger(__name__)
 #: 双证据容差缺省（ADR-20 第 5 条 / 21 号 §4.13 `--tolerance`）
 DEFAULT_TOLERANCE = 0.005
 #: 折算候选判据（19 号 §91.3-B）
-JUMP_THRESHOLD = 0.12      # |close/prev_close − 1| > 12%
+JUMP_THRESHOLD = 0.12  # |close/prev_close − 1| > 12%
 EX_ABSORB_THRESHOLD = 0.05  # |close/pre_close − 1| < 5%
 #: memo（进程内；键含 symbols 元组与容差——网格/复跑同区间零重复读）
 _FUND_DIV_CACHE: dict[tuple, tuple] = {}
 _CONS_SCAN_CACHE: dict[tuple, tuple] = {}
 
 
-def trading_days_span(root: pathlib.Path | str, start_ymd: str,
-                      end_ymd: str) -> list[str]:
+def trading_days_span(root: pathlib.Path | str, start_ymd: str, end_ymd: str) -> list[str]:
     """`trade_cal` 交易日（is_open=1）升序清单；日历缺失 ⇒ 显式报错（禁静默）。"""
     from btf.data.core import YearTableStore
 
@@ -77,12 +77,16 @@ def trading_days_span(root: pathlib.Path | str, start_ymd: str,
     if t is None:
         raise FileNotFoundError(
             f"交易日历缺失（trade_cal）——ETF 公司行动（pay_date 顺延）拒绝静默跳过："
-            f"{pathlib.Path(root) / 'metadata' / 'trade_cal.parquet'}")
+            f"{pathlib.Path(root) / 'metadata' / 'trade_cal.parquet'}"
+        )
     import pyarrow.compute as pc
 
     t = t.filter(pc.equal(t.column("is_open"), 1))
-    days = sorted(str(d) for d in t.column("cal_date").to_pylist()
-                  if d is not None and start_ymd <= str(d) <= end_ymd)
+    days = sorted(
+        str(d)
+        for d in t.column("cal_date").to_pylist()
+        if d is not None and start_ymd <= str(d) <= end_ymd
+    )
     return days
 
 
@@ -114,9 +118,11 @@ def action_order_key(a: CorporateAction) -> tuple:
         return (a.ex_date, a.symbol, 1)
     # **R54′（N58/N59 合并）**：经统一归一化——`""`/`"abc"` 取 1.0＋WARN（禁崩）；
     # `≤0` 视为无效值（不建模）⇒ 归「非折算类」（第三键 1）
-    cons = ratio_or_default(getattr(a, "consolidation_ratio", None),
-                            context=f"order_key:{a.symbol}",
-                            warn=logger.warning)
+    cons = ratio_or_default(
+        getattr(a, "consolidation_ratio", None),
+        context=f"order_key:{a.symbol}",
+        warn=logger.warning,
+    )
     return (a.ex_date, a.symbol, 0 if cons != 1.0 else 1)
 
 
@@ -158,16 +164,23 @@ def load_fund_dividends(
     from btf.data.core import YearTableStore
 
     store = YearTableStore(root)
-    cols = ["ts_code", "ex_date", "pay_date", "earpay_date", "record_date",
-            "ann_date", "div_proc", "div_cash"]
+    cols = [
+        "ts_code",
+        "ex_date",
+        "pay_date",
+        "earpay_date",
+        "record_date",
+        "ann_date",
+        "div_proc",
+        "div_cash",
+    ]
     # **R48′（N52，2026-10-08）**：`peek_columns` 在**表目录缺失**时抛
     # `ReaderError`（`_list_year_files` 拒绝静默）——原实现未捕获 ⇒ R44′
     # 告警分支走不到（N52 缺口）。此处捕获 ⇒ 等同「表缺失」，走同一告警分支。
     try:
         have = set(store.peek_columns("fund_div"))
-    except Exception as exc:               # ReaderError（目录缺失）等
-        logger.warning("fund_div 列探测失败（视为表缺失）：%s: %s",
-                       type(exc).__name__, exc)
+    except Exception as exc:  # ReaderError（目录缺失）等
+        logger.warning("fund_div 列探测失败（视为表缺失）：%s: %s", type(exc).__name__, exc)
         have = set()
     events: list[CorporateAction] = []
     notes: list[str] = []
@@ -175,14 +188,22 @@ def load_fund_dividends(
         # **R44′（N47，2026-10-08）**：表**缺失/不可读** ⇒ 显式告警＋披露
         # （**禁静默**——对齐 `trade_cal` 的「拒绝静默跳过」；N29 换触发条件：
         # dataset freeze / 离线快照漏带 `fund_div` 时不得静默漏计分红）。
-        msg = ("⚠ 基金分红装载：`fund_div` 表**缺失/不可读**（含目录缺失）"
-               " ⇒ **ETF/LOF 分红未装载**（禁静默——ADR-20/R44′；如为 "
-               "dataset freeze／离线快照漏带，请补表后重跑）")
+        msg = (
+            "⚠ 基金分红装载：`fund_div` 表**缺失/不可读**（含目录缺失）"
+            " ⇒ **ETF/LOF 分红未装载**（禁静默——ADR-20/R44′；如为 "
+            "dataset freeze／离线快照漏带，请补表后重跑）"
+        )
         logger.warning(msg)
         notes.append(msg)
-        st = {"table_missing": True, "rows_raw": 0, "n_proc_filtered": 0,
-              "n_cash_filtered": 0, "n_out_of_window": 0, "n_dup": 0,
-              "n_events": 0}
+        st = {
+            "table_missing": True,
+            "rows_raw": 0,
+            "n_proc_filtered": 0,
+            "n_cash_filtered": 0,
+            "n_out_of_window": 0,
+            "n_dup": 0,
+            "n_events": 0,
+        }
         _FUND_DIV_CACHE[key] = ((), tuple(notes), dict(st))
         if stats is not None:
             stats.update(st)
@@ -193,10 +214,17 @@ def load_fund_dividends(
         # **R44′（N47）**：表在、区间内 0 条 ⇒ 披露（0 笔是事实，不静默）
         notes.append(
             f"基金分红装载：`fund_div` 在 {s0}~{s1} 内 **0 条记录**（表在）——"
-            f"如为快照漏带请补表（R44′）")
-        st = {"table_missing": False, "rows_raw": 0, "n_proc_filtered": 0,
-              "n_cash_filtered": 0, "n_out_of_window": 0, "n_dup": 0,
-              "n_events": 0}
+            f"如为快照漏带请补表（R44′）"
+        )
+        st = {
+            "table_missing": False,
+            "rows_raw": 0,
+            "n_proc_filtered": 0,
+            "n_cash_filtered": 0,
+            "n_out_of_window": 0,
+            "n_dup": 0,
+            "n_events": 0,
+        }
         _FUND_DIV_CACHE[key] = ((), tuple(notes), dict(st))
         if stats is not None:
             stats.update(st)
@@ -227,7 +255,7 @@ def load_fund_dividends(
             n_out_of_window += 1
             continue
         dkey = (sym, ex)
-        if dkey in seen:            # 去重：同日重复公告（510310 20241021 两行）
+        if dkey in seen:  # 去重：同日重复公告（510310 20241021 两行）
             n_dup += 1
             continue
         seen.add(dkey)
@@ -262,29 +290,34 @@ def load_fund_dividends(
             n_rolled += 1
             if len(rolled_samples) < 3:
                 rolled_samples.append(f"{sym} {pay}→{eff}")
-        events.append(CorporateAction(
-            symbol=sym,
-            ex_date=TradingDate.from_ymd(ex),
-            pay_date=TradingDate.from_ymd(eff),
-            record_date=(TradingDate.from_ymd(str(r["record_date"]))
-                         if r.get("record_date") else None),
-            cash_div_per_share=div_cash,
-            stk_div_per_share=0.0,
-            ann_date=(TradingDate.from_ymd(str(r["ann_date"]))
-                      if r.get("ann_date") else None),
-        ))
+        events.append(
+            CorporateAction(
+                symbol=sym,
+                ex_date=TradingDate.from_ymd(ex),
+                pay_date=TradingDate.from_ymd(eff),
+                record_date=(
+                    TradingDate.from_ymd(str(r["record_date"])) if r.get("record_date") else None
+                ),
+                cash_div_per_share=div_cash,
+                stk_div_per_share=0.0,
+                ann_date=(TradingDate.from_ymd(str(r["ann_date"])) if r.get("ann_date") else None),
+            )
+        )
     if n_dup:
         notes.append(
             f"基金分红去重（ADR-20 第 4 条）：`(ts_code, ex_date)` 重复行 {n_dup} 条"
-            f"已合并（仅入账一次）")
+            f"已合并（仅入账一次）"
+        )
     if n_fallback:
         notes.append(
             f"基金分红 pay_date 回退（ADR-20 第 2 条）：{n_fallback} 笔走回退链 "
-            f"`pay_date→earpay_date→ex_date`（样例：{'；'.join(fallback_samples)}）")
+            f"`pay_date→earpay_date→ex_date`（样例：{'；'.join(fallback_samples)}）"
+        )
     if n_rolled:
         notes.append(
             f"基金分红 pay_date 非交易日顺延（ADR-20 第 2 条）：{n_rolled} 笔"
-            f"顺延至下一交易日（样例：{'；'.join(rolled_samples)}）")
+            f"顺延至下一交易日（样例：{'；'.join(rolled_samples)}）"
+        )
     if raw_rows > 0 and not events:
         # **R51′（N55-E3）**：「有行但过滤后为空」——原实现**零告警静默**；
         # 此形态下除息日交叉判别**无输入**，折算候选将按幅度阈值保留 ⇒ 必须披露。
@@ -293,13 +326,18 @@ def load_fund_dividends(
             f"原始 **{raw_rows} 行** → `div_proc` 过滤 **{n_proc_filtered} 行**／"
             f"`div_cash<=0` 过滤 **{n_cash_filtered} 行**／区间外 {n_out_of_window} 行"
             f" ⇒ **最终入账 0 笔**；**除息日交叉判别无输入**——折算候选若存在将按"
-            f"幅度阈值保留（请人工核对 `fund_div` 是否含未实施/无现金行）")
+            f"幅度阈值保留（请人工核对 `fund_div` 是否含未实施/无现金行）"
+        )
     events.sort(key=lambda a: (a.ex_date, a.symbol))
-    st = {"table_missing": False, "rows_raw": raw_rows,
-          "n_proc_filtered": n_proc_filtered,
-          "n_cash_filtered": n_cash_filtered,
-          "n_out_of_window": n_out_of_window, "n_dup": n_dup,
-          "n_events": len(events)}
+    st = {
+        "table_missing": False,
+        "rows_raw": raw_rows,
+        "n_proc_filtered": n_proc_filtered,
+        "n_cash_filtered": n_cash_filtered,
+        "n_out_of_window": n_out_of_window,
+        "n_dup": n_dup,
+        "n_events": len(events),
+    }
     _FUND_DIV_CACHE[key] = (tuple(events), tuple(notes), dict(st))
     if stats is not None:
         stats.update(st)
@@ -348,26 +386,27 @@ def scan_consolidations(
     # 未捕获 FileNotFoundError——缺任一表即崩的新耦合由此去除）。
     _div_stats: dict[str, Any] = {}
     _divs_for_cross, _cross_div_notes = load_fund_dividends(
-        root, funds, start, end, need_calendar=False, stats=_div_stats)
+        root, funds, start, end, need_calendar=False, stats=_div_stats
+    )
     div_ex = {(a.symbol, a.ex_date.to_ymd()) for a in _divs_for_cross}
     if cross_state is not None:
         # **R51′（N55）**：表缺失/不可读 ⇒ 交叉防线**不可用**（失能标志上报，
         # 由调用方升级为 degraded/退出码 2——与 trade_cal 同强度，禁静默放行）。
         cross_state["disabled"] = bool(_div_stats.get("table_missing"))
         cross_state["stats"] = dict(_div_stats)
-    daily = store.read_codes("fund_daily", funds, s0, s1,
-                             columns=["ts_code", "trade_date", "pre_close",
-                                      "close"])
-    adj = store.read_codes("fund_adj", funds, s0, s1,
-                           columns=["ts_code", "trade_date", "adj_factor"])
+    daily = store.read_codes(
+        "fund_daily", funds, s0, s1, columns=["ts_code", "trade_date", "pre_close", "close"]
+    )
+    adj = store.read_codes(
+        "fund_adj", funds, s0, s1, columns=["ts_code", "trade_date", "adj_factor"]
+    )
     dcols: dict[str, dict[str, tuple]] = {}
     if daily is not None:
         cols = {n: daily.column(n).to_pylist() for n in daily.column_names}
         for i in range(daily.num_rows):
             sym = str(cols["ts_code"][i])
             d = str(cols["trade_date"][i])
-            dcols.setdefault(sym, {})[d] = (cols["pre_close"][i],
-                                            cols["close"][i])
+            dcols.setdefault(sym, {})[d] = (cols["pre_close"][i], cols["close"][i])
     fcols: dict[str, dict[str, float]] = {}
     if adj is not None:
         cols = {n: adj.column(n).to_pylist() for n in adj.column_names}
@@ -398,7 +437,7 @@ def scan_consolidations(
             if abs(jump) <= JUMP_THRESHOLD:
                 continue
             if abs(close / pre_close - 1.0) >= EX_ABSORB_THRESHOLD:
-                continue        # 真行情（除权价未吸收）⇒ 非份额事件
+                continue  # 真行情（除权价未吸收）⇒ 非份额事件
             if (sym, d) in div_ex:
                 # **R43′（N46）**：同日有除息记录 ⇒ 分红（语义优先于幅度）
                 n_crossed += 1
@@ -414,33 +453,39 @@ def scan_consolidations(
             if f_t is not None and f_prev is not None:
                 rho = (f_t / f_prev) if f_prev else None
                 ev2 = (f_prev / f_t) if f_t else None
-                dev = (abs(r * rho - 1.0) if rho is not None else None)
+                dev = abs(r * rho - 1.0) if rho is not None else None
                 ok = bool(dev is not None and dev < tolerance)
             else:
-                ev2, dev, ok = None, None, False   # 因子缺失 ⇒ fail-closed
-            ev = {"ts_code": sym, "date": d, "R": round(r, 6),
-                  "evidence1": round(r, 6),
-                  "evidence2": (round(ev2, 6) if ev2 is not None else None),
-                  "dev": (round(dev, 6) if dev is not None else None),
-                  "ok": bool(ok)}
+                ev2, dev, ok = None, None, False  # 因子缺失 ⇒ fail-closed
+            ev = {
+                "ts_code": sym,
+                "date": d,
+                "R": round(r, 6),
+                "evidence1": round(r, 6),
+                "evidence2": (round(ev2, 6) if ev2 is not None else None),
+                "dev": (round(dev, 6) if dev is not None else None),
+                "ok": bool(ok),
+            }
             events.append(ev)
             if not ok:
                 n_fail += 1
                 if len(fail_samples) < 3:
                     fail_samples.append(
-                        f"{sym} {d}（R={r:.5f}，dev="
-                        f"{'因子缺失' if dev is None else f'{dev:.4%}'}）")
+                        f"{sym} {d}（R={r:.5f}，dev={'因子缺失' if dev is None else f'{dev:.4%}'}）"
+                    )
     events.sort(key=lambda e: (e["date"], e["ts_code"]))
     if n_crossed:
         notes.append(
             f"份额折算候选**除息日交叉剔除**（N46/R43′）：{n_crossed} 个事件同日"
             f"存在 `fund_div` 除息记录 ⇒ 判为**分红**、不计折算（语义优先于幅度"
-            f"阈值；样例：{'；'.join(cross_samples)}）")
+            f"阈值；样例：{'；'.join(cross_samples)}）"
+        )
     if n_fail:
         notes.append(
             f"⚠ 份额折算**未建模项（fail-closed）**：{n_fail} 个事件双证据不符或"
             f"因子缺失 ⇒ **不建模**（不得静默取其一——ADR-20 第 5 条）；样例："
-            f"{'；'.join(fail_samples)}")
+            f"{'；'.join(fail_samples)}"
+        )
     # R44′：分红装载披露（含表缺失告警）先于扫描自身披露——CLI 扫描路径同样可见；
     # 运行路径由 `to_etf_corporate_actions` 合并去重。
     notes = [*_cross_div_notes, *notes]
@@ -463,10 +508,8 @@ def to_etf_corporate_actions(
     `n_div / n_conv / n_unmodeled / n_symbols`。
     """
     funds = _fund_symbols(symbols)
-    divs, div_notes = load_fund_dividends(root, funds, start, end,
-                                          calendar=calendar)
-    cons, cons_notes = scan_consolidations(root, funds, start, end,
-                                           tolerance=tolerance)
+    divs, div_notes = load_fund_dividends(root, funds, start, end, calendar=calendar)
+    cons, cons_notes = scan_consolidations(root, funds, start, end, tolerance=tolerance)
     out = list(divs)
     for ev in cons:
         if not ev.get("ok"):
@@ -474,17 +517,19 @@ def to_etf_corporate_actions(
         r = float(ev["R"])
         if r <= 0:
             continue
-        out.append(CorporateAction(
-            symbol=str(ev["ts_code"]),
-            ex_date=TradingDate.from_ymd(str(ev["date"])),
-            pay_date=None,
-            record_date=None,
-            cash_div_per_share=0.0,
-            stk_div_per_share=0.0,
-            ann_date=None,
-            consolidation_ratio=1.0 / r,       # 与股票缩股同构（qty ×= ratio）
-            consolidation_source="fund_conv",
-        ))
+        out.append(
+            CorporateAction(
+                symbol=str(ev["ts_code"]),
+                ex_date=TradingDate.from_ymd(str(ev["date"])),
+                pay_date=None,
+                record_date=None,
+                cash_div_per_share=0.0,
+                stk_div_per_share=0.0,
+                ann_date=None,
+                consolidation_ratio=1.0 / r,  # 与股票缩股同构（qty ×= ratio）
+                consolidation_source="fund_conv",
+            )
+        )
     # **R45′（N49，2026-10-08）**：同日同标的**顺序＝先折算后分红**
     # （ADR-20 第 ⑩ 条；排序键见 `_action_order_key`）——分红现金按**折算后**
     # 份额计；池内 0 实例（边界定义，池内探针交叉无命中）。

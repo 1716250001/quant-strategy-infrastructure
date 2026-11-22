@@ -21,6 +21,7 @@
     python tools/db/scale_check.py --stats --json out.json
 退出码：0=跑完（无论有无越界）/ 2=数据读取致命错误
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,8 +38,8 @@ import config
 from config.scale_anchors import SCALE_ANCHORS
 
 ROOT = Path(config.DATA_ROOT)
-L2_THRESHOLD = 0.01          # 1%
-L3_THRESHOLD = 0.50          # 月环比 50%
+L2_THRESHOLD = 0.01  # 1%
+L3_THRESHOLD = 0.50  # 月环比 50%
 
 # K 档（§451）：分片读取失败原实现静默 continue ⇒ 统计量偏少、可能假绿。
 # 统一计数并允许末尾汇报；不改任何计算口径。
@@ -52,8 +53,10 @@ def _shard_fail(p, exc):
 
 def _report_shard_fails():
     if _SHARD_FAILS:
-        print(f"[scale_check] ⚠ {len(_SHARD_FAILS)} 个分片读取失败"
-              f"（统计量偏少，结论可能假绿）", file=sys.stderr)
+        print(
+            f"[scale_check] ⚠ {len(_SHARD_FAILS)} 个分片读取失败（统计量偏少，结论可能假绿）",
+            file=sys.stderr,
+        )
 
 
 def _paths(table: str) -> list[Path]:
@@ -103,8 +106,10 @@ def cmd_stats(tables: list[str] | None, out: str | None) -> int:
         if r["q001"] is None:
             print(f"[!] {r['table']}.{r['col']} 无数据（shards={r['shards']}）")
         else:
-            print(f"{r['table']}\t{r['col']}\tq001={r['q001']:.6g}\tq999={r['q999']:.6g}"
-                  f"\tn={r['n']}\tshards={r['shards']}")
+            print(
+                f"{r['table']}\t{r['col']}\tq001={r['q001']:.6g}\tq999={r['q999']:.6g}"
+                f"\tn={r['n']}\tshards={r['shards']}"
+            )
     if out:
         Path(out).write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"[OK] 写入 {out}")
@@ -134,10 +139,13 @@ def _scan_l1(table: str, col: str, lo: float, hi: float, limit: int = 5) -> dict
         if len(samples) < limit:
             take = df[low_mask | high_mask].head(limit - len(samples))
             for _, r in take.iterrows():
-                samples.append({"file": p.name,
-                                **{k: (None if r[k] is None else str(r[k]))
-                                   for k in _id_cols(sch)},
-                                "value": float(r[col])})
+                samples.append(
+                    {
+                        "file": p.name,
+                        **{k: (None if r[k] is None else str(r[k])) for k in _id_cols(sch)},
+                        "value": float(r[col]),
+                    }
+                )
     return {"n_low": n_low, "n_high": n_high, "samples": samples}
 
 
@@ -180,7 +188,9 @@ def _ttm_income():
     if not frames:
         return None
     df = pd.concat(frames, ignore_index=True).dropna(subset=["end_date", "n_income"])
-    df = df.sort_values(["ts_code", "end_date"]).drop_duplicates(["ts_code", "end_date"], keep="last")
+    df = df.sort_values(["ts_code", "end_date"]).drop_duplicates(
+        ["ts_code", "end_date"], keep="last"
+    )
     rows = []
     for code, g in df.groupby("ts_code", sort=False):
         last = g.iloc[-1]
@@ -189,14 +199,20 @@ def _ttm_income():
             ttm = float(last["n_income"])
         else:
             md = end[4:]
-            annual = g[g["end_date"].astype(str).str.endswith("1231")
-                       & (g["end_date"].astype(str) < end)]
-            prev = g[(g["end_date"].astype(str).str[4:] == md)
-                     & (g["end_date"].astype(str).str[:4] == str(int(end[:4]) - 1))]
+            annual = g[
+                g["end_date"].astype(str).str.endswith("1231") & (g["end_date"].astype(str) < end)
+            ]
+            prev = g[
+                (g["end_date"].astype(str).str[4:] == md)
+                & (g["end_date"].astype(str).str[:4] == str(int(end[:4]) - 1))
+            ]
             if annual.empty or prev.empty:
                 continue
-            ttm = (float(annual.iloc[-1]["n_income"]) + float(last["n_income"])
-                   - float(prev.iloc[-1]["n_income"]))
+            ttm = (
+                float(annual.iloc[-1]["n_income"])
+                + float(last["n_income"])
+                - float(prev.iloc[-1]["n_income"])
+            )
         rows.append({"ts_code": code, "n_income_ttm": ttm, "end_date": end})
     return pd.DataFrame(rows)
 
@@ -211,39 +227,77 @@ def cmd_l2() -> list[dict]:
 
     if db is not None and bs is not None:
         m = db.merge(bs, on="ts_code", suffixes=("", "_bs")).dropna(
-            subset=["total_mv", "total_share", "close"])
+            subset=["total_mv", "total_share", "close"]
+        )
         # total_share 股 × close 元 / 1e4 → 万元
         pred = m["total_share"] * m["close"] / 1e4
-        rel = ((pred - m["total_mv"]).abs() / m["total_mv"].replace(0, float("nan")))
+        rel = (pred - m["total_mv"]).abs() / m["total_mv"].replace(0, float("nan"))
         for _, r in m[rel > L2_THRESHOLD].assign(rel=rel).nlargest(10, "rel").iterrows():
-            out.append({"pair": "total_mv↔total_share×close", "ts_code": r["ts_code"],
-                        "rel": float(r["rel"]), "a": float(r["total_mv"]), "b": float(pred.loc[r.name])})
-        out.append({"pair": "total_mv↔total_share×close", "checked": len(m),
-                    "over": int((rel > L2_THRESHOLD).sum()), "note": "单位：total_share 股×close 元/1e4=万元"})
+            out.append(
+                {
+                    "pair": "total_mv↔total_share×close",
+                    "ts_code": r["ts_code"],
+                    "rel": float(r["rel"]),
+                    "a": float(r["total_mv"]),
+                    "b": float(pred.loc[r.name]),
+                }
+            )
+        out.append(
+            {
+                "pair": "total_mv↔total_share×close",
+                "checked": len(m),
+                "over": int((rel > L2_THRESHOLD).sum()),
+                "note": "单位：total_share 股×close 元/1e4=万元",
+            }
+        )
 
     if db is not None and inc is not None:
         m = db.merge(inc, on="ts_code").dropna(subset=["pe_ttm", "n_income_ttm", "total_mv"])
         m = m[(m["pe_ttm"] > 0) & (m["total_mv"] > 0)]
-        pred = m["pe_ttm"] * m["n_income_ttm"] / 1e4   # pe_ttm(倍) × TTM 净利(元)/1e4 → 万元
-        rel = ((pred - m["total_mv"]).abs() / m["total_mv"].replace(0, float("nan")))
+        pred = m["pe_ttm"] * m["n_income_ttm"] / 1e4  # pe_ttm(倍) × TTM 净利(元)/1e4 → 万元
+        rel = (pred - m["total_mv"]).abs() / m["total_mv"].replace(0, float("nan"))
         for _, r in m[rel > L2_THRESHOLD].assign(rel=rel).nlargest(10, "rel").iterrows():
-            out.append({"pair": "pe_ttm×n_income_ttm↔total_mv", "ts_code": r["ts_code"],
-                        "rel": float(r["rel"]), "a": float(r["total_mv"]), "b": float(pred.loc[r.name])})
-        out.append({"pair": "pe_ttm×n_income_ttm↔total_mv", "checked": len(m),
-                    "over": int((rel > L2_THRESHOLD).sum()),
-                    "note": "单位：TTM 净利 元；pe_ttm 倍；/1e4→万元（仅 pe_ttm>0）"})
+            out.append(
+                {
+                    "pair": "pe_ttm×n_income_ttm↔total_mv",
+                    "ts_code": r["ts_code"],
+                    "rel": float(r["rel"]),
+                    "a": float(r["total_mv"]),
+                    "b": float(pred.loc[r.name]),
+                }
+            )
+        out.append(
+            {
+                "pair": "pe_ttm×n_income_ttm↔total_mv",
+                "checked": len(m),
+                "over": int((rel > L2_THRESHOLD).sum()),
+                "note": "单位：TTM 净利 元；pe_ttm 倍；/1e4→万元（仅 pe_ttm>0）",
+            }
+        )
 
     if fd is not None:
         m = fd.dropna(subset=["amount", "vol", "close"])
         # amount 千元；vol 手 ×100 份/手 × close 元 /1000 = 千元
         pred = m["vol"] * 100 * m["close"] / 1000
-        rel = ((pred - m["amount"]).abs() / m["amount"].replace(0, float("nan")))
+        rel = (pred - m["amount"]).abs() / m["amount"].replace(0, float("nan"))
         for _, r in m[rel > L2_THRESHOLD].assign(rel=rel).nlargest(10, "rel").iterrows():
-            out.append({"pair": "fund_daily.amount↔vol×close", "ts_code": r["ts_code"],
-                        "rel": float(r["rel"]), "a": float(r["amount"]), "b": float(pred.loc[r.name])})
-        out.append({"pair": "fund_daily.amount↔vol×close", "checked": len(m),
-                    "over": int((rel > L2_THRESHOLD).sum()),
-                    "note": "单位：amount 千元；vol 手×100×close/1000"})
+            out.append(
+                {
+                    "pair": "fund_daily.amount↔vol×close",
+                    "ts_code": r["ts_code"],
+                    "rel": float(r["rel"]),
+                    "a": float(r["amount"]),
+                    "b": float(pred.loc[r.name]),
+                }
+            )
+        out.append(
+            {
+                "pair": "fund_daily.amount↔vol×close",
+                "checked": len(m),
+                "over": int((rel > L2_THRESHOLD).sum()),
+                "note": "单位：amount 千元；vol 手×100×close/1000",
+            }
+        )
     return out
 
 
@@ -271,16 +325,23 @@ def cmd_l3(tables: list[str] | None) -> list[dict]:
             df = pd.concat(frames, ignore_index=True).dropna()
             if df.empty:
                 continue
-            df["ym"] = pd.to_datetime(df["trade_date"].astype(str), format="%Y%m%d",
-                                      errors="coerce").dt.to_period("M")
+            df["ym"] = pd.to_datetime(
+                df["trade_date"].astype(str), format="%Y%m%d", errors="coerce"
+            ).dt.to_period("M")
             med = df.groupby("ym")[col].median().sort_index()
             if len(med) < 3:
                 continue
             chg = med.pct_change().abs()
             hits = chg[chg > L3_THRESHOLD]
             if len(hits):
-                out.append({"table": table, "col": col, "months": len(med),
-                            "hits": [(str(k), float(v)) for k, v in hits.items()][:5]})
+                out.append(
+                    {
+                        "table": table,
+                        "col": col,
+                        "months": len(med),
+                        "hits": [(str(k), float(v)) for k, v in hits.items()][:5],
+                    }
+                )
     return out
 
 
@@ -308,8 +369,10 @@ def main(argv: list[str] | None = None) -> int:
             n = r["n_low"] + r["n_high"]
             if n:
                 viol += 1
-                lines.append(f"- [L1] `{table}.{col}` 越界 {n} 条"
-                             f"（低 {r['n_low']}／高 {r['n_high']}，带 [{a['lo']}, {a['hi']}]）")
+                lines.append(
+                    f"- [L1] `{table}.{col}` 越界 {n} 条"
+                    f"（低 {r['n_low']}／高 {r['n_high']}，带 [{a['lo']}, {a['hi']}]）"
+                )
                 for s in r["samples"]:
                     lines.append(f"    - 样: {s}")
     lines.append(f"\n[L1] 列 {total}｜越界列 {viol}")
@@ -320,7 +383,9 @@ def main(argv: list[str] | None = None) -> int:
         if "checked" in r:
             lines.append(f"- `{r['pair']}` 检查 {r['checked']} 只｜>1% {r['over']} 只｜{r['note']}")
         else:
-            lines.append(f"    - {r['ts_code']} 相对误差 {r['rel']:.4%}：a={r['a']:.6g} b={r['b']:.6g}")
+            lines.append(
+                f"    - {r['ts_code']} 相对误差 {r['rel']:.4%}：a={r['a']:.6g} b={r['b']:.6g}"
+            )
 
     l3 = cmd_l3(tables)
     lines.append("\n## L3 月度中位数环比 |Δ|>50%（仅提示，不定性）\n")

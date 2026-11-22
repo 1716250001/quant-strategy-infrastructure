@@ -13,6 +13,7 @@
 主库不可用 → skip（不静默通过）。全区间（2019-06-26 起）净值复跑由
 `tools/run_qidian_rerun.py` 承担（分钟级，不入 CI）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -26,11 +27,18 @@ from btf.domain.types import TradingDate
 pytestmark = [pytest.mark.l4]
 
 ROOT = Path(MARKET_DATA_DIR)
-START, END = "2026-01-02", "2026-09-23"          # 有界窗口（CI 秒级）
-LIMIT_START = "20190626"                          # etf_limit 起点（E3）
+START, END = "2026-01-02", "2026-09-23"  # 有界窗口（CI 秒级）
+LIMIT_START = "20190626"  # etf_limit 起点（E3）
 #: ETF 限价回退测试候选（不依赖已迁仓外的 qidian 池）
-ETF_CANDIDATES = ("510300.SH", "510500.SH", "510050.SH", "159901.SZ",
-                  "159915.SZ", "511010.SH", "511380.SH")
+ETF_CANDIDATES = (
+    "510300.SH",
+    "510500.SH",
+    "510050.SH",
+    "159901.SZ",
+    "159915.SZ",
+    "511010.SH",
+    "511380.SH",
+)
 
 
 def _feed() -> MixedDailyFeed:
@@ -53,16 +61,14 @@ class TestEtfLimitChannel:
     def test_etf_limit_from_table(self):
         _skip_if_no_data()
         feed = _feed()
-        state = feed.trading_states(
-            TradingDate.from_ymd("20260923"), ["511380.SH"])["511380.SH"]
+        state = feed.trading_states(TradingDate.from_ymd("20260923"), ["511380.SH"])["511380.SH"]
         assert state.limit_up_price and state.limit_down_price
         assert state.limit_up_price > state.limit_down_price
 
     def test_stock_still_from_stk_limit(self):
         _skip_if_no_data()
         feed = _feed()
-        state = feed.trading_states(
-            TradingDate.from_ymd("20260923"), ["000001.SZ"])["000001.SZ"]
+        state = feed.trading_states(TradingDate.from_ymd("20260923"), ["000001.SZ"])["000001.SZ"]
         assert state.limit_up_price and state.limit_down_price
 
     def test_fallback_before_etf_limit_start(self):
@@ -73,9 +79,8 @@ class TestEtfLimitChannel:
         """
         _skip_if_no_data()
         feed = _feed()
-        day = TradingDate.from_ymd("20190625")     # 起点前一日
-        candidates = [code for code in ETF_CANDIDATES
-                      if feed.bars_of(code, day, day)]
+        day = TradingDate.from_ymd("20190625")  # 起点前一日
+        candidates = [code for code in ETF_CANDIDATES if feed.bars_of(code, day, day)]
         if not candidates:
             pytest.skip("候选 ETF 无 2019-06-25 前行情（无行情则回退无输入）")
         code = candidates[0]
@@ -92,5 +97,3 @@ class TestEtfLimitChannel:
         feed = _feed()
         feed.trading_states(TradingDate.from_ymd(LIMIT_START), ["511380.SH"])
         assert not feed.states.fallback_limit_dates
-
-

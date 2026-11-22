@@ -17,6 +17,7 @@ H2 单一真源链路（04 §8.3.7）：
     - 指纹 `rules_version = "v7.7@sha256:<规则内容哈希>"`——规则升级必变；
     - 幂等：同镜像区内容 → 同 JSON（内容哈希不含导出时间）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,12 +35,18 @@ from _paths import CHICHAO_ROOT, RULES_MIRROR
 
 #: 单位口径（md_core 镜像区口径：比率 vs 百分数）
 UNITS: dict[str, str] = {
-    "pe_max": "ratio", "pb_max": "ratio",
-    "roe_min": "percent", "dv_min": "percent",
-    "sh_crisis": "percent", "sh_watch": "percent",
-    "small_crisis": "percent", "small_watch": "percent",
-    "down_crisis": "count", "down_watch": "count",
-    "ratio_crisis": "percent", "ratio_watch": "percent",
+    "pe_max": "ratio",
+    "pb_max": "ratio",
+    "roe_min": "percent",
+    "dv_min": "percent",
+    "sh_crisis": "percent",
+    "sh_watch": "percent",
+    "small_crisis": "percent",
+    "small_watch": "percent",
+    "down_crisis": "count",
+    "down_watch": "count",
+    "ratio_crisis": "percent",
+    "ratio_watch": "percent",
 }
 
 #: 文档键名（04 §8.3.7）→ 镜像键名（md_core）
@@ -54,16 +61,24 @@ SCHEMA_VERSION = "rules_mirror.v1"
 
 def digest_of(rules: Mapping[str, Mapping[str, Any]]) -> str:
     """规则内容哈希（确定性：键排序 + 紧凑 JSON）。"""
-    text = json.dumps({k: dict(v) for k, v in sorted(rules.items())},
-                      sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    text = json.dumps(
+        {k: dict(v) for k, v in sorted(rules.items())},
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def build_payload(v75: Mapping[str, Any], liq: Mapping[str, Any], *,
-                  version: str = "v7.7",
-                  source_file: str = "赤潮/rules/single-source.md",
-                  mirror_file: str = "赤潮/md_core/paths.py",
-                  exported_at: str | None = None) -> dict[str, Any]:
+def build_payload(
+    v75: Mapping[str, Any],
+    liq: Mapping[str, Any],
+    *,
+    version: str = "v7.7",
+    source_file: str = "赤潮/rules/single-source.md",
+    mirror_file: str = "赤潮/md_core/paths.py",
+    exported_at: str | None = None,
+) -> dict[str, Any]:
     """镜像常量 → 镜像 JSON 载荷（纯函数，可单测）。"""
     rules = {
         "L2_filter": {k: v75[k] for k in sorted(v75)},
@@ -78,7 +93,7 @@ def build_payload(v75: Mapping[str, Any], liq: Mapping[str, Any], *,
         "units": {k: UNITS.get(k, "") for k in sorted(rules["L0_LIQ"] | rules["L2_filter"])},
         "aliases": dict(ALIASES),
         "rules": rules,
-        "exported_at": exported_at,          # None = 幂等（不写时间戳）
+        "exported_at": exported_at,  # None = 幂等（不写时间戳）
     }
 
 
@@ -93,15 +108,13 @@ def load_from_mdcore(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="规则镜像导出（H2 单一真源）")
-    parser.add_argument("--out", default=str(RULES_MIRROR),
-                        help="输出 JSON 路径")
-    parser.add_argument("--mdcore-root", default=str(CHICHAO_ROOT),
-                        help="md_core 所在根目录")
+    parser.add_argument("--out", default=str(RULES_MIRROR), help="输出 JSON 路径")
+    parser.add_argument("--mdcore-root", default=str(CHICHAO_ROOT), help="md_core 所在根目录")
     parser.add_argument("--version", default="v7.7", help="规则源版本标识")
-    parser.add_argument("--stamp", action="store_true",
-                        help="写入 exported_at（破坏幂等，仅审计用）")
-    parser.add_argument("--print", dest="show", action="store_true",
-                        help="只打印不落盘")
+    parser.add_argument(
+        "--stamp", action="store_true", help="写入 exported_at（破坏幂等，仅审计用）"
+    )
+    parser.add_argument("--print", dest="show", action="store_true", help="只打印不落盘")
     args = parser.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -114,9 +127,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     payload = build_payload(
-        v75, liq, version=args.version,
-        exported_at=datetime.now().isoformat(timespec="seconds")
-        if args.stamp else None)
+        v75,
+        liq,
+        version=args.version,
+        exported_at=datetime.now().isoformat(timespec="seconds") if args.stamp else None,
+    )
     text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.show:
         print(text)

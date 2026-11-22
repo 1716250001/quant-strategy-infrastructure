@@ -38,26 +38,28 @@ PUSHPLUS_URL = "http://www.pushplus.plus/send"
 PUSHPLUS_BATCH_URL = "http://www.pushplus.plus/batchSend"
 
 # 免费版限制
-DAILY_LIMIT = 200          # 每日请求上限
-MINUTE_LIMIT = 5           # 每分钟请求上限
-SAME_CONTENT_HOURLY = 3    # 相同内容每小时上限
-CONTENT_MAX_LEN = 20000    # 内容最大长度
-TITLE_MAX_LEN = 100         # 标题最大长度
+DAILY_LIMIT = 200  # 每日请求上限
+MINUTE_LIMIT = 5  # 每分钟请求上限
+SAME_CONTENT_HOURLY = 3  # 相同内容每小时上限
+CONTENT_MAX_LEN = 20000  # 内容最大长度
+TITLE_MAX_LEN = 100  # 标题最大长度
 
 # 返回码
 CODE_SUCCESS = 200
-CODE_RATE_LIMITED = 900     # 当日额度用完或被封，必须停止
-CODE_NOT_VERIFIED = 905     # 未实名认证
-CODE_INVALID_TOKEN = 903    # token无效
+CODE_RATE_LIMITED = 900  # 当日额度用完或被封，必须停止
+CODE_NOT_VERIFIED = 905  # 未实名认证
+CODE_INVALID_TOKEN = 903  # token无效
 
 
 class PushPlusError(Exception):
     """PushPlus 推送异常"""
+
     pass
 
 
 class DailyLimitExceededError(PushPlusError):
     """当日额度用完"""
+
     pass
 
 
@@ -191,7 +193,7 @@ class PushPlus:
         template: str | None = None,
         channel: str | None = None,
         topic: str | None = None,
-        **kwargs
+        **kwargs,
     ) -> dict:
         """
         原始发送方法
@@ -361,7 +363,7 @@ class PushPlus:
         """生成信号唯一标识（用于冷却去重）"""
         parts = []
         for s in signals:
-            parts.append(f'{s.get("symbol","")}:{s.get("period","")}:{s.get("type","")}')
+            parts.append(f"{s.get('symbol', '')}:{s.get('period', '')}:{s.get('type', '')}")
         return "|".join(sorted(parts))
 
     def _check_cooldown(self, key: str) -> bool:
@@ -380,8 +382,9 @@ class PushPlus:
         """更新冷却时间"""
         self._state.setdefault("cooldowns", {})[key] = time.time()
         now = time.time()
-        expired = [k for k, v in self._state["cooldowns"].items()
-                   if now - v > self.cooldown_seconds * 2]
+        expired = [
+            k for k, v in self._state["cooldowns"].items() if now - v > self.cooldown_seconds * 2
+        ]
         for k in expired:
             del self._state["cooldowns"][k]
         self._save_state()
@@ -436,8 +439,8 @@ class PushPlus:
 # CLI入口
 # ============================================================
 
-def run_push(token=None, channel=None, template=None, title="通知",
-             content="", test=False):
+
+def run_push(token=None, channel=None, template=None, title="通知", content="", test=False):
     """发送推送并打印配额状态（供本文件 CLI 与统一入口 main.py 的 push-test 子命令共用）。
 
     参数:
@@ -473,10 +476,13 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="PushPlus微信推送")
-    parser.add_argument("--token", default=PUSHPLUS_TOKEN,
-                        help="PushPlus token (默认从config.py读取)")
+    parser.add_argument(
+        "--token", default=PUSHPLUS_TOKEN, help="PushPlus token (默认从config.py读取)"
+    )
     parser.add_argument("--channel", default=PUSHPLUS_CHANNEL, help="发送渠道 (wechat/clawbot)")
-    parser.add_argument("--template", default=PUSHPLUS_TEMPLATE, help="消息模板 (txt/markdown/html)")
+    parser.add_argument(
+        "--template", default=PUSHPLUS_TEMPLATE, help="消息模板 (txt/markdown/html)"
+    )
     parser.add_argument("--title", default="通知", help="消息标题")
     parser.add_argument("--content", default="", help="消息内容 (--test时可不填)")
     parser.add_argument("--test", action="store_true", help="发送测试消息")
@@ -487,8 +493,14 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    run_push(token=args.token, channel=args.channel, template=args.template,
-             title=args.title, content=args.content, test=args.test)
+    run_push(
+        token=args.token,
+        channel=args.channel,
+        template=args.template,
+        title=args.title,
+        content=args.content,
+        test=args.test,
+    )
 
 
 if __name__ == "__main__":

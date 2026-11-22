@@ -8,6 +8,7 @@
     ④ **幂等**：重复装载不重复注入 `sys.path`；
     ⑤ 不声明 `strategy_paths` 时行为不变（仓内夹具仍可加载）。
 """
+
 from __future__ import annotations
 
 import sys
@@ -17,7 +18,7 @@ import pytest
 from btf.config.validation import ConfigError
 from btf.runtime import BTFRuntime
 
-DEMO = '''\
+DEMO = """\
 from btf.domain.contracts import CONTRACT_VERSION
 from btf.strategy.base import StrategyBase
 
@@ -27,7 +28,7 @@ class DemoStrategy(StrategyBase):
 
     def __init__(self, **_params):
         super().__init__()
-'''
+"""
 
 
 def _runtime() -> BTFRuntime:
@@ -51,32 +52,28 @@ class TestStrategyPaths:
     def test_absolute_path_loads(self, external: Path, monkeypatch):
         monkeypatch.setattr(sys, "path", list(sys.path))
         rt = _runtime()
-        cfg = {"strategy": "ext_demo:DemoStrategy",
-               "strategy_paths": [str(external)]}
+        cfg = {"strategy": "ext_demo:DemoStrategy", "strategy_paths": [str(external)]}
         strategy = rt._load_strategy(cfg)
         assert type(strategy).__name__ == "DemoStrategy"
 
     def test_missing_path_raises(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr(sys, "path", list(sys.path))
         rt = _runtime()
-        cfg = {"strategy": "ext_demo:DemoStrategy",
-               "strategy_paths": [str(tmp_path / "missing")]}
+        cfg = {"strategy": "ext_demo:DemoStrategy", "strategy_paths": [str(tmp_path / "missing")]}
         with pytest.raises(ConfigError, match="路径不存在"):
             rt._load_strategy(cfg)
 
     def test_relative_path_raises(self, monkeypatch):
         monkeypatch.setattr(sys, "path", list(sys.path))
         rt = _runtime()
-        cfg = {"strategy": "ext_demo:DemoStrategy",
-               "strategy_paths": ["relative/path"]}
+        cfg = {"strategy": "ext_demo:DemoStrategy", "strategy_paths": ["relative/path"]}
         with pytest.raises(ConfigError, match="须为绝对路径"):
             rt._load_strategy(cfg)
 
     def test_idempotent_injection(self, external: Path, monkeypatch):
         monkeypatch.setattr(sys, "path", list(sys.path))
         rt = _runtime()
-        cfg = {"strategy": "ext_demo:DemoStrategy",
-               "strategy_paths": [str(external)]}
+        cfg = {"strategy": "ext_demo:DemoStrategy", "strategy_paths": [str(external)]}
         rt._load_strategy(cfg)
         resolved = str(external.resolve())
         assert sys.path.count(resolved) == 1

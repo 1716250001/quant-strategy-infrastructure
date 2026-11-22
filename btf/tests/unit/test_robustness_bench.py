@@ -12,6 +12,7 @@
     ③ **端点留痕**：`_excess_ir` 返回 `strat_*/bench_*` 四端点，端点不一致可核；
     ④ **变异测试**：把 `_ymd` 打残为恒等函数（模拟未规范化）⇒ ② 必红。
 """
+
 from __future__ import annotations
 
 import sys
@@ -33,18 +34,24 @@ def bench(tmp_path, monkeypatch):
     idx = tmp_path / "index_daily"
     idx.mkdir(parents=True)
     rows = {
-        2025: [("000300.SH", "20251230", 100.0),
-               ("000300.SH", "20251231", 102.0)],
-        2026: [("000300.SH", "20260102", 103.0),
-               ("000300.SH", "20260923", 119.09),
-               ("000300.SH", "20260924", 120.0)],
+        2025: [("000300.SH", "20251230", 100.0), ("000300.SH", "20251231", 102.0)],
+        2026: [
+            ("000300.SH", "20260102", 103.0),
+            ("000300.SH", "20260923", 119.09),
+            ("000300.SH", "20260924", 120.0),
+        ],
     }
     for year, data in rows.items():
-        pq.write_table(pa.table({
-            "ts_code": [d[0] for d in data],
-            "trade_date": [d[1] for d in data],
-            "close": [d[2] for d in data],
-        }), idx / f"{year}.parquet")
+        pq.write_table(
+            pa.table(
+                {
+                    "ts_code": [d[0] for d in data],
+                    "trade_date": [d[1] for d in data],
+                    "close": [d[2] for d in data],
+                }
+            ),
+            idx / f"{year}.parquet",
+        )
 
     from btf.config import paths
 
@@ -79,8 +86,7 @@ class TestBenchSeriesRange:
 class TestEndpointDisclosure:
     def test_excess_ir_returns_endpoints(self, bench):
         """③ 端点留痕：四端点齐备且两侧对齐（本案缺的正是这个可核性）。"""
-        nav = [("20251230", 1.0), ("20251231", 1.01), ("20260102", 1.02),
-               ("20260923", 1.20)]
+        nav = [("20251230", 1.0), ("20251231", 1.01), ("20260102", 1.02), ("20260923", 1.20)]
         out = bench._excess_ir(nav, _series(bench, "2025-12-30", "2026-09-23"))
         assert out["strat_first"] == out["bench_first"] == "20251230"
         assert out["strat_last"] == out["bench_last"] == "20260923"
@@ -92,14 +98,13 @@ class TestEndpointDisclosure:
         nav = [("20251230", 1.0), ("20260923", 1.20)]
         out = bench._excess_ir(nav, {"20251230": 100.0, "20251231": 102.0})
         assert out["bench_last"] == "20251231"
-        assert out["strat_last"] == "20260923"      # 一眼可见不一致
+        assert out["strat_last"] == "20260923"  # 一眼可见不一致
 
 
 class TestMutation:
     """④ 变异测试：打残 `_ymd`（恒等）⇒ 断言② 必红。"""
 
     def test_identity_ymd_reproduces_defect(self, bench, monkeypatch):
-        monkeypatch.setattr(bench, "_ymd", lambda v: v)      # 打残：不规范化
+        monkeypatch.setattr(bench, "_ymd", lambda v: v)  # 打残：不规范化
         s = _series(bench, "2025-12-30", "2026-09-23")
-        assert "20260923" not in s, (
-            "打残后未复现端点截断 ⇒ 断言② 无牙齿（伪防线）")
+        assert "20260923" not in s, "打残后未复现端点截断 ⇒ 断言② 无牙齿（伪防线）"

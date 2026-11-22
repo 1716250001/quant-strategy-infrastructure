@@ -12,6 +12,7 @@
 history 缓存：per-symbol 全区间一次装载（engine 生命周期），后续
 history() 调用纯内存切片——B2 月调仓 10 年 50 标的 ≈ 50 次单标的读。
 """
+
 from __future__ import annotations
 
 from bisect import bisect_right
@@ -110,8 +111,10 @@ class StrategyContext:
         # 条目存 `(bars, dates)`，`history` 用 `bisect_right` 定位（O(log n)）。
         #     生命周期归引擎（`Engine.run()` 开头重建），策略侧不得假设其存活期。
         self._cache: BoundedDict[str, Any] = (
-            history_cache if history_cache is not None
-            else BoundedDict(maxsize=8_000, name="ctx.history"))
+            history_cache
+            if history_cache is not None
+            else BoundedDict(maxsize=8_000, name="ctx.history")
+        )
         self._submit_target = on_submit_target
         self._submit_order = on_submit_order
         self.start = start
@@ -122,12 +125,12 @@ class StrategyContext:
     def universe(self) -> Sequence[Instrument]:
         """当日可交易宇宙（静态身份，04 §8.3.2；ST/停牌标记走 state()）。"""
         if self._universe_loader is None:
-            raise RuntimeError(
-                "本引擎装配未注入 universe_loader（DataFeed.universe 不可用）")
+            raise RuntimeError("本引擎装配未注入 universe_loader（DataFeed.universe 不可用）")
         current = self._now()
         if current is None:
             raise RuntimeError("宇宙查询早于首个交易日（now=None）")
         return self._universe_loader(current)
+
     def bar(self, symbol: str) -> Bar | None:
         """当日 bar（停牌缺席 → None）。
 
@@ -141,11 +144,13 @@ class StrategyContext:
             raise RuntimeError(
                 f"前视封堵（on_open 阶段）：不得读当日 bar（symbol={symbol}）"
                 f"——close/high/low 在收盘重估（步骤⑤）后才产生；"
-                f"读状态请用 ctx.state()，读史请用 history(end < 当日)（RC-10）")
+                f"读状态请用 ctx.state()，读史请用 history(end < 当日)（RC-10）"
+            )
         return self._data.get(symbol)
 
-    def history(self, symbol: str, end: TradingDate, fields: Sequence[str] | None = None,
-                n_bars: int = 1) -> list[Bar]:
+    def history(
+        self, symbol: str, end: TradingDate, fields: Sequence[str] | None = None, n_bars: int = 1
+    ) -> list[Bar]:
         """截至 end（含）的最近 n_bars 个 bar（升序）。
 
         前视封堵（**RC-10，2026-10-05**——原实现只拦 `end > current`）：
@@ -158,13 +163,13 @@ class StrategyContext:
         current = self._now()
         if current is not None:
             if end > current:
-                raise RuntimeError(
-                    f"前视封堵：history end={end} 超过当前交易日 {current}")
+                raise RuntimeError(f"前视封堵：history end={end} 超过当前交易日 {current}")
             if end == current and self._phase == "open":
                 raise RuntimeError(
                     f"前视封堵（on_open 阶段）：history end={end} 命中当日——"
                     f"当日 bar 未收盘（close 在其后产生）；"
-                    f"请改用 end < {current}（RC-10）")
+                    f"请改用 end < {current}（RC-10）"
+                )
         bars = self._cache.get(symbol)
         if bars is None:
             bars = self._loader(symbol)
@@ -174,8 +179,8 @@ class StrategyContext:
         bars, dates = bars
         if n_bars <= 0:
             return []
-        hi = bisect_right(dates, end)          # 首个 > end 的位置 = 满足数量
-        return list(bars[max(0, hi - n_bars):hi])
+        hi = bisect_right(dates, end)  # 首个 > end 的位置 = 满足数量
+        return list(bars[max(0, hi - n_bars) : hi])
 
     def state(self, symbol: str) -> TradingState | None:
         """当日状态面板行（停牌/涨跌停/ST）。"""

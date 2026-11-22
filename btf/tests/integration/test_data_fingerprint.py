@@ -17,6 +17,7 @@
     ③ **变异性检查**（铁律新 15）：数据变 → 指纹必变；
     ④ 性能留痕：装配期指纹耗时被记录（不得显著拖慢启动）。
 """
+
 from __future__ import annotations
 
 import json
@@ -28,8 +29,7 @@ from btf.config.paths import MARKET_DATA_DIR
 pytestmark = [pytest.mark.l4]
 
 ROOT = Path(MARKET_DATA_DIR)
-requires_mainlib = pytest.mark.skipif(
-    not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
+requires_mainlib = pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -40,8 +40,7 @@ def _write_config(tmp_path: Path) -> Path:
         "run": {
             "strategy": "tests.fixtures.buyhold:ConfigBuyHold",
             "params": {"symbol": "000001.SZ", "weight": 0.9},
-            "universe": {"source": "explicit",
-                         "symbols": ["000001.SZ", "600000.SH"]},
+            "universe": {"source": "explicit", "symbols": ["000001.SZ", "600000.SH"]},
             "period": {"start": "2024-01-01", "end": "2024-06-30"},
             "initial_cash": 1_000_000,
         },
@@ -67,12 +66,12 @@ class TestDataFingerprintEndToEnd:
         assert len(run_dirs) == 1
         run_id = run_dirs[0].name
 
-        manifest = json.loads((out_dir / run_id / "manifest.json").read_text(
-            encoding="utf-8"))
+        manifest = json.loads((out_dir / run_id / "manifest.json").read_text(encoding="utf-8"))
         dv = manifest["data_version"]
         assert dv["content_hash"].startswith("sha256:")
         assert dv["content_hash"] != "sha256:unknown", (
-            "数据指纹仍为占位——空洞披露回归（P2-NEW-7 / 铁律新 16）")
+            "数据指纹仍为占位——空洞披露回归（P2-NEW-7 / 铁律新 16）"
+        )
         assert dv["tables"], "tables 为空（指纹未覆盖任何表）"
         assert dv["anchor_date"], "anchor_date 为 null（数据水位未落）"
         assert dv["anchor_date"].startswith("2024"), dv["anchor_date"]
@@ -103,11 +102,10 @@ class TestDataFingerprintEndToEnd:
 
         rt.run(store=LocalRunStore(tmp_path / "runs"))
         assert rt.data_fingerprint_seconds > 0, "落盘路径未计算指纹"
-        print(f"\n指纹耗时（缺省 meta 档）："
-              f"{rt.data_fingerprint_seconds:.3f}s")
+        print(f"\n指纹耗时（缺省 meta 档）：{rt.data_fingerprint_seconds:.3f}s")
         assert rt.data_fingerprint_seconds < 5.0, (
-            f"缺省档指纹耗时 {rt.data_fingerprint_seconds:.1f}s 过高"
-            f"（meta 档应毫秒级）")
+            f"缺省档指纹耗时 {rt.data_fingerprint_seconds:.1f}s 过高（meta 档应毫秒级）"
+        )
         assert rt.data_version_info["mode"] == "meta"
 
     def test_grid_path_pays_nothing(self, tmp_path):
@@ -116,8 +114,7 @@ class TestDataFingerprintEndToEnd:
 
         rt = BTFRuntime().load_config(_write_config(tmp_path)).build()
         rt.run(persist=False)
-        assert rt.data_fingerprint_seconds == 0.0, (
-            "不落盘路径不得计算指纹（B4 网格回归守卫）")
+        assert rt.data_fingerprint_seconds == 0.0, "不落盘路径不得计算指纹（B4 网格回归守卫）"
 
 
 class TestFingerprintVariability:
@@ -128,11 +125,13 @@ class TestFingerprintVariability:
         import pyarrow.parquet as pq
 
         (root / "daily").mkdir(parents=True, exist_ok=True)
-        table = pa.table({
-            "ts_code": ["000001.SZ"] * len(closes),
-            "trade_date": [f"{year}010{i + 1:02d}" for i in range(len(closes))],
-            "close": closes,
-        })
+        table = pa.table(
+            {
+                "ts_code": ["000001.SZ"] * len(closes),
+                "trade_date": [f"{year}010{i + 1:02d}" for i in range(len(closes))],
+                "close": closes,
+            }
+        )
         pq.write_table(table, root / "daily" / f"{year}.parquet")
 
     def test_fast_digest_changes_when_key_columns_change(self, tmp_path):
@@ -174,13 +173,14 @@ class TestFingerprintVariability:
         fast_before = compute(["daily"], root, mode="fast", years=[2015]).digest
         full_before = compute(["daily"], root, mode="full", years=[2015]).digest
 
-        self._write_daily(root, 2015, [10.0, 10.5, 11.7])      # 仅改数值
+        self._write_daily(root, 2015, [10.0, 10.5, 11.7])  # 仅改数值
         fast_after = compute(["daily"], root, mode="fast", years=[2015]).digest
         full_after = compute(["daily"], root, mode="full", years=[2015]).digest
 
         assert full_before != full_after, "full 档未检出数值级修订（伪防线）"
         assert fast_before == fast_after, (
-            "fast 档只指纹键列——若此处变了，说明抽样面被改动（实现漂移）")
+            "fast 档只指纹键列——若此处变了，说明抽样面被改动（实现漂移）"
+        )
 
     def test_years_filter_scopes_fingerprint(self, tmp_path):
         """区间年过滤（BB-1 性能要点）：不同 years → 覆盖不同文件 → 指纹不同。"""
@@ -199,7 +199,6 @@ class TestFingerprintVariability:
         """表缺失（未落盘/区间外）→ 零行指纹（不崩、不静默回落 unknown）。"""
         from btf.data.version import compute
 
-        fp = compute(["daily", "stk_limit"], tmp_path / "empty",
-                     mode="fast", years=[2015])
+        fp = compute(["daily", "stk_limit"], tmp_path / "empty", mode="fast", years=[2015])
         assert fp.tables["daily"].row_count == 0
-        assert fp.digest.startswith("sha256:")     # 仍是**真值**（空是事实）
+        assert fp.digest.startswith("sha256:")  # 仍是**真值**（空是事实）

@@ -35,6 +35,7 @@ RECOVERY / 确认期（规则源 Z-6 澄清=唯一口径；仓位上限见 `POSI
     - 跌停判定容差 1e-6（与 md_core 一致；btf/data/state.py 用 1e-4，二者
       用途不同——本模块对账赤潮口径，state.py 供引擎撮合）。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -43,7 +44,7 @@ from typing import TYPE_CHECKING
 
 from btf.config.paths import MARKET_DATA_DIR
 
-if TYPE_CHECKING:                     # 仅类型注解（运行期惰性 import，无环）
+if TYPE_CHECKING:  # 仅类型注解（运行期惰性 import，无环）
     from btf.data.core import YearTableStore
 
 
@@ -52,6 +53,7 @@ def _store(root: Path | None) -> YearTableStore:
     from btf.data import core as _core
 
     return _core.YearTableStore(Path(root or MARKET_DATA_DIR))
+
 
 #: 状态常量（`status` 取值 = 仓位上限/策略消费依据）
 NORMAL, WATCH, CRISIS, RECOVERY = "NORMAL", "WATCH", "CRISIS", "RECOVERY"
@@ -89,12 +91,11 @@ class LiqState:
     phase_days: int = 0
 
 
-def index_pct(symbol: str, date_ymd: str, root: Path | None = None
-              ) -> float | None:
+def index_pct(symbol: str, date_ymd: str, root: Path | None = None) -> float | None:
     """指数当日涨跌幅（%）；缺失/无行情 → None（fail-closed）。"""
     table = _store(root).read_range(
-        "index_daily", date_ymd, date_ymd,
-        columns=["ts_code", "trade_date", "pct_chg"])
+        "index_daily", date_ymd, date_ymd, columns=["ts_code", "trade_date", "pct_chg"]
+    )
     for row in table.to_pylist():
         if row.get("ts_code") == symbol and str(row.get("trade_date")) == date_ymd:
             value = row.get("pct_chg")
@@ -106,14 +107,16 @@ def limit_stats(date_ymd: str, root: Path | None = None) -> tuple[int, int, floa
     """跌停统计 → (跌停家数, 样本总数, 跌停占比%)。"""
     root = Path(root or MARKET_DATA_DIR)
     limits = _store(root).read_range(
-        "stk_limit", date_ymd, date_ymd,
-        columns=["ts_code", "trade_date", "down_limit", "up_limit"])
-    limits_by_code = {r["ts_code"]: r for r in limits.to_pylist()
-                      if str(r.get("trade_date")) == date_ymd}
+        "stk_limit", date_ymd, date_ymd, columns=["ts_code", "trade_date", "down_limit", "up_limit"]
+    )
+    limits_by_code = {
+        r["ts_code"]: r for r in limits.to_pylist() if str(r.get("trade_date")) == date_ymd
+    }
     if not limits_by_code:
         return 0, 0, 0.0
     daily = _store(root).read_range(
-        "daily", date_ymd, date_ymd, columns=["ts_code", "trade_date", "close"])
+        "daily", date_ymd, date_ymd, columns=["ts_code", "trade_date", "close"]
+    )
     total = down = 0
     for row in daily.to_pylist():
         if str(row.get("trade_date")) != date_ymd:
@@ -130,8 +133,14 @@ def limit_stats(date_ymd: str, root: Path | None = None) -> tuple[int, int, floa
     return down, total, (down / total * 100.0 if total else 0.0)
 
 
-def classify(*, sh_pct: float | None, small_pct: float | None, down_cnt: int,
-             down_ratio: float, thresholds: dict) -> tuple[str, tuple[str, ...]]:
+def classify(
+    *,
+    sh_pct: float | None,
+    small_pct: float | None,
+    down_cnt: int,
+    down_ratio: float,
+    thresholds: dict,
+) -> tuple[str, tuple[str, ...]]:
     """纯判定（无 I/O，可单测）：(状态, 触发项)。"""
     sh_crisis = float(thresholds["sh_crisis"])
     sh_watch = float(thresholds["sh_watch"])
@@ -147,8 +156,7 @@ def classify(*, sh_pct: float | None, small_pct: float | None, down_cnt: int,
         triggers.append(f"down_cnt≥{down_crisis}")
     if small_pct is not None and small_pct <= small_crisis:
         triggers.append(f"small≤{small_crisis}")
-    if (sh_pct is not None and sh_pct <= sh_crisis
-            and down_ratio >= ratio_crisis):
+    if sh_pct is not None and sh_pct <= sh_crisis and down_ratio >= ratio_crisis:
         triggers.append(f"sh≤{sh_crisis}且ratio≥{ratio_crisis}")
     if triggers:
         return CRISIS, tuple(triggers)
@@ -166,9 +174,15 @@ def classify(*, sh_pct: float | None, small_pct: float | None, down_cnt: int,
     return NORMAL, ()
 
 
-def state_of(date_ymd: str, thresholds: dict, *, root: Path | None = None,
-             prev: LiqState | None = None,
-             recovery_days: int = 3, confirm_days: int = 3) -> LiqState:
+def state_of(
+    date_ymd: str,
+    thresholds: dict,
+    *,
+    root: Path | None = None,
+    prev: LiqState | None = None,
+    recovery_days: int = 3,
+    confirm_days: int = 3,
+) -> LiqState:
     """单日状态（含确认期 + RECOVERY 两段序列判定）——**单日入口**（对账/抽查用）。
 
     `prev`：**前一交易日的 `LiqState`**（单步递推；`None` = 序列起点/IDLE）。
@@ -183,14 +197,30 @@ def state_of(date_ymd: str, thresholds: dict, *, root: Path | None = None,
     sh_pct = index_pct(IDX_SH, date_ymd, root)
     small_pct = index_pct(IDX_SMALL, date_ymd, root)
     down_cnt, _total, down_ratio = limit_stats(date_ymd, root)
-    return _finalize(date_ymd, thresholds, sh_pct, small_pct, down_cnt,
-                     down_ratio, prev, recovery_days, confirm_days)
+    return _finalize(
+        date_ymd,
+        thresholds,
+        sh_pct,
+        small_pct,
+        down_cnt,
+        down_ratio,
+        prev,
+        recovery_days,
+        confirm_days,
+    )
 
 
-def _finalize(date_ymd: str, thresholds: dict, sh_pct: float | None,
-              small_pct: float | None, down_cnt: int, down_ratio: float,
-              prev: LiqState | None, recovery_days: int,
-              confirm_days: int) -> LiqState:
+def _finalize(
+    date_ymd: str,
+    thresholds: dict,
+    sh_pct: float | None,
+    small_pct: float | None,
+    down_cnt: int,
+    down_ratio: float,
+    prev: LiqState | None,
+    recovery_days: int,
+    confirm_days: int,
+) -> LiqState:
     """判定 + 确认期/恢复期叠加（`state_of` 与预计算共用的**唯一**口径）。
 
     状态机（规则源 Z-6 澄清 = 唯一口径；**单步递推**，记忆 = `phase` +
@@ -222,9 +252,13 @@ def _finalize(date_ymd: str, thresholds: dict, sh_pct: float | None,
           （规则源写明"确认期内状态归属 = CRISIS（0 成）"），
           原"CRISIS 次日即入 RECOVERY"的最简窗口**取消**。
     """
-    raw, triggers = classify(sh_pct=sh_pct, small_pct=small_pct,
-                             down_cnt=down_cnt, down_ratio=down_ratio,
-                             thresholds=thresholds)
+    raw, triggers = classify(
+        sh_pct=sh_pct,
+        small_pct=small_pct,
+        down_cnt=down_cnt,
+        down_ratio=down_ratio,
+        thresholds=thresholds,
+    )
     phase = prev.phase if prev is not None else IDLE
     days = prev.phase_days if prev is not None else 0
 
@@ -238,21 +272,29 @@ def _finalize(date_ymd: str, thresholds: dict, sh_pct: float | None,
             status, phase, days = CRISIS, CONFIRM, 0
     elif phase == CONFIRM:
         if days + 1 < confirm_days:
-            status, days = CRISIS, days + 1              # 入闸确认期（0 成）
+            status, days = CRISIS, days + 1  # 入闸确认期（0 成）
         else:
             status, phase, days = RECOVERY, RECOVERY, 0  # 第 C 个平静日入闸
     elif phase == RECOVERY:
         if days + 1 < recovery_days:
-            status, days = RECOVERY, days + 1            # 恢复期（≤1 成）
+            status, days = RECOVERY, days + 1  # 恢复期（≤1 成）
         else:
             status, phase, days = NORMAL, IDLE, 0
-    else:                                                # IDLE + NORMAL
+    else:  # IDLE + NORMAL
         status, phase, days = NORMAL, IDLE, 0
 
-    return LiqState(date=date_ymd, status=status, sh_pct=sh_pct,
-                    small_pct=small_pct, down_cnt=down_cnt,
-                    down_ratio=down_ratio, triggers=triggers,
-                    raw=raw, phase=phase, phase_days=days)
+    return LiqState(
+        date=date_ymd,
+        status=status,
+        sh_pct=sh_pct,
+        small_pct=small_pct,
+        down_cnt=down_cnt,
+        down_ratio=down_ratio,
+        triggers=triggers,
+        raw=raw,
+        phase=phase,
+        phase_days=days,
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -278,47 +320,58 @@ def _limit_counts_by_day(t: object, tol: float) -> dict[str, tuple[int, int]]:
         return pc.binary_join_element_wise(
             tbl.column("ts_code").cast(pa.large_string()),
             tbl.column("trade_date").cast(pa.large_string()),
-            pa.scalar("|", pa.large_string()))
+            pa.scalar("|", pa.large_string()),
+        )
 
     down_col = limits.column("down_limit")
     close_col = daily.column("close")
     # 有效性先行（口径：down_limit 有效且 > 0；close 有效）
-    lim = limits.filter(pc.and_(pc.is_valid(down_col),
-                                pc.greater(down_col, 0)))
+    lim = limits.filter(pc.and_(pc.is_valid(down_col), pc.greater(down_col, 0)))
     dl = daily.filter(pc.is_valid(close_col))
     if not lim.num_rows or not dl.num_rows:
         return {}
     idx = pc.index_in(_key(dl), value_set=_key(lim))
     # 未命中语义：pyarrow `index_in` 对未命中返回 **null**；部分版本/路径可能
     # 返回 -1——两者都排除（`take(-1)` 会静默取末行 → 计数错乱，实测踩过）
-    mask = pc.and_(pc.is_valid(idx),
-                   pc.greater_equal(pc.fill_null(idx, -1), 0))
+    mask = pc.and_(pc.is_valid(idx), pc.greater_equal(pc.fill_null(idx, -1), 0))
     if not pc.any(mask).as_py():
         return {}
     sel = pc.filter(idx, mask)
-    aligned = pa.table({
-        "trade_date": pc.filter(dl.column("trade_date"), mask),
-        "close": pc.filter(close_col.cast(pa.float64()), mask),
-        # 索引基准 = **过滤后**的 lim（sel 由 _key(lim) 的 value_set 生成）
-        "down_limit": pc.take(lim.column("down_limit").cast(pa.float64()), sel),
-    })
+    aligned = pa.table(
+        {
+            "trade_date": pc.filter(dl.column("trade_date"), mask),
+            "close": pc.filter(close_col.cast(pa.float64()), mask),
+            # 索引基准 = **过滤后**的 lim（sel 由 _key(lim) 的 value_set 生成）
+            "down_limit": pc.take(lim.column("down_limit").cast(pa.float64()), sel),
+        }
+    )
 
     def _counts(tbl) -> dict[str, int]:
         grouped = tbl.group_by("trade_date").aggregate([("close", "count")])
-        return dict(zip(grouped.column("trade_date").to_pylist(),
-                        grouped.column("close_count").to_pylist(), strict=True))
+        return dict(
+            zip(
+                grouped.column("trade_date").to_pylist(),
+                grouped.column("close_count").to_pylist(),
+                strict=True,
+            )
+        )
 
     total = _counts(aligned)
-    hit = aligned.filter(pc.less_equal(
-        aligned.column("close"),
-        pc.add(aligned.column("down_limit"), pa.scalar(tol))))
+    hit = aligned.filter(
+        pc.less_equal(aligned.column("close"), pc.add(aligned.column("down_limit"), pa.scalar(tol)))
+    )
     down = _counts(hit)
     return {day: (int(down.get(day, 0)), int(cnt)) for day, cnt in total.items()}
 
 
 def precompute_liq_series(
-    start_ymd: str, end_ymd: str, thresholds: dict, *,
-    root: Path | None = None, recovery_days: int = 3, confirm_days: int = 3,
+    start_ymd: str,
+    end_ymd: str,
+    thresholds: dict,
+    *,
+    root: Path | None = None,
+    recovery_days: int = 3,
+    confirm_days: int = 3,
     store: YearTableStore | None = None,
 ) -> dict[str, LiqState]:
     """一次性算整个回测区间的 LIQ 序列（19 号报告 §9.2；P0-1 直接解）。
@@ -340,15 +393,13 @@ def precompute_liq_series(
     # ① 交易日域（A 股交易日 = daily 表日索引），逐年滚动装载
     days: list[str] = []
     for year in range(y0, y1 + 1):
-        days.extend(d for d in store.days("daily", year)
-                    if start_ymd <= d <= end_ymd)
+        days.extend(d for d in store.days("daily", year) if start_ymd <= d <= end_ymd)
     days.sort()
 
     # ② 指数涨跌幅：小标的集整年取（Arrow is_in；对比 index_pct 整表遍历）
     pct: dict[tuple[str, str], float] = {}
     for year in range(y0, y1 + 1):
-        pct.update(store.values_by_symbol_day(
-            "index_daily", year, [IDX_SH, IDX_SMALL], "pct_chg"))
+        pct.update(store.values_by_symbol_day("index_daily", year, [IDX_SH, IDX_SMALL], "pct_chg"))
 
     # ③ 逐日跌停统计：逐年 Arrow join + group_by（业务口径留在本模块）
     #    免排序装载（join/group_by 不要求有序）+ **逐年并行**（pyarrow 释放
@@ -361,11 +412,11 @@ def precompute_liq_series(
 
     def _year_counts(year: int) -> dict[str, tuple[int, int]]:
         limits = store.load_year(
-            "stk_limit", year, ("ts_code", "trade_date", "down_limit"),
-            sorted_rows=False)[0]
+            "stk_limit", year, ("ts_code", "trade_date", "down_limit"), sorted_rows=False
+        )[0]
         daily = store.load_year(
-            "daily", year, ("ts_code", "trade_date", "close"),
-            sorted_rows=False)[0]
+            "daily", year, ("ts_code", "trade_date", "close"), sorted_rows=False
+        )[0]
         if limits is None or daily is None:
             return {}
         return _limit_counts_by_day((limits, daily), _TOL)
@@ -388,14 +439,36 @@ def precompute_liq_series(
     for day in days:
         down_cnt, total = counts.get(day, (0, 0))
         ratio = down_cnt / total * 100.0 if total else 0.0
-        state = _finalize(day, thresholds, pct.get((IDX_SH, day)),
-                          pct.get((IDX_SMALL, day)), down_cnt, ratio,
-                          prev, recovery_days, confirm_days)
+        state = _finalize(
+            day,
+            thresholds,
+            pct.get((IDX_SH, day)),
+            pct.get((IDX_SMALL, day)),
+            down_cnt,
+            ratio,
+            prev,
+            recovery_days,
+            confirm_days,
+        )
         out[day] = state
         prev = state
     return out
 
 
-__all__ = ["CONFIRM", "CRISIS", "IDLE", "IDX_SH", "IDX_SMALL", "NORMAL",
-           "POSITION_CAPS", "RECOVERY", "WATCH", "LiqState", "classify",
-           "index_pct", "limit_stats", "precompute_liq_series", "state_of"]
+__all__ = [
+    "CONFIRM",
+    "CRISIS",
+    "IDLE",
+    "IDX_SH",
+    "IDX_SMALL",
+    "NORMAL",
+    "POSITION_CAPS",
+    "RECOVERY",
+    "WATCH",
+    "LiqState",
+    "classify",
+    "index_pct",
+    "limit_stats",
+    "precompute_liq_series",
+    "state_of",
+]

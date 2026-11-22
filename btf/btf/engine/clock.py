@@ -4,6 +4,7 @@
 职责：唯一"当前日"真源——引擎每推进一个交易日调用 advance；
 ctx 前视断言（end > current 即触发）依赖它，禁止策略侧持有独立日期推进。
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence

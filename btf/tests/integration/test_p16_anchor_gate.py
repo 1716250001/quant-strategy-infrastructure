@@ -10,6 +10,7 @@
 
 另锁 **D**：`content_hash`（`fp.digest`）逐字不变——P16 只动锚点语义。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -19,7 +20,8 @@ from btf.config.validation import ConfigError
 pytestmark = [pytest.mark.l2]
 
 requires_mainlib = pytest.mark.skipif(
-    not (MARKET_DATA_DIR / "daily").is_dir(), reason=f"主库不可用: {MARKET_DATA_DIR}")
+    not (MARKET_DATA_DIR / "daily").is_dir(), reason=f"主库不可用: {MARKET_DATA_DIR}"
+)
 
 
 class _FakeFingerprint:
@@ -71,8 +73,7 @@ def _clear_fingerprint_memo():
 def _install_fake(monkeypatch, detail: dict) -> None:
     from btf.data import version as version_mod
 
-    monkeypatch.setattr(version_mod, "compute",
-                        lambda *a, **k: _FakeFingerprint(detail))
+    monkeypatch.setattr(version_mod, "compute", lambda *a, **k: _FakeFingerprint(detail))
 
 
 # 行情表 20240103 已滞后于区间末（20240105）；`stock_basic` 更"新"（20260930）。
@@ -142,8 +143,7 @@ class TestLagStillRed:
         from btf.runtime import BTFRuntime
 
         _install_fake(monkeypatch, {"daily": {"date_max": "20240105"}})
-        rt = BTFRuntime().load_config(
-            _cfg(anchor="2026-09-18", end="2024-01-05")).build()
+        rt = BTFRuntime().load_config(_cfg(anchor="2026-09-18", end="2024-01-05")).build()
         joined = " | ".join(rt.assembly_notes)
         assert "数据版本门禁通过" in joined
         assert "夹取" in joined

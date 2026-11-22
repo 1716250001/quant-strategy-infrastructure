@@ -3,6 +3,7 @@
 
 验收锚点：拒单六 code 各一单测；涨跌停浮点容差 1e-4。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -26,13 +27,27 @@ pytestmark = [pytest.mark.l1]
 
 
 def _buy(symbol: str, qty: int = 100, oid: str = "O00000001") -> Order:
-    return Order(order_id=oid, symbol=symbol, side=OrderSide.BUY,
-                 order_type=OrderType.MARKET, qty=qty, limit_price=None, created_at=D1)
+    return Order(
+        order_id=oid,
+        symbol=symbol,
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        qty=qty,
+        limit_price=None,
+        created_at=D1,
+    )
 
 
 def _sell(symbol: str, qty: int = 100, oid: str = "O00000002") -> Order:
-    return Order(order_id=oid, symbol=symbol, side=OrderSide.SELL,
-                 order_type=OrderType.MARKET, qty=qty, limit_price=None, created_at=D1)
+    return Order(
+        order_id=oid,
+        symbol=symbol,
+        side=OrderSide.SELL,
+        order_type=OrderType.MARKET,
+        qty=qty,
+        limit_price=None,
+        created_at=D1,
+    )
 
 
 def _section(scenario, day: TradingDate) -> dict:
@@ -51,8 +66,9 @@ class TestRejections:
         sc = suspend_scenario()
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler(instruments=sc.instruments)
-        fills, rejs = h.execute([_buy("000002.SZ")], D3,
-                                _section(sc, D3), sc.feed.trading_states(D3), pf)
+        fills, rejs = h.execute(
+            [_buy("000002.SZ")], D3, _section(sc, D3), sc.feed.trading_states(D3), pf
+        )
         assert not fills
         assert rejs[0][1].code is RejectCode.SUSPENDED
 
@@ -61,8 +77,9 @@ class TestRejections:
         sc = limit_scenario()
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler(instruments=sc.instruments)
-        fills, rejs = h.execute([_buy("600000.SH")], D2,
-                                _section(sc, D2), sc.feed.trading_states(D2), pf)
+        fills, rejs = h.execute(
+            [_buy("600000.SH")], D2, _section(sc, D2), sc.feed.trading_states(D2), pf
+        )
         assert not fills
         assert rejs[0][1].code is RejectCode.LIMIT_UP
 
@@ -72,13 +89,15 @@ class TestRejections:
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler(instruments=sc.instruments)
         # D1 买入建仓（正常日）
-        fills, _ = h.execute([_buy("600000.SH")], D1,
-                             _section(sc, D1), sc.feed.trading_states(D1), pf)
+        fills, _ = h.execute(
+            [_buy("600000.SH")], D1, _section(sc, D1), sc.feed.trading_states(D1), pf
+        )
         assert fills and pf.position("600000.SH").qty == 100
         pf.advance_day()
         # D3 跌停日卖出 → 拒
-        fills, rejs = h.execute([_sell("600000.SH")], D3,
-                                _section(sc, D3), sc.feed.trading_states(D3), pf)
+        fills, rejs = h.execute(
+            [_sell("600000.SH")], D3, _section(sc, D3), sc.feed.trading_states(D3), pf
+        )
         assert not fills
         assert rejs[0][1].code is RejectCode.LIMIT_DOWN
 
@@ -87,8 +106,9 @@ class TestRejections:
         sc = t_plus1_scenario()
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler(instruments=sc.instruments)
-        _, rejs = h.execute([_buy("000001.SZ", qty=150)], D2,
-                            _section(sc, D2), sc.feed.trading_states(D2), pf)
+        _, rejs = h.execute(
+            [_buy("000001.SZ", qty=150)], D2, _section(sc, D2), sc.feed.trading_states(D2), pf
+        )
         assert rejs[0][1].code is RejectCode.LOT_SIZE
 
     def test_t_plus_1(self):
@@ -97,19 +117,25 @@ class TestRejections:
         sc = t_plus1_scenario()
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler(instruments=sc.instruments)
-        fills, rejs = h.execute([_buy("000001.SZ"), _sell("000001.SZ")], D2,
-                                _section(sc, D2), sc.feed.trading_states(D2), pf)
-        assert len(fills) == 1                      # 买单成交
+        fills, rejs = h.execute(
+            [_buy("000001.SZ"), _sell("000001.SZ")],
+            D2,
+            _section(sc, D2),
+            sc.feed.trading_states(D2),
+            pf,
+        )
+        assert len(fills) == 1  # 买单成交
         assert pf.position("000001.SZ").qty == 100
         assert [r[1].code for r in rejs] == [RejectCode.T_PLUS_1]
 
     def test_insufficient_cash(self):
         """⑥ INSUFFICIENT_CASH：现金不足（含费用预估）→ 拒。"""
         sc = t_plus1_scenario()
-        pf = Portfolio(cash=500.0)                  # 100 股 @10.1 需 1010+
+        pf = Portfolio(cash=500.0)  # 100 股 @10.1 需 1010+
         h = NextOpenHandler(instruments=sc.instruments)
-        fills, rejs = h.execute([_buy("000001.SZ")], D2,
-                                _section(sc, D2), sc.feed.trading_states(D2), pf)
+        fills, rejs = h.execute(
+            [_buy("000001.SZ")], D2, _section(sc, D2), sc.feed.trading_states(D2), pf
+        )
         assert not fills
         assert rejs[0][1].code is RejectCode.INSUFFICIENT_CASH
 
@@ -121,8 +147,9 @@ class TestNextOpenFill:
         pf = Portfolio(cash=10_000.0)
         cost = FlatRateCostModel()
         h = NextOpenHandler(cost_model=cost, instruments=sc.instruments)
-        fills, rejs = h.execute([_buy("000001.SZ")], D2,
-                                _section(sc, D2), sc.feed.trading_states(D2), pf)
+        fills, rejs = h.execute(
+            [_buy("000001.SZ")], D2, _section(sc, D2), sc.feed.trading_states(D2), pf
+        )
         assert not rejs and len(fills) == 1
         f = fills[0]
         assert f.price == 10.1 and f.fill_timing == "open" and f.fill_date == D2
@@ -135,18 +162,32 @@ class TestNextOpenFill:
     def test_sequential_same_day_cash_reuse(self):
         """同日卖先买后：卖出回笼资金可供后续买单（顺序处理语义）。"""
         sc = t_plus1_scenario()
-        pf = Portfolio(cash=1_000.0)               # 预置持仓的建仓成本
+        pf = Portfolio(cash=1_000.0)  # 预置持仓的建仓成本
         # D1 手工入账持仓（现金 −1000 → 0）
-        pf.apply_fill(Fill(
-            fill_id="F00000000", order_id="O0", symbol="000001.SZ",
-            side=OrderSide.BUY, qty=100, price=10.0, fee=Fee.zero(),
-            fill_date=D1, fill_timing="open"))
+        pf.apply_fill(
+            Fill(
+                fill_id="F00000000",
+                order_id="O0",
+                symbol="000001.SZ",
+                side=OrderSide.BUY,
+                qty=100,
+                price=10.0,
+                fee=Fee.zero(),
+                fill_date=D1,
+                fill_timing="open",
+            )
+        )
         assert pf.cash == 0.0
         pf.advance_day()
         h = NextOpenHandler(instruments=sc.instruments)
         # 现金 0：先卖 100 股回笼 ~1010，再买 100 股 ~1010 → 两单都成
-        fills, rejs = h.execute([_sell("000001.SZ"), _buy("000001.SZ")], D2,
-                                _section(sc, D2), sc.feed.trading_states(D2), pf)
+        fills, rejs = h.execute(
+            [_sell("000001.SZ"), _buy("000001.SZ")],
+            D2,
+            _section(sc, D2),
+            sc.feed.trading_states(D2),
+            pf,
+        )
         assert len(fills) == 2 and not rejs
 
     def test_t0_etf_same_day_roundtrip(self):
@@ -154,17 +195,27 @@ class TestNextOpenFill:
         sc = t_plus1_scenario()
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler(instruments=sc.instruments)
-        fills, rejs = h.execute([_buy("511380.SH", oid="O1"), _sell("511380.SH", oid="O2")],
-                                D2, _section(sc, D2), sc.feed.trading_states(D2), pf)
+        fills, rejs = h.execute(
+            [_buy("511380.SH", oid="O1"), _sell("511380.SH", oid="O2")],
+            D2,
+            _section(sc, D2),
+            sc.feed.trading_states(D2),
+            pf,
+        )
         assert len(fills) == 2 and not rejs
-        assert pf.position("511380.SH") is None     # 空仓移除
+        assert pf.position("511380.SH") is None  # 空仓移除
 
     def test_fill_id_sequential(self):
         sc = t_plus1_scenario()
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler(instruments=sc.instruments, fill_seq_start=7)
-        fills, _ = h.execute([_buy("000001.SZ", oid="O1"), _buy("511380.SH", oid="O2")],
-                             D2, _section(sc, D2), sc.feed.trading_states(D2), pf)
+        fills, _ = h.execute(
+            [_buy("000001.SZ", oid="O1"), _buy("511380.SH", oid="O2")],
+            D2,
+            _section(sc, D2),
+            sc.feed.trading_states(D2),
+            pf,
+        )
         assert [f.fill_id for f in fills] == ["F00000008", "F00000009"]
 
     def test_zero_cost_baseline(self):
@@ -172,8 +223,9 @@ class TestNextOpenFill:
         sc = t_plus1_scenario()
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler(cost_model=ZeroCostModel(), instruments=sc.instruments)
-        fills, _ = h.execute([_buy("000001.SZ")], D2,
-                             _section(sc, D2), sc.feed.trading_states(D2), pf)
+        fills, _ = h.execute(
+            [_buy("000001.SZ")], D2, _section(sc, D2), sc.feed.trading_states(D2), pf
+        )
         assert fills[0].fee.total == 0.0
         assert pf.cash == 100_000.0 - 10.1 * 100
 
@@ -185,9 +237,10 @@ class TestLimitPriceTolerance:
         """构造 limit=11.0、给定开盘价的合成截面；返回是否拒单。"""
         from tests.fixtures.scenarios import make_bar, make_state
 
-        bar = make_bar("600000.SH", D5, o=open_price, h=open_price,
-                       lo=open_price, c=open_price, pre=10.0)
-        state = make_state("600000.SH", D5, pre=10.0)   # limit_up=11.0
+        bar = make_bar(
+            "600000.SH", D5, o=open_price, h=open_price, lo=open_price, c=open_price, pre=10.0
+        )
+        state = make_state("600000.SH", D5, pre=10.0)  # limit_up=11.0
         assert state.limit_up_price == 11.0
         pf = Portfolio(cash=100_000.0)
         h = NextOpenHandler()
@@ -196,7 +249,7 @@ class TestLimitPriceTolerance:
         return bool(rejs)
 
     def test_at_limit_rejected(self):
-        assert self._run(11.0, OrderSide.BUY)                       # 恰涨停
+        assert self._run(11.0, OrderSide.BUY)  # 恰涨停
 
     def test_within_tolerance_rejected(self):
         # open = 11.0×(1−0.5e-4) = 10.99945 ≥ 11.0×(1−1e-4) → 容差内仍拒
@@ -211,19 +264,30 @@ class TestLimitPriceTolerance:
         from tests.fixtures.scenarios import make_bar, make_state
 
         def run(open_price: float) -> bool:
-            bar = make_bar("600000.SH", D5, o=open_price, h=open_price,
-                           lo=open_price, c=open_price, pre=10.0)
-            state = make_state("600000.SH", D5, pre=10.0)   # limit_down=9.0
+            bar = make_bar(
+                "600000.SH", D5, o=open_price, h=open_price, lo=open_price, c=open_price, pre=10.0
+            )
+            state = make_state("600000.SH", D5, pre=10.0)  # limit_down=9.0
             pf = Portfolio(cash=100_000.0)
-            pf.apply_fill(Fill(
-                fill_id="F0", order_id="O0", symbol="600000.SH", side=OrderSide.BUY,
-                qty=100, price=10.0, fee=Fee.zero(),
-                fill_date=D1, fill_timing="open"))
+            pf.apply_fill(
+                Fill(
+                    fill_id="F0",
+                    order_id="O0",
+                    symbol="600000.SH",
+                    side=OrderSide.BUY,
+                    qty=100,
+                    price=10.0,
+                    fee=Fee.zero(),
+                    fill_date=D1,
+                    fill_timing="open",
+                )
+            )
             pf.advance_day()
             h = NextOpenHandler()
-            _, rejs = h.execute([_sell("600000.SH")], D5,
-                                {"600000.SH": bar}, {"600000.SH": state}, pf)
+            _, rejs = h.execute(
+                [_sell("600000.SH")], D5, {"600000.SH": bar}, {"600000.SH": state}, pf
+            )
             return bool(rejs)
 
-        assert run(9.0)                                   # 恰跌停 → 拒
-        assert not run(9.0 * (1 + 2 * LIMIT_PRICE_TOL))   # 容差外 → 成交
+        assert run(9.0)  # 恰跌停 → 拒
+        assert not run(9.0 * (1 + 2 * LIMIT_PRICE_TOL))  # 容差外 → 成交

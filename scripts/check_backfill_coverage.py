@@ -31,6 +31,7 @@
 
 退出码：0 通过 / 1 硬判据失败 / 2 环境或参数错误
 """
+
 import argparse
 import collections
 import json
@@ -106,8 +107,12 @@ def main():
     ap.add_argument("--date-col", default="trade_date")
     ap.add_argument("--snapshot", action="store_true", help="记录基线")
     ap.add_argument("--verify", action="store_true", help="比对基线")
-    ap.add_argument("--expect", type=int, default=None,
-                    help="本批应新增的有效断点键数（取自 backfill 的「完成=N」）")
+    ap.add_argument(
+        "--expect",
+        type=int,
+        default=None,
+        help="本批应新增的有效断点键数（取自 backfill 的「完成=N」）",
+    )
     a = ap.parse_args()
 
     if not (a.snapshot or a.verify):
@@ -134,8 +139,10 @@ def main():
         with open(snap_path, "w", encoding="utf-8") as f:
             json.dump(snap, f, ensure_ascii=False)
         print(f"[SNAP] {a.table}  有效断点={len(eff)}  数据行={rows:,}  指数={len(codes)}")
-        print(f"       任务集={len(valid)}  断点总键={len(completed)}  "
-              f"非任务集键={len(completed - valid)}")
+        print(
+            f"       任务集={len(valid)}  断点总键={len(completed)}  "
+            f"非任务集键={len(completed - valid)}"
+        )
         print(f"       -> {snap_path}")
         return 0
 
@@ -166,32 +173,38 @@ def main():
     ck_cnt = collections.Counter(k.split("|")[0] for k in eff)
     new_ck_codes = set(ck_cnt) - set(snap.get("ck_codes", []))
     wl = load_empty_whitelist()
-    empty_new = sorted(c for c in new_ck_codes
-                       if per_code.get(c, 0) == 0 and c not in wl)
-    skipped_wl = sorted(c for c in new_ck_codes
-                        if per_code.get(c, 0) == 0 and c in wl)
+    empty_new = sorted(c for c in new_ck_codes if per_code.get(c, 0) == 0 and c not in wl)
+    skipped_wl = sorted(c for c in new_ck_codes if per_code.get(c, 0) == 0 and c in wl)
     if skipped_wl:
         print(f"       [白名单] 已确认源端真空 {len(skipped_wl)} 个: {skipped_wl[:8]}")
     if len(empty_new) >= 2:
-        fails.append(f"③ 本批新增 {len(new_ck_codes)} 个断点 code 中 "
-                     f"{len(empty_new)} 个数据 0 行（整段真空批量＝配额耗尽特征）: "
-                     f"{empty_new[:8]}")
+        fails.append(
+            f"③ 本批新增 {len(new_ck_codes)} 个断点 code 中 "
+            f"{len(empty_new)} 个数据 0 行（整段真空批量＝配额耗尽特征）: "
+            f"{empty_new[:8]}"
+        )
     elif empty_new:
-        warns.append(f"③ 本批新增 code 中数据 0 行: {empty_new[0]}"
-                     f"（单个，疑似源端真空，直查确认后可忽略）")
+        warns.append(
+            f"③ 本批新增 code 中数据 0 行: {empty_new[0]}（单个，疑似源端真空，直查确认后可忽略）"
+        )
 
     # 判据④：全量「断点期数 ≠ 数据期数」清单——源端发布时间边界会集中在此，
     #    只作信息性警告，不作为硬判据（否则 82 个部分真空指数会误停）。
-    mism = [(c, per_code.get(c, 0), ck_cnt[c]) for c in sorted(set(ck_cnt) | codes)
-            if per_code.get(c, 0) != ck_cnt[c]]
+    mism = [
+        (c, per_code.get(c, 0), ck_cnt[c])
+        for c in sorted(set(ck_cnt) | codes)
+        if per_code.get(c, 0) != ck_cnt[c]
+    ]
     if mism:
         warns.append(f"④ 断点期数 ≠ 数据期数: {len(mism)} 个指数（源端发布时间边界）")
         for c, d, k in mism[:8]:
             flag = "  ⚠数据0行" if d == 0 and k > 0 else ""
             print(f"       {c:<12} 数据={d:<4} 断点={k:<4}{flag}")
 
-    print(f"[VERIFY] {a.table}  有效断点 {snap['valid_keys']} -> {len(eff)} (+{d_key})"
-          f"  数据行 {snap['rows']:,} -> {rows:,}  指数 {len(codes)}")
+    print(
+        f"[VERIFY] {a.table}  有效断点 {snap['valid_keys']} -> {len(eff)} (+{d_key})"
+        f"  数据行 {snap['rows']:,} -> {rows:,}  指数 {len(codes)}"
+    )
     for w in warns:
         print(f"  [WARN] {w}")
     if fails:

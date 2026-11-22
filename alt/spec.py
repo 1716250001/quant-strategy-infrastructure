@@ -28,6 +28,7 @@ alt/spec.py — akshare 备用库的【表规格唯一真源】
   3. 按日型接口（如涨停池）返回数据**不含日期列**，必须由调用方注入
      （见 inject_date 标志）。
 """
+
 from dataclasses import dataclass, field
 
 
@@ -35,11 +36,11 @@ from dataclasses import dataclass, field
 class TableSpec:
     """一张表的完整取数与落盘规格"""
 
-    name: str                                   # alt 库中的表名（目录名）
-    func: str                                   # akshare 函数名
-    tier: str = "P0"                            # 优先级
-    layout: str = "single"                      # single | by_year
-    date_col: str = "date"                      # 落盘后的日期列名（统一 YYYYMMDD 字符串）
+    name: str  # alt 库中的表名（目录名）
+    func: str  # akshare 函数名
+    tier: str = "P0"  # 优先级
+    layout: str = "single"  # single | by_year
+    date_col: str = "date"  # 落盘后的日期列名（统一 YYYYMMDD 字符串）
 
     # 源数据的日期列名；None 表示源数据不含日期列（按日型接口），需注入
     src_date_col: str | None = None
@@ -58,11 +59,11 @@ class TableSpec:
     #   ⚠ 必须按**交易日**回溯（common.calendar.prev_trade_dates），不许用 Timedelta。
     date_param_lag_days: int = 0
 
-    mode: str = "once"                          # once=无参 | enum=按参数枚举多次
+    mode: str = "once"  # once=无参 | enum=按参数枚举多次
     params: dict = field(default_factory=dict)  # 固定参数
-    enum_param: str | None = None            # enum 参数名
+    enum_param: str | None = None  # enum 参数名
     enum_values: list = field(default_factory=list)
-    enum_col: str | None = None              # enum 值写入的列名
+    enum_col: str | None = None  # enum 值写入的列名
 
     # 列重命名：{源列名: 目标列名}。日期列无需在此写，由 src_date_col 处理
     rename: dict = field(default_factory=dict)
@@ -136,8 +137,8 @@ class TableSpec:
     #   universe_col = 清单表里的列名（如 hk_basic 用 "ts_code"）；
     #   symbol_param = 拉取接口的参数名（akshare 惯例为 "symbol"）。
     universe_col: str = "symbol"
-    universe_xform: str = ""            # "" | "strip_hk_suffix"（去 ".HK" 后缀）
-    symbol_param: str = "symbol"        # 逐只拉取的接口参数名（mode="list"）
+    universe_xform: str = ""  # "" | "strip_hk_suffix"（去 ".HK" 后缀）
+    symbol_param: str = "symbol"  # 逐只拉取的接口参数名（mode="list"）
     # 落盘时注入的**标的列名**（固定 "symbol"，与 subset 声明一致）
     symbol_col: str = "symbol"
     # 参数是否为 **list 型**（DB-R11 §3；2026-10-30）。
@@ -232,56 +233,159 @@ P0 = [
     # —— 无参一次型 ——
     # 注：以下均为**日频**数据，max_age_days 设 15（留足长假余量）；
     #     若超过 15 天没更新，说明日更链路断了，必须报警。
-    TableSpec("ebs_lg", "stock_ebs_lg", "P0", "single", "date",
-              src_date_col="日期", subset="*", mode="once", max_age_days=15,
-              note="股债利差（2005至今）"),
-    TableSpec("buffett_lg", "stock_buffett_index_lg", "P0", "single", "date",
-              src_date_col="日期", subset="*", mode="once", max_age_days=15,
-              note="巴菲特指标 总市值/GDP（2005至今）"),
-    TableSpec("congestion_lg", "stock_a_congestion_lg", "P0", "single", "date",
-              src_date_col="date", subset="*", mode="once", max_age_days=15,
-              note="大盘拥挤度（2011至今）"),
-    TableSpec("all_pb_lg", "stock_a_all_pb", "P0", "single", "date",
-              src_date_col="date", subset="*", mode="once", max_age_days=45,
-              note="全部A股等权重/中位数市净率（月频）"),
-    TableSpec("ttm_lyr_lg", "stock_a_ttm_lyr", "P0", "single", "date",
-              src_date_col="date", subset="*", mode="once", max_age_days=45,
-              note="全部A股等权重/中位数市盈率（月频）"),
-
+    TableSpec(
+        "ebs_lg",
+        "stock_ebs_lg",
+        "P0",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset="*",
+        mode="once",
+        max_age_days=15,
+        note="股债利差（2005至今）",
+    ),
+    TableSpec(
+        "buffett_lg",
+        "stock_buffett_index_lg",
+        "P0",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset="*",
+        mode="once",
+        max_age_days=15,
+        note="巴菲特指标 总市值/GDP（2005至今）",
+    ),
+    TableSpec(
+        "congestion_lg",
+        "stock_a_congestion_lg",
+        "P0",
+        "single",
+        "date",
+        src_date_col="date",
+        subset="*",
+        mode="once",
+        max_age_days=15,
+        note="大盘拥挤度（2011至今）",
+    ),
+    TableSpec(
+        "all_pb_lg",
+        "stock_a_all_pb",
+        "P0",
+        "single",
+        "date",
+        src_date_col="date",
+        subset="*",
+        mode="once",
+        max_age_days=45,
+        note="全部A股等权重/中位数市净率（月频）",
+    ),
+    TableSpec(
+        "ttm_lyr_lg",
+        "stock_a_ttm_lyr",
+        "P0",
+        "single",
+        "date",
+        src_date_col="date",
+        subset="*",
+        mode="once",
+        max_age_days=45,
+        note="全部A股等权重/中位数市盈率（月频）",
+    ),
     # —— 枚举型（枚举列参与判重）——
-    TableSpec("gxl_lg", "stock_a_gxl_lg", "P0", "single", "date",
-              src_date_col="日期", subset=["date", "symbol"], mode="enum",
-              enum_param="symbol", enum_col="symbol", max_age_days=15,
-              enum_values=["上证A股", "深证A股", "创业板", "科创板"],
-              note="A股股息率（4 类）"),
-    TableSpec("below_net_asset", "stock_a_below_net_asset_statistics", "P0", "single", "date",
-              src_date_col="date", subset=["date", "symbol"], mode="enum",
-              enum_param="symbol", enum_col="symbol", max_age_days=15,
-              enum_values=["全部A股", "沪深300", "上证50", "中证500"],
-              note="破净股统计（4 类）"),
-    TableSpec("market_pe_lg", "stock_market_pe_lg", "P0", "single", "date",
-              src_date_col="日期", subset=["date", "symbol"], mode="enum",
-              enum_param="symbol", enum_col="symbol", max_age_days=45,
-              enum_values=["上证", "深证", "创业板"],
-              note="主板市盈率（月频；科创版已拆至 market_pe_kcb——该组为日频且列不同）"),
+    TableSpec(
+        "gxl_lg",
+        "stock_a_gxl_lg",
+        "P0",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset=["date", "symbol"],
+        mode="enum",
+        enum_param="symbol",
+        enum_col="symbol",
+        max_age_days=15,
+        enum_values=["上证A股", "深证A股", "创业板", "科创板"],
+        note="A股股息率（4 类）",
+    ),
+    TableSpec(
+        "below_net_asset",
+        "stock_a_below_net_asset_statistics",
+        "P0",
+        "single",
+        "date",
+        src_date_col="date",
+        subset=["date", "symbol"],
+        mode="enum",
+        enum_param="symbol",
+        enum_col="symbol",
+        max_age_days=15,
+        enum_values=["全部A股", "沪深300", "上证50", "中证500"],
+        note="破净股统计（4 类）",
+    ),
+    TableSpec(
+        "market_pe_lg",
+        "stock_market_pe_lg",
+        "P0",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset=["date", "symbol"],
+        mode="enum",
+        enum_param="symbol",
+        enum_col="symbol",
+        max_age_days=45,
+        enum_values=["上证", "深证", "创业板"],
+        note="主板市盈率（月频；科创版已拆至 market_pe_kcb——该组为日频且列不同）",
+    ),
     # ⚠ 实测陷阱（2026-09-18）：stock_market_pe_lg 的 4 个枚举值返回结构不一致：
     #   上证/深证/创业板 → 月频，列为 ['日期','指数','平均市盈率']
     #   科创版         → 日频，列为 ['日期','总市值','市盈率']（无『平均市盈率』）
     #   混在一张表里会造成"同表不同频率"的下游陷阱，故单独成表。
-    TableSpec("market_pe_kcb", "stock_market_pe_lg", "P0", "single", "date",
-              src_date_col="日期", subset="*", mode="once", max_age_days=15,
-              params={"symbol": "科创版"},
-              note="科创板市盈率（日频；科创板为奇点框架科技估值锚）"),
-    TableSpec("market_pb_lg", "stock_market_pb_lg", "P0", "single", "date",
-              src_date_col="日期", subset=["date", "symbol"], mode="enum",
-              enum_param="symbol", enum_col="symbol", max_age_days=45,
-              enum_values=["上证", "深证", "创业板", "科创版"],
-              note="主板市净率（月频，4 类）"),
-    TableSpec("high_low_stat", "stock_a_high_low_statistics", "P0", "single", "date",
-              src_date_col="date", subset=["date", "symbol"], mode="enum",
-              enum_param="symbol", enum_col="symbol", max_age_days=15,
-              enum_values=["all", "sz50", "hs300", "zz500"],
-              note="创新高新低股票数（4 类，仅近约2年）"),
+    TableSpec(
+        "market_pe_kcb",
+        "stock_market_pe_lg",
+        "P0",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset="*",
+        mode="once",
+        max_age_days=15,
+        params={"symbol": "科创版"},
+        note="科创板市盈率（日频；科创板为奇点框架科技估值锚）",
+    ),
+    TableSpec(
+        "market_pb_lg",
+        "stock_market_pb_lg",
+        "P0",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset=["date", "symbol"],
+        mode="enum",
+        enum_param="symbol",
+        enum_col="symbol",
+        max_age_days=45,
+        enum_values=["上证", "深证", "创业板", "科创版"],
+        note="主板市净率（月频，4 类）",
+    ),
+    TableSpec(
+        "high_low_stat",
+        "stock_a_high_low_statistics",
+        "P0",
+        "single",
+        "date",
+        src_date_col="date",
+        subset=["date", "symbol"],
+        mode="enum",
+        enum_param="symbol",
+        enum_col="symbol",
+        max_age_days=15,
+        enum_values=["all", "sz50", "hs300", "zz500"],
+        note="创新高新低股票数（4 类，仅近约2年）",
+    ),
 ]
 
 # ============================================================
@@ -321,20 +425,45 @@ P1_QVIX = (
     #   → 同期 ETF 类（qvix_50etf 等 6 只）完全正常（0 零值、最新 14~36）
     #   处置：保留落盘（历史段仍可用），但在 note 中标注，
     #         且校验工具的「数值健全性」检测会每次报警。
-    [TableSpec(n, f, "P1", "single", "date", src_date_col="date",
-               subset="*", mode="once", max_age_days=15,
-               core_metric_cols=["close"],
-               note=note + ("【⚠数值已损坏·最新为0，不可用于当期】"
-                            if n in ("qvix_50index", "qvix_300index", "qvix_1000index")
-                            else "（日频，可回补）"))
-     for n, f, note in _QVIX_DAILY]
+    [
+        TableSpec(
+            n,
+            f,
+            "P1",
+            "single",
+            "date",
+            src_date_col="date",
+            subset="*",
+            mode="once",
+            max_age_days=15,
+            core_metric_cols=["close"],
+            note=note
+            + (
+                "【⚠数值已损坏·最新为0，不可用于当期】"
+                if n in ("qvix_50index", "qvix_300index", "qvix_1000index")
+                else "（日频，可回补）"
+            ),
+        )
+        for n, f, note in _QVIX_DAILY
+    ]
     # 分时：**快照型**，time 为时刻，需按日累积
-    + [TableSpec(n, f, "P1", "by_year", "trade_date",
-                 src_date_col=None, date_param=None, max_age_days=15,
-                 core_metric_cols=["qvix"],
-                 subset=["trade_date", "time"], mode="once",
-                 note=note + "（分时快照，须日更累积）")
-       for n, f, note in _QVIX_MIN]
+    + [
+        TableSpec(
+            n,
+            f,
+            "P1",
+            "by_year",
+            "trade_date",
+            src_date_col=None,
+            date_param=None,
+            max_age_days=15,
+            core_metric_cols=["qvix"],
+            subset=["trade_date", "time"],
+            mode="once",
+            note=note + "（分时快照，须日更累积）",
+        )
+        for n, f, note in _QVIX_MIN
+    ]
 )
 
 # ============================================================
@@ -395,56 +524,88 @@ DROPPED = [
         "name": "macro_ch_cpi",
         "func": "macro_swiss_cpi_yearly",
         "reason": "数据源不完整：仅 20 行季度数据，且 20 行中 7 行缺发布日期"
-                  "（2007-2013 段全为 NaT），日期无法可靠归一化；"
-                  "瑞士季度 CPI 对 A 股策略价值极低。",
-        "evidence": "2026-09-18 实测：发布日期非空 13/20（65%），"
-                    "低于 80% 可解析阈值",
+        "（2007-2013 段全为 NaT），日期无法可靠归一化；"
+        "瑞士季度 CPI 对 A 股策略价值极低。",
+        "evidence": "2026-09-18 实测：发布日期非空 13/20（65%），低于 80% 可解析阈值",
     },
 ]
 
 # ⚠ 已知数据质量问题登记（表已建但数据不可用于当期，留痕备查）
 KNOWN_ISSUES = [
     {
-        "name": "qvix_*_index（股指波指 3 只）"
-                "= qvix_50index / qvix_300index / qvix_1000index",
+        "name": "qvix_*_index（股指波指 3 只）= qvix_50index / qvix_300index / qvix_1000index",
         "kind": "数值损坏",
-        "detail": "数据稀疏 + 含 0.0 + 最新连续 3 个交易日 close 全为 0.0；"
-                  "同期 ETF 类波指完全正常",
+        "detail": "数据稀疏 + 含 0.0 + 最新连续 3 个交易日 close 全为 0.0；同期 ETF 类波指完全正常",
         "impact": "不可用于当期波动率判断；历史段（2015~2025-09）仍可用",
         "detect": "alt/verify_spec.py 的「数值健全性」检测会报警",
     },
     {
-        "name": "金十系美国/欧洲宏观 14 张"
-                "（macro_usa_* / macro_bank_* / macro_euro_cpi）",
+        "name": "金十系美国/欧洲宏观 14 张（macro_usa_* / macro_bank_* / macro_euro_cpi）",
         "kind": "源端停更",
         "detail": "接口可调用、结构正常，但最新数据停在 2025-08~10（陈旧约 1 年）",
-        "impact": "历史研究可用；当期分析须改用东财系替代源"
-                  "（已补 macro_usa_cpi_yoy_em）",
+        "impact": "历史研究可用；当期分析须改用东财系替代源（已补 macro_usa_cpi_yoy_em）",
         "detect": "alt/verify_spec.py 的「数据新鲜度」检测会报警（阈值 45 天）",
     },
 ]
 
 P1_MACRO = (
     # 金十系（历史长、但已停更 1 年；max_age_days 调小以自动报警）
-    [TableSpec(n, f, "P1", "single", "date", src_date_col="日期",
-               subset="*", mode="once", max_age_days=45, update_every_days=7,
-               note=note + "【金十源·已陈旧】",
-               known_stale="金十系源端已停更（实测停于 2025-08~10；接口可调、"
-                           "结构正常，仅数据陈旧，当期用东财系替代）")
-     for n, f, note in _MACRO_A]
+    [
+        TableSpec(
+            n,
+            f,
+            "P1",
+            "single",
+            "date",
+            src_date_col="日期",
+            subset="*",
+            mode="once",
+            max_age_days=45,
+            update_every_days=7,
+            note=note + "【金十源·已陈旧】",
+            known_stale="金十系源端已停更（实测停于 2025-08~10；接口可调、"
+            "结构正常，仅数据陈旧，当期用东财系替代）",
+        )
+        for n, f, note in _MACRO_A
+    ]
     # 东财系美国（新鲜）—— 实测为结构B（['时间','发布日期','现值','前值']）
-    + [TableSpec(n, f, "P1", "single", "date", src_date_col="发布日期",
-                 subset="*", mode="once", rename={"时间": "period"},
-                 max_age_days=45, update_every_days=7, note=note)
-       for n, f, note in _MACRO_US_EM]
+    + [
+        TableSpec(
+            n,
+            f,
+            "P1",
+            "single",
+            "date",
+            src_date_col="发布日期",
+            subset="*",
+            mode="once",
+            rename={"时间": "period"},
+            max_age_days=45,
+            update_every_days=7,
+            note=note,
+        )
+        for n, f, note in _MACRO_US_EM
+    ]
     # 东财系其他国家（新鲜）
     # ⚠ macro_uk_gdp 是**年频发布**（每年 3 月发上一年 Q4，实测 17 行至 2025Q4），
     #   用组内统一的 120 天阈值会**误报「陈旧」**（实测 175 天）→ 单独放宽到 400 天。
-    + [TableSpec(n, f, "P1", "single", "date", src_date_col="发布日期",
-                 subset="*", mode="once", rename={"时间": "period"},
-                 max_age_days=(400 if n == "macro_uk_gdp" else 120),
-                 update_every_days=7, note=note)
-       for n, f, note in _MACRO_B]
+    + [
+        TableSpec(
+            n,
+            f,
+            "P1",
+            "single",
+            "date",
+            src_date_col="发布日期",
+            subset="*",
+            mode="once",
+            rename={"时间": "period"},
+            max_age_days=(400 if n == "macro_uk_gdp" else 120),
+            update_every_days=7,
+            note=note,
+        )
+        for n, f, note in _MACRO_B
+    ]
     # 中国 CPI（国家统计局口径）—— 2026-09-21 新增
     # ⚠ 为什么单列而非并入 _MACRO_B：
     #   ① 日期列名是『月份』（_MACRO_B 用的是『发布日期』）；
@@ -457,10 +618,20 @@ P1_MACRO = (
     #   而本接口**新到 2026-08**（实测）。
     # ⚠ 命名说明：与既有 `macro_{地区}_cpi` 规律的地区码保持一致用 `cn`；
     #   注意 DROPPED 里的 `macro_ch_cpi` 是**瑞士** CPI（当年命名有误导），两者无关。
-    + [TableSpec("macro_cn_cpi", "macro_china_cpi", "P1", "single", "date",
-                 src_date_col="月份", subset="*", mode="once",
-                 max_age_days=120, update_every_days=7,
-                 note="中国CPI(国家统计局口径): 全国/城市/农村 × 当月·同比·环比·累计")
+    + [
+        TableSpec(
+            "macro_cn_cpi",
+            "macro_china_cpi",
+            "P1",
+            "single",
+            "date",
+            src_date_col="月份",
+            subset="*",
+            mode="once",
+            max_age_days=120,
+            update_every_days=7,
+            note="中国CPI(国家统计局口径): 全国/城市/农村 × 当月·同比·环比·累计",
+        )
     ]
 )
 
@@ -472,50 +643,117 @@ P1 = P1_QVIX + P1_MACRO
 # ============================================================
 P3 = [
     # 赚钱效应（无日期参数，但数据无日期列 → 仅注入）
-    TableSpec("market_activity", "stock_market_activity_legu", "P3", "by_year", "trade_date",
-              src_date_col=None, date_param=None, max_age_days=15,
-              max_backfill_days=0,
-              subset=["trade_date", "item"], mode="once",
-              force_str_cols=["value"],
-              note="赚钱效应（快照，须日更积累）"),
-
+    TableSpec(
+        "market_activity",
+        "stock_market_activity_legu",
+        "P3",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        date_param=None,
+        max_age_days=15,
+        max_backfill_days=0,
+        subset=["trade_date", "item"],
+        mode="once",
+        force_str_cols=["value"],
+        note="赚钱效应（快照，须日更积累）",
+    ),
     # 涨停族（接口接受 date 参数，数据无日期列 → 传参 + 注入）
     # ⚠ 实测（2026-09-18）保留窗口：
     #   zt_pool / _previous / _strong / _sub_new：无硬校验，但源端只留约 2~3 周
     #     （实测 20260814 返回 0 行；20260915 返回 32 行）
     #   zt_pool_zbgc / _dtgc：akshare **源码层硬校验 30 天**，超出直接 raise
     #   → 故这几张表**必须日更**，否则历史永久缺口
-    TableSpec("zt_pool", "stock_zt_pool_em", "P3", "by_year", "trade_date",
-              src_date_col=None, date_param="date", max_age_days=15,
-              max_backfill_days=20, core_metric_cols=["涨跌幅"],
-              subset=["trade_date", "代码"], mode="once",
-              note="涨停股池【源端仅留约2~3周，须日更】"),
-    TableSpec("zt_pool_previous", "stock_zt_pool_previous_em", "P3", "by_year", "trade_date",
-              src_date_col=None, date_param="date", max_age_days=15,
-              max_backfill_days=20, core_metric_cols=["涨跌幅"],
-              subset=["trade_date", "代码"], mode="once",
-              note="昨日涨停股池【源端仅留约2~3周，须日更】"),
-    TableSpec("zt_pool_strong", "stock_zt_pool_strong_em", "P3", "by_year", "trade_date",
-              src_date_col=None, date_param="date", max_age_days=15,
-              max_backfill_days=20, core_metric_cols=["涨跌幅"],
-              subset=["trade_date", "代码"], mode="once",
-              note="强势股池【源端仅留约2~3周，须日更】"),
-    TableSpec("zt_pool_sub_new", "stock_zt_pool_sub_new_em", "P3", "by_year", "trade_date",
-              src_date_col=None, date_param="date", max_age_days=15,
-              max_backfill_days=20, core_metric_cols=["涨跌幅"],
-              subset=["trade_date", "代码"], mode="once",
-              note="次新股池【源端仅留约2~3周，须日更】"),
-    TableSpec("zt_pool_zbgc", "stock_zt_pool_zbgc_em", "P3", "by_year", "trade_date",
-              src_date_col=None, date_param="date", max_age_days=15,
-              max_backfill_days=30, core_metric_cols=["涨跌幅"],
-              subset=["trade_date", "代码"], mode="once",
-              note="炸板股池【源码硬校验30天，超出报错】"),
-    TableSpec("zt_pool_dtgc", "stock_zt_pool_dtgc_em", "P3", "by_year", "trade_date",
-              src_date_col=None, date_param="date", max_age_days=15,
-              max_backfill_days=30, core_metric_cols=["涨跌幅"],
-              subset=["trade_date", "代码"], mode="once",
-              note="跌停股池【源码硬校验30天；弱市日可能为空属正常】"),
-
+    TableSpec(
+        "zt_pool",
+        "stock_zt_pool_em",
+        "P3",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        date_param="date",
+        max_age_days=15,
+        max_backfill_days=20,
+        core_metric_cols=["涨跌幅"],
+        subset=["trade_date", "代码"],
+        mode="once",
+        note="涨停股池【源端仅留约2~3周，须日更】",
+    ),
+    TableSpec(
+        "zt_pool_previous",
+        "stock_zt_pool_previous_em",
+        "P3",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        date_param="date",
+        max_age_days=15,
+        max_backfill_days=20,
+        core_metric_cols=["涨跌幅"],
+        subset=["trade_date", "代码"],
+        mode="once",
+        note="昨日涨停股池【源端仅留约2~3周，须日更】",
+    ),
+    TableSpec(
+        "zt_pool_strong",
+        "stock_zt_pool_strong_em",
+        "P3",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        date_param="date",
+        max_age_days=15,
+        max_backfill_days=20,
+        core_metric_cols=["涨跌幅"],
+        subset=["trade_date", "代码"],
+        mode="once",
+        note="强势股池【源端仅留约2~3周，须日更】",
+    ),
+    TableSpec(
+        "zt_pool_sub_new",
+        "stock_zt_pool_sub_new_em",
+        "P3",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        date_param="date",
+        max_age_days=15,
+        max_backfill_days=20,
+        core_metric_cols=["涨跌幅"],
+        subset=["trade_date", "代码"],
+        mode="once",
+        note="次新股池【源端仅留约2~3周，须日更】",
+    ),
+    TableSpec(
+        "zt_pool_zbgc",
+        "stock_zt_pool_zbgc_em",
+        "P3",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        date_param="date",
+        max_age_days=15,
+        max_backfill_days=30,
+        core_metric_cols=["涨跌幅"],
+        subset=["trade_date", "代码"],
+        mode="once",
+        note="炸板股池【源码硬校验30天，超出报错】",
+    ),
+    TableSpec(
+        "zt_pool_dtgc",
+        "stock_zt_pool_dtgc_em",
+        "P3",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        date_param="date",
+        max_age_days=15,
+        max_backfill_days=30,
+        core_metric_cols=["涨跌幅"],
+        subset=["trade_date", "代码"],
+        mode="once",
+        note="跌停股池【源码硬校验30天；弱市日可能为空属正常】",
+    ),
     # 华证 ESG 评级（EE-FUND-12 新增，2026-10-21）
     # ⚠ 接口实测：akshare.stock_esg_hz_sina() 无参 → 一次返回 6,392 行全量
     #   （审查方 §49 对签名的描述「p/num 两参」有误，实际无参）。
@@ -524,18 +762,36 @@ P3 = [
     #   源无历史接口、无日期参数 → rating_date 由 '日期' 归一化（单一值），
     #   fetch_date 由 inject_const 注入（__TODAY__），两列分离避免新浪滞后
     #   造成"同一期被记成两期"。
-    TableSpec("esg_hz_rating", "stock_esg_hz_sina", "P3", "single", "rating_date",
-              src_date_col="日期", subset=["rating_date", "symbol"], mode="once",
-              max_age_days=210, update_every_days=90, max_backfill_days=0,
-              rename={"股票代码": "symbol", "股票名称": "name", "交易市场": "market",
-                      "ESG评分": "esg_score", "ESG等级": "esg_grade",
-                      "环境": "e_score", "环境等级": "e_grade",
-                      "社会": "s_score", "社会等级": "s_grade",
-                      "公司治理": "g_score", "公司治理等级": "g_grade"},
-              inject_const={"fetch_date": "__TODAY__"},
-              note="华证ESG评级（季度快照；评级日滞后约2.5月；源无历史接口，历史须自建；"
-                   "max_age_days=210：按季度更新+源滞后82天推演，峰值 age≈172，留38天缓冲；"
-                   "若实测为半年更，上调300）"),
+    TableSpec(
+        "esg_hz_rating",
+        "stock_esg_hz_sina",
+        "P3",
+        "single",
+        "rating_date",
+        src_date_col="日期",
+        subset=["rating_date", "symbol"],
+        mode="once",
+        max_age_days=210,
+        update_every_days=90,
+        max_backfill_days=0,
+        rename={
+            "股票代码": "symbol",
+            "股票名称": "name",
+            "交易市场": "market",
+            "ESG评分": "esg_score",
+            "ESG等级": "esg_grade",
+            "环境": "e_score",
+            "环境等级": "e_grade",
+            "社会": "s_score",
+            "社会等级": "s_grade",
+            "公司治理": "g_score",
+            "公司治理等级": "g_grade",
+        },
+        inject_const={"fetch_date": "__TODAY__"},
+        note="华证ESG评级（季度快照；评级日滞后约2.5月；源无历史接口，历史须自建；"
+        "max_age_days=210：按季度更新+源滞后82天推演，峰值 age≈172，留38天缓冲；"
+        "若实测为半年更，上调300）",
+    ),
 ]
 
 # ============================================================
@@ -563,10 +819,19 @@ P3 = [
 #      AI 新股未发生复权却返回复权因子。使用该两标的时需留意。
 P4 = [
     # —— 标的全市场清单（元数据，清单元数据无日期列）——
-    TableSpec("us_universe", "stock_us_spot", "P4", "single", "date",
-              has_date=False, subset="*", mode="list", max_age_days=15,
-              note="美股标的全市场清单(18,163只): symbol/英文名/中文名/行业/交易所/市值/PE; "
-                   "⚠ 快照型(每次重建)"),
+    TableSpec(
+        "us_universe",
+        "stock_us_spot",
+        "P4",
+        "single",
+        "date",
+        has_date=False,
+        subset="*",
+        mode="list",
+        max_age_days=15,
+        note="美股标的全市场清单(18,163只): symbol/英文名/中文名/行业/交易所/市值/PE; "
+        "⚠ 快照型(每次重建)",
+    ),
     # —— §125 RE2-2：美股日线**衍生清单（B 口径 · 18,052 只 · 冻结语义）**——
     #   口径裁定（老大 2026-10-24）：B = us_daily_qfq 全历史各年分区出现过的唯一 symbol
     #     · 含 5,523 只已退市/停牌（**必须含**，否则生存者偏差）
@@ -576,63 +841,99 @@ P4 = [
     #   ⚠ func 故意写成派生标记 `derived:<源表>`（不是 akshare 函数名）——
     #     任何误对该表跑 list_backfill/oversize_fetch 都会在 `getattr(ak, func)` 处
     #     立即失败并**零写入**，避免把行情写进清单表污染 universe。
-    TableSpec("us_daily_universe", "derived:us_daily_raw", "P4", "single", "first_date",
-              has_date=True, src_date_col="first_date", subset=["symbol"],
-              mode="list", universe_from="", max_age_days=365,
-              inject_const={"as_of": "__TODAY__"},
-              note="美股日线衍生清单（§125 裁定 B 口径）：symbol/first_date/last_date/as_of; "
-                   "18,052 只 = us_daily_raw 全历史唯一 symbol（含 5,523 已退市）; "
-                   "§159 R10-C2 解耦：派生源由 us_daily_qfq 改为 us_daily_raw（前者已废弃）；"
-                   "⚠ 冻结清单，禁自动刷新; ⚠ 派生表，禁对其取数"),
+    TableSpec(
+        "us_daily_universe",
+        "derived:us_daily_raw",
+        "P4",
+        "single",
+        "first_date",
+        has_date=True,
+        src_date_col="first_date",
+        subset=["symbol"],
+        mode="list",
+        universe_from="",
+        max_age_days=365,
+        inject_const={"as_of": "__TODAY__"},
+        note="美股日线衍生清单（§125 裁定 B 口径）：symbol/first_date/last_date/as_of; "
+        "18,052 只 = us_daily_raw 全历史唯一 symbol（含 5,523 已退市）; "
+        "§159 R10-C2 解耦：派生源由 us_daily_qfq 改为 us_daily_raw（前者已废弃）；"
+        "⚠ 冻结清单，禁自动刷新; ⚠ 派生表，禁对其取数",
+    ),
     # —— 美股日线（前复权）——
-    TableSpec("us_daily_qfq", "stock_us_daily", "P4", "by_year", "date",
-              src_date_col="date", subset=["symbol", "date"], mode="list",
-              max_age_days=5,
-              # §159 R10-C5 / §158 R9-1：30 → 0
-              # rotate_days=0：本表已废弃（源端 qfq 算法错误，§150）；置 0 使 update 走 skip，防每日误更新
-              rotate_days=0,
-              params={"adjust": "qfq"},
-              universe_from="us_universe",
-              note="美股日线【前复权 adjust=qfq】; ⚠ 已废弃（§159 R10-C）：源端算法为「减绝对额 C」"
-                   "非标准前复权、本地无法清洗 ⇒ 只能重算；`alt_backfill` 已加废弃守卫、数据已归档; "
-                   "⚠ 前复权基准随新拆股漂移 ⇒ 只可整表重建、不可增量追加; "
-                   "⚠ 数据为美股 T-1（美股收盘=北京次日凌晨）"),
+    TableSpec(
+        "us_daily_qfq",
+        "stock_us_daily",
+        "P4",
+        "by_year",
+        "date",
+        src_date_col="date",
+        subset=["symbol", "date"],
+        mode="list",
+        max_age_days=5,
+        # §159 R10-C5 / §158 R9-1：30 → 0
+        # rotate_days=0：本表已废弃（源端 qfq 算法错误，§150）；置 0 使 update 走 skip，防每日误更新
+        rotate_days=0,
+        params={"adjust": "qfq"},
+        universe_from="us_universe",
+        note="美股日线【前复权 adjust=qfq】; ⚠ 已废弃（§159 R10-C）：源端算法为「减绝对额 C」"
+        "非标准前复权、本地无法清洗 ⇒ 只能重算；`alt_backfill` 已加废弃守卫、数据已归档; "
+        "⚠ 前复权基准随新拆股漂移 ⇒ 只可整表重建、不可增量追加; "
+        "⚠ 数据为美股 T-1（美股收盘=北京次日凌晨）",
+    ),
     # —— v1.4 外盘扩容 OS-R3（2026-10-23）：美股双表（移植港股双表策略）——
     # 关键设计（复用港股 ADR-13 结论）：
     #   ① 不复权价 us_daily_raw + 事件级因子 us_qfq_factor（拒绝存前复权价）
     #   ② 复权展开唯一入口 alt.reader.expand_qfq_factor()
     #   ③ stock_us_daily 无日期增量参数 ⇒ 只能整表重建；§188 R16 缩宇宙后按 rotate_days=2 轮转（回到日更）
     #   ④ 新浪域名（finance.sina.com.cn），已有 sina 档位 20/分
-    TableSpec("us_daily_raw", "stock_us_daily", "P4_US_DAILY", "by_year", "date",
-              src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_large_cap", max_age_days=5,
-              # rotate_days=2：500 只 / 2 天轮一遍（250 只/天，两表合计 ≈37.5 分钟）
-              rotate_days=2,
-              params={"adjust": ""},
-              coerce_float_cols=["open", "high", "low", "close", "volume"],
-              inject_const={"src": "sina", "as_of": "__TODAY__"},
-              note="美股不复权日线 adjust=''; 逐只拉; "
-                   "§188 R16：universe 缩至 us_large_cap（500 只，从 us_fina_ind 按美元营收前 500 派生）；"
-                   "rotate_days=2（250 只/天，2 天轮一遍）; "
-                   "⚠ 与 us_daily_qfq 并存：存不复权价 + 事件级因子（同港股双表策略）; "
-                   "⚠ 美股 T-1（美股收盘=北京次日凌晨）"),
-    TableSpec("us_qfq_factor", "stock_us_daily", "P4_US_DAILY", "single", "date",
-              src_date_col="date", subset=["symbol", "date"], mode="list",
-              universe_from="us_large_cap", max_age_days=90,
-              # rotate_days=2：500 只 / 2 天轮一遍（250 只/天，两表合计 ≈37.5 分钟）
-              rotate_days=2,
-              params={"adjust": "qfq-factor"},
-              coerce_float_cols=["qfq_factor", "adjust"],
-              strip_sentinel=False,  # ⚠ §98 E-R3 改回 False（与 hk_qfq_factor 一致）
-              # 哨兵不是垃圾行——它是"首个公司行动之前所有日期的基准因子"（如 AAPL 19700101 qfq_factor=0.004464285714）
-              # 上轮错判：date < "19900101" 一刀切把 1 哨兵 + 12 真实公司行动全删 → close_qfq ≡ close
-              inject_const={"src": "sina", "as_of": "__TODAY__"},
-              note="美股事件级复权因子 adjust='qfq-factor'; 逐只拉; "
-                   "§188 R16：universe 缩至 us_large_cap（500 只，从 us_fina_ind 按美元营收前 500 派生）；"
-                   "rotate_days=2（250 只/天，2 天轮一遍）; "
-                   "⚠ layout=single（同港股 hk_qfq_factor；事件级因子按年分区会拆散同标的因子）; "
-                   "⚠ strip_sentinel=False：保留 1970-01-01 哨兵行（真实基准因子）+ 所有公司行动； "
-                   "⚠ 复权展开唯一入口 alt.reader.expand_us_qfq_factor()"),
+    TableSpec(
+        "us_daily_raw",
+        "stock_us_daily",
+        "P4_US_DAILY",
+        "by_year",
+        "date",
+        src_date_col="date",
+        subset=["symbol", "date"],
+        mode="list",
+        universe_from="us_large_cap",
+        max_age_days=5,
+        # rotate_days=2：500 只 / 2 天轮一遍（250 只/天，两表合计 ≈37.5 分钟）
+        rotate_days=2,
+        params={"adjust": ""},
+        coerce_float_cols=["open", "high", "low", "close", "volume"],
+        inject_const={"src": "sina", "as_of": "__TODAY__"},
+        note="美股不复权日线 adjust=''; 逐只拉; "
+        "§188 R16：universe 缩至 us_large_cap（500 只，从 us_fina_ind 按美元营收前 500 派生）；"
+        "rotate_days=2（250 只/天，2 天轮一遍）; "
+        "⚠ 与 us_daily_qfq 并存：存不复权价 + 事件级因子（同港股双表策略）; "
+        "⚠ 美股 T-1（美股收盘=北京次日凌晨）",
+    ),
+    TableSpec(
+        "us_qfq_factor",
+        "stock_us_daily",
+        "P4_US_DAILY",
+        "single",
+        "date",
+        src_date_col="date",
+        subset=["symbol", "date"],
+        mode="list",
+        universe_from="us_large_cap",
+        max_age_days=90,
+        # rotate_days=2：500 只 / 2 天轮一遍（250 只/天，两表合计 ≈37.5 分钟）
+        rotate_days=2,
+        params={"adjust": "qfq-factor"},
+        coerce_float_cols=["qfq_factor", "adjust"],
+        strip_sentinel=False,  # ⚠ §98 E-R3 改回 False（与 hk_qfq_factor 一致）
+        # 哨兵不是垃圾行——它是"首个公司行动之前所有日期的基准因子"（如 AAPL 19700101 qfq_factor=0.004464285714）
+        # 上轮错判：date < "19900101" 一刀切把 1 哨兵 + 12 真实公司行动全删 → close_qfq ≡ close
+        inject_const={"src": "sina", "as_of": "__TODAY__"},
+        note="美股事件级复权因子 adjust='qfq-factor'; 逐只拉; "
+        "§188 R16：universe 缩至 us_large_cap（500 只，从 us_fina_ind 按美元营收前 500 派生）；"
+        "rotate_days=2（250 只/天，2 天轮一遍）; "
+        "⚠ layout=single（同港股 hk_qfq_factor；事件级因子按年分区会拆散同标的因子）; "
+        "⚠ strip_sentinel=False：保留 1970-01-01 哨兵行（真实基准因子）+ 所有公司行动； "
+        "⚠ 复权展开唯一入口 alt.reader.expand_us_qfq_factor()",
+    ),
     # —— v1.5 R-4（§159 R10-A1，2026-10-27）：美股财报两表 ——
     # 参数口径（实测 AAPL，勿改）：
     #   us_fina_ind : stock_financial_us_analysis_indicator_em(symbol="AAPL", indicator="年报")
@@ -640,70 +941,112 @@ P4 = [
     #   us_report   : stock_financial_us_report_em(stock="AAPL", symbol="资产负债表", indicator="年报")
     #                 ⚠ 形参 symbol 是【报表类型】不是市场代码；返回 735 行 × 9 列（长表）
     # 报表类型枚举固定三种：「资产负债表」/「综合损益表」（**不是"利润表"**）/「现金流量表」
-    TableSpec("us_fina_ind", "stock_financial_us_analysis_indicator_em", "P4_US_FINA",
-              "by_year", "date", src_date_col="REPORT_DATE",
-              subset=["symbol", "date"], mode="list",
-              universe_from="us_universe", symbol_param="symbol", symbol_col="symbol",
-              params={"indicator": "年报"},
-              max_age_days=120, rotate_days=90,
-              coerce_float_cols=["OPERATE_INCOME", "GROSS_PROFIT",
-                                 "PARENT_HOLDER_NETPROFIT", "BASIC_EPS", "DILUTED_EPS",
-                                 "ROE_AVG", "ROA", "GROSS_PROFIT_RATIO", "NET_PROFIT_RATIO"],
-              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
-              note="美股财务分析指标（年报，49 列宽表；逐只拉; "
-                   "⚠ 源端 REPORT_DATE 为报告期，非公告日; ⚠ 负值多为合理负（营收同比/净利/EPS/ROE）; "
-                   "§204 R10-6：rotate_days 30→90（97.7% 返空——606 只里 592 只空，"
-                   "40 分钟只拿 58 行）；max_age_days 保持 120 ≥ rotate_days（否则每轮自判 stale）"),
+    TableSpec(
+        "us_fina_ind",
+        "stock_financial_us_analysis_indicator_em",
+        "P4_US_FINA",
+        "by_year",
+        "date",
+        src_date_col="REPORT_DATE",
+        subset=["symbol", "date"],
+        mode="list",
+        universe_from="us_universe",
+        symbol_param="symbol",
+        symbol_col="symbol",
+        params={"indicator": "年报"},
+        max_age_days=120,
+        rotate_days=90,
+        coerce_float_cols=[
+            "OPERATE_INCOME",
+            "GROSS_PROFIT",
+            "PARENT_HOLDER_NETPROFIT",
+            "BASIC_EPS",
+            "DILUTED_EPS",
+            "ROE_AVG",
+            "ROA",
+            "GROSS_PROFIT_RATIO",
+            "NET_PROFIT_RATIO",
+        ],
+        inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+        note="美股财务分析指标（年报，49 列宽表；逐只拉; "
+        "⚠ 源端 REPORT_DATE 为报告期，非公告日; ⚠ 负值多为合理负（营收同比/净利/EPS/ROE）; "
+        "§204 R10-6：rotate_days 30→90（97.7% 返空——606 只里 592 只空，"
+        "40 分钟只拿 58 行）；max_age_days 保持 120 ≥ rotate_days（否则每轮自判 stale）",
+    ),
     # —— §166 R12-1：拆成三张物理表（原 us_report 单表在 list 引擎下**必错**：
     #    fetch_one 会把 symbol_param 指向的参数覆盖掉，而报表述表类型只能走 `symbol`
     #    形参 ⇒ 不拆则恒拉默认「资产负债表」= 只拉 1/3）——
     #    关键：symbol_param="stock"（市场代码）与 params.symbol（报表类型）**分工**
-    TableSpec("us_report_balance", "stock_financial_us_report_em", "P4_US_REPORT",
-              "by_year", "date", src_date_col="REPORT_DATE",
-              subset=["symbol", "date", "item_name"], mode="list",
-              symbol_param="stock",            # ← 关键：防覆盖 params 里的 symbol
-              symbol_col="SECURITY_CODE",
-              rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
-                      "AMOUNT": "amount"},
-              universe_from="us_large_cap", universe_col="symbol",
-              params={"symbol": "资产负债表", "indicator": "年报"},
-              rotate_days=30, max_age_days=120,
-              coerce_float_cols=["amount"],
-              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
-              note="§166 R12-1：三表拆分之一（资产负债表）；symbol_param='stock' 防覆盖报表类型；"
-                   "值列 AMOUNT→amount；清单来自 us_fina_ind 命中名单（非 universe 直取）; "
-                   "§204 R10-7：名单由 us_fina_ind（4,642 只，含大量无语料标的）收敛为 "
-                   "us_large_cap（500 只），生效日 2026-10-29（三表同改）"),
-    TableSpec("us_report_income", "stock_financial_us_report_em", "P4_US_REPORT",
-              "by_year", "date", src_date_col="REPORT_DATE",
-              subset=["symbol", "date", "item_name"], mode="list",
-              symbol_param="stock",
-              symbol_col="SECURITY_CODE",
-              rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
-                      "AMOUNT": "amount"},
-              universe_from="us_large_cap", universe_col="symbol",
-              params={"symbol": "综合损益表", "indicator": "年报"},
-              rotate_days=30, max_age_days=120,
-              coerce_float_cols=["amount"],
-              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
-              note="§166 R12-1：三表拆分之一（综合损益表，**不是『利润表』**）；"
-                   "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount; "
-                   "§204 R10-7：名单收敛为 us_large_cap（500 只），2026-10-29 生效（三表同改）"),
-    TableSpec("us_report_cashflow", "stock_financial_us_report_em", "P4_US_REPORT",
-              "by_year", "date", src_date_col="REPORT_DATE",
-              subset=["symbol", "date", "item_name"], mode="list",
-              symbol_param="stock",
-              symbol_col="SECURITY_CODE",
-              rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name",
-                      "AMOUNT": "amount"},
-              universe_from="us_large_cap", universe_col="symbol",
-              params={"symbol": "现金流量表", "indicator": "年报"},
-              rotate_days=30, max_age_days=120,
-              coerce_float_cols=["amount"],
-              inject_const={"src": "datacenter", "as_of": "__TODAY__"},
-              note="§166 R12-1：三表拆分之一（现金流量表）；"
-                   "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount; "
-                   "§204 R10-7：名单收敛为 us_large_cap（500 只），2026-10-29 生效（三表同改）"),
+    TableSpec(
+        "us_report_balance",
+        "stock_financial_us_report_em",
+        "P4_US_REPORT",
+        "by_year",
+        "date",
+        src_date_col="REPORT_DATE",
+        subset=["symbol", "date", "item_name"],
+        mode="list",
+        symbol_param="stock",  # ← 关键：防覆盖 params 里的 symbol
+        symbol_col="SECURITY_CODE",
+        rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name", "AMOUNT": "amount"},
+        universe_from="us_large_cap",
+        universe_col="symbol",
+        params={"symbol": "资产负债表", "indicator": "年报"},
+        rotate_days=30,
+        max_age_days=120,
+        coerce_float_cols=["amount"],
+        inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+        note="§166 R12-1：三表拆分之一（资产负债表）；symbol_param='stock' 防覆盖报表类型；"
+        "值列 AMOUNT→amount；清单来自 us_fina_ind 命中名单（非 universe 直取）; "
+        "§204 R10-7：名单由 us_fina_ind（4,642 只，含大量无语料标的）收敛为 "
+        "us_large_cap（500 只），生效日 2026-10-29（三表同改）",
+    ),
+    TableSpec(
+        "us_report_income",
+        "stock_financial_us_report_em",
+        "P4_US_REPORT",
+        "by_year",
+        "date",
+        src_date_col="REPORT_DATE",
+        subset=["symbol", "date", "item_name"],
+        mode="list",
+        symbol_param="stock",
+        symbol_col="SECURITY_CODE",
+        rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name", "AMOUNT": "amount"},
+        universe_from="us_large_cap",
+        universe_col="symbol",
+        params={"symbol": "综合损益表", "indicator": "年报"},
+        rotate_days=30,
+        max_age_days=120,
+        coerce_float_cols=["amount"],
+        inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+        note="§166 R12-1：三表拆分之一（综合损益表，**不是『利润表』**）；"
+        "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount; "
+        "§204 R10-7：名单收敛为 us_large_cap（500 只），2026-10-29 生效（三表同改）",
+    ),
+    TableSpec(
+        "us_report_cashflow",
+        "stock_financial_us_report_em",
+        "P4_US_REPORT",
+        "by_year",
+        "date",
+        src_date_col="REPORT_DATE",
+        subset=["symbol", "date", "item_name"],
+        mode="list",
+        symbol_param="stock",
+        symbol_col="SECURITY_CODE",
+        rename={"SECURITY_CODE": "symbol", "ITEM_NAME": "item_name", "AMOUNT": "amount"},
+        universe_from="us_large_cap",
+        universe_col="symbol",
+        params={"symbol": "现金流量表", "indicator": "年报"},
+        rotate_days=30,
+        max_age_days=120,
+        coerce_float_cols=["amount"],
+        inject_const={"src": "datacenter", "as_of": "__TODAY__"},
+        note="§166 R12-1：三表拆分之一（现金流量表）；"
+        "symbol_param='stock' 防覆盖报表类型；值列 AMOUNT→amount; "
+        "§204 R10-7：名单收敛为 us_large_cap（500 只），2026-10-29 生效（三表同改）",
+    ),
 ]
 
 # ============================================================
@@ -730,75 +1073,147 @@ P1_EX = [
     #   `代码\_scratch\wind_macro_fetch.py` 已备，Wind 充值后一键续跑。
     #   此处**不删条目**（保结构），仅注记「Wind 线承接，暂缓建表」；
     #   既有 7 天复查轮询对该 2 表不再有意义（源端已停更 + 线路移交）。
-    TableSpec("macro_bank_brazil", "macro_bank_brazil_interest_rate", "P1",
-              "single", "date", src_date_col="日期", subset="*", mode="once",
-              max_age_days=45, update_every_days=7,
-              note="巴西央行决议报告（金十源）【已陈旧】实测 156 行、止 2025-09-18；"
-                   "每 7 天复查一次源端是否恢复",
-              known_stale="金十系源端已停更（实测止于 2025-09-18；接口可调、结构正常）；"
-                          "**Wind 线承接，暂缓建表**（18号 §15；采集器 wind_macro_fetch.py 已备）"),
-    TableSpec("macro_bank_india", "macro_bank_india_interest_rate", "P1",
-              "single", "date", src_date_col="日期", subset="*", mode="once",
-              max_age_days=45, update_every_days=7,
-              note="印度央行决议报告（金十源）【已陈旧】实测 232 行、止 2025-08-06",
-              known_stale="金十系源端已停更（实测止于 2025-08-06；接口可调、结构正常）；"
-                          "**Wind 线承接，暂缓建表**（18号 §15；采集器 wind_macro_fetch.py 已备）"),
+    TableSpec(
+        "macro_bank_brazil",
+        "macro_bank_brazil_interest_rate",
+        "P1",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset="*",
+        mode="once",
+        max_age_days=45,
+        update_every_days=7,
+        note="巴西央行决议报告（金十源）【已陈旧】实测 156 行、止 2025-09-18；"
+        "每 7 天复查一次源端是否恢复",
+        known_stale="金十系源端已停更（实测止于 2025-09-18；接口可调、结构正常）；"
+        "**Wind 线承接，暂缓建表**（18号 §15；采集器 wind_macro_fetch.py 已备）",
+    ),
+    TableSpec(
+        "macro_bank_india",
+        "macro_bank_india_interest_rate",
+        "P1",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset="*",
+        mode="once",
+        max_age_days=45,
+        update_every_days=7,
+        note="印度央行决议报告（金十源）【已陈旧】实测 232 行、止 2025-08-06",
+        known_stale="金十系源端已停更（实测止于 2025-08-06；接口可调、结构正常）；"
+        "**Wind 线承接，暂缓建表**（18号 §15；采集器 wind_macro_fetch.py 已备）",
+    ),
     # —— 中行人民币牌价（枚举 17 币种 × **区间参数**，alt 库首个区间表）——
     # ⚠ 隐式分页（R-19）：接口内部按网页页码循环，一次调用可发多个 HTTP 请求，
     #   limiter 只记 1 次 ⇒ 区间分段 ≤1 年（实测 1 年 ≈2~3 页）。
     # ⚠ 批内同区间可摊薄 `_currency_boc_sina_map` 的 lru_cache 映射请求。
-    TableSpec("currency_boc_sina", "currency_boc_sina", "P1", "single", "date",
-              src_date_col="日期", subset=["date", "symbol"], mode="enum",
-              enum_param="symbol", enum_col="symbol",
-              enum_values=["美元", "英镑", "欧元", "澳门元", "泰国铢", "菲律宾比索",
-                           "港币", "瑞士法郎", "新加坡元", "瑞典克朗", "丹麦克朗",
-                           "挪威克朗", "日元", "加拿大元", "澳大利亚元", "新西兰元",
-                           "韩国元"],
-              range_params=("start_date", "end_date"),
-              range_start="20120101",            # 实测可用的建库起点（YYYYMMDD）
-              max_age_days=15,
-              note="中行人民币牌价（新浪中行源）17 币种；区间分段 ≤1 年（隐式分页 R-19）；"
-                   "日更 = 最近 30 自然日 ≈18 请求/天"),
+    TableSpec(
+        "currency_boc_sina",
+        "currency_boc_sina",
+        "P1",
+        "single",
+        "date",
+        src_date_col="日期",
+        subset=["date", "symbol"],
+        mode="enum",
+        enum_param="symbol",
+        enum_col="symbol",
+        enum_values=[
+            "美元",
+            "英镑",
+            "欧元",
+            "澳门元",
+            "泰国铢",
+            "菲律宾比索",
+            "港币",
+            "瑞士法郎",
+            "新加坡元",
+            "瑞典克朗",
+            "丹麦克朗",
+            "挪威克朗",
+            "日元",
+            "加拿大元",
+            "澳大利亚元",
+            "新西兰元",
+            "韩国元",
+        ],
+        range_params=("start_date", "end_date"),
+        range_start="20120101",  # 实测可用的建库起点（YYYYMMDD）
+        max_age_days=15,
+        note="中行人民币牌价（新浪中行源）17 币种；区间分段 ≤1 年（隐式分页 R-19）；"
+        "日更 = 最近 30 自然日 ≈18 请求/天",
+    ),
     # —— HIBOR（DB-R8 接入；此前由引擎外独立脚本 refresh_hibor_alt.py 维护，已退休）——
     # ⚠ 该接口是**三参**（market / symbol / indicator）⇒ 依赖 R8-1 的 params 合并，
     #   否则只能绕过引擎（§198.2）。
     # ⚠ 期限枚举值：akshare 没有「12月」，12 个月期限的名叫「1年」（实测传 12月 抛 KeyError）。
     # ⚠ 源端每期限内部还有**隐式分页**（实测 隔夜 11 页 / 1年 15 页），limiter 只记 1 次请求。
-    TableSpec("hibor", "rate_interbank", "P1", "single", "date",
-              src_date_col="报告日", subset=["date", "tenor"], mode="enum",
-              enum_param="indicator", enum_col="tenor", max_age_days=15,
-              enum_values=["隔夜", "1周", "2周", "1月", "2月", "3月", "6月", "1年"],
-              params={"market": "香港银行同业拆借市场", "symbol": "Hibor港币"},
-              rename={"利率": "rate", "涨跌": "change"},
-              note="HIBOR 8 期限（东财源；tushare 侧限频1次/小时 ⇒ 主库该表已废弃）；"
-                   "长表口径（每期限一行，主键 [date,tenor]）；源端每期限有隐式分页"),
+    TableSpec(
+        "hibor",
+        "rate_interbank",
+        "P1",
+        "single",
+        "date",
+        src_date_col="报告日",
+        subset=["date", "tenor"],
+        mode="enum",
+        enum_param="indicator",
+        enum_col="tenor",
+        max_age_days=15,
+        enum_values=["隔夜", "1周", "2周", "1月", "2月", "3月", "6月", "1年"],
+        params={"market": "香港银行同业拆借市场", "symbol": "Hibor港币"},
+        rename={"利率": "rate", "涨跌": "change"},
+        note="HIBOR 8 期限（东财源；tushare 侧限频1次/小时 ⇒ 主库该表已废弃）；"
+        "长表口径（每期限一行，主键 [date,tenor]）；源端每期限有隐式分页",
+    ),
 ]
 
 P4_HK = [
     # —— 港股日线（未复权，1 请求/只；轮转重建）——
-    TableSpec("hk_daily", "stock_hk_daily", "P4_HK", "by_year", "date",
-              src_date_col="date", subset=["symbol", "date"], mode="list",
-              params={"adjust": ""},
-              universe_from="master:hk_basic", universe_col="ts_code",
-              universe_xform="strip_hk_suffix",
-              rotate_days=7, max_age_days=15,
-              core_metric_cols=["close"],
-              note="港股日线【未复权】(1 请求/只)；轮转重建(7 天/轮) → alt/list_backfill.py；"
-                   "⚠ volume=股 / amount=元(港元)，与主库 vol=手 / amount=千元不同口径(R-21)；"
-                   "⚠ 拆股期间源侧可能缺行(00700 实测 2014-05-15~05-28 共 10 个交易日)；"
-                   "⚠ 复权展开唯一入口 alt.reader.expand_qfq_factor()"),
+    TableSpec(
+        "hk_daily",
+        "stock_hk_daily",
+        "P4_HK",
+        "by_year",
+        "date",
+        src_date_col="date",
+        subset=["symbol", "date"],
+        mode="list",
+        params={"adjust": ""},
+        universe_from="master:hk_basic",
+        universe_col="ts_code",
+        universe_xform="strip_hk_suffix",
+        rotate_days=7,
+        max_age_days=15,
+        core_metric_cols=["close"],
+        note="港股日线【未复权】(1 请求/只)；轮转重建(7 天/轮) → alt/list_backfill.py；"
+        "⚠ volume=股 / amount=元(港元)，与主库 vol=手 / amount=千元不同口径(R-21)；"
+        "⚠ 拆股期间源侧可能缺行(00700 实测 2014-05-15~05-28 共 10 个交易日)；"
+        "⚠ 复权展开唯一入口 alt.reader.expand_qfq_factor()",
+    ),
     # —— 港股前复权因子（**事件级**，1 请求/只；轮转重建）——
-    TableSpec("hk_qfq_factor", "stock_hk_daily", "P4_HK", "single", "date",
-              src_date_col="date", subset=["symbol", "date"], mode="list",
-              params={"adjust": "qfq-factor"},
-              universe_from="master:hk_basic", universe_col="ts_code",
-              universe_xform="strip_hk_suffix",
-              rotate_days=7, max_age_days=400,
-              coerce_float_cols=["qfq_factor"],
-              note="港股前复权因子【事件级】(1 请求/只)；⚠ 源为日期降序、含 1900-01-01 "
-                   "哨兵行(在尾) ⇒ 入库归一化: 转 float + 升序；⚠ 展开唯一入口 "
-                   "alt.reader.expand_qfq_factor()(骨架=价格日∪事件日)，禁自行 ffill；"
-                   "⚠ 哨兵行精度 ~3e-5(早期段残差)，见 09 §14.10 V6（P-C 条款）"),
+    TableSpec(
+        "hk_qfq_factor",
+        "stock_hk_daily",
+        "P4_HK",
+        "single",
+        "date",
+        src_date_col="date",
+        subset=["symbol", "date"],
+        mode="list",
+        params={"adjust": "qfq-factor"},
+        universe_from="master:hk_basic",
+        universe_col="ts_code",
+        universe_xform="strip_hk_suffix",
+        rotate_days=7,
+        max_age_days=400,
+        coerce_float_cols=["qfq_factor"],
+        note="港股前复权因子【事件级】(1 请求/只)；⚠ 源为日期降序、含 1900-01-01 "
+        "哨兵行(在尾) ⇒ 入库归一化: 转 float + 升序；⚠ 展开唯一入口 "
+        "alt.reader.expand_qfq_factor()(骨架=价格日∪事件日)，禁自行 ffill；"
+        "⚠ 哨兵行精度 ~3e-5(早期段残差)，见 09 §14.10 V6（P-C 条款）",
+    ),
 ]
 
 # ============================================================
@@ -811,48 +1226,66 @@ P0_EXT = [
     # —— OS-R1 P0-1 港股基本面快照 ——
     # 源: stock_hk_financial_indicator_em → datacenter 档 15/分
     # 每标的 1 请求 × 2785 只 ≈ 2.95 h
-    TableSpec("hk_fina_snap", "stock_hk_financial_indicator_em", "P0_EXT", "single",
-              "date", src_date_col=None,
-              # §159 R10-D3（A 案）：主键由 [symbol, date] 改为 **[symbol]**
-              # 原因：源端返回的是"当前快照"，无数据日期列；date 只能注入拉取日
-              #       ⇒ 旧口径下每天重跑都算"新行"，表无限累积（实测 4,000 行 = 2,777 + 1,223 老批次）。
-              # 现口径：按 symbol 覆盖，重跑恒为 2,777 行，date 仅表示"最近一次拉取日"。
-              subset=["symbol"], mode="list",
-              universe_from="master:hk_basic", universe_col="ts_code",
-              universe_xform="strip_hk_suffix", symbol_param="symbol",
-              symbol_col="symbol", rotate_days=30,
-              max_age_days=45,
-              inject_const={"date": "__TODAY__", "src": "datacenter-web", "as_of": "__TODAY__"},
-              # ⚠ 源函数内部用 f'(SECUCODE="{symbol}.HK")' 过滤，
-              #   故 symbol_param 实际无效（请求体用硬编码 .HK 后缀），
-              #   但保留以符合 list 引擎契约；
-              #   ⚠ akshare 内部 RENAME 映射会把中文列名转英文，
-              #     实际落盘列见 alt/oversize_fetch.py 的 schema_fp 校验。
-              note="港股基本面+估值快照（21列：总市值/港股市值/PE/PB/股息率/ROE/EPS/BPS等；"
-                   "东财 datacenter 档 15/分；每标的 1 请求，全量 2785 只 ≈ 2.95h；"
-                   "⚠ 源接口自动按 .HK 后缀过滤，symbols 需去后缀传入）"),
-
+    TableSpec(
+        "hk_fina_snap",
+        "stock_hk_financial_indicator_em",
+        "P0_EXT",
+        "single",
+        "date",
+        src_date_col=None,
+        # §159 R10-D3（A 案）：主键由 [symbol, date] 改为 **[symbol]**
+        # 原因：源端返回的是"当前快照"，无数据日期列；date 只能注入拉取日
+        #       ⇒ 旧口径下每天重跑都算"新行"，表无限累积（实测 4,000 行 = 2,777 + 1,223 老批次）。
+        # 现口径：按 symbol 覆盖，重跑恒为 2,777 行，date 仅表示"最近一次拉取日"。
+        subset=["symbol"],
+        mode="list",
+        universe_from="master:hk_basic",
+        universe_col="ts_code",
+        universe_xform="strip_hk_suffix",
+        symbol_param="symbol",
+        symbol_col="symbol",
+        rotate_days=30,
+        max_age_days=45,
+        inject_const={"date": "__TODAY__", "src": "datacenter-web", "as_of": "__TODAY__"},
+        # ⚠ 源函数内部用 f'(SECUCODE="{symbol}.HK")' 过滤，
+        #   故 symbol_param 实际无效（请求体用硬编码 .HK 后缀），
+        #   但保留以符合 list 引擎契约；
+        #   ⚠ akshare 内部 RENAME 映射会把中文列名转英文，
+        #     实际落盘列见 alt/oversize_fetch.py 的 schema_fp 校验。
+        note="港股基本面+估值快照（21列：总市值/港股市值/PE/PB/股息率/ROE/EPS/BPS等；"
+        "东财 datacenter 档 15/分；每标的 1 请求，全量 2785 只 ≈ 2.95h；"
+        "⚠ 源接口自动按 .HK 后缀过滤，symbols 需去后缀传入）",
+    ),
     # —— OS-R1 P0-2 港股十年估值分位 ——
     # 源: stock_hk_valuation_baidu × 3 个 indicator → other 档 15/分
     # 每标的 3 请求 × 2785 只 ≈ 8.85 h（但与 R1 的 datacenter 可并行）
-    TableSpec("hk_val_pct", "stock_hk_valuation_baidu", "P0_EXT", "by_year",
-              "date", src_date_col="date",
-              subset=["symbol", "indicator", "date"], mode="list",
-              universe_from="master:hk_basic", universe_col="ts_code",
-              universe_xform="strip_hk_suffix", symbol_param="symbol",
-              symbol_col="symbol",
-              # rotate_days=0：本表由 alt.oversize_fetch 专用（3 indicator），
-              # 走 list_backfill 会因 indicator 缺省='总市值' 而写错数据（§163）
-              rotate_days=0,
-              max_age_days=45,
-              params={"period": "近十年"},
-              inject_const={"src": "baidu", "as_of": "__TODAY__"},
-              coerce_float_cols=["value"],
-              note="港股估值时序（市盈率TTM/市盈率静/市净率，各 period=近十年 ≈ 731 行/2016-10-25起）；"
-                   "百度 other 档 15/分；每标的 3 请求，全量 ≈ 8.85h；"
-                   "⚠ 需 OS-R1 独立 fetcher（alt.oversize_fetch.py，3 indicator + 分位算法），不走 list_backfill；"
-                   "⚠ period=近十年（审查方 §86 P0-2 实测：近十年 731 点 vs 全部 629 点，分位偏移最大 31.4pp）；"
-                   "⚠ 分位算法 CK-13 必须剔非正值，CK-14 三道门禁 cur>0 & n_pos>=100 & n_total>=520"),
+    TableSpec(
+        "hk_val_pct",
+        "stock_hk_valuation_baidu",
+        "P0_EXT",
+        "by_year",
+        "date",
+        src_date_col="date",
+        subset=["symbol", "indicator", "date"],
+        mode="list",
+        universe_from="master:hk_basic",
+        universe_col="ts_code",
+        universe_xform="strip_hk_suffix",
+        symbol_param="symbol",
+        symbol_col="symbol",
+        # rotate_days=0：本表由 alt.oversize_fetch 专用（3 indicator），
+        # 走 list_backfill 会因 indicator 缺省='总市值' 而写错数据（§163）
+        rotate_days=0,
+        max_age_days=45,
+        params={"period": "近十年"},
+        inject_const={"src": "baidu", "as_of": "__TODAY__"},
+        coerce_float_cols=["value"],
+        note="港股估值时序（市盈率TTM/市盈率静/市净率，各 period=近十年 ≈ 731 行/2016-10-25起）；"
+        "百度 other 档 15/分；每标的 3 请求，全量 ≈ 8.85h；"
+        "⚠ 需 OS-R1 独立 fetcher（alt.oversize_fetch.py，3 indicator + 分位算法），不走 list_backfill；"
+        "⚠ period=近十年（审查方 §86 P0-2 实测：近十年 731 点 vs 全部 629 点，分位偏移最大 31.4pp）；"
+        "⚠ 分位算法 CK-13 必须剔非正值，CK-14 三道门禁 cur>0 & n_pos>=100 & n_total>=520",
+    ),
 ]
 
 # ============================================================
@@ -864,171 +1297,364 @@ P0_EXT = [
 # ============================================================
 P2 = [
     # —— A 块：QDII 场内快照（两张列不同，禁止合并）——
-    TableSpec("qdii_spot_asia", "qdii_a_index_jsl", "P2", "by_year", "trade_date",
-              src_date_col=None, subset=["trade_date", "代码"], mode="once",
-              max_age_days=15, max_backfill_days=0,
-              force_str_cols=["涨幅", "指数涨幅", "溢价率"],
-              note="QDII 亚太快照（20 行 × 17 列，实测 2026-10-30）；"
-                   "⚠ 源端无日期列 ⇒ 注入 trade_date；快照不可回补；"
-                   "⚠ qdii_e_comm_jsl 与 qdii_e_index_jsl 返回完全相同（§215），不接"),
-    TableSpec("qdii_spot_euro", "qdii_e_index_jsl", "P2", "by_year", "trade_date",
-              src_date_col=None, subset=["trade_date", "代码"], mode="once",
-              max_age_days=15, max_backfill_days=0,
-              force_str_cols=["涨幅", "T-1指数涨幅", "T-1溢价率"],
-              note="QDII 欧洲快照（20 行 × 18 列，含 T-2净值/T-1估值/T-1溢价率）；"
-                   "⚠ 与 asia 表**列不同**，故两张物理表；源端无日期列 ⇒ 注入 trade_date"),
+    TableSpec(
+        "qdii_spot_asia",
+        "qdii_a_index_jsl",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        subset=["trade_date", "代码"],
+        mode="once",
+        max_age_days=15,
+        max_backfill_days=0,
+        force_str_cols=["涨幅", "指数涨幅", "溢价率"],
+        note="QDII 亚太快照（20 行 × 17 列，实测 2026-10-30）；"
+        "⚠ 源端无日期列 ⇒ 注入 trade_date；快照不可回补；"
+        "⚠ qdii_e_comm_jsl 与 qdii_e_index_jsl 返回完全相同（§215），不接",
+    ),
+    TableSpec(
+        "qdii_spot_euro",
+        "qdii_e_index_jsl",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        subset=["trade_date", "代码"],
+        mode="once",
+        max_age_days=15,
+        max_backfill_days=0,
+        force_str_cols=["涨幅", "T-1指数涨幅", "T-1溢价率"],
+        note="QDII 欧洲快照（20 行 × 18 列，含 T-2净值/T-1估值/T-1溢价率）；"
+        "⚠ 与 asia 表**列不同**，故两张物理表；源端无日期列 ⇒ 注入 trade_date",
+    ),
     # —— A2：交易所口径 ETF 份额（仅上交所；深交所源端坏）——
-    TableSpec("etf_scale_sse", "fund_etf_scale_sse", "P2", "by_year", "trade_date",
-              src_date_col="统计日期", date_param="date", date_param_lag_days=1,
-              subset=["trade_date", "基金代码"], mode="once",
-              max_age_days=15, max_backfill_days=0,
-              note="上交所官方 ETF 份额（593~923 行 × 6 列）；"
-                   "⚠ 源端**当日份额次日才发布**（20261030 KeyError / 20261029=923 行）"
-                   "⇒ date_param_lag_days=1 取 T-1；"
-                   "⚠ 深市对应表为 etf_scale_szse（R12 已接入）——"
-                   "akshare 原函数在 pandas>=2.0 下 read_excel(bytes) 报 TypeError，"
-                   "已由 alt/compat.patch_akshare() 修复；注意两所口径不同："
-                   "本表为 T-1，SZSE 为 T 日实时快照，跨所汇总须先对齐日期"),
-    TableSpec("etf_scale_szse", "fund_etf_scale_szse", "P2", "by_year", "trade_date",
-              src_date_col=None, subset=["trade_date", "基金代码"], mode="once",
-              max_age_days=15, max_backfill_days=0,
-              note="深交所官方 ETF 份额（实测 1,083 行 × 10 列）；"
-                   "⚠ 源端无日期列 ⇒ 注入 trade_date；纯快照表须日更累积；"
-                   "⚠ akshare 原函数在 pandas>=2.0 下 read_excel(bytes) 报 TypeError，"
-                   "已由 alt/compat.patch_akshare() 修（同一端点重实现，仅加 BytesIO）"),
+    TableSpec(
+        "etf_scale_sse",
+        "fund_etf_scale_sse",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col="统计日期",
+        date_param="date",
+        date_param_lag_days=1,
+        subset=["trade_date", "基金代码"],
+        mode="once",
+        max_age_days=15,
+        max_backfill_days=0,
+        note="上交所官方 ETF 份额（593~923 行 × 6 列）；"
+        "⚠ 源端**当日份额次日才发布**（20261030 KeyError / 20261029=923 行）"
+        "⇒ date_param_lag_days=1 取 T-1；"
+        "⚠ 深市对应表为 etf_scale_szse（R12 已接入）——"
+        "akshare 原函数在 pandas>=2.0 下 read_excel(bytes) 报 TypeError，"
+        "已由 alt/compat.patch_akshare() 修复；注意两所口径不同："
+        "本表为 T-1，SZSE 为 T 日实时快照，跨所汇总须先对齐日期",
+    ),
+    TableSpec(
+        "etf_scale_szse",
+        "fund_etf_scale_szse",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        subset=["trade_date", "基金代码"],
+        mode="once",
+        max_age_days=15,
+        max_backfill_days=0,
+        note="深交所官方 ETF 份额（实测 1,083 行 × 10 列）；"
+        "⚠ 源端无日期列 ⇒ 注入 trade_date；纯快照表须日更累积；"
+        "⚠ akshare 原函数在 pandas>=2.0 下 read_excel(bytes) 报 TypeError，"
+        "已由 alt/compat.patch_akshare() 修（同一端点重实现，仅加 BytesIO）",
+    ),
     # —— B 块：CFTC 四张（商品两张列名相同值不同、外汇两张同理 ⇒ 必须 4 张物理表）——
-    TableSpec("cftc_goods_nc", "macro_usa_cftc_c_holding", "P2", "single", "trade_date",
-              src_date_col="日期", subset=["trade_date"], mode="once",
-              update_every_days=7, max_age_days=15, max_backfill_days=0,
-              note="CFTC 商品**非商业**持仓（投机盘）1986 起 1,941 行 × 37 列；"
-                   "非商业 = 投机盘；商业 = 套保盘 —— 这是它们全部价值所在；"
-                   "⚠ 与 cftc_goods_merchant 列名完全相同但值不同，禁合并"),
-    TableSpec("cftc_goods_merchant", "macro_usa_cftc_merchant_goods_holding", "P2",
-              "single", "trade_date", src_date_col="日期", subset=["trade_date"],
-              mode="once", update_every_days=7, max_age_days=15, max_backfill_days=0,
-              note="CFTC 商品**商业**持仓（套保盘）1,941 行 × 37 列；"
-                   "⚠ 与 cftc_goods_nc 列名相同、值不同（a.equals(b)=False），禁合并"),
-    TableSpec("cftc_fx_nc", "macro_usa_cftc_nc_holding", "P2", "single", "trade_date",
-              src_date_col="日期", subset=["trade_date"], mode="once",
-              update_every_days=7, max_age_days=15, max_backfill_days=0,
-              note="CFTC 外汇**非商业**持仓（投机盘）1,941 行 × 28 列；"
-                   "⚠ 与 cftc_fx_merchant 列名相同但值不同，禁合并"),
-    TableSpec("cftc_fx_merchant", "macro_usa_cftc_merchant_currency_holding", "P2",
-              "single", "trade_date", src_date_col="日期", subset=["trade_date"],
-              mode="once", update_every_days=7, max_age_days=15, max_backfill_days=0,
-              note="CFTC 外汇**商业**持仓（套保盘）1,941 行 × 28 列；"
-                   "⚠ 与 cftc_fx_nc 列名相同、值不同，禁合并"),
+    TableSpec(
+        "cftc_goods_nc",
+        "macro_usa_cftc_c_holding",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="日期",
+        subset=["trade_date"],
+        mode="once",
+        update_every_days=7,
+        max_age_days=15,
+        max_backfill_days=0,
+        note="CFTC 商品**非商业**持仓（投机盘）1986 起 1,941 行 × 37 列；"
+        "非商业 = 投机盘；商业 = 套保盘 —— 这是它们全部价值所在；"
+        "⚠ 与 cftc_goods_merchant 列名完全相同但值不同，禁合并",
+    ),
+    TableSpec(
+        "cftc_goods_merchant",
+        "macro_usa_cftc_merchant_goods_holding",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="日期",
+        subset=["trade_date"],
+        mode="once",
+        update_every_days=7,
+        max_age_days=15,
+        max_backfill_days=0,
+        note="CFTC 商品**商业**持仓（套保盘）1,941 行 × 37 列；"
+        "⚠ 与 cftc_goods_nc 列名相同、值不同（a.equals(b)=False），禁合并",
+    ),
+    TableSpec(
+        "cftc_fx_nc",
+        "macro_usa_cftc_nc_holding",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="日期",
+        subset=["trade_date"],
+        mode="once",
+        update_every_days=7,
+        max_age_days=15,
+        max_backfill_days=0,
+        note="CFTC 外汇**非商业**持仓（投机盘）1,941 行 × 28 列；"
+        "⚠ 与 cftc_fx_merchant 列名相同但值不同，禁合并",
+    ),
+    TableSpec(
+        "cftc_fx_merchant",
+        "macro_usa_cftc_merchant_currency_holding",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="日期",
+        subset=["trade_date"],
+        mode="once",
+        update_every_days=7,
+        max_age_days=15,
+        max_backfill_days=0,
+        note="CFTC 外汇**商业**持仓（套保盘）1,941 行 × 28 列；"
+        "⚠ 与 cftc_fx_nc 列名相同、值不同，禁合并",
+    ),
     # —— C 块：债券 ——
     # bond_china_yield：跨度 >约 1 年 **静默返空**（实测 13 个月=0 行 / 10 个月=609 行）
     #   ⇒ 引擎走 range_params（按年切段）；本表无枚举维度（enum_values 为空）
     #     ⇒ run_range_spec 的内层循环会迭代一次 val=None（DB-R11b §225）。
-    TableSpec("bond_yield_cn", "bond_china_yield", "P2", "by_year", "trade_date",
-              src_date_col="日期", subset=["trade_date", "曲线名称"], mode="once",
-              range_params=("start_date", "end_date"),
-              range_start="20160101",          # DB-R11c：20200101 → 20160101
-              max_age_days=15, max_backfill_days=240,
-              note="中债收益率曲线（曲线名称 × 10 期限，实测 20260101~20261029=609 行）；"
-                   "⚠ 源端**仅返回 3 种曲线**：中债国债 / 中债中短期票据(AAA) / 中债商业银行普通债(AAA)"
-                   "（**不是**国债/地方债/金融债/信用债全套，§226 P3-3 更正 §219 的设计假设）；"
-                   "⚠ 单次跨度**不得超过约 1 年**，超了静默返回空表 ⇒ 引擎按年切段；"
-                   "max_backfill_days=240（交易日口径）；回补脚本按季度切片；"
-                   "起点 20160101（opt_daily 与中债曲线的最早可得年份）；"
-                   "2016–2019 实测逐年 750~756 行"),
-    TableSpec("bond_yield_us", "bond_zh_us_rate", "P2", "by_year", "trade_date",
-              src_date_col="日期", subset=["trade_date"], mode="once",
-              params={"start_date": "20100101"}, max_age_days=15, max_backfill_days=0,
-              note="中美国债收益率 + 10Y-2Y 利差 + GDP（9,377 行 × 13 列）；"
-                   "⚠ 函数内部**分页 19 次、约 8s**；"
-                   "⚠ 与派单差异：**不设 date_param**——引擎会把 target_date（当日）传给 "
-                   "start_date，实测当日单点常返 0 行；改为固定 params.start_date=20100101 "
-                   "全量重拉（落盘按 trade_date 去重，幂等）"),
+    TableSpec(
+        "bond_yield_cn",
+        "bond_china_yield",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col="日期",
+        subset=["trade_date", "曲线名称"],
+        mode="once",
+        range_params=("start_date", "end_date"),
+        range_start="20160101",  # DB-R11c：20200101 → 20160101
+        max_age_days=15,
+        max_backfill_days=240,
+        note="中债收益率曲线（曲线名称 × 10 期限，实测 20260101~20261029=609 行）；"
+        "⚠ 源端**仅返回 3 种曲线**：中债国债 / 中债中短期票据(AAA) / 中债商业银行普通债(AAA)"
+        "（**不是**国债/地方债/金融债/信用债全套，§226 P3-3 更正 §219 的设计假设）；"
+        "⚠ 单次跨度**不得超过约 1 年**，超了静默返回空表 ⇒ 引擎按年切段；"
+        "max_backfill_days=240（交易日口径）；回补脚本按季度切片；"
+        "起点 20160101（opt_daily 与中债曲线的最早可得年份）；"
+        "2016–2019 实测逐年 750~756 行",
+    ),
+    TableSpec(
+        "bond_yield_us",
+        "bond_zh_us_rate",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col="日期",
+        subset=["trade_date"],
+        mode="once",
+        params={"start_date": "20100101"},
+        max_age_days=15,
+        max_backfill_days=0,
+        note="中美国债收益率 + 10Y-2Y 利差 + GDP（9,377 行 × 13 列）；"
+        "⚠ 函数内部**分页 19 次、约 8s**；"
+        "⚠ 与派单差异：**不设 date_param**——引擎会把 target_date（当日）传给 "
+        "start_date，实测当日单点常返 0 行；改为固定 params.start_date=20100101 "
+        "全量重拉（落盘按 trade_date 去重，幂等）",
+    ),
     # —— DB-R14（§257）：股东户数 / 基金公司规模 / 上交所期权官方统计 ——
-    TableSpec("stock_gdhs", "stock_zh_a_gdhs", "P2", "single", "trade_date",
-              src_date_col="公告日期", subset=["trade_date", "代码", "报告期"],
-              mode="enum", enum_param="symbol", enum_col="报告期",
-              enum_values=([f"2014{md}" for md in ("0630", "0930", "1231")]
-                           + [f"{y}{md}" for y in range(2015, 2026)
-                              for md in ("0331", "0630", "0930", "1231")]
-                           + [f"2026{md}" for md in ("0331", "0630", "0930")]),
-              update_every_days=90, max_age_days=95,
-              note="股东户数（筹码集中度，20140630 起每季全市场，20250930 期实测 5,272 行）；"
-                   "enum=报告期（季末），**共 50 期已确认有数据**——未来期会 TypeError"
-                   "且单值失败会毒整表，故**绝不追加未来期**；"
-                   "⚠ 维护动作：每年 4 月底（年报/一季报披露完）在 enum_values 追加当年 0331 与上年 1231；"
-                   "subset 的 trade_date=公告日期；报告期本身存于「报告期」列；"
-                   "每期内部 5~11 个分页请求（随上市公司数增长）"),
-    TableSpec("fund_aum_em", "fund_aum_hist_em", "P2", "single", "trade_date",
-              has_date=False, subset=["基金公司", "年份"],
-              mode="enum", enum_param="year", enum_col="年份",
-              enum_values=[str(y) for y in range(2019, 2027)],
-              update_every_days=30,
-              inject_const={"fetch_date": "__TODAY__"},
-              note="基金公司管理规模（东财，2019~2026 每年一份快照，实测 147~205 行 × 9 列："
-                   "总规模/股票型/混合型/债券型/指数型/QDII）；"
-                   "⚠ 源端无日期列 ⇒ **has_date=False**（无日期表，io 强制 single 布局合并写回），"
-                   "年份存「年份」列（enum_col），拉取时间存 fetch_date（inject_const=__TODAY__）；"
-                   "⚠ enum 只列 2019~2026（已实测年份），未来年会失败毒整表；"
-                   "⚠ 维护动作：**每年 1 月在 enum_values 追加新年份**；"
-                   "「汇金 ETF 化」的公司维度，与 etf_scale_sse/szse（标的维度）互补"),
-    TableSpec("fund_stock_position_lg", "fund_stock_position_lg", "P2", "single", "trade_date",
-              src_date_col="date", subset=["trade_date"], mode="once",
-              update_every_days=7, max_age_days=10,
-              note="股票型基金仓位（乐咕乐股，实测 459 行 2017-12-04~2026-10-30，"
-                   "周频每周五更新，非零率 100%，最新 96.70→96.95→97.29）；"
-                   "⚠ 同族 fund_balance_position_lg（平衡混合型）已停更 2025-12-12 后恒 0，"
-                   "故改用本表 + fund_linghuo_position_lg 两个活品类；"
-                   "股票型含指数基金 ⇒ 常年 95%+ 属正常口径"),
-    TableSpec("fund_linghuo_position_lg", "fund_linghuo_position_lg", "P2", "single", "trade_date",
-              src_date_col="date", subset=["trade_date"], mode="once",
-              update_every_days=7, max_age_days=10,
-              note="灵活配置型基金仓位（乐咕乐股，实测 459 行 2017-12-04~2026-10-30，"
-                   "周频每周五更新，非零率 100%，最新 87.33→86.86→87.79）；"
-                   "⚠ 与 fund_stock_position_lg 的仓位差本身有信息量（主动权益实际仓位）"),
-    TableSpec("option_sse_stats", "option_daily_stats_sse", "P2", "by_year", "trade_date",
-              src_date_col=None, subset=["trade_date", "合约标的代码"], mode="once",
-              date_param="date", date_param_lag_days=0,
-              max_age_days=15, max_backfill_days=0,
-              note="上交所期权每日统计（每日 5 行 × 12 列：5 个标的的 总成交量/认购成交量/"
-                   "认沽成交量/官方认沽认购比/总持仓 等）；2018-01-10 起有（1→2→5 行随标的扩容）；"
-                   "⚠ 源端无日期列 ⇒ 注入 trade_date；dates 策略 1 请求/天；"
-                   "⚠ 仅上交所 5 标的——深交所/中金所期权不在内；"
-                   "官方认沽认购比可与派生 opt_pcr **交叉验证**（独立源互核）"),
-    TableSpec("cb_redeem", "bond_cb_redeem_jsl", "P2", "by_year", "trade_date",
-              src_date_col=None, subset=["trade_date", "代码"], mode="once",
-              max_age_days=15, max_backfill_days=0,
-              force_str_cols=["强赎天计数", "强赎条款", "强赎状态"],
-              note="可转债强赎（318 行 × 18 列，代码唯一 318/318）；"
-                   "⚠ 源端无日期列 ⇒ 注入 trade_date；快照表须日更累积；"
-                   "强赎天计数含 HTML，故强制转字符串"),
-    TableSpec("bond_index_composite", "bond_composite_index_cbond", "P2", "single",
-              "trade_date", src_date_col="date", subset=["trade_date"], mode="once",
-              params={"indicator": "财富", "period": "总值"},
-              update_every_days=7, max_age_days=45,
-              note="中债综合指数（6,207 行 × 2 列 date/value；源列小写 ⇒ src_date_col=date）"),
-    TableSpec("bond_index_new_composite", "bond_new_composite_index_cbond", "P2",
-              "single", "trade_date", src_date_col="date", subset=["trade_date"],
-              mode="once", params={"indicator": "财富", "period": "总值"},
-              update_every_days=7, max_age_days=45,
-              note="中债新综合指数（6,207 行；与综合指数同日不同值）"),
-    TableSpec("bond_index_treasury", "bond_treasury_index_cbond", "P2", "by_year",
-              "trade_date", src_date_col="date", subset=["trade_date", "period"],
-              mode="enum", enum_param="period", enum_col="period",
-              enum_values=["5Y", "10Y"],        # 实测 '1Y'/'3Y' 直接 KeyError
-              params={"indicator": "财富"}, update_every_days=7, max_age_days=45,
-              note="中债国债指数（5Y/10Y 各 4,704 行；⚠ '1Y'/'3Y' 实测 KeyError ⇒ 只登记 2 档）"),
+    TableSpec(
+        "stock_gdhs",
+        "stock_zh_a_gdhs",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="公告日期",
+        subset=["trade_date", "代码", "报告期"],
+        mode="enum",
+        enum_param="symbol",
+        enum_col="报告期",
+        enum_values=(
+            [f"2014{md}" for md in ("0630", "0930", "1231")]
+            + [f"{y}{md}" for y in range(2015, 2026) for md in ("0331", "0630", "0930", "1231")]
+            + [f"2026{md}" for md in ("0331", "0630", "0930")]
+        ),
+        update_every_days=90,
+        max_age_days=95,
+        note="股东户数（筹码集中度，20140630 起每季全市场，20250930 期实测 5,272 行）；"
+        "enum=报告期（季末），**共 50 期已确认有数据**——未来期会 TypeError"
+        "且单值失败会毒整表，故**绝不追加未来期**；"
+        "⚠ 维护动作：每年 4 月底（年报/一季报披露完）在 enum_values 追加当年 0331 与上年 1231；"
+        "subset 的 trade_date=公告日期；报告期本身存于「报告期」列；"
+        "每期内部 5~11 个分页请求（随上市公司数增长）",
+    ),
+    TableSpec(
+        "fund_aum_em",
+        "fund_aum_hist_em",
+        "P2",
+        "single",
+        "trade_date",
+        has_date=False,
+        subset=["基金公司", "年份"],
+        mode="enum",
+        enum_param="year",
+        enum_col="年份",
+        enum_values=[str(y) for y in range(2019, 2027)],
+        update_every_days=30,
+        inject_const={"fetch_date": "__TODAY__"},
+        note="基金公司管理规模（东财，2019~2026 每年一份快照，实测 147~205 行 × 9 列："
+        "总规模/股票型/混合型/债券型/指数型/QDII）；"
+        "⚠ 源端无日期列 ⇒ **has_date=False**（无日期表，io 强制 single 布局合并写回），"
+        "年份存「年份」列（enum_col），拉取时间存 fetch_date（inject_const=__TODAY__）；"
+        "⚠ enum 只列 2019~2026（已实测年份），未来年会失败毒整表；"
+        "⚠ 维护动作：**每年 1 月在 enum_values 追加新年份**；"
+        "「汇金 ETF 化」的公司维度，与 etf_scale_sse/szse（标的维度）互补",
+    ),
+    TableSpec(
+        "fund_stock_position_lg",
+        "fund_stock_position_lg",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="date",
+        subset=["trade_date"],
+        mode="once",
+        update_every_days=7,
+        max_age_days=10,
+        note="股票型基金仓位（乐咕乐股，实测 459 行 2017-12-04~2026-10-30，"
+        "周频每周五更新，非零率 100%，最新 96.70→96.95→97.29）；"
+        "⚠ 同族 fund_balance_position_lg（平衡混合型）已停更 2025-12-12 后恒 0，"
+        "故改用本表 + fund_linghuo_position_lg 两个活品类；"
+        "股票型含指数基金 ⇒ 常年 95%+ 属正常口径",
+    ),
+    TableSpec(
+        "fund_linghuo_position_lg",
+        "fund_linghuo_position_lg",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="date",
+        subset=["trade_date"],
+        mode="once",
+        update_every_days=7,
+        max_age_days=10,
+        note="灵活配置型基金仓位（乐咕乐股，实测 459 行 2017-12-04~2026-10-30，"
+        "周频每周五更新，非零率 100%，最新 87.33→86.86→87.79）；"
+        "⚠ 与 fund_stock_position_lg 的仓位差本身有信息量（主动权益实际仓位）",
+    ),
+    TableSpec(
+        "option_sse_stats",
+        "option_daily_stats_sse",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        subset=["trade_date", "合约标的代码"],
+        mode="once",
+        date_param="date",
+        date_param_lag_days=0,
+        max_age_days=15,
+        max_backfill_days=0,
+        note="上交所期权每日统计（每日 5 行 × 12 列：5 个标的的 总成交量/认购成交量/"
+        "认沽成交量/官方认沽认购比/总持仓 等）；2018-01-10 起有（1→2→5 行随标的扩容）；"
+        "⚠ 源端无日期列 ⇒ 注入 trade_date；dates 策略 1 请求/天；"
+        "⚠ 仅上交所 5 标的——深交所/中金所期权不在内；"
+        "官方认沽认购比可与派生 opt_pcr **交叉验证**（独立源互核）",
+    ),
+    TableSpec(
+        "cb_redeem",
+        "bond_cb_redeem_jsl",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col=None,
+        subset=["trade_date", "代码"],
+        mode="once",
+        max_age_days=15,
+        max_backfill_days=0,
+        force_str_cols=["强赎天计数", "强赎条款", "强赎状态"],
+        note="可转债强赎（318 行 × 18 列，代码唯一 318/318）；"
+        "⚠ 源端无日期列 ⇒ 注入 trade_date；快照表须日更累积；"
+        "强赎天计数含 HTML，故强制转字符串",
+    ),
+    TableSpec(
+        "bond_index_composite",
+        "bond_composite_index_cbond",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="date",
+        subset=["trade_date"],
+        mode="once",
+        params={"indicator": "财富", "period": "总值"},
+        update_every_days=7,
+        max_age_days=45,
+        note="中债综合指数（6,207 行 × 2 列 date/value；源列小写 ⇒ src_date_col=date）",
+    ),
+    TableSpec(
+        "bond_index_new_composite",
+        "bond_new_composite_index_cbond",
+        "P2",
+        "single",
+        "trade_date",
+        src_date_col="date",
+        subset=["trade_date"],
+        mode="once",
+        params={"indicator": "财富", "period": "总值"},
+        update_every_days=7,
+        max_age_days=45,
+        note="中债新综合指数（6,207 行；与综合指数同日不同值）",
+    ),
+    TableSpec(
+        "bond_index_treasury",
+        "bond_treasury_index_cbond",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col="date",
+        subset=["trade_date", "period"],
+        mode="enum",
+        enum_param="period",
+        enum_col="period",
+        enum_values=["5Y", "10Y"],  # 实测 '1Y'/'3Y' 直接 KeyError
+        params={"indicator": "财富"},
+        update_every_days=7,
+        max_age_days=45,
+        note="中债国债指数（5Y/10Y 各 4,704 行；⚠ '1Y'/'3Y' 实测 KeyError ⇒ 只登记 2 档）",
+    ),
     # —— 外盘商品：**list 型参数**（首批 6 品种，符号取自 subscribe 清单实测：GC/CL/HG/S/SI/C）——
-    TableSpec("commodity_foreign", "futures_foreign_commodity_realtime", "P2",
-              "by_year", "trade_date", src_date_col="日期",
-              subset=["trade_date", "symbol"], mode="list",
-              symbol_param="symbol", symbol_col="symbol", symbol_as_list=True,
-              universe_from="commodity_foreign_universe", universe_col="symbol",
-              rotate_days=1,
-              max_age_days=1, max_backfill_days=0,
-              note="外盘商品实时（symbol 须传 **list**，引擎 symbol_as_list=True）；"
-                   "清单源 commodity_foreign_universe（6 品种 GC/CL/HG/S/SI/C），"
-                   "rotate_days=1 ⇒ 每日全量 6 只一次批拉；"
-                   "实测可订阅代码取自 subscribe_exchange_symbol（返回**代码**不是中文名）；"
-                   "⚠ 仅实时快照无历史 ⇒ 只能从接入日起累积"),
+    TableSpec(
+        "commodity_foreign",
+        "futures_foreign_commodity_realtime",
+        "P2",
+        "by_year",
+        "trade_date",
+        src_date_col="日期",
+        subset=["trade_date", "symbol"],
+        mode="list",
+        symbol_param="symbol",
+        symbol_col="symbol",
+        symbol_as_list=True,
+        universe_from="commodity_foreign_universe",
+        universe_col="symbol",
+        rotate_days=1,
+        max_age_days=1,
+        max_backfill_days=0,
+        note="外盘商品实时（symbol 须传 **list**，引擎 symbol_as_list=True）；"
+        "清单源 commodity_foreign_universe（6 品种 GC/CL/HG/S/SI/C），"
+        "rotate_days=1 ⇒ 每日全量 6 只一次批拉；"
+        "实测可订阅代码取自 subscribe_exchange_symbol（返回**代码**不是中文名）；"
+        "⚠ 仅实时快照无历史 ⇒ 只能从接入日起累积",
+    ),
 ]
 
 ALL_SPECS = P0 + P1 + P1_EX + P3 + P4 + P4_HK + P0_EXT + P2
@@ -1038,12 +1664,24 @@ BY_NAME = {s.name: s for s in ALL_SPECS}
 #   （2026-10-28 盘上核对）——max_age_days=45 会让每轮体检都报「高度可疑」，
 #   淹没真问题（告警疲劳）。放宽到 **720 天（2 年）**；spec 定义与历史数据**均保留**。
 #   ⚠ 只改这一字段，不动 known_stale/note/取数参数。
-_RETIRED_AGE_720 = frozenset({
-    "macro_usa_cpi", "macro_usa_core_cpi", "macro_usa_gdp", "macro_usa_unemp",
-    "macro_usa_non_farm", "macro_usa_ppi", "macro_usa_adp",
-    "macro_bank_usa", "macro_bank_euro", "macro_bank_uk", "macro_bank_japan",
-    "macro_bank_australia", "macro_bank_swiss", "macro_euro_cpi",
-})
+_RETIRED_AGE_720 = frozenset(
+    {
+        "macro_usa_cpi",
+        "macro_usa_core_cpi",
+        "macro_usa_gdp",
+        "macro_usa_unemp",
+        "macro_usa_non_farm",
+        "macro_usa_ppi",
+        "macro_usa_adp",
+        "macro_bank_usa",
+        "macro_bank_euro",
+        "macro_bank_uk",
+        "macro_bank_japan",
+        "macro_bank_australia",
+        "macro_bank_swiss",
+        "macro_euro_cpi",
+    }
+)
 for _sp in ALL_SPECS:
     if _sp.name in _RETIRED_AGE_720:
         _sp.max_age_days = 720
@@ -1079,14 +1717,16 @@ def tier_specs(tier):
 def summary():
     """规格概览（供 dry-run 打印）"""
     out = []
-    for t in TIERS:                     # ⚠ 用 TIERS 而非硬编码（见上方说明）
+    for t in TIERS:  # ⚠ 用 TIERS 而非硬编码（见上方说明）
         specs = BY_TIER.get(t, [])
-        out.append({
-            "tier": t,
-            "tables": len(specs),
-            "requests": sum(s.n_requests() for s in specs),
-            "names": [s.name for s in specs],
-        })
+        out.append(
+            {
+                "tier": t,
+                "tables": len(specs),
+                "requests": sum(s.n_requests() for s in specs),
+                "names": [s.name for s in specs],
+            }
+        )
     return out
 
 

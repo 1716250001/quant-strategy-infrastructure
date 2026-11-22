@@ -27,6 +27,7 @@ CLI：
     python -m alt.verify_spec --tier P0 --full-enum  # enum 全取值
     python -m alt.verify_spec --list-todo          # 只列出待校验表（零请求）
 """
+
 import argparse
 import json
 import os
@@ -57,6 +58,7 @@ def guess_url(func_name: str) -> str:
     被判入不同限流档位。现统一转发，杜绝漂移。
     """
     from alt.urls import guess_url as _guess
+
     return _guess(func_name)
 
 
@@ -109,8 +111,14 @@ def date_like_columns(df: pd.DataFrame, max_rows=50):
         s = df[c].head(max_rows)
         hit = s.map(_looks_like_date).mean()
         if hit > 0.8:
-            out.append({"column": str(c), "match_ratio": round(float(hit), 3),
-                        "sample": str(df[c].iloc[0])[:24], "dtype": str(df[c].dtype)})
+            out.append(
+                {
+                    "column": str(c),
+                    "match_ratio": round(float(hit), 3),
+                    "sample": str(df[c].iloc[0])[:24],
+                    "dtype": str(df[c].dtype),
+                }
+            )
     return out
 
 
@@ -133,13 +141,11 @@ def can_parse_dates(s: pd.Series, min_ratio: float = 0.8) -> tuple:
             note = f"日期非空 {d.notna().sum()}/{len(d)}（{ratio:.0%}）"
         return bool(ok), sample, ratio, note
     except Exception as exc:
-        print(f"[alt.verify_spec] 日期解析异常: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(f"[alt.verify_spec] 日期解析异常: {type(exc).__name__}: {exc}", file=sys.stderr)
         return False, "", 0.0, "解析异常"
 
 
-def check_freshness(df: pd.DataFrame, date_col: str,
-                    max_age_days: int = 120, today=None) -> dict:
+def check_freshness(df: pd.DataFrame, date_col: str, max_age_days: int = 120, today=None) -> dict:
     """数据新鲜度检测。
 
     ⚠ 为什么必须查：接口"能调用、有数据、格式正确"≠ 数据是**当期**的。
@@ -161,14 +167,17 @@ def check_freshness(df: pd.DataFrame, date_col: str,
     past = d[d <= today]
     latest = past.max() if len(past) else d.max()
     age = int((today - latest).days)
-    out.update(checked=True, latest=latest.strftime("%Y%m%d"), age_days=age,
-               stale=age > max_age_days,
-               future_rows=int((d > today).sum()))
+    out.update(
+        checked=True,
+        latest=latest.strftime("%Y%m%d"),
+        age_days=age,
+        stale=age > max_age_days,
+        future_rows=int((d > today).sum()),
+    )
     return out
 
 
-def check_value_sanity(df: pd.DataFrame, skip_cols=None, core_cols=None,
-                       date_col=None) -> tuple:
+def check_value_sanity(df: pd.DataFrame, skip_cols=None, core_cols=None, date_col=None) -> tuple:
     """数值健全性检测，返回 (problems, warnings)。
 
     ⚠ 校准说明（实测两轮才调准）：
@@ -191,9 +200,20 @@ def check_value_sanity(df: pd.DataFrame, skip_cols=None, core_cols=None,
                    （R6，2026-09-19 修复）；不给则退化为原始行序取末行。
     """
     problems, warnings = [], []
-    skip = set(skip_cols or []) | {"date", "trade_date", "datetime", "time",
-                                   "symbol", "period", "商品", "指数", "item",
-                                   "序号", "代码", "名称"}
+    skip = set(skip_cols or []) | {
+        "date",
+        "trade_date",
+        "datetime",
+        "time",
+        "symbol",
+        "period",
+        "商品",
+        "指数",
+        "item",
+        "序号",
+        "代码",
+        "名称",
+    }
 
     # ⚠ R6（2026-09-19 修复）：取"最新值"前必须显式按日期排序。
     #   原实现直接 nn.iloc[-1]，取的是**原始行序的末行**，而不是最新日期的值。
@@ -206,12 +226,14 @@ def check_value_sanity(df: pd.DataFrame, skip_cols=None, core_cols=None,
         try:
             _ord = pd.to_datetime(df[date_col].astype(str), errors="coerce")
             if _ord.notna().sum() >= 3:
-                work = (df.assign(**{"__ord__": _ord})
-                          .sort_values("__ord__")
-                          .drop(columns=["__ord__"]))
+                work = (
+                    df.assign(**{"__ord__": _ord}).sort_values("__ord__").drop(columns=["__ord__"])
+                )
         except Exception as exc:
-            print(f"[alt.verify_spec] 排序失败（按原序继续）: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[alt.verify_spec] 排序失败（按原序继续）: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             work = df
 
     for c in work.columns:
@@ -229,19 +251,33 @@ def check_value_sanity(df: pd.DataFrame, skip_cols=None, core_cols=None,
 
         # 强信号 → problem
         if last == 0 and has_nonzero and (core_cols is None or str(c) in core_cols):
-            problems.append({"column": str(c), "kind": "最新值为零",
-                             "detail": f"最新非空值 = 0，历史区间 "
-                                       f"[{nn.min()}, {nn.max()}]"})
+            problems.append(
+                {
+                    "column": str(c),
+                    "kind": "最新值为零",
+                    "detail": f"最新非空值 = 0，历史区间 [{nn.min()}, {nn.max()}]",
+                }
+            )
             continue
 
         # 弱信号 → warning
         if uniq == 1:
-            warnings.append({"column": str(c), "kind": "常数",
-                             "detail": f"全列唯一值 = {last}（可能是业务正常）"})
+            warnings.append(
+                {
+                    "column": str(c),
+                    "kind": "常数",
+                    "detail": f"全列唯一值 = {last}（可能是业务正常）",
+                }
+            )
         elif zero_ratio > 0.2:
-            warnings.append({"column": str(c), "kind": "大量零值",
-                             "detail": f"零值 {n_zero}/{len(nn)}"
-                                       f"（{zero_ratio:.0%}）（稀疏计数属正常，请人工判断）"})
+            warnings.append(
+                {
+                    "column": str(c),
+                    "kind": "大量零值",
+                    "detail": f"零值 {n_zero}/{len(nn)}"
+                    f"（{zero_ratio:.0%}）（稀疏计数属正常，请人工判断）",
+                }
+            )
     return problems, warnings
 
 
@@ -250,10 +286,17 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
     import akshare as ak
 
     rep = {
-        "table": sp.name, "func": sp.func, "tier": sp.tier,
-        "mode": sp.mode, "layout": sp.layout,
-        "requests": 0, "ok": True,
-        "problems": [], "suggestions": [], "warnings": [], "observations": {},
+        "table": sp.name,
+        "func": sp.func,
+        "tier": sp.tier,
+        "mode": sp.mode,
+        "layout": sp.layout,
+        "requests": 0,
+        "ok": True,
+        "problems": [],
+        "suggestions": [],
+        "warnings": [],
+        "observations": {},
     }
     fn = getattr(ak, sp.func, None)
     if fn is None:
@@ -270,10 +313,12 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
     if sp.range_params:
         end = _recent_trade_date(1)
         from common.calendar import prev_trade_dates
-        prev = prev_trade_dates(end, n=200)          # ≤240 交易日跨度（实测 13 个月返空）
+
+        prev = prev_trade_dates(end, n=200)  # ≤240 交易日跨度（实测 13 个月返空）
         start = prev[-1] if prev else str(sp.range_start or "20200101")
         raw, ok, err = limiter.call(
-            lambda: fn(**{sp.range_params[0]: start, sp.range_params[1]: end}), url)
+            lambda: fn(**{sp.range_params[0]: start, sp.range_params[1]: end}), url
+        )
         rep["requests"] += 1
         rep["observations"]["probe_range"] = f"{start}~{end}"
         if not ok:
@@ -313,16 +358,19 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         if sp.universe_from:
             try:
                 from alt.list_backfill import load_universe
+
                 uni = load_universe(sp, verbose=False)
                 probe_sym = uni[0] if uni else None
             except Exception as e:
                 rep["warnings"].append(
-                    f"清单读取失败（无法确定探测标的）: {type(e).__name__}: {str(e)[:80]}")
+                    f"清单读取失败（无法确定探测标的）: {type(e).__name__}: {str(e)[:80]}"
+                )
         if probe_sym is None:
             rep["ok"] = False
             rep["problems"].append(
                 "list 表无法确定探测标的（universe_from 为空或读取失败）——"
-                "该表须用 --symbols 显式指定，本工具暂不探测")
+                "该表须用 --symbols 显式指定，本工具暂不探测"
+            )
             return rep
         kw = dict(sp.params)
         # R11a-3：symbol_as_list=True 的接口（commodity_foreign）必须传 list
@@ -348,6 +396,7 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
             if _lag > 0:
                 # R11a-1：当日数据次日才发布的源（fund_etf_scale_sse）须按交易日回退
                 from common.calendar import prev_trade_dates
+
                 _prev = prev_trade_dates(probe_date, n=_lag)
                 probe_date = _prev[-1] if _prev else probe_date
             kw[sp.date_param] = probe_date
@@ -368,7 +417,8 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
             # 故降级为提示而非阻断。
             rep["warnings"].append(
                 "该日返回空数据——快照型接口在特定行情下可能本就为空"
-                "（如无跌停股），属正常；请用其他交易日复核")
+                "（如无跌停股），属正常；请用其他交易日复核"
+            )
             rep["observations"]["empty_ok"] = True
             return rep
         rep["ok"] = False
@@ -390,19 +440,19 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         if dl:
             rep["suggestions"].append(
                 f"该表标记为按日型(注入日期)，但源数据含疑似日期列 {[d['column'] for d in dl]}；"
-                f"若源数据本身带日期，应改为 src_date_col 而非注入")
+                f"若源数据本身带日期，应改为 src_date_col 而非注入"
+            )
     else:
         if sp.src_date_col and sp.src_date_col not in cols:
             rep["ok"] = False
             cand = [d["column"] for d in dl]
-            rep["problems"].append(
-                f"src_date_col={sp.src_date_col!r} 不存在。实际列: {cols[:14]}")
+            rep["problems"].append(f"src_date_col={sp.src_date_col!r} 不存在。实际列: {cols[:14]}")
             if cand:
                 rep["suggestions"].append(
-                    f"疑似日期列为 {cand} → 建议 src_date_col 改为 {cand[0]!r}")
+                    f"疑似日期列为 {cand} → 建议 src_date_col 改为 {cand[0]!r}"
+                )
             else:
-                rep["suggestions"].append(
-                    "未发现明显日期列 → 需人工确认该接口的日期字段名")
+                rep["suggestions"].append("未发现明显日期列 → 需人工确认该接口的日期字段名")
         else:
             okp, sample, ratio, note = can_parse_dates(df[sp.src_date_col])
             rep["observations"]["src_date_sample"] = sample
@@ -412,11 +462,11 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
                 rep["problems"].append(
                     f"src_date_col={sp.src_date_col!r} 日期可解析率过低"
                     f"（{ratio:.0%} < 80%）{note} → 落盘会丢弃这部分行，"
-                    f"建议核实数据源或弃用该表")
+                    f"建议核实数据源或弃用该表"
+                )
             elif ratio < 1.0:
                 # 部分缺失：不算失败，但必须报出来（避免静默丢行）
-                rep["warnings"].append(
-                    f"日期列存在缺失：{note}，落盘时这部分行会被丢弃")
+                rep["warnings"].append(f"日期列存在缺失：{note}，落盘时这部分行会被丢弃")
 
     # ── 校验 2：去重键 ──
     # ⚠ 注意：subset 中的某些列是**由本工程注入的**，原始返回里本就不存在：
@@ -437,20 +487,21 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         if sp.rename:
             injected.update(sp.rename.values())
         # 2026-10-21 补：inject_const 注入的常量列
-        if hasattr(sp, 'inject_const') and sp.inject_const:
+        if hasattr(sp, "inject_const") and sp.inject_const:
             injected.update(sp.inject_const.keys())
         missing = [c for c in sp.subset if c not in cols and c not in injected]
         if missing:
             rep["ok"] = False
             rep["problems"].append(
                 f"subset 列缺失: {missing}（实际列: {cols[:14]}）\n"
-                f"    注：已排除注入列 {sorted(injected)}")
-            code_cand = [c for c in cols
-                         if any(k in str(c) for k in ("代码", "code", "股票"))]
+                f"    注：已排除注入列 {sorted(injected)}"
+            )
+            code_cand = [c for c in cols if any(k in str(c) for k in ("代码", "code", "股票"))]
             if code_cand:
                 rep["suggestions"].append(
                     f"疑似标的列 {code_cand[0]!r} → subset 可改为 "
-                    f"[{sp.date_col!r}, {code_cand[0]!r}]")
+                    f"[{sp.date_col!r}, {code_cand[0]!r}]"
+                )
 
     # ── 校验 3：enum 组间结构一致性（⚠ 高价值：实测踩过坑）──
     # akshare 某些接口的不同枚举值返回**结构与频率都不同**。
@@ -463,26 +514,30 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
         for v, frame in got.items():
             f = frame.copy()
             # 推断频率
-            dcand = [c for c in f.columns
-                     if str(c).lower() in ("date", "日期", "trade_date", "时间")]
+            dcand = [
+                c for c in f.columns if str(c).lower() in ("date", "日期", "trade_date", "时间")
+            ]
             if dcand:
                 dt = pd.to_datetime(f[dcand[0]].astype(str), errors="coerce").dropna()
                 if len(dt) > 2:
                     med = dt.sort_values().diff().dt.days.dropna().median()
-                    freq_map[str(v)] = ("月频" if med > 20
-                                        else ("日频" if med < 5 else "周频"))
+                    freq_map[str(v)] = "月频" if med > 20 else ("日频" if med < 5 else "周频")
                 else:
                     freq_map[str(v)] = "样本不足"
             # 非空列签名
-            nn = sorted(str(c) for c in f.columns
-                        if c not in ("date", "日期", "time") and f[c].notna().any())
+            nn = sorted(
+                str(c)
+                for c in f.columns
+                if c not in ("date", "日期", "time") and f[c].notna().any()
+            )
             cols_map[str(v)] = tuple(nn)
 
         if len(set(freq_map.values())) > 1:
             rep["ok"] = False
             rep["problems"].append(
                 f"【enum 组间频率不一致】{freq_map} → 混在一张表会造成"
-                f"下游\"同表不同频率\"陷阱，应为异常组单独建表")
+                f'下游"同表不同频率"陷阱，应为异常组单独建表'
+            )
         if len(set(cols_map.values())) > 1:
             rep["ok"] = False
             sig = {}
@@ -490,30 +545,32 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
                 sig.setdefault(c, []).append(v)
             rep["problems"].append(
                 f"【enum 组间列不一致】{ {k: v for k, v in sig.items()} } → "
-                f"不同组应有不同列，建议拆分或核实口径")
+                f"不同组应有不同列，建议拆分或核实口径"
+            )
         rep["observations"]["enum_freq"] = freq_map
         rep["observations"]["enum_nonnull_cols"] = {k: list(v) for k, v in cols_map.items()}
 
     # ── 校验 4：数据新鲜度（⚠ 高价值：实测金十系源停更 1 年）──
     if not sp.inject_date:
-        fr = check_freshness(df, sp.src_date_col or sp.date_col,
-                             max_age_days=sp.max_age_days)
+        fr = check_freshness(df, sp.src_date_col or sp.date_col, max_age_days=sp.max_age_days)
         rep["observations"]["freshness"] = fr
         if fr["checked"] and fr["stale"]:
             rep["ok"] = False
             rep["problems"].append(
                 f"【数据陈旧】最新 {fr['latest']}，距今 {fr['age_days']} 天"
                 f"（阈值 {sp.max_age_days} 天）→ 源端可能已停更，"
-                f"不可用于当期判断")
+                f"不可用于当期判断"
+            )
         elif fr["checked"] and fr["age_days"] is not None and fr["age_days"] > 30:
             rep["warnings"].append(
-                f"数据最新 {fr['latest']}（距今 {fr['age_days']} 天），"
-                f"确认是否符合该指标发布节奏")
+                f"数据最新 {fr['latest']}（距今 {fr['age_days']} 天），确认是否符合该指标发布节奏"
+            )
 
     # ── 校验 5：数值健全性（强信号阻断 / 弱信号提示）──
     #   传 date_col：让"最新值"判定先按日期排序（R6），不依赖源端返回顺序
-    sanc_p, sanc_w = check_value_sanity(df, core_cols=sp.core_metric_cols or None,
-                                        date_col=sp.src_date_col or sp.date_col)
+    sanc_p, sanc_w = check_value_sanity(
+        df, core_cols=sp.core_metric_cols or None, date_col=sp.src_date_col or sp.date_col
+    )
     rep["observations"]["value_sanity"] = {
         "problems": sanc_p or "clean",
         "warnings": sanc_w or "clean",
@@ -521,11 +578,10 @@ def verify_one(sp, limiter: AltRateLimiter, full_enum=False, verbose=True):
     for it in sanc_p:
         rep["ok"] = False
         rep["problems"].append(
-            f"【数值可疑·{it['kind']}】列 {it['column']!r}：{it['detail']}"
-            f" → 核实源端是否已损坏")
+            f"【数值可疑·{it['kind']}】列 {it['column']!r}：{it['detail']} → 核实源端是否已损坏"
+        )
     for it in sanc_w:
-        rep["warnings"].append(
-            f"数值需人工判断·{it['kind']}：列 {it['column']!r}：{it['detail']}")
+        rep["warnings"].append(f"数值需人工判断·{it['kind']}：列 {it['column']!r}：{it['detail']}")
 
     # ── 校验 6：enum 列 ──
     if sp.mode == "enum":
@@ -560,20 +616,31 @@ def run(tier=None, only=None, full_enum=False, json_out=True):
         try:
             r = verify_one(sp, limiter, full_enum=full_enum)
         except Exception as e:
-            r = {"table": sp.name, "func": sp.func, "tier": sp.tier, "mode": sp.mode,
-                 "layout": sp.layout, "requests": 0, "ok": False,
-                 "problems": [f"校验异常: {type(e).__name__}: {e}"],
-                 "suggestions": [], "observations": {}}
+            r = {
+                "table": sp.name,
+                "func": sp.func,
+                "tier": sp.tier,
+                "mode": sp.mode,
+                "layout": sp.layout,
+                "requests": 0,
+                "ok": False,
+                "problems": [f"校验异常: {type(e).__name__}: {e}"],
+                "suggestions": [],
+                "observations": {},
+            }
         reports.append(r)
         status = "OK" if r["ok"] else "问题"
         obs = r.get("observations", {})
         fr = obs.get("freshness", {})
         frs = ""
         if fr.get("checked"):
-            frs = (f" 新鲜度={fr['latest']}({fr['age_days']}天前)"
-                   + ("★陈旧" if fr.get("stale") else ""))
-        print(f"    [{status}] 请求{r['requests']} 行数{obs.get('rows','-')} "
-              f"列数{len(obs.get('columns',[]))}{frs}")
+            frs = f" 新鲜度={fr['latest']}({fr['age_days']}天前)" + (
+                "★陈旧" if fr.get("stale") else ""
+            )
+        print(
+            f"    [{status}] 请求{r['requests']} 行数{obs.get('rows', '-')} "
+            f"列数{len(obs.get('columns', []))}{frs}"
+        )
         if obs.get("columns"):
             print(f"      实际列: {obs['columns'][:10]}")
         if obs.get("src_date_sample"):
@@ -590,8 +657,10 @@ def run(tier=None, only=None, full_enum=False, json_out=True):
     print("\n" + "=" * 84)
     print("汇总")
     print("=" * 84)
-    print(f"  通过 {ok_n} / 有问题 {len(reports)-ok_n}    请求数 {limiter.stats['requests']}"
-          f"    耗时 {dur:.1f}s")
+    print(
+        f"  通过 {ok_n} / 有问题 {len(reports) - ok_n}    请求数 {limiter.stats['requests']}"
+        f"    耗时 {dur:.1f}s"
+    )
     print(f"  {limiter.status_str()}")
 
     bad = [r for r in reports if not r["ok"]]
@@ -613,15 +682,21 @@ def run(tier=None, only=None, full_enum=False, json_out=True):
                 # 清理历史嵌套脏数据
                 old = {k: v for k, v in old.items() if isinstance(v, dict) and "func" in v}
             except Exception as exc:
-                print(f"[alt.verify_spec] 读历史报告失败（按空处理）: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                print(
+                    f"[alt.verify_spec] 读历史报告失败（按空处理）: {type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 old = {}
         for r in reports:
             old[r["table"]] = r
-        assert_writable(REPORT_FILE)        # M1：落盘前过写入守卫
+        assert_writable(REPORT_FILE)  # M1：落盘前过写入守卫
         with open(REPORT_FILE, "w", encoding="utf-8") as f:
-            json.dump({"updated": datetime.now().isoformat(timespec="seconds"),
-                       "tables": old}, f, ensure_ascii=False, indent=1)
+            json.dump(
+                {"updated": datetime.now().isoformat(timespec="seconds"), "tables": old},
+                f,
+                ensure_ascii=False,
+                indent=1,
+            )
         print(f"\n  报告已存: {REPORT_FILE}（累计 {len(old)} 张表）")
 
     return reports
@@ -631,8 +706,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(description="alt 表规格校验（只读）")
     p.add_argument("--tier", choices=TIERS)
     p.add_argument("--only")
-    p.add_argument("--full-enum", action="store_true",
-                   help="enum 表跑全部枚举值（默认只跑首个）")
+    p.add_argument("--full-enum", action="store_true", help="enum 表跑全部枚举值（默认只跑首个）")
     p.add_argument("--list-todo", action="store_true", help="只列待校验表（零请求）")
     args = p.parse_args(argv)
 
@@ -650,7 +724,7 @@ def main(argv=None):
         for s in todo:
             n = len(s.enum_values) if s.mode == "enum" else 1
             print(f"  {s.tier}  {s.name:<22} {s.func:<40} 约{n}次请求")
-        print(f"\n  预计请求数: {sum(len(s.enum_values) if s.mode=='enum' else 1 for s in todo)}")
+        print(f"\n  预计请求数: {sum(len(s.enum_values) if s.mode == 'enum' else 1 for s in todo)}")
         return 0
 
     run(tier=args.tier, only=args.only, full_enum=args.full_enum)

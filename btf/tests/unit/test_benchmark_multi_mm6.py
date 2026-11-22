@@ -13,6 +13,7 @@
 `tests/system/test_cli_benchmark_e2e.py::TestCliMultiBenchmark`——铁律新 13：
 系统级验收必须经 CLI 真入口，不得以 `persist=False` 充当）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -86,9 +87,10 @@ class TestBenchmarkSymbols:
 
     def test_array_order_preserved(self):
         """**顺序即语义**：首个是主基准，不得排序/去重改写。"""
-        assert benchmark_symbols(
-            {"benchmark": ["000001.SH", "000300.SH"]}
-        ) == ("000001.SH", "000300.SH")
+        assert benchmark_symbols({"benchmark": ["000001.SH", "000300.SH"]}) == (
+            "000001.SH",
+            "000300.SH",
+        )
 
 
 class TestPrimaryOnlyInMetrics:
@@ -124,7 +126,8 @@ class TestPrimaryOnlyInMetrics:
         metrics = rt._benchmark_metrics(["snap-1", "snap-2"])
         assert calls == ["000300.SH", "000001.SH"], "两个基准都要算（披露需要）"
         assert metrics == {"excess_return": 1.0, "beta": 1.0}, (
-            "第二基准的数值（excess_return=2.0）不得进 metrics（P0-NEW-7）")
+            "第二基准的数值（excess_return=2.0）不得进 metrics（P0-NEW-7）"
+        )
         symbols = [row["symbol"] for row in rt.benchmark_details]
         assert symbols == ["000300.SH", "000001.SH"]
         assert [row["primary"] for row in rt.benchmark_details] == [True, False]

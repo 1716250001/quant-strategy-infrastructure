@@ -24,6 +24,7 @@ BoardRule ±10% 依 pre_close 计算回退并计数披露（`fallback_limit_date
 stdout／manifest／报告「假设与披露」标注 **`period_end_source`**
 （`pinned_default`／`explicit`／`today(opt-in)`）；跨区间数字**不可比**。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,16 +43,24 @@ from _paths import STRATEGY_ROOT
 if str(STRATEGY_ROOT) not in sys.path:
     sys.path.insert(0, str(STRATEGY_ROOT))
 
-KEY_METRICS = ("final_nav", "total_return", "annualized_return", "sharpe_ratio",
-               "max_drawdown", "calmar_ratio", "n_fills", "total_fees",
-               "turnover_annualized", "n_trading_days")
+KEY_METRICS = (
+    "final_nav",
+    "total_return",
+    "annualized_return",
+    "sharpe_ratio",
+    "max_drawdown",
+    "calmar_ratio",
+    "n_fills",
+    "total_fees",
+    "turnover_annualized",
+    "n_trading_days",
+)
 
 #: **R52′（N56）**：区间末端**固定锚**（缺省值；20 号纪律六三档之 09-23 档）
 PINNED_END = "20260923"
 
 
-def build_config(pool_symbols: list[str], start: str, end: str,
-                 cash: float, weight: float) -> dict:
+def build_config(pool_symbols: list[str], start: str, end: str, cash: float, weight: float) -> dict:
     """回测配置（registry 声明制：feed=mixed / 策略 module:Class）。
 
     **CL-2-H/R26′（19 号 §96.4）**：`analysis.metrics` 声明 15 项默认指标 ＋
@@ -82,15 +91,20 @@ def build_config(pool_symbols: list[str], start: str, end: str,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="奇点战法引擎级全区间净值复跑")
-    parser.add_argument("--start", default="20190626",
-                        help="起点（默认 2019-06-26 = etf_limit 起点，E3）")
-    parser.add_argument("--end", default=None,
-                        help=f"终点（缺省 ⇒ **固定锚** {PINNED_END}；"
-                             f"传 `today` 或 YYYYMMDD 显式指定——R52′/N56，"
-                             f"跨区间数字不可比）")
+    parser.add_argument(
+        "--start", default="20190626", help="起点（默认 2019-06-26 = etf_limit 起点，E3）"
+    )
+    parser.add_argument(
+        "--end",
+        default=None,
+        help=f"终点（缺省 ⇒ **固定锚** {PINNED_END}；"
+        f"传 `today` 或 YYYYMMDD 显式指定——R52′/N56，"
+        f"跨区间数字不可比）",
+    )
     parser.add_argument("--cash", type=float, default=1_000_000.0)
-    parser.add_argument("--weight", type=float, default=0.02,
-                        help="单标的权重（43 池 × 0.02 = 0.86 ≤ 1）")
+    parser.add_argument(
+        "--weight", type=float, default=0.02, help="单标的权重（43 池 × 0.02 = 0.86 ≤ 1）"
+    )
     parser.add_argument("--out", default=None, help="RunStore 根目录")
     parser.add_argument("--dry-run", action="store_true", help="只装配不执行")
     parser.add_argument("--no-report", action="store_true", help="跳过 HTML 报告")
@@ -108,10 +122,11 @@ def main(argv: list[str] | None = None) -> int:
     reference = load_reference()
     pool = pool_of(reference)
     instruments = sorted(pool)
-    index_codes = sorted({entry["code"] for info in pool.values()
-                          for entry in info["indices"]})
-    print(f"标的池：{len(instruments)} 只 ETF/LOF + {len(index_codes)} 条配对指数"
-          f"（真源 {reference.__file__}）")
+    index_codes = sorted({entry["code"] for info in pool.values() for entry in info["indices"]})
+    print(
+        f"标的池：{len(instruments)} 只 ETF/LOF + {len(index_codes)} 条配对指数"
+        f"（真源 {reference.__file__}）"
+    )
 
     # **R52′（N56）**：末端解析与来源标注（缺省＝固定锚；today 须显式）
     if args.end is None:
@@ -120,23 +135,28 @@ def main(argv: list[str] | None = None) -> int:
         end_s, end_src = date.today().strftime("%Y%m%d"), "today(opt-in)"
     else:
         end_s, end_src = str(args.end), "explicit"
-    print(f"[区间] start={args.start} end={end_s} | "
-          f"period_end_source={end_src}"
-          + ("（缺省＝固定锚——如需当日请显式 `--end today`）"
-             if end_src == "pinned_default" else "")
-          + " | ⚠ 跨区间数字**不可比**（20 号纪律六）")
+    print(
+        f"[区间] start={args.start} end={end_s} | "
+        f"period_end_source={end_src}"
+        + ("（缺省＝固定锚——如需当日请显式 `--end today`）" if end_src == "pinned_default" else "")
+        + " | ⚠ 跨区间数字**不可比**（20 号纪律六）"
+    )
 
-    config = build_config(instruments, f"{args.start[:4]}-{args.start[4:6]}-"
-                          f"{args.start[6:]}", f"{end_s[:4]}-"
-                          f"{end_s[4:6]}-{end_s[6:]}",
-                          args.cash, args.weight)
+    config = build_config(
+        instruments,
+        f"{args.start[:4]}-{args.start[4:6]}-{args.start[6:]}",
+        f"{end_s[:4]}-{end_s[4:6]}-{end_s[6:]}",
+        args.cash,
+        args.weight,
+    )
     start, end = TradingDate.from_ymd(args.start), TradingDate.from_ymd(end_s)
     runtime = BTFRuntime().load_config(config).build()
     # 区间口径披露进装配说明 ⇒ **manifest ＋ 报告**（「假设与披露」）同载
     runtime.assembly_notes.append(
         f"区间口径（R52′/N56）：period_end_source={end_src}——"
         f"start={args.start}／end={end_s}；**跨区间数字不可比**，"
-        f"引用必标区间（20 号纪律六）")
+        f"引用必标区间（20 号纪律六）"
+    )
     print(f"装配：{len(runtime.instruments)} 标的（ETF 身份推断 + BoardRule T+N）")
 
     if args.dry_run:
@@ -182,12 +202,15 @@ def main(argv: list[str] | None = None) -> int:
         # （读 `manifest.config_effective`）——不再硬编码滑点/撮合，
         # 仅在本工具特有项（degraded / notes）上做覆盖。
         assumptions = replace(
-            assemble_assumptions(store, bundle), degraded=notes,
-            notes=(f"奇点战法引擎级复跑（V3-1 混合表 Feed）"
-                   f"{args.start}–{args.end}；"
-                   f"初始资金 {args.cash:,.0f} 元 / 单标权重 {args.weight}",
-                   "ETF 涨跌停取 etf_limit（起点 2019-06-26，E3）；"
-                   "更早区间由 BoardRule ±10% 计算回退并披露"),
+            assemble_assumptions(store, bundle),
+            degraded=notes,
+            notes=(
+                f"奇点战法引擎级复跑（V3-1 混合表 Feed）"
+                f"{args.start}–{args.end}；"
+                f"初始资金 {args.cash:,.0f} 元 / 单标权重 {args.weight}",
+                "ETF 涨跌停取 etf_limit（起点 2019-06-26，E3）；"
+                "更早区间由 BoardRule ±10% 计算回退并披露",
+            ),
         )
         html = ReportBuilder(bundle, assumptions).build()
         out = store.run_dir(result.run_id) / "report.html"

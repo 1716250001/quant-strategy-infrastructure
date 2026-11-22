@@ -5,6 +5,7 @@
 `api.dataset` ≡ `bt dataset`）由**同一实现**保证：编排逻辑在 `btf.app`
 （P2-3 / R4），本模块只做转发（铁律新 10：入口层不含编排）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -30,8 +31,7 @@ def run(
 
     返回 engine.RunResult（含 manifest / run_id / metrics）。
     """
-    outcome = _app.run_backtest(config, overrides=overrides, out=out,
-                               dry_run=dry_run)
+    outcome = _app.run_backtest(config, overrides=overrides, out=out, dry_run=dry_run)
     return outcome.runtime if dry_run else outcome.result
 
 
@@ -55,8 +55,9 @@ def dataset(
     out: str | Path | None = None,
 ) -> int:
     """黄金集构建（镜像 `bt dataset`——委托 tools/build_golden.py 子进程）。"""
-    return _app.build_dataset(cases, action=action, verify=verify, force=force,
-                              list_only=list_only, out=out)
+    return _app.build_dataset(
+        cases, action=action, verify=verify, force=force, list_only=list_only, out=out
+    )
 
 
 __all__ = ["dataset", "report", "run"]

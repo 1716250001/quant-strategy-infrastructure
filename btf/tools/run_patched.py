@@ -8,6 +8,7 @@
 第二段：回填 expected_hash 后正式运行，透传退出码与输出。
 仅改 `data.dataset.expected_hash`，不动其他键。
 """
+
 from __future__ import annotations
 
 import re
@@ -21,9 +22,14 @@ _ERR = re.compile(r"实算\s+sha256:([0-9a-f]{8,})")
 
 
 def _run(cfg: Path) -> subprocess.CompletedProcess:
-    return subprocess.run([str(BT), "run", "--config", str(cfg)],
-                          cwd=str(ROOT), capture_output=True, text=True,
-                          encoding="utf-8", errors="replace")
+    return subprocess.run(
+        [str(BT), "run", "--config", str(cfg)],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
 
 def main(argv: list[str]) -> int:
@@ -38,8 +44,12 @@ def main(argv: list[str]) -> int:
     first = _run(cfg)
     m = _ERR.search(first.stdout + first.stderr)
     if m:
-        text = re.sub(r"expected_hash:\s*\"sha256:[0-9a-f]+\"",
-                      f'expected_hash: "sha256:{m.group(1)}"', text, count=1)
+        text = re.sub(
+            r"expected_hash:\s*\"sha256:[0-9a-f]+\"",
+            f'expected_hash: "sha256:{m.group(1)}"',
+            text,
+            count=1,
+        )
         cfg.write_text(text, encoding="utf-8")
         second = _run(cfg)
         out = second

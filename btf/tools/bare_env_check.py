@@ -33,6 +33,7 @@
 （写入 `btf/tools/README.md` 与 20 号指引；不自动进 `bt check`——它要建 venv、
 要联网，不属于"秒级常跑门禁"）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -43,12 +44,20 @@ import sys
 import tempfile
 from pathlib import Path
 
-BTF = Path(__file__).resolve().parents[1]          # btf/
-CODE = BTF.parent                                  # 代码/
+BTF = Path(__file__).resolve().parents[1]  # btf/
+CODE = BTF.parent  # 代码/
 BASE_REQ = CODE / "requirements.txt"
 BTF_REQ = BTF / "requirements.txt"
-MIN_BASE_FALLBACK = ("pandas", "numpy", "pyarrow", "tushare", "akshare",
-                     "scipy", "requests", "pyyaml")   # 仅当底座清单缺失时用
+MIN_BASE_FALLBACK = (
+    "pandas",
+    "numpy",
+    "pyarrow",
+    "tushare",
+    "akshare",
+    "scipy",
+    "requests",
+    "pyyaml",
+)  # 仅当底座清单缺失时用
 
 
 def _harden_stdout() -> None:
@@ -67,9 +76,14 @@ def _plan(steps: list[str]) -> None:
 
 def _run(cmd: list[str], cwd: Path | None = None) -> int:
     print(f"\n$ {' '.join(cmd)}")
-    p = subprocess.run(cmd, cwd=str(cwd) if cwd else None,
-                       capture_output=True, text=True, encoding="utf-8",
-                       errors="replace")
+    p = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     tail = (p.stdout or "").strip().splitlines()[-8:]
     err = (p.stderr or "").strip().splitlines()[-8:]
     for ln in tail:
@@ -84,12 +98,14 @@ def _run(cmd: list[str], cwd: Path | None = None) -> int:
 def main(argv=None) -> int:
     _harden_stdout()
     ap = argparse.ArgumentParser(
-        description="btf 独立环境裸验证（C-01）：临时 venv 重建 + 真入口 + 测试子集")
+        description="btf 独立环境裸验证（C-01）：临时 venv 重建 + 真入口 + 测试子集"
+    )
     ap.add_argument("--plan", action="store_true", help="只打印步骤（默认行为）")
     ap.add_argument("--run", action="store_true", help="真正执行（需网络；数分钟）")
     ap.add_argument("--keep", action="store_true", help="保留临时环境目录")
-    ap.add_argument("--tests", default="tests/unit",
-                    help="pytest 子集（默认 tests/unit；`-` = 跳过测试）")
+    ap.add_argument(
+        "--tests", default="tests/unit", help="pytest 子集（默认 tests/unit；`-` = 跳过测试）"
+    )
     ap.add_argument("--python", default=sys.executable, help="建 venv 用的解释器")
     a = ap.parse_args(argv)
 
@@ -98,12 +114,18 @@ def main(argv=None) -> int:
         print(f"[WARN] 底座依赖清单不存在: {BASE_REQ} → 退化为最小底座集合")
     steps = [
         f"{a.python} -m venv <tmp>/venv",
-        (f"<tmp>/venv/…/python -m pip install -r {BASE_REQ}" if not base_missing
-         else "<tmp>/venv/…/python -m pip install " + " ".join(MIN_BASE_FALLBACK)),
+        (
+            f"<tmp>/venv/…/python -m pip install -r {BASE_REQ}"
+            if not base_missing
+            else "<tmp>/venv/…/python -m pip install " + " ".join(MIN_BASE_FALLBACK)
+        ),
         f"<tmp>/venv/…/python -m pip install -r {BTF_REQ}",
         "<tmp>/venv/…/python -m btf.cli.main --version",
-        (f"<tmp>/venv/…/python -m pytest {a.tests} -q（cwd=btf/）"
-         if a.tests != "-" else "（跳过测试子集）"),
+        (
+            f"<tmp>/venv/…/python -m pytest {a.tests} -q（cwd=btf/）"
+            if a.tests != "-"
+            else "（跳过测试子集）"
+        ),
     ]
     if not a.run:
         _plan(steps)
@@ -112,8 +134,11 @@ def main(argv=None) -> int:
 
     tmp = Path(tempfile.mkdtemp(prefix="btf_bare_"))
     venv = tmp / "venv"
-    py = venv / ("Scripts" if os.name == "nt" else "bin") / (
-        "python.exe" if os.name == "nt" else "python")
+    py = (
+        venv
+        / ("Scripts" if os.name == "nt" else "bin")
+        / ("python.exe" if os.name == "nt" else "python")
+    )
     rc = 0
     try:
         if _run([a.python, "-m", "venv", str(venv)]) != 0:
@@ -127,10 +152,11 @@ def main(argv=None) -> int:
             # 真入口（NOTE-4：`bt --version` 必须由**真入口**报版本）
             rc |= _run([str(py), "-m", "btf.cli.main", "--version"], cwd=BTF)
             if rc == 0 and a.tests != "-":
-                rc |= _run([str(py), "-m", "pytest", *a.tests.split(), "-q"],
-                           cwd=BTF)
-        print("\n裸验证结论:", "通过（独立环境可重建、真入口可跑）" if rc == 0
-              else f"失败（退出码 {rc}）——见上方输出")
+                rc |= _run([str(py), "-m", "pytest", *a.tests.split(), "-q"], cwd=BTF)
+        print(
+            "\n裸验证结论:",
+            "通过（独立环境可重建、真入口可跑）" if rc == 0 else f"失败（退出码 {rc}）——见上方输出",
+        )
         return 0 if rc == 0 else 1
     finally:
         if a.keep:

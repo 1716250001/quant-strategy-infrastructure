@@ -48,6 +48,7 @@ G10（2026-09-27 v0.5 V5-6 落地后补建，VPP 成交量参与率上限）：
     state_expectations           —— is_st 逐日期望（G5）
     hfq                          —— hfq 区间收益（G9）
 """
+
 from __future__ import annotations
 
 import argparse
@@ -62,15 +63,15 @@ from typing import Any
 
 _TOOLS_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _TOOLS_DIR.parent
-for _p in (str(_PROJECT_ROOT), str(_TOOLS_DIR)):   # btf 包根 + tools/ 内互引
+for _p in (str(_PROJECT_ROOT), str(_TOOLS_DIR)):  # btf 包根 + tools/ 内互引
     if _p not in sys.path:
         sys.path.insert(0, _p)
 from golden_refcalc import compute_case
 
-try:                                     # 主库读取（仅构建期；参考计算器不依赖）
+try:  # 主库读取（仅构建期；参考计算器不依赖）
     from btf.config.paths import DATASETS_DIR, MARKET_DATA_DIR
     from btf.data.parquet_reader import read_full, read_range
-except ImportError:                      # pragma: no cover - 环境缺失时降级
+except ImportError:  # pragma: no cover - 环境缺失时降级
     DATASETS_DIR = Path("btf_datasets")
     MARKET_DATA_DIR = Path("market_data")
     read_full = read_range = None  # type: ignore[assignment]
@@ -91,117 +92,167 @@ CASE_SPECS: dict[str, dict[str, Any]] = {
     "g1_cash_div_same_day": {
         "group": "G1",
         "description": "派息且 pay≡ex（2020+ 常态）：单日 Δ=0，avg_cost 摊薄",
-        "symbol": "000001.SZ", "anchor_ex_date": "20200528",
-        "before": 3, "after": 7, "weight": 0.9,
+        "symbol": "000001.SZ",
+        "anchor_ex_date": "20200528",
+        "before": 3,
+        "after": 7,
+        "weight": 0.9,
     },
     "g1_cash_div_ex_ne_pay": {
         "group": "G1",
         "description": "派息 ex≠pay（600000.SH 2012）：ex 日缺口 / pay 日到账，窗口合并 Δ=0",
-        "symbol": "600000.SH", "anchor_ex_date": "20120626",
-        "before": 3, "after": 7, "weight": 0.9,
+        "symbol": "600000.SH",
+        "anchor_ex_date": "20120626",
+        "before": 3,
+        "after": 7,
+        "weight": 0.9,
     },
     "g1_stk_div_mixed": {
         "group": "G1",
         "description": "送转+派息混合（stk 0.6）：合成式 avg_cost'=(avg−cash)/(1+stk)",
-        "symbol": "000001.SZ", "anchor_ex_date": "20130620",
-        "before": 3, "after": 7, "weight": 0.9,
+        "symbol": "000001.SZ",
+        "anchor_ex_date": "20130620",
+        "before": 3,
+        "after": 7,
+        "weight": 0.9,
     },
     # ── G2 涨跌停（stk_limit 真实限价 + 拒单链）──
     "g2_limit_up_buy_rejected": {
         "group": "G2",
         "description": "涨停开盘买入拒单：000004.SZ 20190411 开盘=涨停价 26.22（非停牌日）→ limit_up",
-        "symbol": "000004.SZ", "anchor": "20190411",
-        "before": 3, "after": 5, "with_states": True, "plan": "orders",
+        "symbol": "000004.SZ",
+        "anchor": "20190411",
+        "before": 3,
+        "after": 5,
+        "with_states": True,
+        "plan": "orders",
         "dates_from": "calendar",
         "orders": [{"at": 2, "side": "buy", "qty": 1000}],
     },
     "g2_limit_down_sell_rejected": {
         "group": "G2",
         "description": "跌停开盘卖出拒单：000010.SZ 20190429 起连续跌停（买允许、卖 limit_down）",
-        "symbol": "000010.SZ", "anchor": "20190429",
-        "before": 3, "after": 6, "with_states": True, "plan": "orders",
+        "symbol": "000010.SZ",
+        "anchor": "20190429",
+        "before": 3,
+        "after": 6,
+        "with_states": True,
+        "plan": "orders",
         "dates_from": "calendar",
-        "orders": [{"at": 2, "side": "buy", "qty": 1000},
-                   {"at": 3, "side": "sell", "qty": 1000}],
+        "orders": [{"at": 2, "side": "buy", "qty": 1000}, {"at": 3, "side": "sell", "qty": 1000}],
     },
     # ── G3 停牌（长停牌期截面缺席 → suspended）──
     "g3_suspension_buy_rejected": {
         "group": "G3",
         "description": "长期停牌：000006.SZ 20180102–20180308 无行情 → 停牌期内买入拒单；复牌后可成交",
-        "symbol": "000006.SZ", "span": ["20171225", "20180320"],
-        "dates_from": "calendar", "with_states": True, "plan": "orders",
-        "orders": [{"date": "20180103", "side": "buy", "qty": 1000},
-                   {"date": "20180309", "side": "buy", "qty": 1000}],
+        "symbol": "000006.SZ",
+        "span": ["20171225", "20180320"],
+        "dates_from": "calendar",
+        "with_states": True,
+        "plan": "orders",
+        "orders": [
+            {"date": "20180103", "side": "buy", "qty": 1000},
+            {"date": "20180309", "side": "buy", "qty": 1000},
+        ],
     },
     # ── G4 T+1 / T+0（次日开盘卖：股票拒、债券 ETF 成交）──
     "g4_t1_same_day_sell_rejected": {
         "group": "G4",
         "description": "T+1：同日决策买+卖（股票 t_plus=1）→ 买成交、卖 T_PLUS_1 拒单",
-        "symbol": "000001.SZ", "anchor": "20200601",
-        "before": 3, "after": 5, "with_states": True, "plan": "orders",
-        "orders": [{"at": 1, "side": "buy", "qty": 1000},
-                   {"at": 1, "side": "sell", "qty": 1000}],
+        "symbol": "000001.SZ",
+        "anchor": "20200601",
+        "before": 3,
+        "after": 5,
+        "with_states": True,
+        "plan": "orders",
+        "orders": [{"at": 1, "side": "buy", "qty": 1000}, {"at": 1, "side": "sell", "qty": 1000}],
     },
     "g4_t0_etf_same_day_roundtrip": {
         "group": "G4",
         "description": "T+0：可转债 ETF（511380.SH，子类 bond）同日买+卖**均成交**（E2 双维规则）",
-        "symbol": "511380.SH", "anchor": "20210601",
-        "before": 3, "after": 5, "with_states": True, "plan": "orders",
-        "asset_class": "etf", "etf_subclass": "bond", "t_plus": 0,
+        "symbol": "511380.SH",
+        "anchor": "20210601",
+        "before": 3,
+        "after": 5,
+        "with_states": True,
+        "plan": "orders",
+        "asset_class": "etf",
+        "etf_subclass": "bond",
+        "t_plus": 0,
         "price_table": "fund_daily",
-        "orders": [{"at": 1, "side": "buy", "qty": 1000},
-                   {"at": 1, "side": "sell", "qty": 1000}],
+        "orders": [{"at": 1, "side": "buy", "qty": 1000}, {"at": 1, "side": "sell", "qty": 1000}],
     },
     # ── G5 ST（namechange 区间 → 状态面板期望）──
     "g5_st_interval": {
         "group": "G5",
         "description": "ST 状态区间（namechange）：状态面板 is_st 逐日期望（锚点构建期扫描）",
-        "st_scan_year": "2019", "before": 5, "after": 10,
-        "with_states": True, "plan": "none",
+        "st_scan_year": "2019",
+        "before": 5,
+        "after": 10,
+        "with_states": True,
+        "plan": "none",
     },
     # ── G6 退市（末日行情 + 退市后拒单 + 残值携带）──
     "g6_delist_last_day": {
         "group": "G6",
         "description": "退市 000033.SZ（最后交易日 20170706）：末日行情 + 退市后卖出拒单 + 残值按末价携带",
-        "symbol": "000033.SZ", "anchor": "20170706",
-        "before": 5, "after": 9, "dates_from": "calendar",
-        "with_states": True, "plan": "orders",
-        "orders": [{"at": 1, "side": "buy", "qty": 1000},
-                   {"at": 7, "side": "sell", "qty": 1000}],
+        "symbol": "000033.SZ",
+        "anchor": "20170706",
+        "before": 5,
+        "after": 9,
+        "dates_from": "calendar",
+        "with_states": True,
+        "plan": "orders",
+        "orders": [{"at": 1, "side": "buy", "qty": 1000}, {"at": 7, "side": "sell", "qty": 1000}],
     },
     # ── G7 手数与费用（整手/最低佣金/费率分段 + 卖先买后资金链）──
     "g7_lot_and_min_commission": {
         "group": "G7",
         "description": "非整手 150 股拒单 + 1000 股成交触发最低佣金 5 元 + 卖先买后资金链",
-        "symbol": "601668.SH", "anchor": "20210728",
-        "before": 3, "after": 5, "with_states": True, "plan": "orders",
-        "orders": [{"at": 0, "side": "buy", "qty": 150},
-                   {"at": 0, "side": "buy", "qty": 1000},
-                   {"at": 1, "side": "sell", "qty": 1000},
-                   {"at": 1, "side": "buy", "qty": 1000}],
+        "symbol": "601668.SH",
+        "anchor": "20210728",
+        "before": 3,
+        "after": 5,
+        "with_states": True,
+        "plan": "orders",
+        "orders": [
+            {"at": 0, "side": "buy", "qty": 150},
+            {"at": 0, "side": "buy", "qty": 1000},
+            {"at": 1, "side": "sell", "qty": 1000},
+            {"at": 1, "side": "buy", "qty": 1000},
+        ],
     },
     "g7_fee_segments_pre2015": {
         "group": "G7",
         "description": "费率分段（2015-08-01 前：过户费仅沪市按面额 0.06%）+ 最低佣金",
-        "symbol": "600000.SH", "anchor": "20140701",
-        "before": 3, "after": 5, "with_states": True, "plan": "orders",
-        "orders": [{"at": 0, "side": "buy", "qty": 1000},
-                   {"at": 1, "side": "sell", "qty": 1000}],
+        "symbol": "600000.SH",
+        "anchor": "20140701",
+        "before": 3,
+        "after": 5,
+        "with_states": True,
+        "plan": "orders",
+        "orders": [{"at": 0, "side": "buy", "qty": 1000}, {"at": 1, "side": "sell", "qty": 1000}],
     },
     # ── G8 日历边界（春节缺口 + W-FRI 周锚）──
     "g8_calendar_spring_festival": {
         "group": "G8",
         "description": "日历边界（2021 春节）：最长缺口 ≥ 9 自然日 + 交易日 W-FRI 周锚归组",
-        "symbol": "000001.SZ", "span": ["20210205", "20210226"],
-        "dates_from": "calendar", "plan": "none",
+        "symbol": "000001.SZ",
+        "span": ["20210205", "20210226"],
+        "dates_from": "calendar",
+        "plan": "none",
     },
     # ── G9 复权链（事件链收益 ≡ hfq 收益）──
     "g9_dividend_chain_hfq": {
         "group": "G9",
         "description": "复权链（601988.SH 两次分红 20190603/20200715）：全持仓事件链收益 ≡ hfq 区间收益",
-        "symbol": "601988.SH", "span": ["20190520", "20200831"],
-        "dates_from": "calendar", "plan": "targets", "weight": 0.995,
-        "hold_to_end": True, "hfq": True,
+        "symbol": "601988.SH",
+        "span": ["20190520", "20200831"],
+        "dates_from": "calendar",
+        "plan": "targets",
+        "weight": 0.995,
+        "hold_to_end": True,
+        "hfq": True,
     },
     # ── G10 流动性边界（VPP 成交量参与率上限，v0.5 V5-6）──
     #    bars.vol 为主库 tushare 原始口径（手）——引擎夹具与参考计算器
@@ -209,17 +260,27 @@ CASE_SPECS: dict[str, dict[str, Any]] = {
     "g10_vpp_partial_fill": {
         "group": "G10",
         "description": "VPP 部分成交：601599.SH 20191108 vol=30000 × 5% = 1500 股 → 10 万股委托部分成交，余量当日取消",
-        "symbol": "601599.SH", "anchor": "20191108",
-        "before": 3, "after": 5, "with_states": True, "plan": "orders",
-        "dates_from": "calendar", "volume_participation": 0.05,
+        "symbol": "601599.SH",
+        "anchor": "20191108",
+        "before": 3,
+        "after": 5,
+        "with_states": True,
+        "plan": "orders",
+        "dates_from": "calendar",
+        "volume_participation": 0.05,
         "orders": [{"at": 2, "side": "buy", "qty": 100000}],
     },
     "g10_vpp_volume_cap_rejected": {
         "group": "G10",
         "description": "VPP 量上限不足一手：600265.SH 20191126 vol=151 × 5% = 7 股 < 100 → volume_cap 拒单（完全无法成交）",
-        "symbol": "600265.SH", "anchor": "20191126",
-        "before": 3, "after": 5, "with_states": True, "plan": "orders",
-        "dates_from": "calendar", "volume_participation": 0.05,
+        "symbol": "600265.SH",
+        "anchor": "20191126",
+        "before": 3,
+        "after": 5,
+        "with_states": True,
+        "plan": "orders",
+        "dates_from": "calendar",
+        "volume_participation": 0.05,
         "orders": [{"at": 2, "side": "buy", "qty": 100000}],
     },
 }
@@ -231,20 +292,43 @@ PENDING_GROUPS: dict[str, str] = {}
 # ─────────────────────────────────────────────────────────────
 # 主库截取（可注入 reader 以便测试脱离主库）
 # ─────────────────────────────────────────────────────────────
-def _bars_from_mainlib(symbol: str, start: str, end: str, root: Path, *,
-                       table: str = "daily") -> list[dict[str, Any]]:
+def _bars_from_mainlib(
+    symbol: str, start: str, end: str, root: Path, *, table: str = "daily"
+) -> list[dict[str, Any]]:
     """日线表区间读取（股票 daily / ETF fund_daily）→ bar dict 列表（升序）。"""
-    arrow = read_range(table, root, start, end,
-                       columns=["ts_code", "trade_date", "open", "high", "low",
-                                "close", "pre_close", "vol", "amount"])
+    arrow = read_range(
+        table,
+        root,
+        start,
+        end,
+        columns=[
+            "ts_code",
+            "trade_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "pre_close",
+            "vol",
+            "amount",
+        ],
+    )
     rows = [r for r in arrow.to_pylist() if r["ts_code"] == symbol]
-    bars = [{
-        "symbol": r["ts_code"], "date": r["trade_date"],
-        "open": float(r["open"]), "high": float(r["high"]),
-        "low": float(r["low"]), "close": float(r["close"]),
-        "pre_close": float(r["pre_close"] or 0.0),
-        "vol": float(r["vol"] or 0.0), "amount": float(r["amount"] or 0.0),
-    } for r in rows if r["open"] is not None and r["close"] is not None]
+    bars = [
+        {
+            "symbol": r["ts_code"],
+            "date": r["trade_date"],
+            "open": float(r["open"]),
+            "high": float(r["high"]),
+            "low": float(r["low"]),
+            "close": float(r["close"]),
+            "pre_close": float(r["pre_close"] or 0.0),
+            "vol": float(r["vol"] or 0.0),
+            "amount": float(r["amount"] or 0.0),
+        }
+        for r in rows
+        if r["open"] is not None and r["close"] is not None
+    ]
     return sorted(bars, key=lambda b: (b["date"], b["symbol"]))
 
 
@@ -267,8 +351,7 @@ def _bars_reader(root: Path, spec: dict[str, Any]):
     return read
 
 
-def _states_from_mainlib(symbol: str, dates: list[str], root: Path
-                         ) -> list[dict[str, Any]]:
+def _states_from_mainlib(symbol: str, dates: list[str], root: Path) -> list[dict[str, Any]]:
     """状态面板逐日截取（**独立直读主库**，不复用引擎 StateSynthesizer）。
 
     限价：股票 `stk_limit` / ETF `etf_limit`（起点 2019-06-26）；
@@ -281,47 +364,57 @@ def _states_from_mainlib(symbol: str, dates: list[str], root: Path
     limit_table = "etf_limit" if _price_table(symbol) != "daily" else "stk_limit"
     limits: dict[str, tuple[float | None, float | None]] = {}
     try:
-        arrow = read_range(limit_table, root, lo, hi,
-                           columns=["ts_code", "trade_date", "up_limit",
-                                    "down_limit"])
-        limits = {r["trade_date"]: (r["up_limit"], r["down_limit"])
-                  for r in arrow.to_pylist() if r["ts_code"] == symbol}
-    except Exception:                       # 表缺失（etf_limit 起点前）→ 无限价
+        arrow = read_range(
+            limit_table, root, lo, hi, columns=["ts_code", "trade_date", "up_limit", "down_limit"]
+        )
+        limits = {
+            r["trade_date"]: (r["up_limit"], r["down_limit"])
+            for r in arrow.to_pylist()
+            if r["ts_code"] == symbol
+        }
+    except Exception:  # 表缺失（etf_limit 起点前）→ 无限价
         limits = {}
     suspended: set[str] = set()
     try:
-        arrow = read_range("suspend_d", root, lo, hi,
-                           columns=["ts_code", "trade_date"])
-        suspended = {r["trade_date"] for r in arrow.to_pylist()
-                     if r["ts_code"] == symbol}
+        arrow = read_range("suspend_d", root, lo, hi, columns=["ts_code", "trade_date"])
+        suspended = {r["trade_date"] for r in arrow.to_pylist() if r["ts_code"] == symbol}
     except Exception:
         suspended = set()
     st_days = _st_days(symbol, dates, root)
     delist = _delist_date(symbol, root)
-    return [{
-        "date": day, "symbol": symbol,
-        "limit_up": limits.get(day, (None, None))[0],
-        "limit_down": limits.get(day, (None, None))[1],
-        "suspended": day in suspended,
-        "is_st": day in st_days,
-        "delisted": delist is not None and day >= delist,
-    } for day in dates]
+    return [
+        {
+            "date": day,
+            "symbol": symbol,
+            "limit_up": limits.get(day, (None, None))[0],
+            "limit_down": limits.get(day, (None, None))[1],
+            "suspended": day in suspended,
+            "is_st": day in st_days,
+            "delisted": delist is not None and day >= delist,
+        }
+        for day in dates
+    ]
 
 
 def _price_table(symbol: str) -> str:
     from btf.data.tables_meta import daily_table_of
+
     return daily_table_of(symbol)
 
 
 def _st_days(symbol: str, dates: list[str], root: Path) -> set[str]:
     """ST 命中日（namechange 区间：name 含 'ST' ∧ start ≤ d < end）。"""
-    arrow = read_full("namechange", root,
-                      columns=["ts_code", "name", "start_date", "end_date"])
-    spans = [(r["start_date"], r["end_date"]) for r in arrow.to_pylist()
-             if r["ts_code"] == symbol and "ST" in (r.get("name") or "")]
-    return {day for day in dates
-            if any(start and start <= day and (not end or day < end)
-                   for start, end in spans)}
+    arrow = read_full("namechange", root, columns=["ts_code", "name", "start_date", "end_date"])
+    spans = [
+        (r["start_date"], r["end_date"])
+        for r in arrow.to_pylist()
+        if r["ts_code"] == symbol and "ST" in (r.get("name") or "")
+    ]
+    return {
+        day
+        for day in dates
+        if any(start and start <= day and (not end or day < end) for start, end in spans)
+    }
 
 
 def _delist_date(symbol: str, root: Path) -> str | None:
@@ -332,8 +425,9 @@ def _delist_date(symbol: str, root: Path) -> str | None:
     return None
 
 
-def _hfq_return(symbol: str, dates: list[str], root: Path, *,
-                price_table: str = "daily") -> dict[str, Any]:
+def _hfq_return(
+    symbol: str, dates: list[str], root: Path, *, price_table: str = "daily"
+) -> dict[str, Any]:
     """hfq 区间收益（adj_factor **独立复算**，09 §14.2 G9 引擎侧等价断言用）。
 
     区间取 dates[1]（建仓次日，已重估）→ dates[-1]：此后无交易，现金仅因
@@ -342,28 +436,47 @@ def _hfq_return(symbol: str, dates: list[str], root: Path, *,
     if len(dates) < 3:
         raise RuntimeError(f"{symbol} 窗口过短，无法计算 hfq 区间收益")
     frm, to = dates[1], dates[-1]
-    arrow = read_range("adj_factor", root, frm, to,
-                       columns=["ts_code", "trade_date", "adj_factor"])
-    adj = {r["trade_date"]: r["adj_factor"] for r in arrow.to_pylist()
-           if r["ts_code"] == symbol and r["adj_factor"]}
-    bars = {b["date"]: b["close"]
-            for b in _bars_from_mainlib(symbol, frm, to, root, table=price_table)}
+    arrow = read_range("adj_factor", root, frm, to, columns=["ts_code", "trade_date", "adj_factor"])
+    adj = {
+        r["trade_date"]: r["adj_factor"]
+        for r in arrow.to_pylist()
+        if r["ts_code"] == symbol and r["adj_factor"]
+    }
+    bars = {
+        b["date"]: b["close"] for b in _bars_from_mainlib(symbol, frm, to, root, table=price_table)
+    }
     missing = [d for d in (frm, to) if d not in adj or d not in bars]
     if missing:
         raise RuntimeError(f"{symbol} hfq 输入缺失（adj_factor/close）：{missing}")
     value_from = bars[frm] * float(adj[frm])
     value_to = bars[to] * float(adj[to])
-    return {"from": frm, "to": to, "close_from": bars[frm], "close_to": bars[to],
-            "adj_from": float(adj[frm]), "adj_to": float(adj[to]),
-            "return": value_to / value_from - 1.0, "tolerance": 0.01}
+    return {
+        "from": frm,
+        "to": to,
+        "close_from": bars[frm],
+        "close_to": bars[to],
+        "adj_from": float(adj[frm]),
+        "adj_to": float(adj[to]),
+        "return": value_to / value_from - 1.0,
+        "tolerance": 0.01,
+    }
 
 
-def _actions_from_mainlib(symbol: str, start: str, end: str,
-                          root: Path) -> list[dict[str, Any]]:
+def _actions_from_mainlib(symbol: str, start: str, end: str, root: Path) -> list[dict[str, Any]]:
     """dividend 表 → CorporateAction 形态（区间型表：read_full + 自行判定）。"""
-    table = read_full("dividend", root,
-                      columns=["ts_code", "ann_date", "ex_date", "pay_date",
-                               "record_date", "cash_div", "stk_div"])
+    table = read_full(
+        "dividend",
+        root,
+        columns=[
+            "ts_code",
+            "ann_date",
+            "ex_date",
+            "pay_date",
+            "record_date",
+            "cash_div",
+            "stk_div",
+        ],
+    )
     out = []
     for r in table.to_pylist():
         if r["ts_code"] != symbol:
@@ -371,20 +484,21 @@ def _actions_from_mainlib(symbol: str, start: str, end: str,
         ex = r["ex_date"]
         if not ex or ex < start or ex > end:
             continue
-        out.append({
-            "symbol": r["ts_code"],
-            "ex_date": ex,
-            "pay_date": r["pay_date"] or ex,        # 缺失回退 ex（E5）
-            "record_date": r["record_date"],
-            "cash_div_per_share": float(r["cash_div"] or 0.0),
-            "stk_div_per_share": float(r["stk_div"] or 0.0),
-            "ann_date": r["ann_date"],
-        })
+        out.append(
+            {
+                "symbol": r["ts_code"],
+                "ex_date": ex,
+                "pay_date": r["pay_date"] or ex,  # 缺失回退 ex（E5）
+                "record_date": r["record_date"],
+                "cash_div_per_share": float(r["cash_div"] or 0.0),
+                "stk_div_per_share": float(r["stk_div"] or 0.0),
+                "ann_date": r["ann_date"],
+            }
+        )
     return sorted(out, key=lambda a: a["ex_date"])
 
 
-def _window_dates(dates: list[str], anchor: str, before: int,
-                  after: int) -> list[str]:
+def _window_dates(dates: list[str], anchor: str, before: int, after: int) -> list[str]:
     """以 anchor 为锚取窗口交易日（anchor 缺失 → 取最近交易日）。"""
     ordered = sorted(set(dates))
     if not ordered:
@@ -392,9 +506,8 @@ def _window_dates(dates: list[str], anchor: str, before: int,
     if anchor in ordered:
         idx = ordered.index(anchor)
     else:
-        idx = min(range(len(ordered)),
-                  key=lambda i: abs(int(ordered[i]) - int(anchor)))
-    return ordered[max(0, idx - before):min(len(ordered), idx + after + 1)]
+        idx = min(range(len(ordered)), key=lambda i: abs(int(ordered[i]) - int(anchor)))
+    return ordered[max(0, idx - before) : min(len(ordered), idx + after + 1)]
 
 
 def _instrument_row(spec: dict[str, Any]) -> dict[str, Any]:
@@ -402,7 +515,8 @@ def _instrument_row(spec: dict[str, Any]) -> dict[str, Any]:
     symbol = spec["symbol"]
     asset = spec.get("asset_class", "stock")
     row: dict[str, Any] = {
-        "symbol": symbol, "asset_class": asset,
+        "symbol": symbol,
+        "asset_class": asset,
         "board": spec.get("board", "etf" if asset == "etf" else "main"),
         "lot_size": int(spec.get("lot_size", 100)),
     }
@@ -416,18 +530,18 @@ def _instrument_row(spec: dict[str, Any]) -> dict[str, Any]:
 def _resolve_st_anchor(spec: dict[str, Any], root: Path) -> dict[str, Any]:
     """G5 锚点：扫描 namechange 取指定年份首个 ST 区间（确定性：按代码序）。"""
     year = spec["st_scan_year"]
-    arrow = read_full("namechange", root,
-                      columns=["ts_code", "name", "start_date", "end_date"])
-    spans = sorted({
-        (r["ts_code"], r["start_date"]) for r in arrow.to_pylist()
-        if "ST" in (r.get("name") or "") and r.get("start_date")
-        and r["start_date"][:4] == year
-    })
+    arrow = read_full("namechange", root, columns=["ts_code", "name", "start_date", "end_date"])
+    spans = sorted(
+        {
+            (r["ts_code"], r["start_date"])
+            for r in arrow.to_pylist()
+            if "ST" in (r.get("name") or "") and r.get("start_date") and r["start_date"][:4] == year
+        }
+    )
     for code, start in spans:
         if _price_table(code) != "daily":
             continue
-        bars = _bars_from_mainlib(code, _shift_ymd(start, -40),
-                                  _shift_ymd(start, 60), root)
+        bars = _bars_from_mainlib(code, _shift_ymd(start, -40), _shift_ymd(start, 60), root)
         if len(bars) >= 12:
             resolved = dict(spec)
             resolved["symbol"] = code
@@ -452,16 +566,18 @@ def _calendar_block(dates: list[str]) -> dict[str, Any]:
     weeks: dict[str, list[str]] = {}
     for day in dates:
         parsed = parse(day)
-        week_end = (parsed + timedelta(days=(4 - parsed.weekday()) % 7))
+        week_end = parsed + timedelta(days=(4 - parsed.weekday()) % 7)
         weeks.setdefault(week_end.strftime("%Y%m%d"), []).append(day)
-    return {"dates": dates, "gaps": gaps,
-            "week_anchors": dict(sorted(weeks.items()))}
+    return {"dates": dates, "gaps": gaps, "week_anchors": dict(sorted(weeks.items()))}
 
 
-def extract_case(spec: dict[str, Any], root: Path, *,
-                 bars_reader: Callable[..., list[dict[str, Any]]] | None = None,
-                 actions_reader: Callable[..., list[dict[str, Any]]] | None = None,
-                 ) -> dict[str, Any]:
+def extract_case(
+    spec: dict[str, Any],
+    root: Path,
+    *,
+    bars_reader: Callable[..., list[dict[str, Any]]] | None = None,
+    actions_reader: Callable[..., list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     """按规格从主库截取案例数据。
 
     窗口：`span=[from, to]` 显式区间，或 `anchor` 前后 N 个交易日；
@@ -486,14 +602,13 @@ def extract_case(spec: dict[str, Any], root: Path, *,
     else:
         universe = [b["date"] for b in bars]
     if spec.get("span"):
-        dates = universe            # 显式区间 = 整段交易日（不窗口化）
+        dates = universe  # 显式区间 = 整段交易日（不窗口化）
     else:
         dates = _window_dates(universe, anchor, spec["before"], spec["after"])
     if not dates:
         raise RuntimeError(f"{symbol} 窗口为空（{start}~{end} 无交易日）")
     window_bars = [b for b in bars if b["date"] in set(dates)]
-    actions = (actions_reader or _actions_from_mainlib)(symbol, dates[0],
-                                                        dates[-1], root)
+    actions = (actions_reader or _actions_from_mainlib)(symbol, dates[0], dates[-1], root)
     data: dict[str, Any] = {
         "dates": dates,
         "bars": window_bars,
@@ -508,6 +623,7 @@ def extract_case(spec: dict[str, Any], root: Path, *,
 def _shift_ymd(ymd: str, days: int) -> str:
     """YYYYMMDD ± 自然日（窗口截取用；不依赖 trading calendar）。"""
     from datetime import date, timedelta
+
     d = date(int(ymd[:4]), int(ymd[4:6]), int(ymd[6:8])) + timedelta(days=days)
     return d.strftime("%Y%m%d")
 
@@ -516,8 +632,7 @@ def _shift_ymd(ymd: str, days: int) -> str:
 # 构建 / 校验（只增不改）
 # ─────────────────────────────────────────────────────────────
 def _hash(obj: Any) -> str:
-    text = json.dumps(obj, sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":"))
+    text = json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
 
 
@@ -528,11 +643,11 @@ def _same(left: Any, right: Any) -> bool:
     `nan != nan` → 原 `!=` 比较**误报漂移**（2026-09-27 G2 零成交案例实测）。
     """
     if isinstance(left, dict) and isinstance(right, dict):
-        return left.keys() == right.keys() and all(
-            _same(left[k], right[k]) for k in left)
+        return left.keys() == right.keys() and all(_same(left[k], right[k]) for k in left)
     if isinstance(left, list) and isinstance(right, list):
         return len(left) == len(right) and all(
-            _same(a, b) for a, b in zip(left, right, strict=True))
+            _same(a, b) for a, b in zip(left, right, strict=True)
+        )
     if isinstance(left, float) and isinstance(right, float):
         return left == right or (math.isnan(left) and math.isnan(right))
     return left == right
@@ -550,30 +665,36 @@ def make_plan(spec: dict[str, Any], dates: list[str]) -> dict[str, Any]:
     """
     symbol = spec["symbol"]
     mode = spec.get("plan", "targets")
-    plan: dict[str, Any] = {"initial_cash": 1_000_000.0, "targets": {},
-                            "lot_size": int(spec.get("lot_size", 100))}
+    plan: dict[str, Any] = {
+        "initial_cash": 1_000_000.0,
+        "targets": {},
+        "lot_size": int(spec.get("lot_size", 100)),
+    }
     if spec.get("volume_participation"):
-        plan["execution"] = {
-            "volume_participation": float(spec["volume_participation"])}
+        plan["execution"] = {"volume_participation": float(spec["volume_participation"])}
     if mode == "targets" and dates:
-        targets: dict[str, dict[str, float]] = {
-            dates[0]: {symbol: spec.get("weight", 0.9)}}
+        targets: dict[str, dict[str, float]] = {dates[0]: {symbol: spec.get("weight", 0.9)}}
         if len(dates) > 2 and not spec.get("hold_to_end"):
             targets[dates[-2]] = {}
         plan["targets"] = targets
     elif mode == "orders":
-        plan["orders"] = [{
-            "date": dates[draft["at"]] if "at" in draft else draft["date"],
-            "symbol": draft.get("symbol", symbol),
-            "side": draft["side"], "qty": int(draft["qty"]),
-        } for draft in spec.get("orders", [])]
+        plan["orders"] = [
+            {
+                "date": dates[draft["at"]] if "at" in draft else draft["date"],
+                "symbol": draft.get("symbol", symbol),
+                "side": draft["side"],
+                "qty": int(draft["qty"]),
+            }
+            for draft in spec.get("orders", [])
+        ]
         if spec.get("weight"):
             plan["targets"] = {dates[0]: {symbol: spec["weight"]}}
     return plan
 
 
-def build_case_dict(case_id: str, spec: dict[str, Any], data: dict[str, Any],
-                    root: Path) -> dict[str, Any]:
+def build_case_dict(
+    case_id: str, spec: dict[str, Any], data: dict[str, Any], root: Path
+) -> dict[str, Any]:
     """案例数据 + plan + 参考计算器断言（+ 组专属断言块）→ 可落盘 case dict。"""
     plan = make_plan(spec, data["dates"])
     assertions = compute_case(data, plan)
@@ -584,15 +705,14 @@ def build_case_dict(case_id: str, spec: dict[str, Any], data: dict[str, Any],
             "is_st": {s["date"]: s["is_st"] for s in states},
             "suspended": {s["date"]: s["suspended"] for s in states},
             "delisted": {s["date"]: s["delisted"] for s in states},
-            "limits": {s["date"]: [s["limit_up"], s["limit_down"]]
-                       for s in states},
+            "limits": {s["date"]: [s["limit_up"], s["limit_down"]] for s in states},
         }
     if spec["group"] == "G8":
         assertions["calendar"] = _calendar_block(data["dates"])
     if spec.get("hfq"):
         assertions["hfq"] = _hfq_return(
-            spec["symbol"], data["dates"], root,
-            price_table=spec.get("price_table", "daily"))
+            spec["symbol"], data["dates"], root, price_table=spec.get("price_table", "daily")
+        )
     window: dict[str, Any] = {"dates": data["dates"]}
     if spec.get("span"):
         window["span"] = list(spec["span"])
@@ -617,12 +737,19 @@ def build_case_dict(case_id: str, spec: dict[str, Any], data: dict[str, Any],
     }
 
 
-def build(case_id: str, out_dir: Path, *, root: Path, verify: bool = False,
-          force: bool = False, **extract_kw) -> str:
+def build(
+    case_id: str,
+    out_dir: Path,
+    *,
+    root: Path,
+    verify: bool = False,
+    force: bool = False,
+    **extract_kw,
+) -> str:
     """构建单个 case（返回状态：created | unchanged | updated | verified）。"""
     spec = CASE_SPECS[case_id]
     if "symbol" not in spec and "st_scan_year" in spec:
-        spec = _resolve_st_anchor(spec, root)     # G5：锚点构建期扫描（确定性）
+        spec = _resolve_st_anchor(spec, root)  # G5：锚点构建期扫描（确定性）
     data = extract_case(spec, root, **extract_kw)
     case = build_case_dict(case_id, spec, data, root)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -631,8 +758,9 @@ def build(case_id: str, out_dir: Path, *, root: Path, verify: bool = False,
     if not path.is_file():
         if verify:
             return f"{case_id}: 缺失（--verify 不写）"
-        path.write_text(json.dumps(case, ensure_ascii=False, indent=2,
-                                   sort_keys=True) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(case, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         return f"{case_id}: created"
 
     existing = json.loads(path.read_text(encoding="utf-8"))
@@ -647,9 +775,11 @@ def build(case_id: str, out_dir: Path, *, root: Path, verify: bool = False,
     if verify or not force:
         raise GoldenAssertionDrift(
             f"{case_id} 已存在且发生漂移：{', '.join(drift)}——"
-            f"只增不改纪律（05 §20.1）：请升版 golden_v{{N+1}} 或显式 --force")
-    path.write_text(json.dumps(case, ensure_ascii=False, indent=2,
-                               sort_keys=True) + "\n", encoding="utf-8")
+            f"只增不改纪律（05 §20.1）：请升版 golden_v{{N+1}} 或显式 --force"
+        )
+    path.write_text(
+        json.dumps(case, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return f"{case_id}: updated（--force 覆盖，留痕）"
 
 
@@ -672,8 +802,7 @@ def refcalc_case(case_id: str, out_dir: Path) -> tuple[str, bool]:
     case = json.loads(path.read_text(encoding="utf-8"))
     recomputed = compute_case(case["data"], case["plan"])
     stored = case.get("assertions") or {}
-    drift = [k for k in sorted(recomputed)
-             if not _same(recomputed[k], stored.get(k))]
+    drift = [k for k in sorted(recomputed) if not _same(recomputed[k], stored.get(k))]
     if drift:
         return (f"{case_id}: DIFF（参考计算器结果与落盘断言不一致）{drift}", False)
     return (f"{case_id}: ok（{len(recomputed)} 组断言独立复算一致）", True)
@@ -701,8 +830,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verify", action="store_true", help="只校验不写")
     parser.add_argument("--force", action="store_true", help="显式覆盖（留痕）")
     parser.add_argument("--list", action="store_true", help="列出案例规格与已构建状态")
-    parser.add_argument("--refcalc", action="store_true",
-                        help="由案例内嵌数据独立重算断言（不读主库、不写盘）")
+    parser.add_argument(
+        "--refcalc", action="store_true", help="由案例内嵌数据独立重算断言（不读主库、不写盘）"
+    )
     args = parser.parse_args(argv)
 
     # 中文/全角输出纪律（06 §11.3）：Windows GBK 控制台强制 UTF-8
@@ -710,15 +840,16 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
 
     root = Path(args.root) if args.root else MARKET_DATA_DIR
-    out_dir = (Path(args.out) if args.out
-               else DATASETS_DIR / f"golden_{GOLDEN_VERSION}" / "cases")
+    out_dir = Path(args.out) if args.out else DATASETS_DIR / f"golden_{GOLDEN_VERSION}" / "cases"
 
     if args.list:
         for case_id in sorted(CASE_SPECS):
             spec = CASE_SPECS[case_id]
             built = (out_dir / f"{case_id}.json").is_file()
-            print(f"{case_id:24s} {spec['group']}  "
-                  f"{'built' if built else 'missing':8s} {spec['description']}")
+            print(
+                f"{case_id:24s} {spec['group']}  "
+                f"{'built' if built else 'missing':8s} {spec['description']}"
+            )
         print("-- pending（未实现，显式的）--")
         for group, desc in PENDING_GROUPS.items():
             print(f"{group:24s} {desc}")
@@ -729,8 +860,7 @@ def main(argv: list[str] | None = None) -> int:
         ok = True
         for case_id in _select(args.cases):
             if case_id not in CASE_SPECS:
-                print(f"未知案例 {case_id}（可选: {sorted(CASE_SPECS)}）",
-                      file=sys.stderr)
+                print(f"未知案例 {case_id}（可选: {sorted(CASE_SPECS)}）", file=sys.stderr)
                 ok = False
                 continue
             message, matched = refcalc_case(case_id, out_dir)
@@ -748,13 +878,11 @@ def main(argv: list[str] | None = None) -> int:
     ok = True
     for case_id in _select(args.cases):
         if case_id not in CASE_SPECS:
-            print(f"未知案例 {case_id}（可选: {sorted(CASE_SPECS)}）",
-                  file=sys.stderr)
+            print(f"未知案例 {case_id}（可选: {sorted(CASE_SPECS)}）", file=sys.stderr)
             ok = False
             continue
         try:
-            print(build(case_id, out_dir, root=root, verify=args.verify,
-                        force=args.force))
+            print(build(case_id, out_dir, root=root, verify=args.verify, force=args.force))
         except GoldenAssertionDrift as exc:
             print(f"[FAIL] {exc}", file=sys.stderr)
             ok = False

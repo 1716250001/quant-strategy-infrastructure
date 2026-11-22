@@ -4,6 +4,7 @@
 config（四层合并+Schema）→ registry（协商+组装）→ Engine 全链路；
 M1 留白显式化（risk 接线 / mirror_json 已随 M2/M3 交付；指数宇宙 → v0.5 报错指路）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -34,8 +35,7 @@ def runtime_config():
         "run": {
             "strategy": "tests.fixtures.buyhold:ConfigBuyHold",
             "params": {"symbol": "000001.SZ", "weight": 0.9},
-            "universe": {"source": "explicit",
-                         "symbols": ["000001.SZ", "511380.SH"]},
+            "universe": {"source": "explicit", "symbols": ["000001.SZ", "511380.SH"]},
             "period": {"start": "2015-01-05", "end": "2015-01-09"},
             "initial_cash": 1_000_000,
         },
@@ -60,15 +60,15 @@ class TestRuntimeVertical:
     def test_end_to_end(self, runtime_config, tmp_path):
         rt = BTFRuntime().load_config(runtime_config).build()
         assert rt.feed is not None
-        assert rt.strategy.symbol == "000001.SZ"            # module:Class + params
+        assert rt.strategy.symbol == "000001.SZ"  # module:Class + params
         assert set(rt.instruments) == {"000001.SZ", "511380.SH"}
         # store 注入临时目录（默认落盘到 回测产物/runs，测试隔离）
         result = rt.run(store=LocalRunStore(tmp_path))
         assert len(result.snapshots) == 5
         assert len(result.fills) == 1
         assert result.fills[0].symbol == "000001.SZ"
-        assert result.fills[0].qty == 90_000               # 0.9×1M/收盘10.0
-        assert result.fills[0].price == pytest.approx(10.1)   # T+1 开盘成交
+        assert result.fills[0].qty == 90_000  # 0.9×1M/收盘10.0
+        assert result.fills[0].price == pytest.approx(10.1)  # T+1 开盘成交
         assert result.snapshots[-1].total_value > 0
 
     def test_config_yaml_file_source(self, runtime_config, tmp_path):
@@ -76,15 +76,16 @@ class TestRuntimeVertical:
         import yaml
 
         p = tmp_path / "backtest.yaml"
-        p.write_text(yaml.safe_dump(runtime_config, allow_unicode=True),
-                     encoding="utf-8")
+        p.write_text(yaml.safe_dump(runtime_config, allow_unicode=True), encoding="utf-8")
         rt = BTFRuntime().load_config(p).build()
         assert rt.instruments["000001.SZ"].lot_size == 100
 
     def test_env_layer_reaches_runtime(self, runtime_config):
-        rt = BTFRuntime().load_config(
-            runtime_config,
-            environ={"BTF_EXECUTION__COST_MODEL": "flat_rate"}).build()
+        rt = (
+            BTFRuntime()
+            .load_config(runtime_config, environ={"BTF_EXECUTION__COST_MODEL": "flat_rate"})
+            .build()
+        )
         assert type(rt.cost_model).__name__ == "FlatRateCostModel"
 
 
@@ -96,7 +97,7 @@ class TestSlippageDefaultRc01:
     def test_default_is_pct_10bp(self, runtime_config):
         from btf.execution.cost import PctSlippage
 
-        runtime_config.pop("execution", None)        # 空 execution 配置
+        runtime_config.pop("execution", None)  # 空 execution 配置
         rt = BTFRuntime().load_config(runtime_config).build()
         assert isinstance(rt.slippage, PctSlippage)
         assert rt.slippage.pct == pytest.approx(0.001)
@@ -109,7 +110,7 @@ class TestSlippageDefaultRc01:
         runtime_config["execution"] = {"slippage": {"model": "none"}}
         with caplog.at_level(logging.WARNING, logger="btf.runtime._runtime"):
             rt = BTFRuntime().load_config(runtime_config).build()
-        assert isinstance(rt.slippage, NoSlippage)   # 显式语义未被默认值吞掉
+        assert isinstance(rt.slippage, NoSlippage)  # 显式语义未被默认值吞掉
         assert any("零摩擦" in r.getMessage() for r in caplog.records)
 
     def test_switching_model_drops_pct_params(self, runtime_config):
@@ -120,10 +121,9 @@ class TestSlippageDefaultRc01:
         runtime_config["execution"] = {"slippage": {"model": "fixed"}}
         rt = BTFRuntime().load_config(runtime_config).build()
         assert isinstance(rt.slippage, FixedSlippage)
-        assert rt.slippage.amount == pytest.approx(0.01)   # 模型自带默认
+        assert rt.slippage.amount == pytest.approx(0.01)  # 模型自带默认
 
-        runtime_config["execution"] = {
-            "slippage": {"model": "fixed", "params": {"amount": 0.02}}}
+        runtime_config["execution"] = {"slippage": {"model": "fixed", "params": {"amount": 0.02}}}
         rt2 = BTFRuntime().load_config(runtime_config).build()
         assert rt2.slippage.amount == pytest.approx(0.02)  # 用户 params 原样
 
@@ -144,8 +144,7 @@ class TestVppDefaultRc02:
         assert rt.handler._vpp is None
 
     def test_explicit_null_disables(self, runtime_config):
-        runtime_config["execution"] = {
-            "handler_params": {"volume_participation": None}}
+        runtime_config["execution"] = {"handler_params": {"volume_participation": None}}
         rt = BTFRuntime().load_config(runtime_config).build()
         assert rt.handler._vpp is None
 

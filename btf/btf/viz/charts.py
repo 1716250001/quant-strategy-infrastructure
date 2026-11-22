@@ -15,6 +15,7 @@
 
 降级（13 §19.6）：数据缺失/插件异常 → 编排层跳过该图并标注（不中断报告）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -47,8 +48,7 @@ class EquityChart:
     name: ClassVar[str] = "equity"
 
     def query(self, run_id: str) -> ChartQuery:
-        return ChartQuery(run_id=run_id, dataset="snapshots",
-                          fields=["date", "total_value"])
+        return ChartQuery(run_id=run_id, dataset="snapshots", fields=["date", "total_value"])
 
     def build(self, data: Mapping[str, Any]) -> ChartSpec:
         snaps = list(data.get("snapshots") or [])
@@ -57,10 +57,11 @@ class EquityChart:
         dates = [s.date for s in snaps]
         nav = [s.total_value for s in snaps]
         return ChartSpec(
-            chart_type="line", title="资金曲线", subtitle=f"{len(snaps)} 个交易日",
+            chart_type="line",
+            title="资金曲线",
+            subtitle=f"{len(snaps)} 个交易日",
             series=[SeriesSpec(name="策略 NAV", values=nav, kind="line")],
-            axes={"x": AxisSpec(title="日期", format="date"),
-                  "y": AxisSpec(title="总资产（元）")},
+            axes={"x": AxisSpec(title="日期", format="date"), "y": AxisSpec(title="总资产（元）")},
             export_hint={"filename": "equity", "x": dates},
         )
 
@@ -71,8 +72,7 @@ class DrawdownChart:
     name: ClassVar[str] = "drawdown"
 
     def query(self, run_id: str) -> ChartQuery:
-        return ChartQuery(run_id=run_id, dataset="snapshots",
-                          fields=["date", "drawdown"])
+        return ChartQuery(run_id=run_id, dataset="snapshots", fields=["date", "drawdown"])
 
     def build(self, data: Mapping[str, Any]) -> ChartSpec:
         snaps = list(data.get("snapshots") or [])
@@ -81,12 +81,18 @@ class DrawdownChart:
         drawdowns = [s.drawdown * 100.0 for s in snaps]
         worst = min(range(len(drawdowns)), key=lambda i: drawdowns[i])
         return ChartSpec(
-            chart_type="area", title="回撤水下图", subtitle="相对历史峰值",
+            chart_type="area",
+            title="回撤水下图",
+            subtitle="相对历史峰值",
             series=[SeriesSpec(name="回撤 %", values=drawdowns, kind="area")],
-            axes={"x": AxisSpec(title="日期", format="date"),
-                  "y": AxisSpec(title="回撤（%）")},
-            annotations=[AnnotationSpec(x=snaps[worst].date, y=drawdowns[worst],
-                                        text=f"最大回撤 {drawdowns[worst]:.2f}%")],
+            axes={"x": AxisSpec(title="日期", format="date"), "y": AxisSpec(title="回撤（%）")},
+            annotations=[
+                AnnotationSpec(
+                    x=snaps[worst].date,
+                    y=drawdowns[worst],
+                    text=f"最大回撤 {drawdowns[worst]:.2f}%",
+                )
+            ],
             export_hint={"filename": "drawdown", "x": [s.date for s in snaps]},
         )
 
@@ -97,8 +103,7 @@ class MonthlyHeatmapChart:
     name: ClassVar[str] = "monthly_heatmap"
 
     def query(self, run_id: str) -> ChartQuery:
-        return ChartQuery(run_id=run_id, dataset="snapshots",
-                          fields=["date", "daily_return"])
+        return ChartQuery(run_id=run_id, dataset="snapshots", fields=["date", "daily_return"])
 
     def build(self, data: Mapping[str, Any]) -> ChartSpec:
         snaps = list(data.get("snapshots") or [])
@@ -110,15 +115,20 @@ class MonthlyHeatmapChart:
             monthly[key] = (1 + monthly.get(key, 0.0)) * (1 + snap.daily_return) - 1
         years = sorted({y for y, _ in monthly})
         months = list(range(1, 13))
-        z = [[round(monthly.get((y, m), 0.0) * 100, 4) if (y, m) in monthly else None
-              for m in months] for y in years]
+        z = [
+            [
+                round(monthly.get((y, m), 0.0) * 100, 4) if (y, m) in monthly else None
+                for m in months
+            ]
+            for y in years
+        ]
         return ChartSpec(
-            chart_type="heatmap", title="月度收益热力图", subtitle="单位 %",
+            chart_type="heatmap",
+            title="月度收益热力图",
+            subtitle="单位 %",
             series=[SeriesSpec(name="月收益", values=z, kind="heatmap")],
-            axes={"x": AxisSpec(title="月份"),
-                  "y": AxisSpec(title="年份")},
-            export_hint={"categories": {"x": [str(m) for m in months],
-                                        "y": years}},
+            axes={"x": AxisSpec(title="月份"), "y": AxisSpec(title="年份")},
+            export_hint={"categories": {"x": [str(m) for m in months], "y": years}},
         )
 
 
@@ -128,9 +138,11 @@ class TradesTableChart:
     name: ClassVar[str] = "trades_table"
 
     def query(self, run_id: str) -> ChartQuery:
-        return ChartQuery(run_id=run_id, dataset="trades",
-                          fields=["trade_id", "symbol", "qty", "pnl",
-                                  "holding_days"])
+        return ChartQuery(
+            run_id=run_id,
+            dataset="trades",
+            fields=["trade_id", "symbol", "qty", "pnl", "holding_days"],
+        )
 
     def build(self, data: Mapping[str, Any]) -> ChartSpec:
         trades = list(data.get("trades") or [])
@@ -138,16 +150,25 @@ class TradesTableChart:
         rows: list[list[Any]] = []
         for t in trades:
             status = "平仓" if t.get("close_fill") else "持有"
-            rows.append([t.get("trade_id"), t.get("symbol"), t.get("qty"),
-                         round(float(t.get("pnl", 0.0)), 2),
-                         t.get("holding_days"), status])
+            rows.append(
+                [
+                    t.get("trade_id"),
+                    t.get("symbol"),
+                    t.get("qty"),
+                    round(float(t.get("pnl", 0.0)), 2),
+                    t.get("holding_days"),
+                    status,
+                ]
+            )
         if not rows:
             raise ValueError("trades 为空——交易表无内容（报告标注缺失）")
         return ChartSpec(
-            chart_type="table", title="交易明细",
+            chart_type="table",
+            title="交易明细",
             subtitle=f"{len(rows)} 笔（含未平仓）",
             series=[SeriesSpec(name="rows", values=rows, kind="table")],
-            axes={}, export_hint={"header": header},
+            axes={},
+            export_hint={"header": header},
         )
 
 
@@ -163,12 +184,17 @@ class MetricsTableChart:
         metrics = dict(data.get("metrics") or {})
         if not metrics:
             raise ValueError("metrics 为空——指标表无法渲染")
-        rows = [[name, "—" if value != value else round(float(value), 6)]
-                for name, value in sorted(metrics.items())]
+        rows = [
+            [name, "—" if value != value else round(float(value), 6)]
+            for name, value in sorted(metrics.items())
+        ]
         return ChartSpec(
-            chart_type="table", title="核心指标", subtitle=f"{len(rows)} 项",
+            chart_type="table",
+            title="核心指标",
+            subtitle=f"{len(rows)} 项",
             series=[SeriesSpec(name="rows", values=rows, kind="table")],
-            axes={}, export_hint={"header": ["指标", "数值"]},
+            axes={},
+            export_hint={"header": ["指标", "数值"]},
         )
 
 
@@ -178,37 +204,40 @@ class WeightsAreaChart:
     name: ClassVar[str] = "weights_area"
 
     def query(self, run_id: str) -> ChartQuery:
-        return ChartQuery(run_id=run_id, dataset="snapshots",
-                          fields=["date", "weights"])
+        return ChartQuery(run_id=run_id, dataset="snapshots", fields=["date", "weights"])
 
     def build(self, data: Mapping[str, Any]) -> ChartSpec:
         snaps = list(data.get("snapshots") or [])
         if not snaps:
             raise ValueError("snapshots 为空——权重图无法渲染")
         last = dict(snaps[-1].weights or {})
-        ranked = sorted((k for k in last if k != CASH_KEY),
-                        key=lambda k: -abs(last[k]))[:TOP_HOLDINGS]
+        ranked = sorted((k for k in last if k != CASH_KEY), key=lambda k: -abs(last[k]))[
+            :TOP_HOLDINGS
+        ]
         keys = ranked + ([CASH_KEY] if CASH_KEY in last else [])
         series = [
-            SeriesSpec(name=key,
-                       values=[float(dict(s.weights or {}).get(key, 0.0)) * 100.0
-                               for s in snaps],
-                       kind="area", style={"stack": True})
+            SeriesSpec(
+                name=key,
+                values=[float(dict(s.weights or {}).get(key, 0.0)) * 100.0 for s in snaps],
+                kind="area",
+                style={"stack": True},
+            )
             for key in keys
         ]
         others = [
-            round((1.0 - sum(float(dict(s.weights or {}).get(k, 0.0))
-                             for k in keys)) * 100.0, 6)
+            round((1.0 - sum(float(dict(s.weights or {}).get(k, 0.0)) for k in keys)) * 100.0, 6)
             for s in snaps
         ]
         if any(abs(v) > 1e-9 for v in others):
-            series.append(SeriesSpec(name="其他", values=others, kind="area",
-                                     style={"stack": True}))
+            series.append(
+                SeriesSpec(name="其他", values=others, kind="area", style={"stack": True})
+            )
         return ChartSpec(
-            chart_type="area", title="持仓权重", subtitle="堆叠面积（%）",
+            chart_type="area",
+            title="持仓权重",
+            subtitle="堆叠面积（%）",
             series=series,
-            axes={"x": AxisSpec(title="日期", format="date"),
-                  "y": AxisSpec(title="权重（%）")},
+            axes={"x": AxisSpec(title="日期", format="date"), "y": AxisSpec(title="权重（%）")},
             export_hint={"filename": "weights", "x": [s.date for s in snaps]},
         )
 
@@ -216,14 +245,25 @@ class WeightsAreaChart:
 #: 图表插件名字表（配置声明制：报告按名字选图，13 §19.6）
 CHART_PLUGINS: dict[str, type[ChartPlugin]] = {
     cls.name: cls  # type: ignore[attr-defined]
-    for cls in (EquityChart, DrawdownChart, MonthlyHeatmapChart,
-                TradesTableChart, MetricsTableChart, WeightsAreaChart)
+    for cls in (
+        EquityChart,
+        DrawdownChart,
+        MonthlyHeatmapChart,
+        TradesTableChart,
+        MetricsTableChart,
+        WeightsAreaChart,
+    )
 }
 
 #: 默认报告图序（13 §19.4 章节编排）
-DEFAULT_CHARTS: tuple[str, ...] = ("equity", "drawdown", "monthly_heatmap",
-                                   "metrics_table", "trades_table",
-                                   "weights_area")
+DEFAULT_CHARTS: tuple[str, ...] = (
+    "equity",
+    "drawdown",
+    "monthly_heatmap",
+    "metrics_table",
+    "trades_table",
+    "weights_area",
+)
 
 
 def build_chart(name: str, data: Mapping[str, Any]) -> ChartSpec:

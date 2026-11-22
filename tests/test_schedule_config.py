@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """CC-FIX-13（R3'-b）：调度频率表覆盖率与到期判定。"""
+
 from datetime import date, timedelta
 
 import pytest
@@ -77,7 +78,7 @@ def test_is_due_semantics():
     assert is_due("M", (today - timedelta(days=30)).isoformat(), today) is True
     assert is_due("Q", (today - timedelta(days=89)).isoformat(), today) is False
     assert is_due("Q", (today - timedelta(days=90)).isoformat(), today) is True
-    assert is_due("W", "not-a-time", today) is True   # 不可解析按到期
+    assert is_due("W", "not-a-time", today) is True  # 不可解析按到期
 
 
 class _FakeCp:
@@ -88,7 +89,7 @@ class _FakeCp:
 
     def is_done(self, name, key, library=None, key_space=None):
         # P3-4（§455）：签名与 Checkpoint 同步；断言不变。
-        return False            # CC-FIX-16：估算器不再吞异常，替身须补此接口
+        return False  # CC-FIX-16：估算器不再吞异常，替身须补此接口
 
     def mark_done(self, name, key, library=None, key_space=None):
         pass
@@ -132,7 +133,7 @@ def test_lock_rejects_concurrent_instance(tmp_path):
         with pytest.raises(SystemExit):
             with sr._InstanceLock(str(lock)):
                 pass
-    assert not lock.exists()          # 正常退出后释放
+    assert not lock.exists()  # 正常退出后释放
 
 
 def test_daily_group_tables_are_skipped(monkeypatch):

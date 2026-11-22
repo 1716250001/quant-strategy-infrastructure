@@ -23,6 +23,7 @@ Fill 流水（成交视角），分析需要开平成对（交易视角）——
 且 **成本价 ÷R**；费用摊销比例分母同步用**调整后的 lot 原始量**。
 **只对 ex_date 之前建立的 lot 生效**（同日及之后买入不受影响——§114.4 R-3/R-4）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -78,15 +79,15 @@ def normalize_consolidations(
         try:
             ex = parse_trading_date(ex_date)
         except (TypeError, ValueError):
-            logger.warning("折算事件 ex_date 不可解析（%r@%r）⇒ 跳过（R61′）",
-                           ex_date, symbol)
+            logger.warning("折算事件 ex_date 不可解析（%r@%r）⇒ 跳过（R61′）", ex_date, symbol)
             continue
-        ratio = ratio_or_default(ratio_raw, context=f"trades:{symbol}:{ex.to_ymd()}",
-                                 warn=logger.warning)
+        ratio = ratio_or_default(
+            ratio_raw, context=f"trades:{symbol}:{ex.to_ymd()}", warn=logger.warning
+        )
         if ratio == 1.0:
-            continue                      # 无行动（含无效值归一化的结果）
+            continue  # 无行动（含无效值归一化的结果）
         out.append((str(symbol), ex, ratio))
-    out.sort(key=lambda item: (item[1], ))          # 稳定排序（同日保序）
+    out.sort(key=lambda item: (item[1],))  # 稳定排序（同日保序）
     return tuple(out)
 
 
@@ -116,9 +117,14 @@ def _apply_consolidation(lot: list, ratio: float) -> None:
     lot[3] = lot[3] * ratio
 
 
-def _lot_pnl(open_fill: Fill, close_fill: Fill, qty: int, *,
-             cost_price: float | None = None,
-             orig_qty: float | None = None) -> float:
+def _lot_pnl(
+    open_fill: Fill,
+    close_fill: Fill,
+    qty: int,
+    *,
+    cost_price: float | None = None,
+    orig_qty: float | None = None,
+) -> float:
     """配对盈亏：平仓收入 − 开仓成本（双边费用按数量比例摊入）。
 
     **R61′/N63-b**：`cost_price`＝**折算调整后**的成本基准（缺省＝原成交价，
@@ -155,21 +161,28 @@ def pair_fills_to_trades(
     """
     ordered = sorted(fills, key=_sort_key) if sort else list(fills)
     cons = normalize_consolidations(consolidations)
-    lots: dict[str, deque[list]] = {}       # symbol → [[open_fill, 剩余, 价, 原始量], …]
+    lots: dict[str, deque[list]] = {}  # symbol → [[open_fill, 剩余, 价, 原始量], …]
     out: list[Trade] = []
     seq = 0
     ci = 0
 
-    def _emit(open_fill: Fill | None, close_fill: Fill | None, qty: int,
-              pnl: float, holding: int) -> None:
+    def _emit(
+        open_fill: Fill | None, close_fill: Fill | None, qty: int, pnl: float, holding: int
+    ) -> None:
         nonlocal seq
         seq += 1
-        out.append(Trade(
-            trade_id=f"T{seq:06d}", symbol=(open_fill or close_fill).symbol,
-            open_fill=open_fill, close_fill=close_fill, qty=qty, pnl=pnl,
-            holding_days=holding,
-            tag=tag_of(open_fill) if tag_of and open_fill is not None else None,
-        ))
+        out.append(
+            Trade(
+                trade_id=f"T{seq:06d}",
+                symbol=(open_fill or close_fill).symbol,
+                open_fill=open_fill,
+                close_fill=close_fill,
+                qty=qty,
+                pnl=pnl,
+                holding_days=holding,
+                tag=tag_of(open_fill) if tag_of and open_fill is not None else None,
+            )
+        )
 
     def _apply_pending(upto: TradingDate | None) -> None:
         """应用 `ex_date <= upto`（`None`＝全部剩余）的折算到队列（R61′）。"""
@@ -183,10 +196,11 @@ def pair_fills_to_trades(
             ci += 1
 
     for fill in ordered:
-        _apply_pending(fill.fill_date)      # 折算发生时点先于当日配对（同日买入不受影响）
+        _apply_pending(fill.fill_date)  # 折算发生时点先于当日配对（同日买入不受影响）
         if fill.side is OrderSide.BUY:
             lots.setdefault(fill.symbol, deque()).append(
-                [fill, fill.qty, fill.price, float(fill.qty)])
+                [fill, fill.qty, fill.price, float(fill.qty)]
+            )
             continue
         need = fill.qty
         queue = lots.get(fill.symbol)
@@ -195,15 +209,19 @@ def pair_fills_to_trades(
             qty = min(need, lot[1])
             open_fill = lot[0]
             holding = (fill.fill_date.iso - open_fill.fill_date.iso).days
-            _emit(open_fill, fill, qty,
-                  _lot_pnl(open_fill, fill, qty, cost_price=lot[2],
-                           orig_qty=lot[3]), holding)
+            _emit(
+                open_fill,
+                fill,
+                qty,
+                _lot_pnl(open_fill, fill, qty, cost_price=lot[2], orig_qty=lot[3]),
+                holding,
+            )
             lot[1] -= qty
             need -= qty
             if lot[1] <= 0:
                 queue.popleft()
 
-    _apply_pending(None)                    # 末次成交之后的折算（R-2 累积/收尾口径）
+    _apply_pending(None)  # 末次成交之后的折算（R-2 累积/收尾口径）
 
     # 未平仓部分（收盘仍持有）：pnl=0（未实现）
     for symbol in sorted(lots):

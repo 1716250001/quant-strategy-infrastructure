@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """bt config-check 命令单测（M1 任务 4.3 验收）。"""
+
 from __future__ import annotations
 
 import pytest
@@ -26,8 +27,7 @@ class TestConfigCheck:
 
     def test_invalid_config_exits_nonzero(self, tmp_path, capsys):
         p = tmp_path / "bad.yaml"
-        p.write_text(SAMPLE_06.replace("source: \"index\"", "source: 123"),
-                     encoding="utf-8")
+        p.write_text(SAMPLE_06.replace('source: "index"', "source: 123"), encoding="utf-8")
         rc = main(["config-check", str(p)])
         err = capsys.readouterr().err
         assert rc == 1
@@ -35,9 +35,10 @@ class TestConfigCheck:
 
     def test_h2_literal_rejected_by_cli(self, tmp_path, capsys):
         p = tmp_path / "h2.yaml"
-        p.write_text(SAMPLE_06.replace(
-            "  overrides: []",
-            "  overrides: []\n  params: {pe_ttm_max: 30}"), encoding="utf-8")
+        p.write_text(
+            SAMPLE_06.replace("  overrides: []", "  overrides: []\n  params: {pe_ttm_max: 30}"),
+            encoding="utf-8",
+        )
         rc = main(["config-check", str(p)])
         err = capsys.readouterr().err
         assert rc == 1
@@ -45,10 +46,13 @@ class TestConfigCheck:
 
     def test_dump_masks_sensitive(self, tmp_path, capsys):
         p = tmp_path / "secret.yaml"
-        p.write_text(SAMPLE_06.replace(
-            '  feed: "tushare_parquet"',
-            '  feed: "tushare_parquet"\n  feed_params: {tushare_token: "REAL"}'),
-            encoding="utf-8")
+        p.write_text(
+            SAMPLE_06.replace(
+                '  feed: "tushare_parquet"',
+                '  feed: "tushare_parquet"\n  feed_params: {tushare_token: "REAL"}',
+            ),
+            encoding="utf-8",
+        )
         rc = main(["config-check", str(p), "--dump"])
         out = capsys.readouterr().out
         assert rc == 0

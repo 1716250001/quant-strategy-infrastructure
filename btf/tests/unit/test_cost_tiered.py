@@ -8,6 +8,7 @@
     - 佣金最低 5 元触发
 手算锚点全部逐笔列于各断言旁（公式唯一出处 04 §8.2.6/§8.2.4 对照）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -36,9 +37,15 @@ D = TradingDate.from_ymd
 
 
 def _order(side: OrderSide, symbol: str = "000001.SZ", qty: int = 100) -> Order:
-    return Order(order_id="O1", symbol=symbol, side=side,
-                 order_type=OrderType.MARKET, qty=qty, limit_price=None,
-                 created_at=D("20230101"))
+    return Order(
+        order_id="O1",
+        symbol=symbol,
+        side=side,
+        order_type=OrderType.MARKET,
+        qty=qty,
+        limit_price=None,
+        created_at=D("20230101"),
+    )
 
 
 class TestStampDutySegments:
@@ -94,15 +101,11 @@ class TestTransferFeeSegments:
     def test_boundary_days(self):
         m = AShareTieredFeeModel()
         # 2015-07-31（沪 par）0.60 → 2015-08-01（双向 amount）10000×0.00002=0.20
-        assert m.fees("600000.SH", OrderSide.BUY, 1_000, 10.0,
-                      D("20150731")).transfer_fee == 0.60
-        assert m.fees("600000.SH", OrderSide.BUY, 1_000, 10.0,
-                      D("20150801")).transfer_fee == 0.20
+        assert m.fees("600000.SH", OrderSide.BUY, 1_000, 10.0, D("20150731")).transfer_fee == 0.60
+        assert m.fees("600000.SH", OrderSide.BUY, 1_000, 10.0, D("20150801")).transfer_fee == 0.20
         # 2022-04-28 0.002% → 2022-04-29 0.001%
-        assert m.fees("600000.SH", OrderSide.BUY, 1_000, 10.0,
-                      D("20220428")).transfer_fee == 0.20
-        assert m.fees("600000.SH", OrderSide.BUY, 1_000, 10.0,
-                      D("20220429")).transfer_fee == 0.10
+        assert m.fees("600000.SH", OrderSide.BUY, 1_000, 10.0, D("20220428")).transfer_fee == 0.20
+        assert m.fees("600000.SH", OrderSide.BUY, 1_000, 10.0, D("20220429")).transfer_fee == 0.10
 
 
 class TestCommission:
@@ -159,9 +162,14 @@ class TestSegmentTable:
 
     def test_uncovered_date_raises(self):
         m = AShareTieredFeeModel(
-            segments=(FeeSegment(effective_from=TradingDate.from_ymd("20200101"),
-                                 stamp_duty_sell=0.001,
-                                 transfer_fee_rate=0.00001),))
+            segments=(
+                FeeSegment(
+                    effective_from=TradingDate.from_ymd("20200101"),
+                    stamp_duty_sell=0.001,
+                    transfer_fee_rate=0.00001,
+                ),
+            )
+        )
         with pytest.raises(ValueError, match="未覆盖"):
             m.fees("000001.SZ", OrderSide.BUY, 100, 10.0, D("19990101"))
 
@@ -193,15 +201,15 @@ class TestLegacyAndZero:
     """ZeroCostModel 全零；FlatRateCostModel 现行常数（date 参数兼容）。"""
 
     def test_zero_cost(self):
-        f = ZeroCostModel().fees("600000.SH", OrderSide.SELL, 1_000, 10.0,
-                                 D("20140102"))
+        f = ZeroCostModel().fees("600000.SH", OrderSide.SELL, 1_000, 10.0, D("20140102"))
         assert (f.commission, f.stamp_duty, f.transfer_fee, f.total) == (0, 0, 0, 0)
 
     def test_flat_rate_current_constants(self):
         # 现行口径：comm=max(100000×2.5e-4,5)=25；stamp=100000×5e-4=50；
         # transfer=100000×1e-5=1
-        f = FlatRateCostModel().fees("600000.SH", OrderSide.SELL, 10_000, 10.0,
-                                     D("19990101"))       # date 不影响（常数）
+        f = FlatRateCostModel().fees(
+            "600000.SH", OrderSide.SELL, 10_000, 10.0, D("19990101")
+        )  # date 不影响（常数）
         assert (f.commission, f.stamp_duty, f.transfer_fee) == (25.0, 50.0, 1.0)
 
 

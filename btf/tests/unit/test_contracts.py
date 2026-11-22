@@ -3,6 +3,7 @@
 
 主版本不符 → 拒载（不静默降级）；未声明 / 非法格式 → 显式报错。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -53,8 +54,9 @@ class TestRegistryPluginsDeclared:
         checked = 0
         for point in registry.points():
             for name in registry.available(point):
-                factory = registry.resolve(point, name)   # 协商在此发生
-                assert getattr(factory, "contract_version", None), \
+                factory = registry.resolve(point, name)  # 协商在此发生
+                assert getattr(factory, "contract_version", None), (
                     f"{point}:{name} 未声明 contract_version"
+                )
                 checked += 1
-        assert checked >= 7   # 六类扩展点冒烟 + 实现类版本声明
+        assert checked >= 7  # 六类扩展点冒烟 + 实现类版本声明

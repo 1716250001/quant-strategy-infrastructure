@@ -6,6 +6,7 @@
     - 首次访问物化、值正确（Mapping 协议全接口）；
     - 重复访问只装载一次（缓存）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -38,13 +39,13 @@ class TestLazyStates:
         counter = _Counter({"000001.SZ": st})
         lazy = LazyStates(counter)
 
-        assert lazy.get("000001.SZ") is st          # 首次访问 → 物化
+        assert lazy.get("000001.SZ") is st  # 首次访问 → 物化
         assert counter.calls == 1
         assert lazy["000001.SZ"] is st
         assert "000001.SZ" in lazy
         assert set(lazy) == {"000001.SZ"}
         assert len(lazy) == 1
-        assert lazy.get("600000.SH") is None        # 缺席 → None
+        assert lazy.get("600000.SH") is None  # 缺席 → None
         with pytest.raises(KeyError):
             _ = lazy["600000.SH"]
-        assert counter.calls == 1                   # 全程只装载一次
+        assert counter.calls == 1  # 全程只装载一次

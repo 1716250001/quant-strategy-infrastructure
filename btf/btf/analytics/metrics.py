@@ -35,6 +35,7 @@ TestAdditionForbidden）。
                           原实现为线性 `rf/ann`，同一 rf 在两处日化不同
                           （rf=0.0 时两者恒等 ⇒ 既有 run 数字零变化）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,6 +55,7 @@ NAN = math.nan
 DEFAULT_ANNUALIZATION = 252
 #: 默认无风险利率（年化）
 DEFAULT_RISK_FREE = 0.0
+
 
 # ─────────────────────────────────────────────────────────────
 # NAV 四式（04 §8.2.6 N5-1）——纯函数，参考计算器对账锚点
@@ -100,8 +102,7 @@ class NavDrift:
     recomputed: float
 
 
-def audit_nav_four(snapshots: Sequence[Any], *, tol: float = 1e-9
-                   ) -> list[NavDrift]:
+def audit_nav_four(snapshots: Sequence[Any], *, tol: float = 1e-9) -> list[NavDrift]:
     """NAV 四式对账：引擎快照字段 vs 四式重算，返回漂移明细（空=一致）。
 
     对账锚点用途：快照字段（引擎产出）与四式（参考计算器）双轨——口径
@@ -122,8 +123,9 @@ def audit_nav_four(snapshots: Sequence[Any], *, tol: float = 1e-9
         )
         for field, got, expected in checks:
             if abs(float(got) - float(expected)) > tol:
-                drifts.append(NavDrift(getattr(snap, "date", i), field,
-                                       float(got), float(expected)))
+                drifts.append(
+                    NavDrift(getattr(snap, "date", i), field, float(got), float(expected))
+                )
     return drifts
 
 
@@ -149,8 +151,8 @@ class NavSeries:
     daily_returns: tuple[float, ...]
     cumulative_returns: tuple[float, ...]
     drawdowns: tuple[float, ...]
-    fees: float = 0.0            # Σ fee.total（元）
-    turnover: float = 0.0        # Σ price×qty（元，双边）
+    fees: float = 0.0  # Σ fee.total（元）
+    turnover: float = 0.0  # Σ price×qty（元，双边）
     n_fills: int = 0
     #: **R26′（19 号 §96.4；N31）**：在场日掩码（与快照对齐；空 = 无信息 ⇒
     #: 口径回落全样本——向后兼容）。在场判定＝该日快照 `positions_qty` 非空。
@@ -191,16 +193,21 @@ class NavSeries:
         """
         if not self.in_market or len(self.in_market) != self.n_days:
             return self.effective_returns()
-        return tuple(r for r, m in zip(self.daily_returns[1:],
-                                       self.in_market[1:], strict=True) if m)
+        return tuple(
+            r for r, m in zip(self.daily_returns[1:], self.in_market[1:], strict=True) if m
+        )
 
     def total_return(self) -> float:
         """累计收益 = 第三式期末值（NAV 口径，空 → IndexError 降级）。"""
         return self.cumulative_returns[-1]
 
 
-def build_nav_series(snapshots: Sequence[Any], trades: Sequence[Any] = (), *,
-                     consolidations: Sequence[Any] | None = None) -> NavSeries:
+def build_nav_series(
+    snapshots: Sequence[Any],
+    trades: Sequence[Any] = (),
+    *,
+    consolidations: Sequence[Any] | None = None,
+) -> NavSeries:
     """快照 + 成交 → 指标基座（NAV 四式 + 成交汇总；纯函数）。
 
     **R26′（19 号 §96.4；N31）**：另派生
@@ -213,8 +220,7 @@ def build_nav_series(snapshots: Sequence[Any], trades: Sequence[Any] = (), *,
     """
     nav = nav_total_values(snapshots)
     fills = list(trades or ())
-    in_market = tuple(
-        bool(getattr(s, "positions_qty", None)) for s in snapshots)
+    in_market = tuple(bool(getattr(s, "positions_qty", None)) for s in snapshots)
     if not any(in_market):
         # 全部快照无持仓 **或** 快照对象未携带 `positions_qty`——两者不可区分 ⇒
         # 保守回落「全样本」口径（`in_market_returns` 回落分支；向后兼容：
@@ -259,7 +265,7 @@ def _rf_daily(config: Mapping[str, Any], factor: float) -> float:
       仅显式设置 rf≠0 的 run 会计上变（口径变更，已入 CHANGELOG）。
     """
     rf = _risk_free_rate(config)
-    if rf <= -1.0:                      # 防 (1+rf) ≤ 0 的非法域（fail-closed）
+    if rf <= -1.0:  # 防 (1+rf) ≤ 0 的非法域（fail-closed）
         return rf / factor
     return (1.0 + rf) ** (1.0 / factor) - 1.0
 
@@ -293,14 +299,19 @@ class MetricBase:
     contract_version: ClassVar[str] = CONTRACT_VERSION
     name: ClassVar[str] = ""
 
-    def compute(self, snapshots: Sequence[Any], trades: Sequence[Any],
-                config: Mapping[str, Any]) -> float:
+    def compute(
+        self, snapshots: Sequence[Any], trades: Sequence[Any], config: Mapping[str, Any]
+    ) -> float:
         """04 §8.3.6 协议实现（纯函数：快照序列 + 成交序列 + 配置 → 标量）。"""
         try:
-            return float(self._value(build_nav_series(snapshots, trades),
-                                     config or {}))
-        except (ZeroDivisionError, ValueError, TypeError, IndexError,
-                statistics.StatisticsError) as exc:
+            return float(self._value(build_nav_series(snapshots, trades), config or {}))
+        except (
+            ZeroDivisionError,
+            ValueError,
+            TypeError,
+            IndexError,
+            statistics.StatisticsError,
+        ) as exc:
             logger.debug("指标 %s 降级 → NaN（%s）", self.name, exc)
             return NAN
 
@@ -442,12 +453,10 @@ class WinRateTrades(MetricBase):
     name = "win_rate_trades"
 
     def _value(self, series: NavSeries, config: Mapping[str, Any]) -> float:
-        closed = [t for t in series.trades
-                  if getattr(t, "close_fill", None) is not None]
+        closed = [t for t in series.trades if getattr(t, "close_fill", None) is not None]
         if not closed:
             raise ValueError("无平仓交易，逐笔胜率无定义")
-        return (sum(1 for t in closed if float(getattr(t, "pnl", 0.0)) > 0.0)
-                / len(closed))
+        return sum(1 for t in closed if float(getattr(t, "pnl", 0.0)) > 0.0) / len(closed)
 
 
 class ProfitLossRatio(MetricBase):
@@ -500,8 +509,7 @@ class TurnoverAnnualized(MetricBase):
         mean_nav = series.mean_nav()
         if mean_nav == 0:
             raise ZeroDivisionError("平均 NAV 为 0，换手率无定义")
-        return (series.turnover / mean_nav
-                * (_annualization_factor(config) / _periods(series)))
+        return series.turnover / mean_nav * (_annualization_factor(config) / _periods(series))
 
 
 class FeeRatio(MetricBase):
@@ -527,29 +535,42 @@ class NTradingDays(MetricBase):
 
 #: 15 项指标类全集（registry ANALYZER 扩展点名字表来源）
 METRIC_CLASSES: tuple[type[MetricBase], ...] = (
-    FinalNav, TotalReturn, AnnualizedReturn, AnnualizedVolatility,
-    SharpeRatio, MaxDrawdown, CalmarRatio, WinRate, ProfitLossRatio,
-    NFills, TotalFees, TotalTurnover, TurnoverAnnualized, FeeRatio,
+    FinalNav,
+    TotalReturn,
+    AnnualizedReturn,
+    AnnualizedVolatility,
+    SharpeRatio,
+    MaxDrawdown,
+    CalmarRatio,
+    WinRate,
+    ProfitLossRatio,
+    NFills,
+    TotalFees,
+    TotalTurnover,
+    TurnoverAnnualized,
+    FeeRatio,
     NTradingDays,
 )
 
 #: **可选指标**（RC-06，2026-10-05）：须在 `analysis.metrics` **显式声明**才计算，
 #: **不进默认 15 项**（默认指标集与 `metrics_digest` 口径因此保持不变）。
 #: `WinRateTrades`（R26′，2026-10-07）：逐笔口径胜率辅助指标（N31 修复配套）。
-OPTIONAL_METRIC_CLASSES: tuple[type[MetricBase], ...] = (SharpeStderr,
-                                                         WinRateTrades)
+OPTIONAL_METRIC_CLASSES: tuple[type[MetricBase], ...] = (SharpeStderr, WinRateTrades)
 
 #: 指标名 → 类（配置声明制：用户侧只写名字；含可选指标）
 METRICS: Mapping[str, type[MetricBase]] = {
-    cls.name: cls for cls in (*METRIC_CLASSES, *OPTIONAL_METRIC_CLASSES)}
+    cls.name: cls for cls in (*METRIC_CLASSES, *OPTIONAL_METRIC_CLASSES)
+}
 
 #: 15 项**默认**指标名（有序=上表顺序；可选指标不在此列）
 METRIC_NAMES: tuple[str, ...] = tuple(cls.name for cls in METRIC_CLASSES)
 
 
 def compute_all(
-    snapshots: Sequence[Any], trades: Sequence[Any] = (),
-    config: Mapping[str, Any] | None = None, *,
+    snapshots: Sequence[Any],
+    trades: Sequence[Any] = (),
+    config: Mapping[str, Any] | None = None,
+    *,
     analyzer_names: Sequence[str] | None = None,
     resolver: Callable[[str], type[MetricBase]] | None = None,
     consolidations: Sequence[Any] | None = None,
@@ -569,8 +590,7 @@ def compute_all(
     cfg = config or {}
     # 缺省 = **默认 15 项**（`METRIC_NAMES`）——不含 `OPTIONAL_METRIC_CLASSES`
     # （RC-06：可选指标须显式声明；默认集与 digest 口径不变）
-    names = (list(analyzer_names) if analyzer_names is not None
-             else list(METRIC_NAMES))
+    names = list(analyzer_names) if analyzer_names is not None else list(METRIC_NAMES)
     resolve = resolver or (lambda name: METRICS[name])
     series = build_nav_series(snapshots, trades, consolidations=consolidations)
     out: dict[str, float] = {}
@@ -578,8 +598,13 @@ def compute_all(
         metric = resolve(name)()
         try:
             out[metric.name] = float(metric._value(series, cfg))
-        except (ZeroDivisionError, ValueError, TypeError, IndexError,
-                statistics.StatisticsError) as exc:
+        except (
+            ZeroDivisionError,
+            ValueError,
+            TypeError,
+            IndexError,
+            statistics.StatisticsError,
+        ) as exc:
             logger.debug("指标 %s 降级 → NaN（%s）", metric.name, exc)
             out[metric.name] = NAN
     return out

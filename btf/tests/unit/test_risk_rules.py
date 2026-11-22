@@ -4,6 +4,7 @@
 覆盖：每规则 ALLOW/REDUCE/REJECT 三态、整手缩量、批次累计（on_batch_start）、
 数据缺失降级、链序"首个非 ALLOW 生效"、batch_rejections 审计记录。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -19,34 +20,56 @@ D = TradingDate.from_ymd
 
 
 def _buy(qty: int, symbol: str = "000001.SZ") -> Order:
-    return Order(order_id="", symbol=symbol, side=OrderSide.BUY,
-                 order_type=OrderType.MARKET, qty=qty, limit_price=None,
-                 created_at=D("20200106"))
+    return Order(
+        order_id="",
+        symbol=symbol,
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        qty=qty,
+        limit_price=None,
+        created_at=D("20200106"),
+    )
 
 
 def _sell(qty: int, symbol: str = "000001.SZ") -> Order:
-    return Order(order_id="", symbol=symbol, side=OrderSide.SELL,
-                 order_type=OrderType.MARKET, qty=qty, limit_price=None,
-                 created_at=D("20200106"))
+    return Order(
+        order_id="",
+        symbol=symbol,
+        side=OrderSide.SELL,
+        order_type=OrderType.MARKET,
+        qty=qty,
+        limit_price=None,
+        created_at=D("20200106"),
+    )
 
 
-def _portfolio(cash: float = 1_000_000.0, *, mark: dict[str, float] | None = None
-               ) -> Portfolio:
+def _portfolio(cash: float = 1_000_000.0, *, mark: dict[str, float] | None = None) -> Portfolio:
     p = Portfolio(cash=cash)
     if mark:
         p.mark_all(mark)
     return p
 
 
-def _state(symbol: str = "000001.SZ", *, suspended: bool = False,
-           delisted: bool = False, st: bool = False, limit_up: bool = False,
-           limit_down: bool = False) -> TradingState:
+def _state(
+    symbol: str = "000001.SZ",
+    *,
+    suspended: bool = False,
+    delisted: bool = False,
+    st: bool = False,
+    limit_up: bool = False,
+    limit_down: bool = False,
+) -> TradingState:
     return TradingState(
-        symbol=symbol, date=D("20200106"),
+        symbol=symbol,
+        date=D("20200106"),
         limit_up_price=11.0 if limit_up else None,
         limit_down_price=9.0 if limit_down else None,
-        is_suspended=suspended, is_st=st, is_delisted=delisted,
-        is_limit_up=limit_up, is_limit_down=limit_down)
+        is_suspended=suspended,
+        is_st=st,
+        is_delisted=delisted,
+        is_limit_up=limit_up,
+        is_limit_down=limit_down,
+    )
 
 
 class TestMaxWeightRule:
@@ -75,10 +98,19 @@ class TestMaxWeightRule:
         p = _portfolio(cash=900_000.0, mark={"000001.SZ": 10.0})
         # 已持 10000 股=10 万 = 10% 上限 → 预算 0 → REJECT
         # （apply_fill 后现金 80 万 + 持仓 10 万 = NAV 90 万；预算 9 万−10 万 < 0）
-        p.apply_fill(Fill(
-            fill_id="F1", order_id="O1", symbol="000001.SZ",
-            side=OrderSide.BUY, qty=10_000, price=10.0, fee=Fee.zero(),
-            fill_date=D("20200103"), fill_timing="open"))
+        p.apply_fill(
+            Fill(
+                fill_id="F1",
+                order_id="O1",
+                symbol="000001.SZ",
+                side=OrderSide.BUY,
+                qty=10_000,
+                price=10.0,
+                fee=Fee.zero(),
+                fill_date=D("20200103"),
+                fill_timing="open",
+            )
+        )
         v = rule.check(_buy(1_000), p, {})
         assert v.kind is VerdictKind.REJECT and "max_weight" in v.reason_code
 
@@ -90,7 +122,7 @@ class TestMaxWeightRule:
     def test_missing_price_degrades_to_allow(self):
         """降级放行（历史口径）须**显式** `strict=False` 才生效。"""
         rule = MaxWeightRule(max_weight=0.10, strict=False)
-        v = rule.check(_buy(1_000_000), _portfolio(), {})   # 无盯市价
+        v = rule.check(_buy(1_000_000), _portfolio(), {})  # 无盯市价
         assert v.kind is VerdictKind.ALLOW
 
     def test_missing_price_rejects_by_default(self):
@@ -120,8 +152,8 @@ class TestCashCheckRule:
         rule = CashCheckRule(fee_buffer=0.0)
         p = _portfolio(cash=100_000.0, mark={"000001.SZ": 10.0})
         rule.on_batch_start(p)
-        rule.check(_buy(6_000), p, {})          # 耗 6 万
-        rule.on_batch_start(p)                  # 新批次重置
+        rule.check(_buy(6_000), p, {})  # 耗 6 万
+        rule.on_batch_start(p)  # 新批次重置
         assert rule.check(_buy(6_000), p, {}).kind is VerdictKind.ALLOW
 
     def test_reject_when_below_one_lot(self):
@@ -150,35 +182,30 @@ class TestTradabilityRule:
     """tradability：停牌/退市/涨跌停/ST（可选）预拒；缺数据降级。"""
 
     def test_suspended_reject(self):
-        v = TradabilityRule().check(_buy(100), _portfolio(),
-                                    {"000001.SZ": _state(suspended=True)})
+        v = TradabilityRule().check(_buy(100), _portfolio(), {"000001.SZ": _state(suspended=True)})
         assert v.kind is VerdictKind.REJECT and v.reason_code == "risk:suspended"
 
     def test_delisted_reject(self):
-        v = TradabilityRule().check(_buy(100), _portfolio(),
-                                    {"000001.SZ": _state(delisted=True)})
+        v = TradabilityRule().check(_buy(100), _portfolio(), {"000001.SZ": _state(delisted=True)})
         assert v.kind is VerdictKind.REJECT and v.reason_code == "risk:delisted"
 
     def test_limit_up_blocks_buy_only(self):
         s = {"000001.SZ": _state(limit_up=True)}
-        assert TradabilityRule().check(
-            _buy(100), _portfolio(), s).kind is VerdictKind.REJECT
-        assert TradabilityRule().check(
-            _sell(100), _portfolio(), s).kind is VerdictKind.ALLOW
+        assert TradabilityRule().check(_buy(100), _portfolio(), s).kind is VerdictKind.REJECT
+        assert TradabilityRule().check(_sell(100), _portfolio(), s).kind is VerdictKind.ALLOW
 
     def test_limit_down_blocks_sell_only(self):
         s = {"000001.SZ": _state(limit_down=True)}
-        assert TradabilityRule().check(
-            _sell(100), _portfolio(), s).kind is VerdictKind.REJECT
-        assert TradabilityRule().check(
-            _buy(100), _portfolio(), s).kind is VerdictKind.ALLOW
+        assert TradabilityRule().check(_sell(100), _portfolio(), s).kind is VerdictKind.REJECT
+        assert TradabilityRule().check(_buy(100), _portfolio(), s).kind is VerdictKind.ALLOW
 
     def test_st_default_allow_reject_when_configured(self):
         s = {"000001.SZ": _state(st=True)}
-        assert TradabilityRule().check(
-            _buy(100), _portfolio(), s).kind is VerdictKind.ALLOW
-        assert TradabilityRule(reject_st=True).check(
-            _buy(100), _portfolio(), s).kind is VerdictKind.REJECT
+        assert TradabilityRule().check(_buy(100), _portfolio(), s).kind is VerdictKind.ALLOW
+        assert (
+            TradabilityRule(reject_st=True).check(_buy(100), _portfolio(), s).kind
+            is VerdictKind.REJECT
+        )
 
     def test_missing_state_degrades(self):
         """降级放行（历史口径）须**显式** `strict=False` 才生效。"""
@@ -214,7 +241,7 @@ class TestRuleChainManager:
     def test_first_non_allow_wins_in_order(self):
         chain = RuleChainManager([_AllowAll(), _AlwaysReduce()])
         out = chain.pre_check([_buy(1_000)], _portfolio(), {})
-        assert out[0].qty == 700                       # 缩量生效
+        assert out[0].qty == 700  # 缩量生效
 
     def test_batch_hook_called_per_pre_check(self):
         sentinel = _AlwaysReduce()
@@ -224,8 +251,7 @@ class TestRuleChainManager:
 
     def test_rejections_recorded_with_reason(self):
         chain = RuleChainManager([TradabilityRule()])
-        out = chain.pre_check(
-            [_buy(100)], _portfolio(), {"000001.SZ": _state(suspended=True)})
+        out = chain.pre_check([_buy(100)], _portfolio(), {"000001.SZ": _state(suspended=True)})
         assert out == []
         assert len(chain.batch_rejections) == 1
         order, reason = chain.batch_rejections[0]
@@ -234,9 +260,8 @@ class TestRuleChainManager:
     def test_reduce_to_zero_rejected_and_recorded(self):
         # NAV=100 万，max_weight=0.00005 → 预算 50 元 < 一手 1000 元 → 剔除
         chain = RuleChainManager([MaxWeightRule(max_weight=0.00005)])
-        out = chain.pre_check([_buy(1_000)],
-                              _portfolio(mark={"000001.SZ": 10.0}), {})
-        assert out == []                                # 一手都装不下 → 剔除
+        out = chain.pre_check([_buy(1_000)], _portfolio(mark={"000001.SZ": 10.0}), {})
+        assert out == []  # 一手都装不下 → 剔除
         assert len(chain.batch_rejections) == 1
 
     def test_empty_chain_passes_with_warning(self, caplog):
@@ -251,8 +276,7 @@ class TestRegistryRiskRules:
     """registry 声明制：三规则名可解析、协商、带参实例化。"""
 
     def test_names_registered(self):
-        assert set(available(RISK_RULE)) >= {
-            "max_weight", "cash_check", "tradability"}
+        assert set(available(RISK_RULE)) >= {"max_weight", "cash_check", "tradability"}
 
     def test_create_with_params(self):
         r = create(RISK_RULE, "max_weight", {"max_weight": 0.05})
@@ -286,17 +310,19 @@ class TestEngineWiring:
 
         scen = t_plus1_scenario()
         engine = Engine(
-            scen.feed, ConfigBuyHold(symbol="000001.SZ", weight=0.9),
-            start=D("20150105"), end=D("20150109"),
+            scen.feed,
+            ConfigBuyHold(symbol="000001.SZ", weight=0.9),
+            start=D("20150105"),
+            end=D("20150109"),
             initial_cash=1_000_000.0,
             instruments=scen.instruments,
             risk_manager=RuleChainManager([MaxWeightRule(max_weight=0.5)]),
         )
         result = engine.run()
         assert len(result.fills) == 1
-        assert result.fills[0].qty == 50_000           # 0.5×1M/10.0（整手）
+        assert result.fills[0].qty == 50_000  # 0.5×1M/10.0（整手）
         assert result.fills[0].price == pytest.approx(10.1)
-        assert result.rejections == []                  # 缩量非否决
+        assert result.rejections == []  # 缩量非否决
 
     def test_tradability_rejects_into_rejection_stream(self):
         """tradability 否决 → Rejection(code=risk_rejected) 进审计流。"""
@@ -308,8 +334,10 @@ class TestEngineWiring:
 
         scen = t_plus1_scenario()
         engine = Engine(
-            scen.feed, ConfigBuyHold(symbol="000001.SZ", weight=0.9),
-            start=D("20150105"), end=D("20150109"),
+            scen.feed,
+            ConfigBuyHold(symbol="000001.SZ", weight=0.9),
+            start=D("20150105"),
+            end=D("20150109"),
             initial_cash=1_000_000.0,
             instruments=scen.instruments,
             risk_manager=RuleChainManager([TradabilityRule()]),
@@ -317,5 +345,4 @@ class TestEngineWiring:
         result = engine.run()
         # scenario 标的正常可交易：无否决（守护既有行为不被误伤）
         if result.rejections:
-            assert all(r.code != RejectCode.RISK_REJECTED
-                       for _, r in result.rejections)
+            assert all(r.code != RejectCode.RISK_REJECTED for _, r in result.rejections)

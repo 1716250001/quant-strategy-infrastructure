@@ -9,6 +9,7 @@
 对外契约：`resolve()` 返回 `(instruments, monthly_index_universe | None)`——
 第二项仅 `source=index` 时不为 None（由调用方决定是否回写到门面状态）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -48,7 +49,9 @@ class UniverseResolver:
 
     # ── 入口 ──
     def resolve(
-        self, universe_cfg: Mapping[str, Any], start: TradingDate,
+        self,
+        universe_cfg: Mapping[str, Any],
+        start: TradingDate,
         end: TradingDate | None = None,
     ) -> tuple[dict[str, Instrument], dict[str, list[str]] | None]:
         """解析宇宙；返回 `(instruments, 月度指数成分映射 | None)`。"""
@@ -59,13 +62,18 @@ class UniverseResolver:
             return self._all(start, end), None
         if src == "index":
             return self._index(universe_cfg, start, end)
-        raise ConfigError([
-            f"run.universe.source: {src!r} 未支持（可选: explicit | all | "
-            f"index（v0.5 V5-4，index_weight 月末快照机器复算））"])
+        raise ConfigError(
+            [
+                f"run.universe.source: {src!r} 未支持（可选: explicit | all | "
+                f"index（v0.5 V5-4，index_weight 月末快照机器复算））"
+            ]
+        )
 
     # ── explicit ──
     def _explicit(
-        self, universe_cfg: Mapping[str, Any], start: TradingDate,
+        self,
+        universe_cfg: Mapping[str, Any],
+        start: TradingDate,
     ) -> dict[str, Instrument]:
         """explicit 清单解析。
 
@@ -85,14 +93,18 @@ class UniverseResolver:
 
         def _ever_listed() -> set[str]:
             if "ever" not in spans:
-                spans["ever"] = {i.symbol for i in self.feed.universe_span(
-                    TradingDate.from_ymd("19900101"), as_of)}
+                spans["ever"] = {
+                    i.symbol
+                    for i in self.feed.universe_span(TradingDate.from_ymd("19900101"), as_of)
+                }
             return spans["ever"]
 
         def _future_listed() -> set[str]:
             if "future" not in spans:
-                spans["future"] = {i.symbol for i in self.feed.universe_span(
-                    as_of, TradingDate.from_ymd("20991231"))}
+                spans["future"] = {
+                    i.symbol
+                    for i in self.feed.universe_span(as_of, TradingDate.from_ymd("20991231"))
+                }
             return spans["future"]
 
         def _classify(sym: str) -> str:
@@ -114,13 +126,18 @@ class UniverseResolver:
                 logger.info(
                     "%s 不在 stock_basic 宇宙 → ETF 身份推断（子类=%s，"
                     "T+%d；M3 6.3 ETF BoardRule）",
-                    sym, inst.etf_subclass.value, rule_for(inst).t_plus)
+                    sym,
+                    inst.etf_subclass.value,
+                    rule_for(inst).t_plus,
+                )
             else:
                 kind = _classify(sym)
-                note = (f"explicit 宇宙代码 {sym} 不在 stock_basic 在册池"
-                        f"（as_of={as_of.to_ymd()}）：判定 = {kind}——"
-                        f"保留身份推断兜底（**不阻断**；该标的读价将全程"
-                        f"缺席，结论大概率无效；RC-11-A）")
+                note = (
+                    f"explicit 宇宙代码 {sym} 不在 stock_basic 在册池"
+                    f"（as_of={as_of.to_ymd()}）：判定 = {kind}——"
+                    f"保留身份推断兜底（**不阻断**；该标的读价将全程"
+                    f"缺席，结论大概率无效；RC-11-A）"
+                )
                 logger.warning("%s", note)
                 self.notes.append(note)
             out[sym] = inst
@@ -128,7 +145,9 @@ class UniverseResolver:
 
     # ── all（期间并集）──
     def _all(
-        self, start: TradingDate, end: TradingDate | None,
+        self,
+        start: TradingDate,
+        end: TradingDate | None,
     ) -> dict[str, Instrument]:
         """全市场宇宙 = **[start, end] 期间并集**（19 号 §20.3 / P0-NEW-4）。
 
@@ -145,7 +164,7 @@ class UniverseResolver:
         fallback_note = ""
         if callable(span) and end is not None:
             pool = {i.symbol: i for i in span(start, end)}
-        else:                                   # 回退：起止两快照并集
+        else:  # 回退：起止两快照并集
             pool = {i.symbol: i for i in self.feed.universe(end or start)}
             if end is not None:
                 for inst in self.feed.universe(start):
@@ -155,14 +174,17 @@ class UniverseResolver:
                 # 并集会漏"期间上市且期间退市"的标的（十年口径实测 13 只，0.23%）
                 fallback_note = (
                     "（回退口径：该 Feed 未实现 universe_span，取起止快照并集"
-                    "——可能遗漏期间内上市且退市的标的，量级约 0.2%）")
+                    "——可能遗漏期间内上市且退市的标的，量级约 0.2%）"
+                )
         base = {i.symbol for i in self.feed.universe(start)}
         added = len(pool) - len(base)
-        note = (f"source=all 宇宙 = {start.to_ymd()}.."
-                f"{(end or start).to_ymd()} 期间并集：{len(pool)} 标的"
-                f"（起点快照 {len(base)} → 跨期新增 {added} 只）"
-                if added else
-                f"source=all 宇宙：{len(pool)} 标的（期间无新增）")
+        note = (
+            f"source=all 宇宙 = {start.to_ymd()}.."
+            f"{(end or start).to_ymd()} 期间并集：{len(pool)} 标的"
+            f"（起点快照 {len(base)} → 跨期新增 {added} 只）"
+            if added
+            else f"source=all 宇宙：{len(pool)} 标的（期间无新增）"
+        )
         note += fallback_note
         self.notes.append(note)
         logger.info("全市场宇宙（期间并集，P0-NEW-4）：%s", note)
@@ -170,7 +192,9 @@ class UniverseResolver:
 
     # ── index（月末快照 PIT）──
     def _index(
-        self, universe_cfg: Mapping[str, Any], start: TradingDate,
+        self,
+        universe_cfg: Mapping[str, Any],
+        start: TradingDate,
         end: TradingDate | None,
     ) -> tuple[dict[str, Instrument], dict[str, list[str]]]:
         """指数成分宇宙（v0.5 V5-4）：月度 PIT 映射 + 期间并集静态超集。
@@ -185,16 +209,23 @@ class UniverseResolver:
 
         name = universe_cfg.get("index")
         if not name:
-            raise ConfigError(["run.universe.index 必填（source=index）："
-                               "别名（hs300/zz500/sz50/…）或 index_code（000300.SH）"])
+            raise ConfigError(
+                [
+                    "run.universe.index 必填（source=index）："
+                    "别名（hs300/zz500/sz50/…）或 index_code（000300.SH）"
+                ]
+            )
         index_code = resolve_index(name)
         provider = IndexUniverseProvider(getattr(self.feed, "root", None))
         end_ymd = (end or start).to_ymd()
         monthly = provider.monthly_codes(index_code, start.to_ymd(), end_ymd)
         if not any(monthly.values()):
-            raise ConfigError([
-                f"run.universe.index: {name!r}（{index_code}）在 "
-                f"{start.to_ymd()}~{end_ymd} 无可用成分快照（index_weight）"])
+            raise ConfigError(
+                [
+                    f"run.universe.index: {name!r}（{index_code}）在 "
+                    f"{start.to_ymd()}~{end_ymd} 无可用成分快照（index_weight）"
+                ]
+            )
         codes = provider.union_codes(index_code, start.to_ymd(), end_ymd)
         as_of = parse_trading_date(universe_cfg.get("as_of") or end_ymd)
         pool = {i.symbol: i for i in self.feed.universe(as_of)}
@@ -205,5 +236,9 @@ class UniverseResolver:
         logger.info(
             "指数成分宇宙 %s（%s）：%d 个月度快照 → 并集 %d 标的（静态超集；"
             "逐月切换经 index_universe 注入策略）",
-            name, index_code, len(monthly), len(out))
+            name,
+            index_code,
+            len(monthly),
+            len(out),
+        )
         return out, monthly

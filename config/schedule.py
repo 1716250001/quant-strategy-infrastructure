@@ -52,12 +52,12 @@ FREQ_DAYS = {"D": 1, "W": 7, "M": 30, "Q": 90}
 #   裁定 A/B 补拉后即用，**不得据此把它移回 SCHEDULE**，也不得为其发起拉取。
 # ⚠ 未列入本表的 27 张表原样沿用 `FREQ_DAYS` 等间隔（零行为变化）。
 RELEASE_DAY = {
-    "cn_cpi":     (9,  None),            # 统计局 CPI 每月 9 日
-    "cn_ppi":     (10, None),            # 每月 10 日盘后（9 日发布）
-    "cn_m":       (12, None),            # 央行每月 12 日
-    "cn_pmi":     (1,  None),            # 月末次日发布（⛔ 已在 EXCLUDED）
-    "sf_month":   (12, None),            # 央行每月 12 日
-    "cn_gdp":     (20, [1, 4, 7, 10]),   # 季后 20 日后
+    "cn_cpi": (9, None),  # 统计局 CPI 每月 9 日
+    "cn_ppi": (10, None),  # 每月 10 日盘后（9 日发布）
+    "cn_m": (12, None),  # 央行每月 12 日
+    "cn_pmi": (1, None),  # 月末次日发布（⛔ 已在 EXCLUDED）
+    "sf_month": (12, None),  # 央行每月 12 日
+    "cn_gdp": (20, [1, 4, 7, 10]),  # 季后 20 日后
 }
 
 # ============================================================
@@ -65,86 +65,82 @@ RELEASE_DAY = {
 # ============================================================
 SCHEDULE = {
     # ── D：日频源端且无专用日更通道 ──
-    "wz_index":            "D",
-
+    "wz_index": "D",
     # ── M：月频发布 ──
-    "cn_cpi":              "M",   # 统计局次月 9-10 日
-    "cn_ppi":              "M",   # 统计局次月 9 日（CC-FIX-12 §九）
-    "cn_m":                "M",   # 央行次月 10-12 日
-    "sf_month":            "M",   # 央行次月 10-12 日
-    "shibor_lpr":          "M",   # 每月 20 日（限频 1 次/小时，月度足够）
-    "index_weight":        "M",   # 指数权重月度/定期调整
-    "index_monthly":       "M",   # 指数月线，源端月度更新
-
+    "cn_cpi": "M",  # 统计局次月 9-10 日
+    "cn_ppi": "M",  # 统计局次月 9 日（CC-FIX-12 §九）
+    "cn_m": "M",  # 央行次月 10-12 日
+    "sf_month": "M",  # 央行次月 10-12 日
+    "shibor_lpr": "M",  # 每月 20 日（限频 1 次/小时，月度足够）
+    "index_weight": "M",  # 指数权重月度/定期调整
+    "index_monthly": "M",  # 指数月线，源端月度更新
     # ── Q：财报期 / 年度定期 ──
-    "cn_gdp":              "Q",   # 1/4/7/10 月 20 日后（CC-FIX-12 §九）
-    "fina_audit":          "Q",   # 审计意见，随年报
-    "fina_mainbz":         "Q",   # 主营构成，随财报
-    "top10_holders":       "Q",   # 十大股东，季报
-    "top10_floatholders":  "Q",   # 十大流通股东，季报
-    "stk_holdernumber":    "Q",   # 股东户数，季报
-    "stk_rewards":         "Q",   # 股权激励，随公告/季报
-    "pledge_stat":         "Q",   # 质押统计，周/季
-    "stock_company":       "Q",   # 公司概况，变更极少
-    "fut_trade_cal":       "Q",   # 期货交易日历，年度发布
-    "hk_tradecal":         "Q",   # 港股交易日历，年度发布
-    "us_tradecal":         "Q",   # 美股交易日历，年度发布
-
+    "cn_gdp": "Q",  # 1/4/7/10 月 20 日后（CC-FIX-12 §九）
+    "fina_audit": "Q",  # 审计意见，随年报
+    "fina_mainbz": "Q",  # 主营构成，随财报
+    "top10_holders": "Q",  # 十大股东，季报
+    "top10_floatholders": "Q",  # 十大流通股东，季报
+    "stk_holdernumber": "Q",  # 股东户数，季报
+    "stk_rewards": "Q",  # 股权激励，随公告/季报
+    "pledge_stat": "Q",  # 质押统计，周/季
+    "stock_company": "Q",  # 公司概况，变更极少
+    "fut_trade_cal": "Q",  # 期货交易日历，年度发布
+    "hk_tradecal": "Q",  # 港股交易日历，年度发布
+    "us_tradecal": "Q",  # 美股交易日历，年度发布
     # ── W：事件驱动 / 周度节奏 ──
-    "broker_recommend":    "W",   # 券商月度金股，月中陆续发布
-    "cb_issue":            "W",   # 转债发行公告，事件驱动
-    "cb_rating":           "W",   # 转债评级，不定期
-    "cb_share":            "W",   # 转债股本，随转股变动
-    "disclosure_date":     "W",   # 财报披露日程，每日滚动
-    "express":             "W",   # 业绩快报，季度集中
-    "fund_manager":        "W",   # 基金经理变更
-    "new_share":           "W",   # 新股发行日程
-    "pledge_detail":       "W",   # 质押明细，事件驱动
-    "repurchase":          "W",   # 回购公告，每日披露
-    "stk_holdertrade":     "W",   # 股东增减持，事件驱动
-    "stk_managers":        "W",   # 高管变动
-    "stk_seasoned":        "W",   # 次新股名单
+    "broker_recommend": "W",  # 券商月度金股，月中陆续发布
+    "cb_issue": "W",  # 转债发行公告，事件驱动
+    "cb_rating": "W",  # 转债评级，不定期
+    "cb_share": "W",  # 转债股本，随转股变动
+    "disclosure_date": "W",  # 财报披露日程，每日滚动
+    "express": "W",  # 业绩快报，季度集中
+    "fund_manager": "W",  # 基金经理变更
+    "new_share": "W",  # 新股发行日程
+    "pledge_detail": "W",  # 质押明细，事件驱动
+    "repurchase": "W",  # 回购公告，每日披露
+    "stk_holdertrade": "W",  # 股东增减持，事件驱动
+    "stk_managers": "W",  # 高管变动
+    "stk_seasoned": "W",  # 次新股名单
 }
 
 # 灰度候选（CC-FIX-15 §三.1）；⚠ 本单只定义常量，**不启动灰度**（≥2026-11-16 且须老大明示）
 # 硬约束：5 张全部非 once／非静态／非停更／非 PENDING_REFRESH／当前 due=True；
 # 合计 54 请求/轮（8+11+11+11+13），远低于限频。原候选 `index_classify`／
 # `index_member_all` 已定性为静态名录，`cn_gdp`／`cn_ppi` 是 once 整文件覆盖写，均剔除。
-GRAYSCALE = ("fut_trade_cal", "hk_tradecal", "us_tradecal",
-             "new_share", "index_monthly")
+GRAYSCALE = ("fut_trade_cal", "hk_tradecal", "us_tradecal", "new_share", "index_monthly")
 
 # ============================================================
 # 57 − 33 = 24 张不进排班（逐张给依据；判据 1「零遗漏」靠这张表对账）
 # ============================================================
 EXCLUDED = {
     # ⛔ 启用级阻断（CC-FIX-15 §二）：源端列集少于库内，覆盖写会丢列
-    "cn_pmi":         "源端列集变更（59 vs 65 列，缺 PMI012000），CC-FIX-14 §381 停单；"
-                      "裁定前禁止排班/覆盖写",
+    "cn_pmi": "源端列集变更（59 vs 65 列，缺 PMI012000），CC-FIX-14 §381 停单；"
+    "裁定前禁止排班/覆盖写",
     # 双通道（CC-FIX-15 §三.2）：由专用通道承载，避免同表双写链路冲突
-    "fund_nav":       "由 fund-nav 独立通道承载，避免同表双写链路冲突",
-    "fund_share":     "由 fund-nav 独立通道承载，避免同表双写链路冲突",
+    "fund_nav": "由 fund-nav 独立通道承载，避免同表双写链路冲突",
+    "fund_share": "由 fund-nav 独立通道承载，避免同表双写链路冲突",
     # 已停更（STALE_BY_DESIGN，CC-FIX-6/12 定性）
-    "gz_index":       "已停更（源端 2019-03-04 冻结，shibor 已覆盖）",
-    "shibor_quote":   "已停更（SHELVED，维持 2016 现状）",
-    "slb_len_mm":     "已停更（源端 2025-07-25 止）",
-    "stk_account":    "已停更（源端 2019-02-22 止）",
-    "hs_const":       "已停更（源端冻结 2019-12-27，tier C 无消费方）",
+    "gz_index": "已停更（源端 2019-03-04 冻结，shibor 已覆盖）",
+    "shibor_quote": "已停更（SHELVED，维持 2016 现状）",
+    "slb_len_mm": "已停更（源端 2025-07-25 止）",
+    "stk_account": "已停更（源端 2019-02-22 止）",
+    "hs_const": "已停更（源端冻结 2019-12-27，tier C 无消费方）",
     "fut_weekly_detail": "已停更（API 实证两所 2020-04-24 止）",
     # 配置侧显式关闭（enabled=False / tier X）
-    "hibor":          "未启用（market 侧不补，改引用 alt.hibor）",
-    "hk_daily":       "未启用（market 侧不建，改引用 alt.hk_daily）",
-    "bc_bestotcqt":   "未启用（enabled=False，tier X）",
-    "stk_mins":       "未启用（enabled=False，tier X）",
-    "report_rc":      "未启用（enabled=False，tier X）",
+    "hibor": "未启用（market 侧不补，改引用 alt.hibor）",
+    "hk_daily": "未启用（market 侧不建，改引用 alt.hk_daily）",
+    "bc_bestotcqt": "未启用（enabled=False，tier X）",
+    "stk_mins": "未启用（enabled=False，tier X）",
+    "report_rc": "未启用（enabled=False，tier X）",
     # 静态名录（STATIC_TABLES，CC-FIX-12 定性）
-    "bse_mapping":    "静态名录（旧码→新码映射）",
-    "fut_basic":      "静态名录（合约名录）",
-    "hk_basic":       "静态名录（港股标的名录）",
-    "opt_basic":      "静态名录（期权合约名录）",
-    "us_basic":       "静态名录（美股标的名录）",
+    "bse_mapping": "静态名录（旧码→新码映射）",
+    "fut_basic": "静态名录（合约名录）",
+    "hk_basic": "静态名录（港股标的名录）",
+    "opt_basic": "静态名录（期权合约名录）",
+    "us_basic": "静态名录（美股标的名录）",
     "index_classify": "静态名录（申万行业分类）",
-    "index_member_all":  "静态名录（指数成分关系）",
+    "index_member_all": "静态名录（指数成分关系）",
     "index_member_hist": "静态名录（指数历史成分）",
-    "cn_schedule":    "静态名录（财报披露日程快照）",
-    "fund_company":   "静态名录（基金公司名录）",
+    "cn_schedule": "静态名录（财报披露日程快照）",
+    "fund_company": "静态名录（基金公司名录）",
 }

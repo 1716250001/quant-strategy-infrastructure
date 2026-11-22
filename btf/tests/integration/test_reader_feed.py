@@ -5,6 +5,7 @@
 验收锚点（18 号计划 1.2/1.4/1.5）：双布局读取、谓词下推、量纲合理性、
 glob 陷阱防护、截面迭代升序。
 """
+
 from __future__ import annotations
 
 import math
@@ -42,10 +43,25 @@ class TestTablesMeta:
         # **D-1（19 号 §255）**：21（+`fund_basic`，CC-2 基金档位判定）
         assert len(TABLES) == 21
         for required in (
-            "daily", "adj_factor", "stk_limit", "suspend_d", "namechange",
-            "dividend", "stock_basic", "trade_cal", "index_daily", "daily_basic",
-            "index_weight", "index_dailybasic", "new_share", "moneyflow",
-            "fina_indicator", "fx_daily", "fund_daily", "etf_limit", "fund_adj",
+            "daily",
+            "adj_factor",
+            "stk_limit",
+            "suspend_d",
+            "namechange",
+            "dividend",
+            "stock_basic",
+            "trade_cal",
+            "index_daily",
+            "daily_basic",
+            "index_weight",
+            "index_dailybasic",
+            "new_share",
+            "moneyflow",
+            "fina_indicator",
+            "fx_daily",
+            "fund_daily",
+            "etf_limit",
+            "fund_adj",
             "fund_basic",
         ):
             assert required in TABLES, f"核心表缺失: {required}"
@@ -59,7 +75,7 @@ class TestTablesMeta:
 
     def test_daily_unit_conversions_declared(self):
         convs = {c.field: c for c in TABLES["daily"].conversions}
-        assert convs["vol"].factor == 100.0      # 手 → 股
+        assert convs["vol"].factor == 100.0  # 手 → 股
         assert convs["amount"].factor == 1000.0  # 千元 → 元
 
 
@@ -78,8 +94,7 @@ class TestReader:
     def test_range_filter_boundary(self):
         """区间边界含端点。"""
         _skip_if_no_data()
-        t = read_range("daily", ROOT, "20150105", "20150109",
-                       columns=["ts_code", "trade_date"])
+        t = read_range("daily", ROOT, "20150105", "20150109", columns=["ts_code", "trade_date"])
         dates = set(t.column("trade_date").to_pylist())
         assert dates == {"20150105", "20150106", "20150107", "20150108", "20150109"}
 
@@ -107,8 +122,9 @@ class TestFeedUnits:
     def test_bar_units_stock(self):
         _skip_if_no_data()
         feed = TushareParquetFeed(ROOT)
-        bars = feed.bars_of("000001.SZ",
-                            TradingDate(date(2015, 1, 5)), TradingDate(date(2015, 1, 9)))
+        bars = feed.bars_of(
+            "000001.SZ", TradingDate(date(2015, 1, 5)), TradingDate(date(2015, 1, 9))
+        )
         assert len(bars) == 5
         b = bars[0]
         # 实测原始：vol=2,860,436.43 手 → 股；amount=4,565,387.8464 千元 → 元
@@ -127,7 +143,7 @@ class TestFeedUnits:
             dates.append(td.to_ymd())
             assert all(r.symbol in m for r in m.values())  # map 键一致性
         assert dates == sorted(dates)  # 升序
-        assert len(dates) == 6          # 2015-01-05..12 共 6 个交易日
+        assert len(dates) == 6  # 2015-01-05..12 共 6 个交易日
 
     def test_symbol_filter(self):
         _skip_if_no_data()
@@ -142,9 +158,12 @@ class TestFeedUnits:
         if not (ROOT / "fund_daily").is_dir():
             pytest.skip("fund_daily 不可用")
         feed = TushareParquetFeed(ROOT)
-        bars = feed.bars_of("510300.SH",
-                            TradingDate(date(2023, 6, 1)), TradingDate(date(2023, 6, 30)),
-                            daily_table="fund_daily")
+        bars = feed.bars_of(
+            "510300.SH",
+            TradingDate(date(2023, 6, 1)),
+            TradingDate(date(2023, 6, 30)),
+            daily_table="fund_daily",
+        )
         assert 15 <= len(bars) <= 25
         for b in bars:
             avg_px = b.amount / b.volume if b.volume else 0

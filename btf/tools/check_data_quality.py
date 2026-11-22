@@ -13,6 +13,7 @@
 退出码：0 = 全绿；1 = 正样本失败或任一注入缺陷漏检。
 用法：python tools/check_data_quality.py [--full]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,10 +31,28 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 from btf.config.paths import MARKET_DATA_DIR
 from btf.data.quality import run_checks
 
-SYMS = ["000001.SZ", "000002.SZ", "000063.SZ", "000333.SZ", "000651.SZ",
-        "000858.SZ", "002415.SZ", "600009.SH", "600028.SH", "600030.SH",
-        "600036.SH", "600276.SH", "600519.SH", "600887.SH", "600900.SH",
-        "601166.SH", "601288.SH", "601318.SH", "601398.SH", "601988.SH"]
+SYMS = [
+    "000001.SZ",
+    "000002.SZ",
+    "000063.SZ",
+    "000333.SZ",
+    "000651.SZ",
+    "000858.SZ",
+    "002415.SZ",
+    "600009.SH",
+    "600028.SH",
+    "600030.SH",
+    "600036.SH",
+    "600276.SH",
+    "600519.SH",
+    "600887.SH",
+    "600900.SH",
+    "601166.SH",
+    "601288.SH",
+    "601318.SH",
+    "601398.SH",
+    "601988.SH",
+]
 START, END = "20240101", "20241231"
 
 
@@ -85,24 +104,27 @@ def _st_control() -> list[str]:
         own = [d for c, d in zip(codes, dates, strict=True) if c == sym]
         if len(own) < 40:
             return ["CC-2 ST 对照注入失败（切片行数不足）"]
-        day = own[len(own) // 2]                 # 中段常态日（远离上市/复牌豁免）
-        idx = next(i for i, (c, d) in enumerate(zip(codes, dates, strict=True))
-                   if c == sym and d == day)
+        day = own[len(own) // 2]  # 中段常态日（远离上市/复牌豁免）
+        idx = next(
+            i for i, (c, d) in enumerate(zip(codes, dates, strict=True)) if c == sym and d == day
+        )
         pre = t.column("pre_close").to_pylist()
         closes = t.column("close").to_pylist()
-        pre[idx] = (closes[idx] or 1.0) / 1.08   # +8%
+        pre[idx] = (closes[idx] or 1.0) / 1.08  # +8%
         pq.write_table(
-            t.set_column(t.schema.get_field_index("pre_close"), "pre_close",
-                         pa.array(pre, type=t.schema.field("pre_close").type)),
-            p)
-        with_st = run_checks(tmp, START, END, symbols=set(SYMS),
-                             st_symbols={(sym, day)})
-        if with_st.rules[1].ok:                  # CC-2
+            t.set_column(
+                t.schema.get_field_index("pre_close"),
+                "pre_close",
+                pa.array(pre, type=t.schema.field("pre_close").type),
+            ),
+            p,
+        )
+        with_st = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols={(sym, day)})
+        if with_st.rules[1].ok:  # CC-2
             warnings.append("CC-2 ST 分支未检出（伪防线）")
         bare = run_checks(tmp, START, END, symbols=set(SYMS))
         if not bare.rules[1].ok:
-            warnings.append(
-                "CC-2 ST 对照无区分度（不传 ST 也报 ⇒ 检出并非来自 ST 分支）")
+            warnings.append("CC-2 ST 对照无区分度（不传 ST 也报 ⇒ 检出并非来自 ST 分支）")
     return warnings
 
 
@@ -132,16 +154,25 @@ def _delisting_control() -> list[str]:
         idx = codes.index(sym)
         dd = b.column("delist_date").to_pylist()
         dd[idx] = "20241231"
-        b = b.set_column(b.schema.get_field_index("delist_date"), "delist_date",
-                         pa.array(dd, type=b.schema.field("delist_date").type))
+        b = b.set_column(
+            b.schema.get_field_index("delist_date"),
+            "delist_date",
+            pa.array(dd, type=b.schema.field("delist_date").type),
+        )
         pq.write_table(b, bp)
 
         # ② 窗口交易日（2024 年最后 15 个交易日）→ 取首日 + 中段日
         p = tmp / "daily" / "2024.parquet"
         t = pq.read_table(p)
-        days = sorted({d for c, d in zip(t.column("ts_code").to_pylist(),
-                                         t.column("trade_date").to_pylist(),
-                                         strict=True) if c == sym})
+        days = sorted(
+            {
+                d
+                for c, d in zip(
+                    t.column("ts_code").to_pylist(), t.column("trade_date").to_pylist(), strict=True
+                )
+                if c == sym
+            }
+        )
         if len(days) < 20:
             return [f"整理期对照：{sym} 交易日不足（{len(days)}）"]
         # 窗口 = 摘牌日（`days[-1]` = 20241231，不入窗口）**之前** 15 个交易日
@@ -155,22 +186,27 @@ def _delisting_control() -> list[str]:
         dates2 = base.column("trade_date").to_pylist()
 
         def inject(day: str, factor: float) -> None:
-            i = next(k for k, (c, d) in enumerate(zip(codes2, dates2,
-                                                      strict=True))
-                     if c == sym and d == day)
-            pre[i] = (closes[i] or 1.0) * factor      # −80% / −60% 尖刺
+            i = next(
+                k
+                for k, (c, d) in enumerate(zip(codes2, dates2, strict=True))
+                if c == sym and d == day
+            )
+            pre[i] = (closes[i] or 1.0) * factor  # −80% / −60% 尖刺
             pq.write_table(
-                base.set_column(base.schema.get_field_index("pre_close"),
-                                "pre_close",
-                                pa.array(pre, type=base.schema.field(
-                                    "pre_close").type)), p)
+                base.set_column(
+                    base.schema.get_field_index("pre_close"),
+                    "pre_close",
+                    pa.array(pre, type=base.schema.field("pre_close").type),
+                ),
+                p,
+            )
 
         inject(first_day, 5.0)
         rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
         if not rep.rules[1].ok:
             warnings.append("整理期**首日**豁免失效（首日不设涨跌幅却被检出）")
 
-        inject(first_day, 1.0)                        # 还原首日
+        inject(first_day, 1.0)  # 还原首日
         inject(mid_day, 2.5)
         rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
         if rep.rules[1].ok:
@@ -195,12 +231,13 @@ def _inject_and_detect(tmp: Path) -> list[str]:
     def bad_ohlc(t):
         hi = t.column("high").to_pylist()
         hi[0] = 0.0
-        return t.set_column(t.schema.get_field_index("high"), "high",
-                            pa.array(hi, type=t.schema.field("high").type))
+        return t.set_column(
+            t.schema.get_field_index("high"), "high", pa.array(hi, type=t.schema.field("high").type)
+        )
 
     mutate("daily", bad_ohlc)
     rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
-    if rep.rules[0].ok:                       # CC-1
+    if rep.rules[0].ok:  # CC-1
         warnings.append("CC-1 注入缺陷未检出（伪防线）")
 
     # ② CC-2：选中段常态日（20240603，远离上市/复牌豁免窗）把 pre_close
@@ -215,78 +252,94 @@ def _inject_and_detect(tmp: Path) -> list[str]:
             return t
         i = hit[0]
         pre[i] = (closes[i] or 1.0) / 5.0
-        return t.set_column(t.schema.get_field_index("pre_close"), "pre_close",
-                            pa.array(pre, type=t.schema.field("pre_close").type))
+        return t.set_column(
+            t.schema.get_field_index("pre_close"),
+            "pre_close",
+            pa.array(pre, type=t.schema.field("pre_close").type),
+        )
 
     mutate("daily", bad_pct)
     rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
-    if rep.rules[1].ok:                       # CC-2
+    if rep.rules[1].ok:  # CC-2
         warnings.append("CC-2 注入缺陷未检出（伪防线）")
 
     # ③ CC-3：把某个全日停牌日**加回**一行行情（状态与行情错配）
-    susp = pq.read_table(tmp / "suspend_d" / "2024.parquet",
-                         columns=["ts_code", "trade_date", "suspend_type",
-                                  "suspend_timing"])
+    susp = pq.read_table(
+        tmp / "suspend_d" / "2024.parquet",
+        columns=["ts_code", "trade_date", "suspend_type", "suspend_timing"],
+    )
     pair = None
     for code, day, typ, timing in zip(
-            susp.column("ts_code").to_pylist(),
-            susp.column("trade_date").to_pylist(),
-            susp.column("suspend_type").to_pylist(),
-            susp.column("suspend_timing").to_pylist(), strict=True):
+        susp.column("ts_code").to_pylist(),
+        susp.column("trade_date").to_pylist(),
+        susp.column("suspend_type").to_pylist(),
+        susp.column("suspend_timing").to_pylist(),
+        strict=True,
+    ):
         if typ == "S" and not timing:
             pair = (code, day)
             break
     if pair is not None:
+
         def add_suspended_row(t):
             row = {name: t.column(name)[0].as_py() for name in t.column_names}
             row["ts_code"], row["trade_date"] = pair
-            return pa.concat_tables([t, pa.table(
-                {k: [v] for k, v in row.items()},
-                schema=t.schema)])
+            return pa.concat_tables(
+                [t, pa.table({k: [v] for k, v in row.items()}, schema=t.schema)]
+            )
 
         mutate("daily", add_suspended_row)
         rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
-        if rep.rules[2].ok:                   # CC-3
+        if rep.rules[2].ok:  # CC-3
             warnings.append("CC-3 注入缺陷未检出（伪防线）")
 
     # ④ CC-4：把某行 adj_factor 改成 0（非正）
     def bad_factor(t):
         vals = t.column("adj_factor").to_pylist()
         vals[0] = 0.0
-        return t.set_column(t.schema.get_field_index("adj_factor"),
-                            "adj_factor",
-                            pa.array(vals,
-                                     type=t.schema.field("adj_factor").type))
+        return t.set_column(
+            t.schema.get_field_index("adj_factor"),
+            "adj_factor",
+            pa.array(vals, type=t.schema.field("adj_factor").type),
+        )
 
     mutate("adj_factor", bad_factor)
     rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
-    if rep.rules[3].ok:                       # CC-4
+    if rep.rules[3].ok:  # CC-4
         warnings.append("CC-4 注入缺陷未检出（伪防线）")
 
     # ⑤ CC-5：把某行 vol 清零（有价无量）
     def zero_vol(t):
         vals = t.column("vol").to_pylist()
         vals[1] = 0.0
-        return t.set_column(t.schema.get_field_index("vol"), "vol",
-                            pa.array(vals, type=t.schema.field("vol").type))
+        return t.set_column(
+            t.schema.get_field_index("vol"), "vol", pa.array(vals, type=t.schema.field("vol").type)
+        )
 
     mutate("daily", zero_vol)
     rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
-    if rep.rules[4].ok:                       # CC-5
+    if rep.rules[4].ok:  # CC-5
         warnings.append("CC-5 注入缺陷未检出（伪防线）")
 
     # ⑥ CC-7（P14；19 号 §172 C）：注入一条「10 送 10」但 `adj_factor` 不跳 ⇒
     #    必须被 `phantom_shares` 捕获（因子恒定窗口取自真实切片，确定性）
-    adjt = pq.read_table(tmp / "adj_factor" / "2024.parquet",
-                         columns=["ts_code", "trade_date", "adj_factor"])
+    adjt = pq.read_table(
+        tmp / "adj_factor" / "2024.parquet", columns=["ts_code", "trade_date", "adj_factor"]
+    )
     pick = None
     for sym in SYMS:
-        rows = sorted((d, v) for c, d, v in zip(
-            adjt.column("ts_code").to_pylist(),
-            adjt.column("trade_date").to_pylist(),
-            adjt.column("adj_factor").to_pylist(), strict=True) if c == sym)
+        rows = sorted(
+            (d, v)
+            for c, d, v in zip(
+                adjt.column("ts_code").to_pylist(),
+                adjt.column("trade_date").to_pylist(),
+                adjt.column("adj_factor").to_pylist(),
+                strict=True,
+            )
+            if c == sym
+        )
         for i in range(25, len(rows) - 25):
-            if len({v for _, v in rows[i - 1:i + 21]}) == 1:
+            if len({v for _, v in rows[i - 1 : i + 21]}) == 1:
                 pick = (sym, rows[i][0])
                 break
         if pick:
@@ -296,16 +349,28 @@ def _inject_and_detect(tmp: Path) -> list[str]:
     else:
         dp = tmp / "dividend" / "2024.parquet"
         dv = pq.read_table(dp)
-        vals = {"ts_code": pick[0], "end_date": pick[1], "ann_date": pick[1],
-                "div_proc": "实施", "stk_div": 10.0, "stk_bo_rate": 10.0,
-                "stk_co_rate": 0.0, "cash_div": 0.0, "cash_div_tax": 0.0,
-                "record_date": pick[1], "ex_date": pick[1], "pay_date": pick[1],
-                "div_listdate": pick[1], "imp_ann_date": pick[1]}
-        cols = {name: pa.array([vals[name]],
-                               type=dv.schema.field(name).type)
-                for name in dv.column_names if name in vals}
-        pq.write_table(pa.concat_tables([dv, pa.table(cols, schema=dv.schema)]),
-                       dp)
+        vals = {
+            "ts_code": pick[0],
+            "end_date": pick[1],
+            "ann_date": pick[1],
+            "div_proc": "实施",
+            "stk_div": 10.0,
+            "stk_bo_rate": 10.0,
+            "stk_co_rate": 0.0,
+            "cash_div": 0.0,
+            "cash_div_tax": 0.0,
+            "record_date": pick[1],
+            "ex_date": pick[1],
+            "pay_date": pick[1],
+            "div_listdate": pick[1],
+            "imp_ann_date": pick[1],
+        }
+        cols = {
+            name: pa.array([vals[name]], type=dv.schema.field(name).type)
+            for name in dv.column_names
+            if name in vals
+        }
+        pq.write_table(pa.concat_tables([dv, pa.table(cols, schema=dv.schema)]), dp)
         rep = run_checks(tmp, START, END, symbols=set(SYMS), st_symbols=set())
         cc7 = next(r for r in rep.rules if r.rule == "CC-7")
         hit = f"{pick[0]}@{pick[1]}"
@@ -314,10 +379,9 @@ def _inject_and_detect(tmp: Path) -> list[str]:
         else:
             samples = [s for f in cc7.findings for s in f.samples]
             if hit not in samples:
-                warnings.append(
-                    f"CC-7 检出但样例不含注入点 {hit}（口径可疑）")
+                warnings.append(f"CC-7 检出但样例不含注入点 {hit}（口径可疑）")
 
-    for r in rep.rules:                       # ③ 不得恒空
+    for r in rep.rules:  # ③ 不得恒空
         if r.checked_rows == 0:
             warnings.append(f"{r.rule} checked_rows=0（空洞披露，铁律新 16）")
     return warnings
@@ -325,20 +389,19 @@ def _inject_and_detect(tmp: Path) -> list[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--full", action="store_true",
-                    help="另跑全市场一年（只报不进退出码；含退市整理期残余）")
+    ap.add_argument(
+        "--full", action="store_true", help="另跑全市场一年（只报不进退出码；含退市整理期残余）"
+    )
     args = ap.parse_args()
 
     print("=== 正样本：主库 20 标的 × 1 年 ===")
-    rep = run_checks(MARKET_DATA_DIR, START, END, symbols=set(SYMS),
-                     st_symbols=set())
+    rep = run_checks(MARKET_DATA_DIR, START, END, symbols=set(SYMS), st_symbols=set())
     print(rep.summary_line())
     ok = rep.ok
     for r in rep.rules:
         if not r.ok:
             for f in r.findings:
-                print(f"  {r.rule} {f.table}: {f.detail} → {f.n_rows} 行 "
-                      f"样例 {f.samples[:2]}")
+                print(f"  {r.rule} {f.table}: {f.detail} → {f.n_rows} 行 样例 {f.samples[:2]}")
     if any(r.checked_rows == 0 for r in rep.rules):
         print("  [FAIL] checked_rows 为 0（空洞披露）")
         ok = False
@@ -378,8 +441,7 @@ def main() -> int:
         for r in full.rules:
             if not r.ok:
                 for f in r.findings:
-                    print(f"  {r.rule} {f.table}: {f.detail} → {f.n_rows} 行 "
-                          f"样例 {f.samples[:2]}")
+                    print(f"  {r.rule} {f.table}: {f.detail} → {f.n_rows} 行 样例 {f.samples[:2]}")
 
     print(f"\n--- 数据不变量校验机检: {'PASS' if ok else 'FAIL'} ---")
     return 0 if ok else 1

@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """config.download — 全量下载配置（Tushare 限频 / 分页 / 并发 / 下载阶段）。"""
+
 from collections import OrderedDict
 
 # ============================================================
 # 7. 全量下载配置 (Tushare频率限制)
 # ============================================================
-TS_RATE_LIMIT_PER_MIN = 200          # 默认限频 (2000积分档 → 200次/分钟)
+TS_RATE_LIMIT_PER_MIN = 200  # 默认限频 (2000积分档 → 200次/分钟)
 # [ARCHIVED 2026-09-25 G1] 死配置：全库 grep（83 文件，含字符串/getattr 形态）+工作区/skills 交叉核实均无引用。原用途：旧限频参数（现行限频走 RATE_MAP）。保留定义保行号稳定，勿新增引用。
 TS_RATE_INTERVAL_SEC = 60.0 / TS_RATE_LIMIT_PER_MIN
-TS_DAILY_LIMIT = 90000               # 每日总量上限 (留10%安全余量)
+TS_DAILY_LIMIT = 90000  # 每日总量上限 (留10%安全余量)
 TS_MAX_RETRIES = 5
 TS_RETRY_DELAYS = [1, 2, 5, 10, 20]  # 普通错误退避(秒) — 2026-09-15 由[30,60,120,300,600]改短
 
@@ -32,21 +33,21 @@ TS_RETRY_DELAYS = [1, 2, 5, 10, 20]  # 普通错误退避(秒) — 2026-09-15 �
 #    第 1 条之后每一条调用必被服务端拒绝，且 verbose=False 时**静默无日志**。
 #    实证 shibor_quote 按年切 11 个请求只成 1 个（2016），曾被误判为权限边界。
 # ✅ 60/3660 → 间隔 3660 秒（61 分钟），留 60 秒余量防边界抖动。
-RATE_1_PER_HOUR = 60 / 3660          # ≈0.016393 次/分
+RATE_1_PER_HOUR = 60 / 3660  # ≈0.016393 次/分
 
 API_RATE_LIMIT = {
-    "daily":         250,   # 实测服务端 300 —— 唯一确认高于200的常用接口, 提速点
-    "daily_basic":   170,
-    "fund_daily":    170,
-    "fund_nav":      170,
-    "index_daily":   170,
-    "cb_daily":      170,
-    "margin":        170,
+    "daily": 250,  # 实测服务端 300 —— 唯一确认高于200的常用接口, 提速点
+    "daily_basic": 170,
+    "fund_daily": 170,
+    "fund_nav": 170,
+    "index_daily": 170,
+    "cb_daily": 170,
+    "margin": 170,
     "margin_detail": 170,
-    "moneyflow":     170,
-    "dividend":      170,
-    "stk_limit":     170,
-    "adj_factor":    170,
+    "moneyflow": 170,
+    "dividend": 170,
+    "stk_limit": 170,
+    "adj_factor": 170,
     # ⛔ 极低限频接口（2026-09-19 实测）—— 不要"优化"成 170：会触发限频重试
     #    反而更慢（实测连续12次退避全部失败）
     #
@@ -60,22 +61,22 @@ API_RATE_LIMIT = {
     #      （错误地被误判为"权限只能取到 2016 年"，实为本取值缺陷）。
     #   ✅ 修正为 60/3660 → 间隔 3660 秒（61 分钟），留 60 秒余量防边界抖动。
     #   ⚠ 凡"1次/小时"接口一律用 RATE_1_PER_HOUR 常量，勿再手写 0.02。
-    "shibor_quote":    RATE_1_PER_HOUR,
-    "hibor":           RATE_1_PER_HOUR,
+    "shibor_quote": RATE_1_PER_HOUR,
+    "hibor": RATE_1_PER_HOUR,
     # 2026-09-20 实测复核：与 shibor_quote 同族，真实限频 **1次/小时**
     # （原 config 注明"1次/分钟"有误；实证按年切分 11 个请求只成 1 个
     #   —— 根因同 shibor_quote：原 0.02→3000s 不足 3600s，已一并修正）
-    "shibor_lpr":      RATE_1_PER_HOUR,
+    "shibor_lpr": RATE_1_PER_HOUR,
     # 实测 1次/小时（第 1 次调用报“1次/分钟”，65 秒后才是真值，差 60 倍）。
     # 含义：历史回补不可行（9041 交易日≈377天），但日更可行（每天 1~2 次）。
     # ⚠ 同上修正 0.02→RATE_1_PER_HOUR；原值导致 us_daily 的**连续日回补必然失败**
     #   （只有第 1 天能成，这也是它长期 0 文件的直接原因之一）。
-    "us_daily":        RATE_1_PER_HOUR,
+    "us_daily": RATE_1_PER_HOUR,
     # index_global 实测 10次/分钟（远低于默认170）。
     # ⚠ 另有 **100次/天** 日限 —— 这是比分钟限频更紧的约束，极易被忽略。
-    "index_global":      8,      # 10 × 0.8 安全系数
+    "index_global": 8,  # 10 × 0.8 安全系数
 }
-API_RATE_LIMIT_DEFAULT = 170         # 兜底: 200 × 0.85
+API_RATE_LIMIT_DEFAULT = 170  # 兜底: 200 × 0.85
 
 # ------------------------------------------------------------
 # 「接受截断」的接口清单 — 2026-09-22 新增
@@ -99,7 +100,7 @@ API_RATE_LIMIT_DEFAULT = 170         # 兜底: 200 × 0.85
 # 判据: 只要该表"日更只需最新数据、更早历史对下游无价值"，就应登记在此。
 ACCEPT_TRUNCATED_APIS = {
     "index_global": "单次硬顶 4000 行 = 最新 4000 行(实测约 16 年)，"
-                    "对「国际指数行情」用途足够；续拉更早历史无价值且会撞 100次/天 配额",
+    "对「国际指数行情」用途足够；续拉更早历史无价值且会撞 100次/天 配额",
 }
 
 
@@ -112,7 +113,7 @@ ACCEPT_TRUNCATED_APIS = {
 # 限频(429)专用短退避(秒): 限频是"分钟窗口"，等 1~3 秒即可重试，
 # 不需要走 TS_RETRY_DELAYS 的分钟级等待。
 TS_RATE_BACKOFF = [1.0, 1.5, 2.0, 3.0, 5.0]
-TS_RATE_MAX_RETRIES = 12             # 限频场景允许的重试次数(远高于普通错误)
+TS_RATE_MAX_RETRIES = 12  # 限频场景允许的重试次数(远高于普通错误)
 
 # 并发拉取: 每接口线程数 (实测 4 线程打满、8 线程崩)
 FETCH_MAX_WORKERS = 4
@@ -122,30 +123,40 @@ FETCH_MAX_WORKERS = 4
 BACKFILL_PARALLEL_TARGETS = 4
 
 # 全量下载阶段定义
-DOWNLOAD_PHASES = OrderedDict([
-    ("meta", {
-        "desc": "元数据",
-        "apis": [],
-    }),
-    ("daily", {
-        "desc": "日线行情 + 每日指标",
-        "apis": [
-            {"api": "daily",           "desc": "个股日线",   "max_rows": 5000},
-            {"api": "daily_basic",     "desc": "每日指标",   "max_rows": 6000},
-            {"api": "fund_daily",      "desc": "基金日线",   "max_rows": 5000},
-        ],
-    }),
-    ("fina", {
-        "desc": "财务数据",
-        "apis": [
-            {"api": "income",          "desc": "利润表",     "max_rows": 500},
-            {"api": "balancesheet",    "desc": "资产负债表", "max_rows": 500},
-            {"api": "cashflow",        "desc": "现金流量表", "max_rows": 500},
-            {"api": "fina_indicator",  "desc": "财务指标",   "max_rows": 500},
-        ],
-    }),
-])
+DOWNLOAD_PHASES = OrderedDict(
+    [
+        (
+            "meta",
+            {
+                "desc": "元数据",
+                "apis": [],
+            },
+        ),
+        (
+            "daily",
+            {
+                "desc": "日线行情 + 每日指标",
+                "apis": [
+                    {"api": "daily", "desc": "个股日线", "max_rows": 5000},
+                    {"api": "daily_basic", "desc": "每日指标", "max_rows": 6000},
+                    {"api": "fund_daily", "desc": "基金日线", "max_rows": 5000},
+                ],
+            },
+        ),
+        (
+            "fina",
+            {
+                "desc": "财务数据",
+                "apis": [
+                    {"api": "income", "desc": "利润表", "max_rows": 500},
+                    {"api": "balancesheet", "desc": "资产负债表", "max_rows": 500},
+                    {"api": "cashflow", "desc": "现金流量表", "max_rows": 500},
+                    {"api": "fina_indicator", "desc": "财务指标", "max_rows": 500},
+                ],
+            },
+        ),
+    ]
+)
 
 # 可转债下载配置
 CB_DAILY_MAX_ROWS = 2000
-

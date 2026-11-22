@@ -6,6 +6,7 @@
     2. 多表截面合并视图（跨表命中 / 缺席 / keys 并集 / 先命中者胜）；
     3. 混合表使用纪律：拒绝全市场截面、拒绝表覆盖、`requires_explicit_symbols`。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -19,24 +20,55 @@ pytestmark = [pytest.mark.l1]
 
 def _bar(symbol: str, ymd: str, close: float) -> Bar:
     day = TradingDate.from_ymd(ymd)
-    return Bar(symbol=symbol, date=day, open=close, high=close, low=close,
-               close=close, volume=1.0, amount=1.0, pre_close=close)
+    return Bar(
+        symbol=symbol,
+        date=day,
+        open=close,
+        high=close,
+        low=close,
+        close=close,
+        volume=1.0,
+        amount=1.0,
+        pre_close=close,
+    )
 
 
 class TestRouting:
     def test_stock_routes(self):
-        for symbol in ("000001.SZ", "002415.SZ", "300750.SZ", "600000.SH",
-                       "688981.SH", "830799.BJ", "900901.SH"):
+        for symbol in (
+            "000001.SZ",
+            "002415.SZ",
+            "300750.SZ",
+            "600000.SH",
+            "688981.SH",
+            "830799.BJ",
+            "900901.SH",
+        ):
             assert daily_table_of(symbol) == "daily", symbol
 
     def test_etf_and_lof_routes(self):
-        for symbol in ("511380.SH", "560700.SH", "159995.SZ", "160639.SZ",
-                       "501030.SH", "589070.SH", "515220.SH"):
+        for symbol in (
+            "511380.SH",
+            "560700.SH",
+            "159995.SZ",
+            "160639.SZ",
+            "501030.SH",
+            "589070.SH",
+            "515220.SH",
+        ):
             assert daily_table_of(symbol) == "fund_daily", symbol
 
     def test_index_routes(self):
-        for symbol in ("000832.CSI", "980022.SZ", "H30315.CSI", "399431.SZ",
-                       "931479.CSI", "000001.SH", "000300.SH", "950041.CSI"):
+        for symbol in (
+            "000832.CSI",
+            "980022.SZ",
+            "H30315.CSI",
+            "399431.SZ",
+            "931479.CSI",
+            "000001.SH",
+            "000300.SH",
+            "950041.CSI",
+        ):
             assert daily_table_of(symbol) == "index_daily", symbol
 
     def test_sh_index_vs_sz_stock_ambiguity(self):

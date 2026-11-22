@@ -6,6 +6,7 @@
     - 四式数值=手算基准（评审实证脚本输出的 1000≠0 不复现案例）；
     - T+1 冻结/解冻与 T+0 ETF 立即可用。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,13 +19,25 @@ pytestmark = [pytest.mark.l1]
 D = TradingDate.from_ymd("20150105")
 
 
-def mk_fill(symbol: str, side: OrderSide, qty: int, price: float,
-            fee_total: float = 0.0, fid: str = "F00000001") -> Fill:
-    return Fill(fill_id=fid, order_id="O00000001", symbol=symbol, side=side,
-                qty=qty, price=price,
-                fee=Fee(commission=fee_total, stamp_duty=0.0,
-                        transfer_fee=0.0, total=fee_total),
-                fill_date=D, fill_timing="open")
+def mk_fill(
+    symbol: str,
+    side: OrderSide,
+    qty: int,
+    price: float,
+    fee_total: float = 0.0,
+    fid: str = "F00000001",
+) -> Fill:
+    return Fill(
+        fill_id=fid,
+        order_id="O00000001",
+        symbol=symbol,
+        side=side,
+        qty=qty,
+        price=price,
+        fee=Fee(commission=fee_total, stamp_duty=0.0, transfer_fee=0.0, total=fee_total),
+        fill_date=D,
+        fill_timing="open",
+    )
 
 
 class TestAccountingFourForms:
@@ -44,19 +57,19 @@ class TestAccountingFourForms:
     def test_sell_form(self):
         """买 100@10 fee5 → 卖 60@11 fee5：realized=(11−10.05)×60−5=52.0。"""
         self.pf.apply_fill(mk_fill("000001.SZ", OrderSide.BUY, 100, 10.0, 5.0))
-        self.pf.advance_day()                                # 解冻（四式测试无关 T+1）
+        self.pf.advance_day()  # 解冻（四式测试无关 T+1）
         self.pf.apply_fill(mk_fill("000001.SZ", OrderSide.SELL, 60, 11.0, 5.0, "F2"))
         pos = self.pf.position("000001.SZ")
         assert pos.qty == 40
         assert pos.realized_pnl == pytest.approx((11.0 - 10.05) * 60 - 5.0)  # 52.0
-        assert self.pf.cash == pytest.approx(98_995.0 + 660.0 - 5.0)         # 99_650
+        assert self.pf.cash == pytest.approx(98_995.0 + 660.0 - 5.0)  # 99_650
 
     def test_mark_form(self):
         """重估：unrealized=(close−avg_cost)×qty；买后 mark@10 → −5（费用吸收）。"""
         self.pf.apply_fill(mk_fill("000001.SZ", OrderSide.BUY, 100, 10.0, 5.0))
         self.pf.mark_all({"000001.SZ": 10.0})
         pos = self.pf.position("000001.SZ")
-        assert pos.unrealized_pnl == pytest.approx((10.0 - 10.05) * 100)     # −5.0
+        assert pos.unrealized_pnl == pytest.approx((10.0 - 10.05) * 100)  # −5.0
         assert self.pf.market_value() == pytest.approx(1_000.0)
         assert self.pf.total_value() == pytest.approx(98_995.0 + 1_000.0)
 
@@ -66,7 +79,7 @@ class TestAccountingFourForms:
         self.pf.advance_day()
         self.pf.apply_fill(mk_fill("000001.SZ", OrderSide.SELL, 100, 10.5, 3.0, "F2"))
         assert self.pf.cash == pytest.approx(98_995.0 + (1_050.0 - 3.0))
-        assert "000001.SZ" not in self.pf.positions           # 空仓即移除
+        assert "000001.SZ" not in self.pf.positions  # 空仓即移除
 
 
 class TestConservationInvariant:
@@ -87,7 +100,7 @@ class TestConservationInvariant:
             pos_before = pf.position(f.symbol)
             qty_before = 0 if pos_before is None else pos_before.qty
             if f.side is OrderSide.SELL:
-                pf.advance_day()                      # 解冻：守恒断言与 T+1 正交
+                pf.advance_day()  # 解冻：守恒断言与 T+1 正交
             pf.apply_fill(f)
             pos_after = pf.position(f.symbol)
             qty_after = 0 if pos_after is None else pos_after.qty
@@ -95,9 +108,8 @@ class TestConservationInvariant:
             d_mv = (qty_after - qty_before) * f.price  # 成交部分按成交价
             assert d_cash + d_mv + f.fee.total == pytest.approx(0.0, abs=1e-9)
         # 终值手算基准：现金流水逐笔精确（无泄漏）
-        cash_expected = (100_000.0 - 1_005.0 - 20_040.0
-                         + 648.0 - 2.0 + 10_250.0 - 10.0)
-        assert pf.cash == pytest.approx(cash_expected, abs=1e-9)   # 89_841
+        cash_expected = 100_000.0 - 1_005.0 - 20_040.0 + 648.0 - 2.0 + 10_250.0 - 10.0
+        assert pf.cash == pytest.approx(cash_expected, abs=1e-9)  # 89_841
         pf.mark_all({"000001.SZ": 10.8, "600519.SH": 205.0})
         assert pf.market_value() == pytest.approx(40 * 10.8 + 50 * 205.0)
         assert pf.total_value() == pytest.approx(cash_expected + 40 * 10.8 + 50 * 205.0)
@@ -108,21 +120,20 @@ class TestConservationInvariant:
         同一组成交在任意价格水平（模拟不同复权基准）：终值与手算现金
         逐分钱一致（浮点零累积），af 缩放不产生额外泄漏。
         """
-        for scale in (1.0, 2.0, 33.7):        # af=1/2/33.7 的价格缩放代理
+        for scale in (1.0, 2.0, 33.7):  # af=1/2/33.7 的价格缩放代理
             pf = Portfolio(cash=1_000_000.0)
             pf.apply_fill(mk_fill("600519.SH", OrderSide.BUY, 100, 10.0 * scale, 5.0))
             pf.advance_day()
             pf.apply_fill(mk_fill("600519.SH", OrderSide.SELL, 100, 10.5 * scale, 5.0, "F2"))
             # 空仓 → tv=cash；价差盈利 50×scale 恰入账，仅亏两笔费用
-            assert pf.total_value() == pytest.approx(1_000_000.0 + 50.0 * scale - 10.0,
-                                                     abs=1e-9)
+            assert pf.total_value() == pytest.approx(1_000_000.0 + 50.0 * scale - 10.0, abs=1e-9)
 
 
 class TestTPlusOne:
     def test_buy_frozen_same_day(self):
         pf = Portfolio(cash=100_000.0)
         pf.apply_fill(mk_fill("000001.SZ", OrderSide.BUY, 100, 10.0))
-        assert pf.available_qty("000001.SZ") == 0            # T+1 冻结
+        assert pf.available_qty("000001.SZ") == 0  # T+1 冻结
         with pytest.raises(RuntimeError, match="卖出违例"):
             pf.apply_fill(mk_fill("000001.SZ", OrderSide.SELL, 100, 10.0, fid="F2"))
 
@@ -156,26 +167,26 @@ class TestSnapshotNavForms:
         pf = Portfolio(cash=100_000.0)
         pf.apply_fill(mk_fill("000001.SZ", OrderSide.BUY, 1_000, 10.0))
         pf.mark_all({"000001.SZ": 10.0})
-        s1 = pf.snapshot(D)                                  # tv=100000
+        s1 = pf.snapshot(D)  # tv=100000
         assert s1.daily_return == 0.0 and s1.cumulative_return == 0.0
         assert s1.drawdown == 0.0
         assert s1.weights["000001.SZ"] == pytest.approx(0.1)
         assert s1.weights[CASH_KEY] == pytest.approx(0.9)
 
         pf.mark_all({"000001.SZ": 11.0})
-        s2 = pf.snapshot(D)                                  # tv=101000
+        s2 = pf.snapshot(D)  # tv=101000
         assert s2.daily_return == pytest.approx(0.01)
         assert s2.cumulative_return == pytest.approx(0.01)
         assert s2.drawdown == 0.0
 
         pf.mark_all({"000001.SZ": 9.0})
-        s3 = pf.snapshot(D)                                  # tv=99000
+        s3 = pf.snapshot(D)  # tv=99000
         assert s3.daily_return == pytest.approx(99_000 / 101_000 - 1)
         assert s3.cumulative_return == pytest.approx(-0.01)
         assert s3.drawdown == pytest.approx(99_000 / 101_000 - 1)
 
         pf.mark_all({"000001.SZ": 10.0})
-        s4 = pf.snapshot(D)                                  # tv=100000 < peak 101000
+        s4 = pf.snapshot(D)  # tv=100000 < peak 101000
         assert s4.drawdown == pytest.approx(100_000 / 101_000 - 1)
         assert s4.cumulative_return == pytest.approx(0.0)
 
@@ -194,10 +205,16 @@ class TestCorporateActionForms:
     @staticmethod
     def _action(cash_div=0.0, stk_div=0.0, symbol="600900.SH"):
         from btf.domain.action import CorporateAction
+
         return CorporateAction(
-            symbol=symbol, ex_date=D, pay_date=None, record_date=None,
-            cash_div_per_share=cash_div, stk_div_per_share=stk_div,
-            ann_date=None)
+            symbol=symbol,
+            ex_date=D,
+            pay_date=None,
+            record_date=None,
+            cash_div_per_share=cash_div,
+            stk_div_per_share=stk_div,
+            ann_date=None,
+        )
 
     def test_pure_stk_div(self):
         """10送10：qty 100→200、avg_cost 10→5、available_qty 200；
@@ -211,7 +228,7 @@ class TestCorporateActionForms:
         pos = self.pf.position("600900.SH")
         assert qty_at_ex == 100
         assert pos.qty == 200
-        assert pos.available_qty == 200          # 实现注意①（解冻后扩张）
+        assert pos.available_qty == 200  # 实现注意①（解冻后扩张）
         assert pos.avg_cost == pytest.approx(5.0)
 
     def test_pure_cash_div_ex(self):
@@ -222,15 +239,14 @@ class TestCorporateActionForms:
         assert qty_at_ex == 100
         assert pos.qty == 100
         assert pos.avg_cost == pytest.approx(9.0)
-        assert self.pf.cash == pytest.approx(99_000.0)   # 未到账
+        assert self.pf.cash == pytest.approx(99_000.0)  # 未到账
 
     def test_mixed_ex_date(self):
         """混合（10送10+派1）：avg_cost=(10−1)/2=4.5（A 股除权价公式
         同构——先派息后送转，总成本账平 200×4.5=900=1000−100）。"""
-        qty_at_ex = self.pf.apply_ex_date(
-            self._action(cash_div=1.0, stk_div=1.0))
+        qty_at_ex = self.pf.apply_ex_date(self._action(cash_div=1.0, stk_div=1.0))
         pos = self.pf.position("600900.SH")
-        assert qty_at_ex == 100                  # 分红按送转前股数登记
+        assert qty_at_ex == 100  # 分红按送转前股数登记
         assert pos.qty == 200
         assert pos.avg_cost == pytest.approx(4.5)
 
@@ -243,8 +259,7 @@ class TestCorporateActionForms:
 
     def test_no_position_noop(self):
         """无持仓标的：ex no-op 返回 0。"""
-        assert self.pf.apply_ex_date(self._action(cash_div=1.0,
-                                                  symbol="000001.SZ")) == 0
+        assert self.pf.apply_ex_date(self._action(cash_div=1.0, symbol="000001.SZ")) == 0
 
     def test_fractional_stk_div_rounding(self):
         """千分位送转比例（如 10 送 1.235）：qty 取整（**银行家舍入**，B-01 订正）；
@@ -252,7 +267,7 @@ class TestCorporateActionForms:
         qty_at_ex = self.pf.apply_ex_date(self._action(stk_div=0.1235))
         pos = self.pf.position("600900.SH")
         assert qty_at_ex == 100
-        assert pos.qty == round(100 * 1.1235)    # 112
+        assert pos.qty == round(100 * 1.1235)  # 112
         assert pos.avg_cost == pytest.approx(10.0 / 1.1235)
 
     def test_stk_div_half_boundary_pins_rounding(self):
@@ -288,9 +303,16 @@ class TestCorporateActionForms:
 
         def _rights_action():
             return CorporateAction(
-                symbol="600900.SH", ex_date=D, pay_date=None, record_date=None,
-                cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
-                rights_ratio=0.5, rights_price=5.0)
+                symbol="600900.SH",
+                ex_date=D,
+                pay_date=None,
+                record_date=None,
+                cash_div_per_share=0.0,
+                stk_div_per_share=0.0,
+                ann_date=None,
+                rights_ratio=0.5,
+                rights_price=5.0,
+            )
 
         # ① 无 last_close（无 bar）⇒ 兜底取 avg_cost（=10.0）
         pf = Portfolio(cash=1_000_000.0)

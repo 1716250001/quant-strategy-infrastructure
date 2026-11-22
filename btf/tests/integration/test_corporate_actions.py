@@ -18,6 +18,7 @@ G1 五案例（18 号计划 3.2：送转/派息/混合/老数据 ex≠pay/pay �
 事件时序锚点（06 §10.1 步骤①）：CorporateActionEvent 先于 MarketOpenEvent；
 ex/pay 两时点各留一条（04 §8.4；pay≡ex 重合日=两条）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -38,8 +39,9 @@ pytestmark = [pytest.mark.l2]
 
 SYMBOL = "600900.SH"
 CASH = 1_000.0
-_INSTRUMENTS = {SYMBOL: Instrument(symbol=SYMBOL, asset_class=AssetClass.STOCK,
-                                   board="main", lot_size=100)}
+_INSTRUMENTS = {
+    SYMBOL: Instrument(symbol=SYMBOL, asset_class=AssetClass.STOCK, board="main", lot_size=100)
+}
 # 六个交易日：2016-06-01(三) 02(四) 03(五) 06(一) 07(二) 08(三)
 T1 = TradingDate.from_iso(2016, 6, 1)
 T2 = TradingDate.from_iso(2016, 6, 2)
@@ -52,30 +54,47 @@ DATES = [T1, T2, T3, T4, T5, T6]
 
 def _action(ex, pay, cash_div, stk_div, symbol=SYMBOL):
     return CorporateAction(
-        symbol=symbol, ex_date=ex, pay_date=pay, record_date=None,
-        cash_div_per_share=cash_div, stk_div_per_share=stk_div, ann_date=None,
+        symbol=symbol,
+        ex_date=ex,
+        pay_date=pay,
+        record_date=None,
+        cash_div_per_share=cash_div,
+        stk_div_per_share=stk_div,
+        ann_date=None,
     )
 
 
 def _bar(day, o, c, pre) -> Bar:
-    return Bar(symbol=SYMBOL, date=day, open=o, high=max(o, c),
-               low=min(o, c), close=c, volume=1_000_000.0,
-               amount=c * 1_000_000.0, pre_close=pre)
+    return Bar(
+        symbol=SYMBOL,
+        date=day,
+        open=o,
+        high=max(o, c),
+        low=min(o, c),
+        close=c,
+        volume=1_000_000.0,
+        amount=c * 1_000_000.0,
+        pre_close=pre,
+    )
 
 
 def _state(day, pre) -> TradingState:
     return TradingState(
-        symbol=SYMBOL, date=day,
-        limit_up_price=round(pre * 1.1, 2), limit_down_price=round(pre * 0.9, 2),
-        is_suspended=False, is_st=False, is_delisted=False,
-        is_limit_up=False, is_limit_down=False,
+        symbol=SYMBOL,
+        date=day,
+        limit_up_price=round(pre * 1.1, 2),
+        limit_down_price=round(pre * 0.9, 2),
+        is_suspended=False,
+        is_st=False,
+        is_delisted=False,
+        is_limit_up=False,
+        is_limit_down=False,
     )
 
 
 def _feed(bars, actions) -> MemoryFeed:
     states = {(d.to_ymd(), SYMBOL): _state(d, _bar_pre(bars, d)) for d in DATES}
-    return MemoryFeed(list(bars), states, _INSTRUMENTS,
-                      dates=DATES, actions=actions)
+    return MemoryFeed(list(bars), states, _INSTRUMENTS, dates=DATES, actions=actions)
 
 
 def _bar_pre(bars, day) -> float:
@@ -99,21 +118,29 @@ class BuyHoldSellStrategy(StrategyBase):
     def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
         ymd = date.to_ymd()
         if ymd == T1.to_ymd() and not self.bought:
-            ctx.submit_target(
-                TargetPortfolio(rebalance_date=date, targets={SYMBOL: 1.0}))
+            ctx.submit_target(TargetPortfolio(rebalance_date=date, targets={SYMBOL: 1.0}))
         if ymd in self.sells:
-            ctx.submit_order(Order(
-                order_id="", symbol=SYMBOL, side=OrderSide.SELL,
-                order_type=OrderType.MARKET, qty=self.sells[ymd],
-                limit_price=None, created_at=date,
-            ))
+            ctx.submit_order(
+                Order(
+                    order_id="",
+                    symbol=SYMBOL,
+                    side=OrderSide.SELL,
+                    order_type=OrderType.MARKET,
+                    qty=self.sells[ymd],
+                    limit_price=None,
+                    created_at=date,
+                )
+            )
 
 
 def _run(feed, strategy, tmp_path):
     return Engine(
-        feed, strategy, start=T1, end=T6, initial_cash=CASH,
-        handler=NextOpenHandler(cost_model=ZeroCostModel(),
-                                instruments=_INSTRUMENTS),
+        feed,
+        strategy,
+        start=T1,
+        end=T6,
+        initial_cash=CASH,
+        handler=NextOpenHandler(cost_model=ZeroCostModel(), instruments=_INSTRUMENTS),
         instruments=_INSTRUMENTS,
         event_log_path=tmp_path / "events.jsonl",
     ).run()
@@ -132,9 +159,10 @@ def _ca_events(result):
     """
     reader = EventLogReader(result.events_path)
     from btf.domain.events import CorporateActionEvent, MarketOpenEvent
+
     events = list(reader.events())
     out = []
-    batch: list = []          # 尚未归属的 CA（等待下一个 MarketOpen）
+    batch: list = []  # 尚未归属的 CA（等待下一个 MarketOpen）
     for e in events:
         if isinstance(e, CorporateActionEvent):
             batch.append(e.action)
@@ -154,8 +182,8 @@ def test_g1_a_pure_stk_div(tmp_path):
     """
     bars = [
         _bar(T1, 10.0, 10.0, 10.0),
-        _bar(T2, 10.0, 10.0, 10.0),        # 买入执行日（100@10）
-        _bar(T3, 5.0, 5.0, 5.0),           # 除权日：10送10 价格减半
+        _bar(T2, 10.0, 10.0, 10.0),  # 买入执行日（100@10）
+        _bar(T3, 5.0, 5.0, 5.0),  # 除权日：10送10 价格减半
         _bar(T4, 5.0, 5.0, 5.0),
         _bar(T5, 5.0, 5.0, 5.0),
         _bar(T6, 5.0, 5.0, 5.0),
@@ -174,8 +202,7 @@ def test_g1_a_pure_stk_div(tmp_path):
     assert snap[T3.to_ymd()].positions_qty == {SYMBOL: 200}
     assert snap[T3.to_ymd()].cash == pytest.approx(0.0)
     # 守恒：送转单日 Δ(现金+名义总市值)=0
-    assert snap[T3.to_ymd()].total_value == pytest.approx(
-        snap[T2.to_ymd()].total_value)
+    assert snap[T3.to_ymd()].total_value == pytest.approx(snap[T2.to_ymd()].total_value)
     # 实现注意①：available_qty=200 → T4 全数卖出成交
     sells = [f for f in result.fills if f.side is OrderSide.SELL]
     assert len(sells) == 1 and sells[0].qty == 200
@@ -196,7 +223,7 @@ def test_g1_b_cash_div_pay_eq_ex(tmp_path):
     bars = [
         _bar(T1, 10.0, 10.0, 10.0),
         _bar(T2, 10.0, 10.0, 10.0),
-        _bar(T3, 9.0, 9.0, 9.0),           # 除息日：10−1
+        _bar(T3, 9.0, 9.0, 9.0),  # 除息日：10−1
         _bar(T4, 9.0, 9.0, 9.0),
         _bar(T5, 9.0, 9.0, 9.0),
         _bar(T6, 9.0, 9.0, 9.0),
@@ -205,11 +232,12 @@ def test_g1_b_cash_div_pay_eq_ex(tmp_path):
     result = _run(_feed(bars, actions), BuyHoldSellStrategy(), tmp_path)
 
     snap = _snapshot_by_day(result)
-    assert snap[T3.to_ymd()].cash == pytest.approx(100.0)   # qty_at_ex×1
+    assert snap[T3.to_ymd()].cash == pytest.approx(100.0)  # qty_at_ex×1
     assert snap[T3.to_ymd()].positions_qty == {SYMBOL: 100}
     # 守恒：单日 Δ=0（pay≡ex 退化单日）
     assert snap[T3.to_ymd()].total_value == pytest.approx(
-        snap[T2.to_ymd()].total_value)                      # 100×9+100=1000
+        snap[T2.to_ymd()].total_value
+    )  # 100×9+100=1000
     # 事件：ex/pay 两时点各一条（重合日仍两条）
     ca = _ca_events(result)
     assert len(ca) == 2
@@ -226,7 +254,7 @@ def test_g1_c_mixed_ex_ne_pay(tmp_path):
     bars = [
         _bar(T1, 10.0, 10.0, 10.0),
         _bar(T2, 10.0, 10.0, 10.0),
-        _bar(T3, 4.5, 4.5, 4.5),           # (10−1)/2
+        _bar(T3, 4.5, 4.5, 4.5),  # (10−1)/2
         _bar(T4, 4.5, 4.5, 4.5),
         _bar(T5, 4.5, 4.5, 4.5),
         _bar(T6, 4.5, 4.5, 4.5),
@@ -245,8 +273,7 @@ def test_g1_c_mixed_ex_ne_pay(tmp_path):
     # T6 pay：+100 → 合并 Δ=0
     assert snap[T6.to_ymd()].cash == pytest.approx(100.0)
     assert snap[T6.to_ymd()].total_value == pytest.approx(1000.0)
-    assert snap[T6.to_ymd()].total_value == pytest.approx(
-        snap[T2.to_ymd()].total_value)
+    assert snap[T6.to_ymd()].total_value == pytest.approx(snap[T2.to_ymd()].total_value)
     # 事件：T3 一条（ex）、T6 一条（pay）
     ca = _ca_events(result)
     assert [ymd for ymd, _ in ca] == [T3.to_ymd(), T6.to_ymd()]
@@ -262,9 +289,9 @@ def test_g1_d_sell_inside_window(tmp_path):
     bars = [
         _bar(T1, 10.0, 10.0, 10.0),
         _bar(T2, 10.0, 10.0, 10.0),
-        _bar(T3, 9.0, 9.0, 9.0),           # ex 日（pay=T6）
+        _bar(T3, 9.0, 9.0, 9.0),  # ex 日（pay=T6）
         _bar(T4, 9.5, 9.5, 9.0),
-        _bar(T5, 9.5, 9.5, 9.5),           # 卖 60 成交 @9.5
+        _bar(T5, 9.5, 9.5, 9.5),  # 卖 60 成交 @9.5
         _bar(T6, 9.0, 9.0, 9.5),
     ]
     actions = [_action(T3, T6, 1.0, 0.0)]
@@ -302,10 +329,9 @@ def test_g1_e_pay_missing_fallback(tmp_path):
 
     snap = _snapshot_by_day(result)
     assert snap[T3.to_ymd()].cash == pytest.approx(100.0)
-    assert snap[T3.to_ymd()].total_value == pytest.approx(
-        snap[T2.to_ymd()].total_value)     # 单日 Δ=0
+    assert snap[T3.to_ymd()].total_value == pytest.approx(snap[T2.to_ymd()].total_value)  # 单日 Δ=0
     ca = _ca_events(result)
-    assert len(ca) == 2                    # ex + 回退 pay 各一条
+    assert len(ca) == 2  # ex + 回退 pay 各一条
 
 
 # ─────────────────────────────────────────────
@@ -327,7 +353,7 @@ def test_pending_survives_full_close(tmp_path):
     result = _run(_feed(bars, actions), strategy, tmp_path)
 
     snap = _snapshot_by_day(result)
-    assert snap[T5.to_ymd()].positions_qty == {}          # 已清仓
+    assert snap[T5.to_ymd()].positions_qty == {}  # 已清仓
     cash_after_sell = 100 * 9.5
     assert snap[T5.to_ymd()].cash == pytest.approx(cash_after_sell)
     # T6：空仓仍到账（登记数量 100）
@@ -353,11 +379,11 @@ def test_ca_event_before_market_open(tmp_path):
     events = list(EventLogReader(result.events_path).events())
     kinds = [type(e).__name__ for e in events]
     i_open_t3 = next(
-        i for i, e in enumerate(events)
-        if isinstance(e, MarketOpenEvent) and e.date == T3)
+        i for i, e in enumerate(events) if isinstance(e, MarketOpenEvent) and e.date == T3
+    )
     # T3 段的前两事件均为公司行动（ex→pay），且在 MarketOpen 前
-    assert all(isinstance(e, CorporateActionEvent) for e in events[i_open_t3 - 2:i_open_t3])
-    assert kinds[i_open_t3 - 2:i_open_t3] == ["CorporateActionEvent"] * 2
+    assert all(isinstance(e, CorporateActionEvent) for e in events[i_open_t3 - 2 : i_open_t3])
+    assert kinds[i_open_t3 - 2 : i_open_t3] == ["CorporateActionEvent"] * 2
 
 
 # ─────────────────────────────────────────────
@@ -377,9 +403,16 @@ def test_ca_no_position_noop(tmp_path):
     ]
     actions = [
         CorporateAction(
-            symbol=other, ex_date=T3, pay_date=T6, record_date=None,
-            cash_div_per_share=5.0, stk_div_per_share=2.0, ann_date=None),
+            symbol=other,
+            ex_date=T3,
+            pay_date=T6,
+            record_date=None,
+            cash_div_per_share=5.0,
+            stk_div_per_share=2.0,
+            ann_date=None,
+        ),
     ]
+
     # 策略不买（无任何持仓）
     class Noop(StrategyBase):
         def on_close(self, ctx, date): ...
@@ -392,6 +425,15 @@ def test_ca_no_position_noop(tmp_path):
 
 
 __all__ = [
-    "T1", "T2", "T3", "T4", "T5", "T6",
-    "BuyHoldSellStrategy", "_action", "_bar", "_feed", "_run",
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "T5",
+    "T6",
+    "BuyHoldSellStrategy",
+    "_action",
+    "_bar",
+    "_feed",
+    "_run",
 ]

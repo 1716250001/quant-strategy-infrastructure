@@ -22,6 +22,7 @@ btf MARKET_DATA_DIR，USE_ONLINE_API=False 本地模式），差异只能来自
 
 判据：全部 PASS 退出码 0；任一 FAIL 退出码 1（可挂 CI）。
 """
+
 from __future__ import annotations
 
 import math
@@ -31,7 +32,7 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # btf 包
-sys.path.insert(0, str(Path(__file__).resolve().parent))         # tools/_paths（平级）
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # tools/_paths（平级）
 
 from _paths import CHICHAO_ROOT
 
@@ -168,11 +169,13 @@ for d in ("20150612", "20200310", "20240930"):
         btf_rows = cols["ts_code"][lo:hi]
     md_codes = set(md["ts_code"]) if not md.empty else set()
     check(
-        f"截面/{d} 行数", len(btf_rows) == len(md),
+        f"截面/{d} 行数",
+        len(btf_rows) == len(md),
         f"{len(btf_rows)} vs {len(md)}",
     )
     check(
-        f"截面/{d} 代码集", set(btf_rows) == md_codes,
+        f"截面/{d} 代码集",
+        set(btf_rows) == md_codes,
         f"差集 {len(set(btf_rows) ^ md_codes)} 个",
     )
 

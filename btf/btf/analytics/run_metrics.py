@@ -14,6 +14,7 @@
 纪律：`extras` 只接受 `Callable[[Sequence], Mapping]`——基准相对指标由调用方
 注入（runtime 提供；网格场景不传 ⇒ 与既有行为一致，不偷偷改变结果）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
@@ -46,11 +47,14 @@ def compute_run_metrics(
             或 portfolio/事件日志映射）——逐笔口径 `win_rate_trades` 的配对
             须感知折算；缺省 `None`＝旧行为（**NAV 口径 15 项不受影响**）。
     """
-    metrics = compute_all(snapshots, fills, config or {},
-                          analyzer_names=list(analyzer_names)
-                          if analyzer_names is not None else None,
-                          resolver=resolver,
-                          consolidations=consolidations)
+    metrics = compute_all(
+        snapshots,
+        fills,
+        config or {},
+        analyzer_names=list(analyzer_names) if analyzer_names is not None else None,
+        resolver=resolver,
+        consolidations=consolidations,
+    )
     # C-1（19 号 §163）：零成交 run 的基准相对项**不并入** metrics
     # （键缺失，不用 None——metrics 只允许数值）；也不计算对照明细。
     if extras is not None and len(fills) > 0:

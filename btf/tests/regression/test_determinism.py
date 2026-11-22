@@ -8,6 +8,7 @@
 空仓移除——全部事件类型走一遍（等价于事件编码器的双跑稳定证）。
 真实 Feed 用例：parquet 读取 + 引擎全链路确定性（2015 全年，两标的月调仓）。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -37,27 +38,42 @@ class MultiPathStrategy(StrategyBase):
     def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
         ymd = date.to_ymd()
         if ymd == "20150105":
-            ctx.submit_target(TargetPortfolio(date, {
-                "000001.SZ": 0.3, "511380.SH": 0.2, "600000.SH": 0.2,
-            }))
+            ctx.submit_target(
+                TargetPortfolio(
+                    date,
+                    {
+                        "000001.SZ": 0.3,
+                        "511380.SH": 0.2,
+                        "600000.SH": 0.2,
+                    },
+                )
+            )
         elif ymd == "20150106":
             ctx.submit_target(TargetPortfolio(date, {"511380.SH": 0.4}))
         elif ymd == "20150107":
-            ctx.submit_target(TargetPortfolio(date, {
-                "000002.SZ": 0.5, "600000.SH": 0.3,
-            }))
+            ctx.submit_target(
+                TargetPortfolio(
+                    date,
+                    {
+                        "000002.SZ": 0.5,
+                        "600000.SH": 0.3,
+                    },
+                )
+            )
         elif ymd == "20150108":
-            ctx.submit_target(TargetPortfolio(date, {}))       # 全清
+            ctx.submit_target(TargetPortfolio(date, {}))  # 全清
 
 
 def _run_memory(tmp: Path) -> tuple[bytes, list]:
     sc = combined_scenario()
     path = tmp / f"events-{id(sc)}.jsonl"
     engine = Engine(
-        sc.feed, MultiPathStrategy(), start=D1, end=D5,
+        sc.feed,
+        MultiPathStrategy(),
+        start=D1,
+        end=D5,
         initial_cash=1_000_000.0,
-        handler=NextOpenHandler(cost_model=FlatRateCostModel(),
-                                instruments=sc.instruments),
+        handler=NextOpenHandler(cost_model=FlatRateCostModel(), instruments=sc.instruments),
         instruments=sc.instruments,
         event_log_path=path,
     )
@@ -74,7 +90,7 @@ class TestDeterminismMemory:
         assert h1 == h2
         assert len(s1) == len(s2) == 5
         for a, b in zip(s1, s2, strict=True):
-            assert a == b          # frozen dataclass 全等（含浮点逐位）
+            assert a == b  # frozen dataclass 全等（含浮点逐位）
         # 事件量非平凡（多路径确实发生）
         assert h1 != hashlib.sha256(b"").hexdigest().encode()
 
@@ -92,25 +108,31 @@ class TestDeterminismRealFeed:
 
             def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
                 if date.iso.day <= 3:
-                    ctx.submit_target(TargetPortfolio(date, {
-                        "000001.SZ": 0.5, "600519.SH": 0.5,
-                    }))
+                    ctx.submit_target(
+                        TargetPortfolio(
+                            date,
+                            {
+                                "000001.SZ": 0.5,
+                                "600519.SH": 0.5,
+                            },
+                        )
+                    )
 
         def run_once(tag: str) -> bytes:
             # R4（19 号 §48）：状态面板构造期注入（feed 不再 import state）
-            feed = TushareParquetFeed(
-                state_provider=StateSynthesizer())
+            feed = TushareParquetFeed(state_provider=StateSynthesizer())
             path = tmp_path / f"events-{tag}.jsonl"
             r = Engine(
-                feed, MonthlyTwoAssets(),
+                feed,
+                MonthlyTwoAssets(),
                 start=TradingDate.from_ymd("20150101"),
                 end=TradingDate.from_ymd("20151231"),
                 initial_cash=1_000_000.0,
                 handler=NextOpenHandler(cost_model=FlatRateCostModel()),
                 event_log_path=path,
             ).run()
-            assert r.n_days > 230            # 2015 全年交易日
-            assert len(r.fills) > 20         # 12 月度调仓确有成交
+            assert r.n_days > 230  # 2015 全年交易日
+            assert len(r.fills) > 20  # 12 月度调仓确有成交
             return hashlib.sha256(path.read_bytes()).hexdigest().encode()
 
         assert run_once("a") == run_once("b")

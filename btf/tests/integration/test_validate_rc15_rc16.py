@@ -9,6 +9,7 @@
   同种子重跑**逐位一致**；产物含 **p05/p50/p95** 与双侧 p 值；
   无基准 ⇒ 随机择时对照为 `null`（不伪造）。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -37,8 +38,9 @@ N_DAYS = 60
 
 def _long_days() -> list[TradingDate]:
     base = date(2015, 1, 5)
-    return [TradingDate.from_ymd((base + timedelta(days=i)).strftime("%Y%m%d"))
-            for i in range(N_DAYS)]
+    return [
+        TradingDate.from_ymd((base + timedelta(days=i)).strftime("%Y%m%d")) for i in range(N_DAYS)
+    ]
 
 
 @pytest.fixture(scope="module")
@@ -52,9 +54,12 @@ def long_feed():
         states[(d.to_ymd(), SYM)] = make_state(SYM, d, pre=pre)
     from btf.data.memory import MemoryFeed
 
-    feed = MemoryFeed(bars, states,
-                      {SYM: Instrument(SYM, AssetClass.STOCK, board="main",
-                                       lot_size=100)}, dates=days)
+    feed = MemoryFeed(
+        bars,
+        states,
+        {SYM: Instrument(SYM, AssetClass.STOCK, board="main", lot_size=100)},
+        dates=days,
+    )
 
     def _factory(**_params):
         return feed
@@ -90,16 +95,33 @@ class TestWalkForwardRc15:
         days = _long_days()
         cfg_path = _write_cfg(tmp_path, feed=LONG_FEED, days=days)
         out_json = tmp_path / "wf.json"
-        assert main(["validate", "walk-forward", "--config", str(cfg_path),
-                     "--window", "20", "--test", "10", "--step", "10",
-                     "--no-persist", "--out", str(out_json)]) == 0
+        assert (
+            main(
+                [
+                    "validate",
+                    "walk-forward",
+                    "--config",
+                    str(cfg_path),
+                    "--window",
+                    "20",
+                    "--test",
+                    "10",
+                    "--step",
+                    "10",
+                    "--no-persist",
+                    "--out",
+                    str(out_json),
+                ]
+            )
+            == 0
+        )
         text = capsys.readouterr().out
         assert "4 折" in text and "OOS 汇总" in text
-        assert "min=" in text and "max=" in text     # 不得只报最优
+        assert "min=" in text and "max=" in text  # 不得只报最优
 
         report = json.loads(out_json.read_text(encoding="utf-8"))
         assert report["n_folds"] == 4
-        assert len(report["folds"]) == 4             # 全量折（含最差）
+        assert len(report["folds"]) == 4  # 全量折（含最差）
         assert report["spec"]["mode"] == "rolling"
         # 窗口切分来自**交易日历**（Feed dates——非自然月/非随机）
         assert report["folds"][0]["test"]["start"] == days[20].to_ymd()
@@ -113,40 +135,86 @@ class TestWalkForwardRc15:
         days = _long_days()
         cfg_path = _write_cfg(tmp_path, feed=LONG_FEED, days=days)
         out_json = tmp_path / "wf_anchored.json"
-        assert main(["validate", "walk-forward", "--config", str(cfg_path),
-                     "--window", "20", "--test", "10", "--mode", "anchored",
-                     "--no-persist", "--out", str(out_json)]) == 0
+        assert (
+            main(
+                [
+                    "validate",
+                    "walk-forward",
+                    "--config",
+                    str(cfg_path),
+                    "--window",
+                    "20",
+                    "--test",
+                    "10",
+                    "--mode",
+                    "anchored",
+                    "--no-persist",
+                    "--out",
+                    str(out_json),
+                ]
+            )
+            == 0
+        )
         report = json.loads(out_json.read_text(encoding="utf-8"))
         assert report["folds"][1]["train"]["start"] == days[0].to_ymd()
         assert report["folds"][1]["train"]["end"] == days[29].to_ymd()
 
-    def test_persisted_fold_manifest_carries_windows(self, long_feed, tmp_path,
-                                                     capsys):
+    def test_persisted_fold_manifest_carries_windows(self, long_feed, tmp_path, capsys):
         """**训练/测试区间入 manifest**（09 #11）：折 run 的装配披露。"""
         from btf.cli.main import main
 
         days = _long_days()
         cfg_path = _write_cfg(tmp_path, feed=LONG_FEED, days=days)
         runs = tmp_path / "runs"
-        assert main(["validate", "walk-forward", "--config", str(cfg_path),
-                     "--window", "30", "--test", "15", "--step", "15",
-                     "--out-dir", str(runs)]) == 0
+        assert (
+            main(
+                [
+                    "validate",
+                    "walk-forward",
+                    "--config",
+                    str(cfg_path),
+                    "--window",
+                    "30",
+                    "--test",
+                    "15",
+                    "--step",
+                    "15",
+                    "--out-dir",
+                    str(runs),
+                ]
+            )
+            == 0
+        )
         capsys.readouterr()
         dirs = [p for p in runs.iterdir() if p.is_dir()]
-        assert len(dirs) == 2                        # 60 日装得下 2 折
+        assert len(dirs) == 2  # 60 日装得下 2 折
         for d in dirs:
-            manifest = json.loads(
-                (d / "manifest.json").read_text(encoding="utf-8"))
-            assert any("Walk-Forward 折" in n and "训练窗" in n
-                       for n in manifest["assembly_notes"]), manifest["assembly_notes"]
+            manifest = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+            assert any(
+                "Walk-Forward 折" in n and "训练窗" in n for n in manifest["assembly_notes"]
+            ), manifest["assembly_notes"]
 
     def test_insufficient_window_returns_one(self, long_feed, tmp_path, capsys):
         from btf.cli.main import main
 
         days = _long_days()
         cfg_path = _write_cfg(tmp_path, feed=LONG_FEED, days=days)
-        assert main(["validate", "walk-forward", "--config", str(cfg_path),
-                     "--window", "50", "--test", "20", "--no-persist"]) == 1
+        assert (
+            main(
+                [
+                    "validate",
+                    "walk-forward",
+                    "--config",
+                    str(cfg_path),
+                    "--window",
+                    "50",
+                    "--test",
+                    "20",
+                    "--no-persist",
+                ]
+            )
+            == 1
+        )
         assert "窗口" in capsys.readouterr().err
 
 
@@ -158,8 +226,9 @@ class TestWalkForwardRealCalendar:
     抓出并修复；本用例是把该路径纳入常跑回归的守卫）。
     """
 
-    @pytest.mark.skipif(not (Path(MARKET_DATA_DIR) / "daily").is_dir(),
-                        reason=f"主库不可用: {MARKET_DATA_DIR}")
+    @pytest.mark.skipif(
+        not (Path(MARKET_DATA_DIR) / "daily").is_dir(), reason=f"主库不可用: {MARKET_DATA_DIR}"
+    )
     def test_trade_cal_used_not_natural_months(self, tmp_path):
         from btf.cli.main import main
 
@@ -176,12 +245,28 @@ class TestWalkForwardRealCalendar:
             "risk": {"rules": [], "allow_empty_chain": True},
         }
         cfg_path = tmp_path / "wf_real.yaml"
-        cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True),
-                            encoding="utf-8")
+        cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
         out_json = tmp_path / "wf_real.json"
-        assert main(["validate", "walk-forward", "--config", str(cfg_path),
-                     "--window", "30", "--test", "15", "--step", "15",
-                     "--no-persist", "--out", str(out_json)]) == 0
+        assert (
+            main(
+                [
+                    "validate",
+                    "walk-forward",
+                    "--config",
+                    str(cfg_path),
+                    "--window",
+                    "30",
+                    "--test",
+                    "15",
+                    "--step",
+                    "15",
+                    "--no-persist",
+                    "--out",
+                    str(out_json),
+                ]
+            )
+            == 0
+        )
         report = json.loads(out_json.read_text(encoding="utf-8"))
         assert report["n_folds"] >= 2, report["spec"]
         for fold in report["folds"]:
@@ -189,7 +274,7 @@ class TestWalkForwardRealCalendar:
                 for key in ("start", "end"):
                     ymd = fold[seg][key].replace("-", "")
                     day = TradingDate.from_ymd(ymd)
-                    assert day.iso.weekday() < 5, fold    # 交易日（非周末）
+                    assert day.iso.weekday() < 5, fold  # 交易日（非周末）
 
 
 class TestMonteCarloRc16:
@@ -223,8 +308,7 @@ class TestMonteCarloRc16:
 
         _store, run_id = self._run_short(tmp_path)
         out1, out2 = tmp_path / "mc1.json", tmp_path / "mc2.json"
-        base = ["validate", "mc", "--run", run_id, "--out-dir", str(tmp_path),
-                "--n", "300"]
+        base = ["validate", "mc", "--run", run_id, "--out-dir", str(tmp_path), "--n", "300"]
         assert main([*base, "--out", str(out1)]) == 0
         text = capsys.readouterr().out
         assert "p05=" in text and "p95=" in text and "跨0=" in text
@@ -232,10 +316,9 @@ class TestMonteCarloRc16:
 
         rep1 = json.loads(out1.read_text(encoding="utf-8"))
         rep2 = json.loads(out2.read_text(encoding="utf-8"))
-        assert rep1 == rep2                          # 同种子重跑**逐位一致**
+        assert rep1 == rep2  # 同种子重跑**逐位一致**
         bs = rep1["bootstrap"]["sharpe"]
-        for key in ("observed", "p05", "p50", "p95", "ci_low", "ci_high",
-                    "crosses_zero"):
+        for key in ("observed", "p05", "p50", "p95", "ci_low", "ci_high", "crosses_zero"):
             assert key in bs, key
         assert rep1["permutation"]["sign_sharpe"]["p_value"] is not None
         assert rep1["permutation"]["order_max_drawdown"]["scheme"] == "order"
@@ -254,11 +337,14 @@ class TestMonteCarloRc16:
         def _hash(path: Path) -> str:
             return hashlib.sha256(path.read_bytes()).hexdigest()
 
-        before = {name: _hash(run_dir / name)
-                  for name in ("snapshots.jsonl", "fills.jsonl", "orders.jsonl")
-                  if (run_dir / name).is_file()}
-        assert main(["validate", "mc", "--run", run_id,
-                     "--out-dir", str(tmp_path), "--n", "100"]) == 0
+        before = {
+            name: _hash(run_dir / name)
+            for name in ("snapshots.jsonl", "fills.jsonl", "orders.jsonl")
+            if (run_dir / name).is_file()
+        }
+        assert (
+            main(["validate", "mc", "--run", run_id, "--out-dir", str(tmp_path), "--n", "100"]) == 0
+        )
         after = {name: _hash(run_dir / name) for name in before}
         assert before == after
 
@@ -267,9 +353,25 @@ class TestMonteCarloRc16:
 
         _store, run_id = self._run_short(tmp_path)
         out = tmp_path / "mc_seed.json"
-        assert main(["validate", "mc", "--run", run_id,
-                     "--out-dir", str(tmp_path), "--n", "100",
-                     "--seed", "42", "--out", str(out)]) == 0
+        assert (
+            main(
+                [
+                    "validate",
+                    "mc",
+                    "--run",
+                    run_id,
+                    "--out-dir",
+                    str(tmp_path),
+                    "--n",
+                    "100",
+                    "--seed",
+                    "42",
+                    "--out",
+                    str(out),
+                ]
+            )
+            == 0
+        )
         capsys.readouterr()
         rep = json.loads(out.read_text(encoding="utf-8"))
         assert rep["seed"]["used"] == 42

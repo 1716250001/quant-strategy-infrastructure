@@ -13,6 +13,7 @@
     ② 注入后可用 + 幂等覆盖；
     ③ `MixedDailyFeed` 透传到股票侧原型（状态**同一对象**，不各建一份）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -30,7 +31,7 @@ class TestUninjectedRaises:
     """① 未注入 → 显式报错（状态面板是撮合/风控唯一依据，缺它必须失败）。"""
 
     def test_states_property_raises(self):
-        feed = TushareParquetFeed(ROOT)               # 不传 state_provider
+        feed = TushareParquetFeed(ROOT)  # 不传 state_provider
         with pytest.raises(RuntimeError, match="状态面板未注入"):
             _ = feed.states
 
@@ -52,8 +53,11 @@ class TestInjection:
     """② 注入可用 + 幂等覆盖；③ 混合表透传同一对象。"""
 
     def test_constructor_injection(self):
-        feed = TushareParquetFeed(ROOT) if not ROOT.is_dir() else (
-            TushareParquetFeed(ROOT, state_provider=object()))
+        feed = (
+            TushareParquetFeed(ROOT)
+            if not ROOT.is_dir()
+            else (TushareParquetFeed(ROOT, state_provider=object()))
+        )
         assert feed.states is not None
 
     def test_attach_overrides(self):
@@ -61,22 +65,21 @@ class TestInjection:
         first, second = object(), object()
         feed.attach_state_provider(first)
         assert feed.states is first
-        feed.attach_state_provider(second)            # 幂等：后注入覆盖前者
+        feed.attach_state_provider(second)  # 幂等：后注入覆盖前者
         assert feed.states is second
 
     def test_mixed_feed_passes_through_same_object(self):
         provider = object()
         feed = MixedDailyFeed(ROOT, state_provider=provider)
-        assert feed.states is provider                # 透传而非各建一份
+        assert feed.states is provider  # 透传而非各建一份
         assert feed._delegate.states is provider
         other = object()
-        feed.attach_state_provider(other)             # 注入同步到委托层
+        feed.attach_state_provider(other)  # 注入同步到委托层
         assert feed.states is other and feed._delegate.states is other
 
     @pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason="主库不可用")
     def test_real_synthesizer_usable_after_injection(self):
         """真合成器注入后 `trading_states` 可返回状态（端到端小样）。"""
         feed = TushareParquetFeed(ROOT, state_provider=StateSynthesizer(ROOT))
-        states = feed.trading_states(
-            TradingDate.from_ymd("20240102"), ["000001.SZ"])
+        states = feed.trading_states(TradingDate.from_ymd("20240102"), ["000001.SZ"])
         assert "000001.SZ" in states

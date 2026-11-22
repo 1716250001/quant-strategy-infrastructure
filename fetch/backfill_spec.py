@@ -53,6 +53,7 @@ by_date 的 freq 参数（2026-09-19 新增）:
      ⇒ 两侧在真实今天 ≠ 快照日时**永久错位是有意为之**：快照日之后的增量
        不属本轮判据范围。⛔ 不要把 `_resolve_today()` 用到执行侧。
 """
+
 import os
 from datetime import datetime
 
@@ -128,14 +129,14 @@ def resolve_codes(kind):
         # fx_daily 需要 fx_obasic 的代码; 首次运行时缓存到 metadata
         p = meta("fx_obasic.parquet")
         if not os.path.exists(p):
-            return None          # 信号: 需先拉 fx_obasic
+            return None  # 信号: 需先拉 fx_obasic
         df = pd.read_parquet(p)
         return df["ts_code"].dropna().tolist()
 
     if kind == "hk":
         p = meta("hk_basic.parquet")
         if not os.path.exists(p):
-            return None          # 信号: 需先拉 hk_basic
+            return None  # 信号: 需先拉 hk_basic
         df = pd.read_parquet(p)
         return df["ts_code"].dropna().tolist()
 
@@ -143,12 +144,14 @@ def resolve_codes(kind):
         # 国际指数行情(index_global)的代码清单。该接口的代码不是 tushare 常规
         # ts_code(如 "SPX")，而是固定的 22 个国际指数简称，故直接写在 config。
         from config import BACKFILL_GLOBAL_INDEX_CODES
+
         return list(BACKFILL_GLOBAL_INDEX_CODES)
 
     if kind == "fut_index":
         # 南华期货指数(fut_index_daily)的代码清单（2026-09-19 新增）。
         # ⚠ 该接口必填 ts_code；代码格式 <简称>.NH，清单写在 config。
         from config import BACKFILL_FUT_INDEX_CODES
+
         return list(BACKFILL_FUT_INDEX_CODES)
 
     print(f"  [WARN] 未知的 codes 类型: {kind}")
@@ -163,7 +166,7 @@ def backfill_meta_dir():
 # ============================================================
 # 二、日期维度工具
 # ============================================================
-ASOF_DEFAULT = "20261113"   # 体检侧快照日（P3 判据基线，18 号 §400 定；勿改 datetime.now()）
+ASOF_DEFAULT = "20261113"  # 体检侧快照日（P3 判据基线，18 号 §400 定；勿改 datetime.now()）
 
 
 def _resolve_today(today=None):
@@ -244,9 +247,9 @@ def week_last_trade_dates(start, end=None, calendar="SSE", anchor="last_trade"):
         # 该周周一 + 4 天 = 该周周五（ISO 周必含周五）
         monday = dt - pd.to_timedelta(dt.dt.weekday, unit="D")
         friday = (monday + pd.Timedelta(days=4)).dt.strftime("%Y%m%d")
-        return sorted({x for x in friday.tolist() if x <= end})   # 排除未来周五
+        return sorted({x for x in friday.tolist() if x <= end})  # 排除未来周五
 
-    key = dt.dt.strftime("%G-%V")          # ISO 年-周，跨年周正确合并
+    key = dt.dt.strftime("%G-%V")  # ISO 年-周，跨年周正确合并
     last = s.groupby(key).max()
     return sorted(last.tolist())
 
@@ -339,7 +342,7 @@ def build_tasks(name, conf, dry_run=False):
     if mode == "by_code":
         codes = resolve_codes(conf.get("codes"))
         if codes is None:
-            return None, "need_meta"          # 需先拉基础信息表
+            return None, "need_meta"  # 需先拉基础信息表
         return codes, "code"
 
     if mode == "by_date":
@@ -355,13 +358,15 @@ def build_tasks(name, conf, dry_run=False):
         freq = conf.get("freq", "day")
         cal = conf.get("calendar", "SSE")
         if freq == "week":
-            return truncate_to_today(week_last_trade_dates(
-                start, calendar=cal,
-                anchor=conf.get("week_anchor", "last_trade"))), "date"
+            return truncate_to_today(
+                week_last_trade_dates(
+                    start, calendar=cal, anchor=conf.get("week_anchor", "last_trade")
+                )
+            ), "date"
         if freq == "month":
             return truncate_to_today(
-                _drop_unfinished_month(
-                    [d for _, d in month_last_trade_dates(start, calendar=cal)])), "date"
+                _drop_unfinished_month([d for _, d in month_last_trade_dates(start, calendar=cal)])
+            ), "date"
         return truncate_to_today(open_dates_by_market(cal, start_date=start)), "date"
 
     if mode == "by_range":
@@ -383,7 +388,8 @@ def build_tasks(name, conf, dry_run=False):
         if codes is None:
             return None, "need_meta"
         pairs = _drop_unfinished_month_pairs(
-            month_last_trade_dates(start, calendar=conf.get("calendar", "SSE")))
+            month_last_trade_dates(start, calendar=conf.get("calendar", "SSE"))
+        )
         if not codes:
             # broker_recommend 型: 只需月份
             return [(None, m) for m, _ in pairs], "month"
@@ -397,17 +403,30 @@ def build_tasks(name, conf, dry_run=False):
 
 # 实测单日行数（用于推算分页数；来自各接口的真实探测）
 DAILY_ROWS = {
-    "index_daily": 11000, "fut_holding": 10650, "opt_daily": 25800,
-    "fut_wsr": 1200, "repo_daily": 45, "moneyflow": 3000,
-    "margin_detail": 1200, "margin_secs": 500, "top_inst": 800,
-    "block_trade": 200, "hk_hold": 2200, "suspend_d": 90,
-    "fut_daily": 340, "fut_mapping": 200,
+    "index_daily": 11000,
+    "fut_holding": 10650,
+    "opt_daily": 25800,
+    "fut_wsr": 1200,
+    "repo_daily": 45,
+    "moneyflow": 3000,
+    "margin_detail": 1200,
+    "margin_secs": 500,
+    "top_inst": 800,
+    "block_trade": 200,
+    "hk_hold": 2200,
+    "suspend_d": 90,
+    "fut_daily": 340,
+    "fut_mapping": 200,
     # by_param 类的实测总量(用于推算页数)
-    "fut_basic": 11275, "opt_basic": 30730,
+    "fut_basic": 11275,
+    "opt_basic": 30730,
     # 单日多页类（用于推算 by_date 的页数）
-    "bc_otcqt": 8160,      # 单日约 8160 行 → 2000/页 = 5 页
+    "bc_otcqt": 8160,  # 单日约 8160 行 → 2000/页 = 5 页
     # C 档其余表单日行数（均 < 50，1 页足够，列出便于估算换算）
-    "fund_div": 40, "sge_daily": 41, "daily_info": 11, "sz_daily_info": 14,
+    "fund_div": 40,
+    "sge_daily": 41,
+    "daily_info": 11,
+    "sz_daily_info": 14,
     "eco_cal": 50,
 }
 
@@ -431,14 +450,14 @@ def estimate_requests(tasks, conf):
         page = conf.get("page_size", 2000)
         rows = DAILY_ROWS.get(api, 0)
         if rows and n:
-            pages_total = -(-rows // page)      # 向上取整
-            return pages_total + n              # + 收尾
+            pages_total = -(-rows // page)  # 向上取整
+            return pages_total + n  # + 收尾
         return n
 
     if api in BACKFILL_PAGE_CONF:
         page, _ = BACKFILL_PAGE_CONF[api]
-        rows = DAILY_ROWS.get(api, page)        # 未知则按 1 页
-        pages = max(1, -(-rows // page))        # 向上取整
+        rows = DAILY_ROWS.get(api, page)  # 未知则按 1 页
+        pages = max(1, -(-rows // page))  # 向上取整
         n = n * pages
     return n
 
@@ -462,18 +481,25 @@ def expected_task_count(name, conf, today=None):
         if freq == "week":
             # ⚠ 必须与 build_tasks 同口径（否则 R12 缺口分析会漂移）；
             #   体检侧额外把快照日传下去 ⇒ 结果不再随真实日期漂移。
-            return truncate_to_today(week_last_trade_dates(
-                start, end=today, calendar=cal,
-                anchor=conf.get("week_anchor", "last_trade")), today=today), "date"
+            return truncate_to_today(
+                week_last_trade_dates(
+                    start, end=today, calendar=cal, anchor=conf.get("week_anchor", "last_trade")
+                ),
+                today=today,
+            ), "date"
         if freq == "month":
             return truncate_to_today(
-                [d for _, d in _drop_unfinished_month_pairs(
-                    month_last_trade_dates(start, end=today, calendar=cal),
-                    cur=str(today)[:6])],
-                today=today), "date"
+                [
+                    d
+                    for _, d in _drop_unfinished_month_pairs(
+                        month_last_trade_dates(start, end=today, calendar=cal), cur=str(today)[:6]
+                    )
+                ],
+                today=today,
+            ), "date"
         return truncate_to_today(
-            open_dates_by_market(cal, start_date=start, end_date=today),
-            today=today), "date"
+            open_dates_by_market(cal, start_date=start, end_date=today), today=today
+        ), "date"
 
     if mode == "by_range":
         # ⚠ 当年端点用"今天"（见模块 docstring 纪律 2）
@@ -503,9 +529,9 @@ def expected_task_count(name, conf, today=None):
         if codes is None:
             return None, "need_meta"
         pairs = _drop_unfinished_month_pairs(
-            month_last_trade_dates(
-                start, end=today, calendar=conf.get("calendar", "SSE")),
-            cur=str(today)[:6])
+            month_last_trade_dates(start, end=today, calendar=conf.get("calendar", "SSE")),
+            cur=str(today)[:6],
+        )
         if not codes:
             return [f"None|{m}" for m, _ in pairs], "month"
         return [f"{c}|{d}" for c in codes for _, d in pairs], "month"

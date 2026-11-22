@@ -3,6 +3,7 @@
 
 ⚠ test_env_override_works 会 importlib.reload(config)，必须放在文件最后。
 """
+
 import os
 
 import config
@@ -33,6 +34,7 @@ def test_env_override_works(monkeypatch):
 
     import config as c
     import config.paths as cp
+
     importlib.reload(cp)
     importlib.reload(c)
     assert c.WIND_DATA_DIR != r"D:\全量数据\wind_data"

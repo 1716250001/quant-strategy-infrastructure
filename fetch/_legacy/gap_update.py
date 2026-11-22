@@ -123,6 +123,7 @@ def scan_db_latest_date():
 # 获取交易日历中间隔
 # ============================================================
 
+
 def get_trade_dates_between(start_date, end_date):
     """
     获取 start_date（不含）到 end_date（含）之间的所有交易日。
@@ -146,6 +147,7 @@ def get_trade_dates_between(start_date, end_date):
 # ============================================================
 # 主流程
 # ============================================================
+
 
 # ============================================================
 # 废弃守卫
@@ -179,7 +181,8 @@ def _guard_deprecated(entry):
         f"        python -m fetch.daily_update --help  # 引擎本体\n"
         f"\n"
         f"  若确需查看旧实现，请直接阅读源码，不要执行本模块。\n"
-        f"{'=' * 74}\n")
+        f"{'=' * 74}\n"
+    )
 
 
 # ============================================================
@@ -249,8 +252,9 @@ def run_gap_update(target_date=None, dry_run=False):
         total_missing += len(gaps)
         total_api_calls += len(gaps)
         dir_name = os.path.basename(INTRADAY_UPDATE_APIS[api_name][0])
-        print(f"  {api_name:15s} ({dir_name:15s}): {api_latest} → {target_date}, "
-              f"缺口 {len(gaps)} 天")
+        print(
+            f"  {api_name:15s} ({dir_name:15s}): {api_latest} → {target_date}, 缺口 {len(gaps)} 天"
+        )
 
         if gaps and len(gaps) <= 30:
             print(f"    缺口日期: {', '.join(gaps)}")
@@ -301,7 +305,7 @@ def run_gap_update(target_date=None, dry_run=False):
         api_fail = 0
 
         for i, dt in enumerate(gaps):
-            print(f"\n  [{api_name}] 进度: {i+1}/{len(gaps)} | 日期: {dt}")
+            print(f"\n  [{api_name}] 进度: {i + 1}/{len(gaps)} | 日期: {dt}")
 
             s, f = update_one_api(pro, api_name, limiter, dt, dry_run=False)
             api_success += s
@@ -309,8 +313,7 @@ def run_gap_update(target_date=None, dry_run=False):
             processed += 1
 
             elapsed = time.time() - t_start
-            print(f"  当日完成: 更新={s} 失败={f} | "
-                  f"累计耗时={elapsed/60:.1f}min")
+            print(f"  当日完成: 更新={s} 失败={f} | 累计耗时={elapsed / 60:.1f}min")
 
         grand_success += api_success
         grand_fail += api_fail
@@ -325,15 +328,14 @@ def run_gap_update(target_date=None, dry_run=False):
     print(f"{'=' * 60}")
     print(f"  目标日期:           {target_date}")
     for api_name in INTRADAY_UPDATE_APIS:
-        api_latest = detail.get(api_name, '?')
+        api_latest = detail.get(api_name, "?")
         gaps = api_gaps.get(api_name, [])
         dir_name = os.path.basename(INTRADAY_UPDATE_APIS[api_name][0])
-        print(f"  {api_name:15s} ({dir_name:15s}): {api_latest} → {target_date} "
-              f"({len(gaps)}天)")
+        print(f"  {api_name:15s} ({dir_name:15s}): {api_latest} → {target_date} ({len(gaps)}天)")
     print(f"  总更新: {grand_success} | 总失败: {grand_fail}")
     print(f"  总请求: {limiter.total_requests}")
     print(f"  频次统计: {limiter.status_str()}")
-    print(f"  总耗时: {elapsed/60:.1f} 分钟")
+    print(f"  总耗时: {elapsed / 60:.1f} 分钟")
     print(f"{'=' * 60}")
 
     return grand_success, grand_fail
@@ -343,10 +345,10 @@ def run_gap_update(target_date=None, dry_run=False):
 # CLI入口
 # ============================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="差额补全更新 (已废弃, 请用 main.py gap-update)")
-    parser.add_argument("--date", default=None,
-                        help="目标日期 YYYYMMDD (默认: 自动获取最近交易日)")
+    parser.add_argument("--date", default=None, help="目标日期 YYYYMMDD (默认: 自动获取最近交易日)")
     parser.add_argument("--dry-run", action="store_true", help="空跑模式, 只统计不写入")
     args = parser.parse_args()
 

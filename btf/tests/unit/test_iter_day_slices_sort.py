@@ -8,6 +8,7 @@
 
 注：`iter_day_slices` 的 `cols` 是**整年**列数据，日切片由 `lo/hi` 表达。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,8 +24,13 @@ DATES = ["20240102"] * 3 + ["20240103"] * 2 + ["20240104"] * 2
 
 
 def _write(root: Path, codes: list[str]) -> Path:
-    t = pa.table({"ts_code": pa.array(codes), "trade_date": pa.array(DATES),
-                  "close": pa.array([float(i) for i in range(len(codes))])})
+    t = pa.table(
+        {
+            "ts_code": pa.array(codes),
+            "trade_date": pa.array(DATES),
+            "close": pa.array([float(i) for i in range(len(codes))]),
+        }
+    )
     (root / "daily").mkdir(parents=True)
     pq.write_table(t, root / "daily" / "2024.parquet")
     return t
@@ -51,8 +57,15 @@ def _slice(cols: dict[str, list], lo: int, hi: int) -> dict[str, list]:
 
 
 def test_ascending_fast_path_matches_single_key(tmp_path):
-    codes = ["000001.SZ", "000002.SZ", "000003.SZ",
-             "000002.SZ", "000003.SZ", "000001.SZ", "000002.SZ"]
+    codes = [
+        "000001.SZ",
+        "000002.SZ",
+        "000003.SZ",
+        "000002.SZ",
+        "000003.SZ",
+        "000001.SZ",
+        "000002.SZ",
+    ]
     t = _write(tmp_path, sorted(codes))
     got = list(iter_day_slices("daily", tmp_path, "20240101", "20240131"))
     want = _reference(t, [("trade_date", "ascending")])
@@ -65,8 +78,15 @@ def test_ascending_fast_path_matches_single_key(tmp_path):
 
 def test_non_ascending_falls_back_to_double_key(tmp_path):
     """`ts_code` 非升序 ⇒ 双键回退，结果与**原实现**逐值一致。"""
-    codes = ["000003.SZ", "000002.SZ", "000001.SZ",
-             "000003.SZ", "000001.SZ", "000002.SZ", "000001.SZ"]
+    codes = [
+        "000003.SZ",
+        "000002.SZ",
+        "000001.SZ",
+        "000003.SZ",
+        "000001.SZ",
+        "000002.SZ",
+        "000001.SZ",
+    ]
     t = _write(tmp_path, codes)
     got = list(iter_day_slices("daily", tmp_path, "20240101", "20240131"))
     want = _reference(t, [("trade_date", "ascending"), ("ts_code", "ascending")])

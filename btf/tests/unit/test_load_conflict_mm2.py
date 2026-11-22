@@ -7,6 +7,7 @@
     ③ 未声明 `strategy_paths` ⇒ 检测不触发（行为与 LL-2 前一致）；
     另：幂等注入行为不变由 `test_strategy_paths.py` 现有 5 例守卫（不回退）。
 """
+
 from __future__ import annotations
 
 import importlib
@@ -17,7 +18,7 @@ import pytest
 from btf.config.validation import ConfigError
 from btf.runtime import BTFRuntime
 
-DEMO = '''\
+DEMO = """\
 from btf.domain.contracts import CONTRACT_VERSION
 from btf.strategy.base import StrategyBase
 
@@ -27,7 +28,7 @@ class DemoStrategy(StrategyBase):
 
     def __init__(self, **_params):
         super().__init__()
-'''
+"""
 
 
 def _runtime() -> BTFRuntime:
@@ -51,11 +52,10 @@ class TestLoadConflictDetection:
         other = tmp_path / "other"
         other.mkdir()
         monkeypatch.syspath_prepend(str(evil_root))
-        importlib.import_module("mm2_conflict_pkg")     # 模拟同进程先装载异源同名包
+        importlib.import_module("mm2_conflict_pkg")  # 模拟同进程先装载异源同名包
         try:
             rt = _runtime()
-            cfg = {"strategy": "mm2_conflict_pkg:DemoStrategy",
-                   "strategy_paths": [str(other)]}
+            cfg = {"strategy": "mm2_conflict_pkg:DemoStrategy", "strategy_paths": [str(other)]}
             with pytest.raises(ConfigError, match="包名冲突：请使用唯一包名"):
                 rt._load_strategy(cfg)
         finally:
@@ -66,11 +66,10 @@ class TestLoadConflictDetection:
         root = tmp_path / "root"
         _make_pkg(root, "mm2_same_pkg")
         monkeypatch.syspath_prepend(str(root))
-        importlib.import_module("mm2_same_pkg")          # 先从 root 缓存
+        importlib.import_module("mm2_same_pkg")  # 先从 root 缓存
         try:
             rt = _runtime()
-            cfg = {"strategy": "mm2_same_pkg:DemoStrategy",
-                   "strategy_paths": [str(root)]}
+            cfg = {"strategy": "mm2_same_pkg:DemoStrategy", "strategy_paths": [str(root)]}
             strategy = rt._load_strategy(cfg)
             assert type(strategy).__name__ == "DemoStrategy"
         finally:

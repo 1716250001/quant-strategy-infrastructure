@@ -12,24 +12,35 @@
   ② 同数据换旧 4 键两次 → 变 2 行（复现折叠丢行）
   ③ 三处配置断言，防止回退
 """
+
 import pandas as pd
 
 from common.parquet_store import upsert_by_year
 from config import BACKFILL_TARGETS, DB_AUDIT_PKEYS, PERIODIC_UPDATE_TARGETS
 
-COLS = ["ts_code", "ann_date", "float_date", "float_share",
-        "float_ratio", "holder_name", "share_type"]
+COLS = [
+    "ts_code",
+    "ann_date",
+    "float_date",
+    "float_share",
+    "float_ratio",
+    "holder_name",
+    "share_type",
+]
 
 OLD_4KEYS = ["ts_code", "float_date", "ann_date", "holder_name"]
 
 
 def _sample():
     """3 行：前两行仅 float_share 不同（旧 4 键会折叠），第三行换持有人。"""
-    return pd.DataFrame([
-        ["000001.SZ", "20240101", "20240201", 400000.0, 0.12, "甲", "定增股份"],
-        ["000001.SZ", "20240101", "20240201", 800000.0, 0.24, "甲", "定增股份"],
-        ["000001.SZ", "20240101", "20240201", 300000.0, 0.09, "乙", "定增股份"],
-    ], columns=COLS)
+    return pd.DataFrame(
+        [
+            ["000001.SZ", "20240101", "20240201", 400000.0, 0.12, "甲", "定增股份"],
+            ["000001.SZ", "20240101", "20240201", 800000.0, 0.24, "甲", "定增股份"],
+            ["000001.SZ", "20240101", "20240201", 300000.0, 0.09, "乙", "定增股份"],
+        ],
+        columns=COLS,
+    )
 
 
 def _rows(tmp_path, year="2024"):
@@ -39,12 +50,10 @@ def _rows(tmp_path, year="2024"):
 def test_full_column_subset_keeps_all_rows(tmp_path):
     """① subset="*" 连写两次 → 仍 3 行"""
     df = _sample()
-    upsert_by_year(df, str(tmp_path), date_col="ann_date", subset="*",
-                   sort_by="ann_date")
+    upsert_by_year(df, str(tmp_path), date_col="ann_date", subset="*", sort_by="ann_date")
     assert _rows(tmp_path) == 3, "全列判重首写后应保留 3 行"
 
-    upsert_by_year(df, str(tmp_path), date_col="ann_date", subset="*",
-                   sort_by="ann_date")
+    upsert_by_year(df, str(tmp_path), date_col="ann_date", subset="*", sort_by="ann_date")
     assert _rows(tmp_path) == 3, "全列判重重复写不应折叠"
 
     got = pd.read_parquet(tmp_path / "2024.parquet")
@@ -58,12 +67,10 @@ def test_old_four_key_subset_collapses_rows(tmp_path):
     —— 这正是日更/周期刷新重写年度文件时静默丢行的真实路径。
     """
     df = _sample()
-    upsert_by_year(df, str(tmp_path), date_col="ann_date", subset=OLD_4KEYS,
-                   sort_by="ann_date")
+    upsert_by_year(df, str(tmp_path), date_col="ann_date", subset=OLD_4KEYS, sort_by="ann_date")
     assert _rows(tmp_path) == 3, "首写为新建文件分支，原样落盘 3 行"
 
-    upsert_by_year(df, str(tmp_path), date_col="ann_date", subset=OLD_4KEYS,
-                   sort_by="ann_date")
+    upsert_by_year(df, str(tmp_path), date_col="ann_date", subset=OLD_4KEYS, sort_by="ann_date")
     assert _rows(tmp_path) == 2, "旧 4 键在重写时把同持有人两笔折叠成 1 行"
 
 

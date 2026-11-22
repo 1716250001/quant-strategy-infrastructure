@@ -6,6 +6,7 @@
 RunStore 供数 + 章节顺序；渲染层（viz/render.py）把 Spec 变成 HTML。
 三层可独立替换（Plotly→ECharts 只动渲染层）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -21,7 +22,7 @@ class ChartQuery:
     """图表插件的数据请求（声明式）：插件声明要什么，编排层从 RunStore 供给。"""
 
     run_id: str
-    dataset: str                      # snapshots|trades|fills|rejections|metrics
+    dataset: str  # snapshots|trades|fills|rejections|metrics
     fields: Sequence[str] = ()
     filters: Mapping[str, Any] | None = None
     contract_version: str = CHART_CONTRACT_VERSION
@@ -33,8 +34,8 @@ class SeriesSpec:
 
     name: str
     values: Sequence[Any]
-    axis: str = "y"                   # y | y2
-    kind: str = "line"                # line|area|bar|heatmap|table
+    axis: str = "y"  # y | y2
+    kind: str = "line"  # line|area|bar|heatmap|table
     style: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -43,7 +44,7 @@ class AxisSpec:
     """轴定义（标题/格式/对数）。"""
 
     title: str = ""
-    format: str = ""                  # "" | "pct" | "date" | "log"
+    format: str = ""  # "" | "pct" | "date" | "log"
     range: Sequence[float] | None = None
 
 
@@ -54,14 +55,14 @@ class AnnotationSpec:
     x: Any
     y: Any
     text: str = ""
-    kind: str = "point"               # point|vline|band
+    kind: str = "point"  # point|vline|band
 
 
 @dataclass(frozen=True)
 class ChartSpec:
     """图表插件输出（渲染无关声明；可序列化——报告缓存/测试快照）。"""
 
-    chart_type: str                   # line|heatmap|candle|area|table|scatter
+    chart_type: str  # line|heatmap|candle|area|table|scatter
     title: str
     subtitle: str | None = None
     series: Sequence[SeriesSpec] = ()
@@ -71,15 +72,30 @@ class ChartSpec:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "chart_type": self.chart_type, "title": self.title,
+            "chart_type": self.chart_type,
+            "title": self.title,
             "subtitle": self.subtitle,
-            "series": [{"name": s.name, "values": list(s.values), "axis": s.axis,
-                        "kind": s.kind, "style": dict(s.style)} for s in self.series],
-            "axes": {k: {"title": v.title, "format": v.format,
-                         "range": list(v.range) if v.range else None}
-                     for k, v in self.axes.items()},
-            "annotations": [{"x": a.x, "y": a.y, "text": a.text, "kind": a.kind}
-                            for a in self.annotations],
+            "series": [
+                {
+                    "name": s.name,
+                    "values": list(s.values),
+                    "axis": s.axis,
+                    "kind": s.kind,
+                    "style": dict(s.style),
+                }
+                for s in self.series
+            ],
+            "axes": {
+                k: {
+                    "title": v.title,
+                    "format": v.format,
+                    "range": list(v.range) if v.range else None,
+                }
+                for k, v in self.axes.items()
+            },
+            "annotations": [
+                {"x": a.x, "y": a.y, "text": a.text, "kind": a.kind} for a in self.annotations
+            ],
             "export_hint": dict(self.export_hint or {}),
         }
 

@@ -6,6 +6,7 @@
     2. 端到端耗时 **< 30 分钟**（DXP 验收口径；实测应远低于此）；
     3. 产物齐备（manifest 七件）+ R1 复核通过 + 报告可生成。
 """
+
 from __future__ import annotations
 
 import time
@@ -20,11 +21,10 @@ pytestmark = [pytest.mark.l3]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG = PROJECT_ROOT / "examples" / "config_rotation.yaml"
-DXP_LIMIT_SECONDS = 30 * 60          # 30 分钟（DXP 验收）
+DXP_LIMIT_SECONDS = 30 * 60  # 30 分钟（DXP 验收）
 
 
-@pytest.mark.skipif(not (Path(MARKET_DATA_DIR) / "daily").is_dir(),
-                    reason="主库不可用")
+@pytest.mark.skipif(not (Path(MARKET_DATA_DIR) / "daily").is_dir(), reason="主库不可用")
 class TestExampleRotation:
     def test_config_check(self, capsys):
         assert main(["config-check", str(CONFIG)]) == 0
@@ -41,19 +41,26 @@ class TestExampleRotation:
         assert result.snapshots, "无快照（回测未产出）"
         assert result.fills, "无成交（示例策略应调仓）"
         assert elapsed < DXP_LIMIT_SECONDS, f"DXP 验收超标：{elapsed:.0f}s"
-        print(f"\nDXP-rotation: {result.n_days} 日 / {len(result.fills)} 成交 "
-              f"/ {elapsed:.1f}s（预算 {DXP_LIMIT_SECONDS}s）")
+        print(
+            f"\nDXP-rotation: {result.n_days} 日 / {len(result.fills)} 成交 "
+            f"/ {elapsed:.1f}s（预算 {DXP_LIMIT_SECONDS}s）"
+        )
 
         # 产物七件齐全
         directory = store.run_dir(result.run_id)
-        for name in ("manifest.json", "snapshots.jsonl", "trades.jsonl",
-                     "fills.jsonl", "rejections.jsonl", "events.jsonl",
-                     "metrics.json"):
+        for name in (
+            "manifest.json",
+            "snapshots.jsonl",
+            "trades.jsonl",
+            "fills.jsonl",
+            "rejections.jsonl",
+            "events.jsonl",
+            "metrics.json",
+        ):
             assert (directory / name).is_file(), name
 
         # R1 复核 + 报告再生成
         report = rt.verify_run(result.run_id, store=store)
         assert report["match"], "R1 复核失败（产物与 manifest 摘要不一致）"
-        assert main(["report", "--run", result.run_id,
-                     "--out-dir", str(tmp_path)]) == 0
+        assert main(["report", "--run", result.run_id, "--out-dir", str(tmp_path)]) == 0
         assert (directory / "report.html").is_file()

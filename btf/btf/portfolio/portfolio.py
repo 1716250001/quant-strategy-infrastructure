@@ -26,6 +26,7 @@ NAV 四式（快照字段唯一计算公式，N5-1；参考计算器对账锚点
 T+1 冻结：买入不增 available_qty（t_plus=1），advance_day() 于新交易日
 开盘前同步 available_qty = qty；t_plus=0（债券/黄金/跨境/货币 ETF）立即可用。
 """
+
 from __future__ import annotations
 
 import logging
@@ -48,11 +49,11 @@ class Position:
     """持仓（引擎内可变状态；对快照只读视图）。记账口径=不复权名义价。"""
 
     symbol: str
-    qty: int = 0                    # 总持仓（股）；除权日经事件调整（PoC-3）
-    available_qty: int = 0          # T+N 可卖数量（当日买入冻结，t_plus=1）
-    avg_cost: float = 0.0           # 名义价持仓成本（含费用）
+    qty: int = 0  # 总持仓（股）；除权日经事件调整（PoC-3）
+    available_qty: int = 0  # T+N 可卖数量（当日买入冻结，t_plus=1）
+    avg_cost: float = 0.0  # 名义价持仓成本（含费用）
     realized_pnl: float = 0.0
-    unrealized_pnl: float = 0.0     # 每 bar 按名义 close 重估
+    unrealized_pnl: float = 0.0  # 每 bar 按名义 close 重估
 
     # ── 记账四式（买入/卖出只动持仓空间；现金在 Portfolio.apply_fill）──
     def buy(self, fill_price: float, fill_qty: int, fee_total: float) -> None:
@@ -60,7 +61,8 @@ class Position:
         new_qty = self.qty + fill_qty
         self.avg_cost = (
             (self.avg_cost * self.qty + fill_price * fill_qty + fee_total) / new_qty
-            if new_qty else 0.0
+            if new_qty
+            else 0.0
         )
         self.qty = new_qty
 
@@ -85,9 +87,9 @@ class PortfolioSnapshot:
 
     date: TradingDate
     cash: float
-    market_value: float             # 持仓市值（不含现金，N5-2 消歧）
-    total_value: float              # = cash + market_value（NAV）
-    weights: Mapping[str, float]    # 当日权重（含现金项 CASH_KEY）
+    market_value: float  # 持仓市值（不含现金，N5-2 消歧）
+    total_value: float  # = cash + market_value（NAV）
+    weights: Mapping[str, float]  # 当日权重（含现金项 CASH_KEY）
     positions_qty: Mapping[str, int]
     daily_return: float
     cumulative_return: float
@@ -106,9 +108,9 @@ class Portfolio:
     positions: dict[str, Position] = field(default_factory=dict)
     # 重估基准价（mark_all 维护；total_value/snapshot 消费）
     _last_close: dict[str, float] = field(default_factory=dict)
-    _tv0: float | None = None       # total_value_0（cumulative 基点）
-    _tv_prev: float | None = None   # total_value_{t-1}
-    _tv_peak: float | None = None   # max(total_value_0..t)
+    _tv0: float | None = None  # total_value_0（cumulative 基点）
+    _tv_prev: float | None = None  # total_value_{t-1}
+    _tv_peak: float | None = None  # max(total_value_0..t)
     #: **CL-2 第二段（R5′，19 号 §79.4）**：配股行权审计（逐事件：
     #: 获配股数 / 缴款额 / 现金缺口 / 上市日 / 理论除权价）——引擎转 run 元数据。
     rights_events: list[dict[str, Any]] = field(default_factory=list)
@@ -134,7 +136,7 @@ class Portfolio:
             pos.buy(fill.price, fill.qty, fee)
             self.cash -= fill.price * fill.qty + fee
             if t_plus == 0:
-                pos.available_qty += fill.qty   # T+0 品种当日可卖
+                pos.available_qty += fill.qty  # T+0 品种当日可卖
         else:
             pos = self.positions.get(fill.symbol)
             if pos is None or pos.available_qty < fill.qty:
@@ -190,7 +192,7 @@ class Portfolio:
         ratio = float(getattr(action, "rights_ratio", 0.0) or 0.0)
         if ratio > 0.0 and qty_at_ex > 0:
             price = float(getattr(action, "rights_price", 0.0) or 0.0)
-            m = int(qty_at_ex * ratio)          # 可配股数（§79.3 #1 默认 floor）
+            m = int(qty_at_ex * ratio)  # 可配股数（§79.3 #1 默认 floor）
             if m > 0:
                 cost = m * price
                 p0 = self._last_close.get(action.symbol)
@@ -206,9 +208,8 @@ class Portfolio:
                 cash_before = self.cash
                 pos.qty += m
                 pos.available_qty += m
-                self.cash -= cost                   # 默认外部增资补足（可透支）
-                pos.avg_cost = ((old_cost * qty_at_ex + cost)
-                                / (qty_at_ex + m))
+                self.cash -= cost  # 默认外部增资补足（可透支）
+                pos.avg_cost = (old_cost * qty_at_ex + cost) / (qty_at_ex + m)
                 pex = (p0 + ratio * price) / (1.0 + ratio) if p0 > 0 else None
                 # **R19′（Q-6 §85.3）**：清单 L2（effective_ratio）下发的 `pex`
                 # 优先——**仅无 bar 时生效**（有 bar ⇒ 步骤⑤ mark_all 以真实收盘
@@ -219,18 +220,24 @@ class Portfolio:
                 if pex is not None:
                     self._last_close[action.symbol] = pex
                 listing = getattr(action, "rights_listing_date", None)
-                self.rights_events.append({
-                    "symbol": action.symbol,
-                    "ex_date": action.ex_date.to_ymd(),
-                    "ratio": ratio, "price": price,
-                    "qty_at_ex": qty_at_ex, "rights_qty": m, "cost": cost,
-                    "cash_shortfall": max(0.0, cost - cash_before),
-                    "p0": p0, "pex": pex,
-                    # B-02：`last_close`（正常）／`avg_cost_fallback`（降级，
-                    # 当日无 bar ⇒ 成本冒充市价）——报告层据此进披露通道
-                    "p0_source": p0_source,
-                    "listing_date": (listing.to_ymd() if listing else None),
-                })
+                self.rights_events.append(
+                    {
+                        "symbol": action.symbol,
+                        "ex_date": action.ex_date.to_ymd(),
+                        "ratio": ratio,
+                        "price": price,
+                        "qty_at_ex": qty_at_ex,
+                        "rights_qty": m,
+                        "cost": cost,
+                        "cash_shortfall": max(0.0, cost - cash_before),
+                        "p0": p0,
+                        "pex": pex,
+                        # B-02：`last_close`（正常）／`avg_cost_fallback`（降级，
+                        # 当日无 bar ⇒ 成本冒充市价）——报告层据此进披露通道
+                        "p0_source": p0_source,
+                        "listing_date": (listing.to_ymd() if listing else None),
+                    }
+                )
 
         # 缩股（**R6′** 代理检测 / **R18′** 股本级确证；默认不触发）：qty 按比例
         # 减少、**无现金流**；成本总额守恒 ⇒ 每股成本按 1/ratio 放大；理论价
@@ -248,31 +255,38 @@ class Portfolio:
         cons = ratio_or_default(
             getattr(action, "consolidation_ratio", None),
             context=f"portfolio:{action.symbol}:{action.ex_date.to_ymd()}",
-            warn=logger.warning)
+            warn=logger.warning,
+        )
         if cons != 1.0 and qty_at_ex > 0:
             raw_qty = int(qty_at_ex * cons)
             # **R45′（N48，2026-10-08）**：碎份口径＝**向下取整、丢弃不补偿**
-            #（ADR-20 第 ⑪ 条）——丢弃量逐事件披露（`qty_fraction_dropped`），
+            # （ADR-20 第 ⑪ 条）——丢弃量逐事件披露（`qty_fraction_dropped`），
             # 不得静默消失（510310 实测 777,700 × 0.499844 = 388,728.7 ⇒ 丢 0.7 份）。
             frac_dropped = qty_at_ex * cons - raw_qty
-            forced = raw_qty <= 0                      # R21′ 保底判定（保底前）
+            forced = raw_qty <= 0  # R21′ 保底判定（保底前）
             new_qty = 1 if forced else raw_qty
             p0c = self._last_close.get(action.symbol)
             if p0c is None or p0c <= 0:
                 p0c = pos.avg_cost
-            self.consolidations.append({
-                "symbol": action.symbol,
-                "ex_date": action.ex_date.to_ymd(),
-                "ratio": cons, "qty_before": qty_at_ex, "qty_after": new_qty,
-                "p0": p0c,
-                "p_resume_theory": (p0c / cons if p0c > 0 and cons > 0 else None),
-                "source": str(getattr(action, "consolidation_source", "proxy")
-                              or "proxy"),
-                **({"forced_min_qty": True} if forced else {}),
-                # R45′（N48）：碎份丢弃量（向下取整差；保底路径不适用）
-                **({"qty_fraction_dropped": round(frac_dropped, 6)}
-                   if not forced and frac_dropped > 1e-9 else {}),
-            })
+            self.consolidations.append(
+                {
+                    "symbol": action.symbol,
+                    "ex_date": action.ex_date.to_ymd(),
+                    "ratio": cons,
+                    "qty_before": qty_at_ex,
+                    "qty_after": new_qty,
+                    "p0": p0c,
+                    "p_resume_theory": (p0c / cons if p0c > 0 and cons > 0 else None),
+                    "source": str(getattr(action, "consolidation_source", "proxy") or "proxy"),
+                    **({"forced_min_qty": True} if forced else {}),
+                    # R45′（N48）：碎份丢弃量（向下取整差；保底路径不适用）
+                    **(
+                        {"qty_fraction_dropped": round(frac_dropped, 6)}
+                        if not forced and frac_dropped > 1e-9
+                        else {}
+                    ),
+                }
+            )
             if not forced:
                 # 正常路径（**逐位不变**——R21′-C1）：成本总额守恒 ⇒ 每股放大
                 pos.avg_cost = pos.avg_cost * qty_at_ex / new_qty
@@ -328,8 +342,7 @@ class Portfolio:
     def market_value(self) -> float:
         """持仓市值（不含现金）。"""
         return sum(
-            pos.qty * self._last_close.get(sym, pos.avg_cost)
-            for sym, pos in self.positions.items()
+            pos.qty * self._last_close.get(sym, pos.avg_cost) for sym, pos in self.positions.items()
         )
 
     def total_value(self) -> float:
@@ -360,7 +373,7 @@ class Portfolio:
                 continue
             value = pos.qty * self._last_close.get(sym, pos.avg_cost)
             values[sym] = value
-            qtys[sym] = pos.qty          # PF-8：持仓数量同遍产出（原二次遍历）
+            qtys[sym] = pos.qty  # PF-8：持仓数量同遍产出（原二次遍历）
             market += value
         tv = self.cash + market
         if self._tv0 is None:
@@ -371,15 +384,19 @@ class Portfolio:
         cum = tv / self._tv0 - 1.0 if self._tv0 else 0.0
         dd = tv / self._tv_peak - 1.0 if self._tv_peak else 0.0
         self._tv_prev = tv
-        weights: dict[str, float] = (
-            {sym: value / tv for sym, value in values.items()} if tv else {})
+        weights: dict[str, float] = {sym: value / tv for sym, value in values.items()} if tv else {}
         if tv:
             weights[CASH_KEY] = self.cash / tv
         return PortfolioSnapshot(
-            date=date, cash=self.cash, market_value=market, total_value=tv,
+            date=date,
+            cash=self.cash,
+            market_value=market,
+            total_value=tv,
             weights=weights,
-            positions_qty=qtys,          # 单遍产出（19 号审查 PF-8/P3-2 注释一致）
-            daily_return=daily, cumulative_return=cum, drawdown=dd,
+            positions_qty=qtys,  # 单遍产出（19 号审查 PF-8/P3-2 注释一致）
+            daily_return=daily,
+            cumulative_return=cum,
+            drawdown=dd,
         )
 
     # ── 便捷 ──

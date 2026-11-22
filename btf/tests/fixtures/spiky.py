@@ -9,6 +9,7 @@
 ⇒ 相对退化率 ≈ 100% > 50%，`--perturb` 必须报**敏感**（与平坦对照
 `ConfigBuyHold` 的双向探针见 `tests/unit/test_grid_search.py`）。
 """
+
 from __future__ import annotations
 
 from btf.domain.contracts import CONTRACT_VERSION
@@ -24,8 +25,7 @@ class ConfigSpiky(StrategyBase):
     #: S1 契约声明（runtime 对策略做版本协商）
     contract_version = CONTRACT_VERSION
 
-    def __init__(self, symbol: str = "000001.SZ", x: float = 1.0,
-                 weight: float = 0.9):
+    def __init__(self, symbol: str = "000001.SZ", x: float = 1.0, weight: float = 0.9):
         self.symbol = symbol
         self.x = x
         self.weight = weight

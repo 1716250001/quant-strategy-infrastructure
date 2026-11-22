@@ -21,6 +21,7 @@
 000001.SZ / 000002.SZ / 600811.SH / 600867.SH 各 14 次）——
 行动密度最大化路径覆盖（含同日多行动/停牌中除权/90 年代 ex≠pay）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -48,7 +49,7 @@ SYMBOLS = ["600276.SH", "000001.SZ", "000002.SZ", "600811.SH", "600867.SH"]
 START = TradingDate.from_ymd("20080102")
 END = TradingDate.from_ymd("20251231")
 INITIAL_CASH = 1_000_000.0
-G9_TOL = 0.01          # 1%：除权价 2 位小数舍入累积 + af 舍入噪声
+G9_TOL = 0.01  # 1%：除权价 2 位小数舍入累积 + af 舍入噪声
 
 
 class FirstBarBuyHold(StrategyBase):
@@ -60,8 +61,7 @@ class FirstBarBuyHold(StrategyBase):
 
     def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
         if not self.done and ctx.history(self.symbol, date, n_bars=1):
-            ctx.submit_target(
-                TargetPortfolio(rebalance_date=date, targets={self.symbol: 1.0}))
+            ctx.submit_target(TargetPortfolio(rebalance_date=date, targets={self.symbol: 1.0}))
             self.done = True
 
 
@@ -88,14 +88,18 @@ def adjust():
 @pytest.mark.parametrize("symbol", SYMBOLS)
 def test_g9_event_chain_equals_hfq(feed, adjust, symbol, tmp_path):
     bars = feed.bars_of(symbol, START, END)
-    assert len(bars) > 1_000                       # 窗口量级护栏
+    assert len(bars) > 1_000  # 窗口量级护栏
     acts = [a for a in feed.corporate_actions(START, END) if a.symbol == symbol]
-    assert len(acts) >= 6                          # 行动密度护栏（Top5）
+    assert len(acts) >= 6  # 行动密度护栏（Top5）
     # ── 引擎世界：buy-and-hold 全历史 ──
-    inst = {symbol: Instrument(symbol=symbol, asset_class=AssetClass.STOCK,
-                               board="main", lot_size=100)}
+    inst = {
+        symbol: Instrument(symbol=symbol, asset_class=AssetClass.STOCK, board="main", lot_size=100)
+    }
     result = Engine(
-        feed, FirstBarBuyHold(symbol), start=START, end=END,
+        feed,
+        FirstBarBuyHold(symbol),
+        start=START,
+        end=END,
         initial_cash=INITIAL_CASH,
         handler=NextOpenHandler(cost_model=ZeroCostModel(), instruments=inst),
         instruments=inst,
@@ -111,21 +115,21 @@ def test_g9_event_chain_equals_hfq(feed, adjust, symbol, tmp_path):
     for a in acts:
         acts_by_ex.setdefault(a.ex_date.to_ymd(), []).append(a)
     close_by_day = {b.date.to_ymd(): b.close for b in bars}
-    day_seq = [s.date.to_ymd() for s in result.snapshots]   # 引擎日历同源
+    day_seq = [s.date.to_ymd() for s in result.snapshots]  # 引擎日历同源
     fill_ymd = buy.fill_date.to_ymd()
     fill_i = day_seq.index(fill_ymd)
 
-    qty_cash = qty0                       # 持现账本份额
-    cash = INITIAL_CASH - qty0 * price0   # ZeroCost：无费用
-    qty_tilde = float(qty0)               # 理想再投资账本份额
-    v_tilde_base = None                   # 基准（成交日收盘）
+    qty_cash = qty0  # 持现账本份额
+    cash = INITIAL_CASH - qty0 * price0  # ZeroCost：无费用
+    qty_tilde = float(qty0)  # 理想再投资账本份额
+    v_tilde_base = None  # 基准（成交日收盘）
     prev_close = None
-    pending: list[tuple[str, int, float]] = []        # (pay_ymd, qty_at_ex, cd)
+    pending: list[tuple[str, int, float]] = []  # (pay_ymd, qty_at_ex, cd)
 
     for ymd in day_seq[fill_i:]:
-        close = close_by_day.get(ymd, prev_close)      # 停牌前值语义（mark_all）
-        if ymd > fill_ymd:                             # 成交日行动先于撮合，不适用
-            for a in acts_by_ex.get(ymd, ()):          # 引擎同序逐行
+        close = close_by_day.get(ymd, prev_close)  # 停牌前值语义（mark_all）
+        if ymd > fill_ymd:  # 成交日行动先于撮合，不适用
+            for a in acts_by_ex.get(ymd, ()):  # 引擎同序逐行
                 cd, sd = a.cash_div_per_share, a.stk_div_per_share
                 # 持现账本：qty_at_ex=送转前登记 → 送转扩张
                 qty_at_ex = qty_cash
@@ -137,7 +141,7 @@ def test_g9_event_chain_equals_hfq(feed, adjust, symbol, tmp_path):
                         qty_tilde *= prev_close / (prev_close - cd)
                     eff_pay = (a.pay_date or a.ex_date).to_ymd()
                     if eff_pay == ymd:
-                        cash += qty_at_ex * cd         # 当日到账/回退
+                        cash += qty_at_ex * cd  # 当日到账/回退
                     else:
                         pending.append((eff_pay, qty_at_ex, cd))
         # pay 到期（跨日；pay 超窗留存=引擎 B1 口径不发放）
@@ -150,7 +154,7 @@ def test_g9_event_chain_equals_hfq(feed, adjust, symbol, tmp_path):
         pending = rest
         if close is not None:
             if v_tilde_base is None:
-                v_tilde_base = qty_tilde * close       # 成交日收盘基准
+                v_tilde_base = qty_tilde * close  # 成交日收盘基准
             prev_close = close
 
     # ── 断言 1/2：引擎账本 == 持现账本（精确）──
@@ -163,8 +167,8 @@ def test_g9_event_chain_equals_hfq(feed, adjust, symbol, tmp_path):
     v_tilde_end = qty_tilde * last_close
     cum_events = v_tilde_end / v_tilde_base
     hfq_base = close_by_day[fill_ymd] * adjust.adj_factor(symbol, buy.fill_date)
-    hfq_end = last_close * adjust.adj_factor(
-        symbol, TradingDate.from_ymd(day_seq[-1]))
+    hfq_end = last_close * adjust.adj_factor(symbol, TradingDate.from_ymd(day_seq[-1]))
     cum_hfq = hfq_end / hfq_base
     assert cum_events == pytest.approx(cum_hfq, rel=G9_TOL), (
-        f"{symbol}: 事件链 {cum_events:.4f} vs hfq {cum_hfq:.4f}")
+        f"{symbol}: 事件链 {cum_events:.4f} vs hfq {cum_hfq:.4f}"
+    )

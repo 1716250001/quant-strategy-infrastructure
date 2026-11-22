@@ -42,6 +42,7 @@
     python tools/adhoc_run.py --list
 退出码：0=成功 / 1=失败（脚本非零退出或登记失败）
 """
+
 from __future__ import annotations
 
 import argparse
@@ -98,8 +99,9 @@ def snapshot_tree(root: Path) -> dict[str, tuple[int, int]]:
     return out
 
 
-def diff_snapshot(before: dict[str, tuple[int, int]],
-                  after: dict[str, tuple[int, int]]) -> list[str]:
+def diff_snapshot(
+    before: dict[str, tuple[int, int]], after: dict[str, tuple[int, int]]
+) -> list[str]:
     """新增或修改的文件（删除不登记——产物关心的是留下了什么）。"""
     changed = []
     for rel, sig in after.items():
@@ -117,8 +119,15 @@ def _load_params(params_path: str | None) -> dict:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
-def build_config(name: str, script: Path, params: dict, args: list[str],
-                 tables: list[str], as_of: str, watch_dir: Path) -> dict:
+def build_config(
+    name: str,
+    script: Path,
+    params: dict,
+    args: list[str],
+    tables: list[str],
+    as_of: str,
+    watch_dir: Path,
+) -> dict:
     """冻结配置 → 决定 config_hash / run_id（同输入必同 id）。"""
     return {
         "schema_version": "adhoc.v1",
@@ -127,8 +136,7 @@ def build_config(name: str, script: Path, params: dict, args: list[str],
         "params": params,
         "argv": args,
         "watch_dir": str(watch_dir),
-        "data": {"tables": sorted(tables), "as_of": as_of,
-                 "market_data_dir": str(MARKET_DATA_DIR)},
+        "data": {"tables": sorted(tables), "as_of": as_of, "market_data_dir": str(MARKET_DATA_DIR)},
     }
 
 
@@ -139,14 +147,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--params", help="参数 JSON 路径")
     ap.add_argument("--tables", default="", help="声明用到的主库表，逗号分隔")
     ap.add_argument("--as-of", default="", help="数据基准日 YYYYMMDD")
-    ap.add_argument("--watch-dir", default="",
-                    help="差分监视目录（默认脚本所在目录）")
+    ap.add_argument("--watch-dir", default="", help="差分监视目录（默认脚本所在目录）")
     ap.add_argument("--out", default=str(OUT_DEFAULT))
-    ap.add_argument("--register-only", action="store_true",
-                    help="不执行脚本，仅登记现有产物（存量脚本用）")
+    ap.add_argument(
+        "--register-only", action="store_true", help="不执行脚本，仅登记现有产物（存量脚本用）"
+    )
     ap.add_argument("--list", action="store_true", help="列出登记台")
-    ap.add_argument("script_args", nargs=argparse.REMAINDER,
-                    help="传给被封装脚本的参数（用 -- 分隔）")
+    ap.add_argument(
+        "script_args", nargs=argparse.REMAINDER, help="传给被封装脚本的参数（用 -- 分隔）"
+    )
     args = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -162,9 +171,11 @@ def main(argv: list[str] | None = None) -> int:
             if not line.strip():
                 continue
             row = json.loads(line)
-            print(f"  {row['run_id']}  {row['status']:9s} "
-                  f"{row['name']:24s} 产物 {row.get('n_outputs', 0):3d}  "
-                  f"{row.get('finished_at', '')}")
+            print(
+                f"  {row['run_id']}  {row['status']:9s} "
+                f"{row['name']:24s} 产物 {row.get('n_outputs', 0):3d}  "
+                f"{row.get('finished_at', '')}"
+            )
         return 0
 
     if not args.name or not args.script:
@@ -182,36 +193,44 @@ def main(argv: list[str] | None = None) -> int:
     tables = [t.strip() for t in args.tables.split(",") if t.strip()]
     params = _load_params(args.params)
     rest = [a for a in args.script_args if a != "--"]
-    cfg = build_config(args.name, script, params, rest, tables, args.as_of,
-                       watch)
+    cfg = build_config(args.name, script, params, rest, tables, args.as_of, watch)
 
     before = snapshot_tree(watch)
     run_dir = root / args.name
     run_dir.mkdir(parents=True, exist_ok=True)
 
     manifest = RunManifest.skeleton(
-        cfg, data_fingerprint=None,
-        assembly_notes=("adhoc：一次性/外部脚本，经 tools/adhoc_run.py 封装",))
+        cfg,
+        data_fingerprint=None,
+        assembly_notes=("adhoc：一次性/外部脚本，经 tools/adhoc_run.py 封装",),
+    )
     status, reason, logs = "COMPLETED", "", {}
 
     if args.register_only:
         # 存量脚本：不执行，直接把 watch 树里**已存在**的产物全登记
         after = snapshot_tree(watch)
         changed = sorted(after)
-        notes = (*manifest.assembly_notes,
-                 "register-only：未执行，登记存量产物")
+        notes = (*manifest.assembly_notes, "register-only：未执行，登记存量产物")
         manifest = RunManifest.skeleton(
-            cfg, data_fingerprint=None,
-            assembly_notes=notes, run_id=manifest.run_id)
+            cfg, data_fingerprint=None, assembly_notes=notes, run_id=manifest.run_id
+        )
     else:
         t0 = time.perf_counter()
         proc = subprocess.run(
             [sys.executable, str(script), *rest],
-            cwd=str(script.parent), capture_output=True, text=True,
-            encoding="utf-8", errors="replace")
+            cwd=str(script.parent),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         wall = time.perf_counter() - t0
-        logs = {"stdout": proc.stdout, "stderr": proc.stderr,
-                "returncode": proc.returncode, "wall_s": round(wall, 1)}
+        logs = {
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "returncode": proc.returncode,
+            "wall_s": round(wall, 1),
+        }
         after = snapshot_tree(watch)
         changed = diff_snapshot(before, after)
         if proc.returncode != 0:
@@ -225,37 +244,49 @@ def main(argv: list[str] | None = None) -> int:
         if not f.is_file():
             continue
         try:
-            outputs.append({"path": rel, "size": f.stat().st_size,
-                            "sha256": _file_sha(f)})
+            outputs.append({"path": rel, "size": f.stat().st_size, "sha256": _file_sha(f)})
         except OSError:
             continue
 
-    final = (manifest.completed({"n_outputs": float(len(outputs))})
-             if status == "COMPLETED" else manifest.failed(reason))
+    final = (
+        manifest.completed({"n_outputs": float(len(outputs))})
+        if status == "COMPLETED"
+        else manifest.failed(reason)
+    )
     payload = final.to_dict()
-    payload.update({
-        "name": args.name,
-        "script_sha256": cfg["script"]["sha256"],
-        "params_hash": sha256_hex(canonical_json(params)),
-        "outputs": outputs,
-        "command": " ".join([sys.executable, str(script), *rest]),
-        "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-    })
+    payload.update(
+        {
+            "name": args.name,
+            "script_sha256": cfg["script"]["sha256"],
+            "params_hash": sha256_hex(canonical_json(params)),
+            "outputs": outputs,
+            "command": " ".join([sys.executable, str(script), *rest]),
+            "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        }
+    )
     payload["logs"] = {k: v for k, v in logs.items() if k != "stdout"}
     payload["stdout"] = logs.get("stdout", "")[-8000:]
 
     out_dir = run_dir / manifest.run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "manifest.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
-    row = {"run_id": manifest.run_id, "name": args.name, "status": status,
-           "finished_at": payload["finished_at"],
-           "script": str(script), "script_sha256": cfg["script"]["sha256"],
-           "params_hash": payload["params_hash"],
-           "config_hash": manifest.config_hash, "tables": sorted(tables),
-           "as_of": args.as_of, "n_outputs": len(outputs),
-           "dir": str(out_dir)}
+    row = {
+        "run_id": manifest.run_id,
+        "name": args.name,
+        "status": status,
+        "finished_at": payload["finished_at"],
+        "script": str(script),
+        "script_sha256": cfg["script"]["sha256"],
+        "params_hash": payload["params_hash"],
+        "config_hash": manifest.config_hash,
+        "tables": sorted(tables),
+        "as_of": args.as_of,
+        "n_outputs": len(outputs),
+        "dir": str(out_dir),
+    }
     with (root / REGISTRY).open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 

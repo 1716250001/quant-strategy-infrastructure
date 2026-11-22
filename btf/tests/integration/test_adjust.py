@@ -13,6 +13,7 @@ hfq 连续性断言（18 号计划 3.1 / 11 §21.1 验证点）：
     由同一除权参数生成，自洽性高；残差来自价格小数位舍入，容差 0.5%
     + 异常率 <1%（数据质量护栏，非引擎正确性判据）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,8 +30,8 @@ ROOT = Path(MARKET_DATA_DIR)
 SYMBOLS = ["600276.SH", "000001.SZ", "000002.SZ", "600811.SH", "600867.SH"]
 START = TradingDate.from_ymd("19910101")
 END = TradingDate.from_ymd("20261231")
-REL_TOL = 0.005          # 0.5%：送转重缩放 + 价格两位小数舍入
-MAX_BAD_RATE = 0.01      # 异常率护栏 1%
+REL_TOL = 0.005  # 0.5%：送转重缩放 + 价格两位小数舍入
+MAX_BAD_RATE = 0.01  # 异常率护栏 1%
 
 
 def _skip_if_no_data():
@@ -58,19 +59,18 @@ class TestHfqContinuityReal:
         from itertools import pairwise
 
         bars = feed.bars_of(symbol, START, END)
-        assert len(bars) > 1_000                       # 全历史量级护栏
+        assert len(bars) > 1_000  # 全历史量级护栏
         bad = 0
         n = 0
         for prev, cur in pairwise(bars):
             af_prev = adjust.adj_factor(symbol, prev.date)
             af_cur = adjust.adj_factor(symbol, cur.date)
-            lhs = prev.close * af_prev                 # hfq 收盘(t−1)
-            rhs = cur.pre_close * af_cur               # hfq 前收盘(t)
+            lhs = prev.close * af_prev  # hfq 收盘(t−1)
+            rhs = cur.pre_close * af_cur  # hfq 前收盘(t)
             n += 1
             if abs(rhs - lhs) > REL_TOL * max(abs(lhs), 1e-9):
                 bad += 1
-        assert bad / n < MAX_BAD_RATE, (
-            f"{symbol}: hfq 连续性异常率 {bad}/{n}={bad / n:.4f} 超护栏")
+        assert bad / n < MAX_BAD_RATE, f"{symbol}: hfq 连续性异常率 {bad}/{n}={bad / n:.4f} 超护栏"
 
     def test_adjust_factor_monotone_nondecreasing(self, adjust):
         """后复权因子单调不减（除权日跳升、平日恒定——分红再投资
@@ -84,8 +84,13 @@ class TestHfqContinuityReal:
         import pyarrow.compute as pc
         from btf.data.parquet_reader import read_range
 
-        t = read_range("adj_factor", ROOT, "19910101", "20261231",
-                       columns=["ts_code", "trade_date", "adj_factor"])
+        t = read_range(
+            "adj_factor",
+            ROOT,
+            "19910101",
+            "20261231",
+            columns=["ts_code", "trade_date", "adj_factor"],
+        )
         t = t.filter(pc.equal(t.column("ts_code"), "600276.SH"))
         t = t.sort_by([("trade_date", "ascending")])
         factors = t.column("adj_factor").to_pylist()
@@ -97,25 +102,24 @@ class TestFeedCorporateActionsReal:
     """feed.corporate_actions 真实数据合成（任务 3.2 数据侧）。"""
 
     def test_impl_only_and_sorted(self, feed):
-        acts = feed.corporate_actions(TradingDate.from_ymd("19910101"),
-                                      TradingDate.from_ymd("20251231"))
-        assert len(acts) > 10_000                      # 全市场全历史量级护栏
+        acts = feed.corporate_actions(
+            TradingDate.from_ymd("19910101"), TradingDate.from_ymd("20251231")
+        )
+        assert len(acts) > 10_000  # 全市场全历史量级护栏
         # 升序确定性
         keys = [(a.ex_date.to_ymd(), a.symbol) for a in acts]
         assert keys == sorted(keys)
         # 2000 年前老数据含 ex≠pay（两时点路径真实覆盖）；2020+ 主流 pay≡ex
-        old = [a for a in acts
-               if a.ex_date.to_ymd() < "20000101" and a.pay_date is not None]
+        old = [a for a in acts if a.ex_date.to_ymd() < "20000101" and a.pay_date is not None]
         assert old, "老数据 ex≠pay 样本缺席——两时点路径失去真实覆盖"
         modern = [a for a in acts if a.ex_date.to_ymd() >= "20200101"]
-        eq_ratio = sum(1 for a in modern
-                       if a.pay_date is not None and a.pay_date == a.ex_date)
-        assert eq_ratio / len(modern) > 0.5            # 2020+ pay≡ex 主流口径
+        eq_ratio = sum(1 for a in modern if a.pay_date is not None and a.pay_date == a.ex_date)
+        assert eq_ratio / len(modern) > 0.5  # 2020+ pay≡ex 主流口径
 
     def test_pay_date_missing_fallback_present(self, feed):
         """实施态 pay_date 缺失行存在（E5 回退路径有真实依据）。"""
-        acts = feed.corporate_actions(TradingDate.from_ymd("19910101"),
-                                      TradingDate.from_ymd("20251231"))
-        missing = [a for a in acts if a.pay_date is None
-                   and a.cash_div_per_share > 0]
+        acts = feed.corporate_actions(
+            TradingDate.from_ymd("19910101"), TradingDate.from_ymd("20251231")
+        )
+        missing = [a for a in acts if a.pay_date is None and a.cash_div_per_share > 0]
         assert missing, "pay_date 缺失实施行缺席——E5 回退失去真实依据"

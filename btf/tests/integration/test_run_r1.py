@@ -8,6 +8,7 @@
     3. 崩溃 run：manifest 落 FAILED（骨架已写 → 可审计）；
     4. persist=False 不落盘（纯内存回测）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -56,16 +57,16 @@ def runtime_config():
         "data": {"feed": FEED_NAME},
         # X-7（Q1=A）：显式声明无风控裸奔（默认层已拒绝空链）
         "risk": {"rules": [], "allow_empty_chain": True},
-        "seed": {"master": 20260926},        # Schema：seed 为对象（08 §13.4）
+        "seed": {"master": 20260926},  # Schema：seed 为对象（08 §13.4）
     }
 
 
 class BoomStrategy(StrategyBase):
     """故意崩溃策略（崩溃审计用例）。"""
 
-    contract_version = CONTRACT_VERSION    # S1 契约（19 号 P1-2 协商要求）
+    contract_version = CONTRACT_VERSION  # S1 契约（19 号 P1-2 协商要求）
 
-    def __init__(self, **_params):        # 装配期接受 run.params 注入
+    def __init__(self, **_params):  # 装配期接受 run.params 注入
         super().__init__()
 
     def on_close(self, ctx, date):
@@ -82,8 +83,8 @@ class TestR1EndToEnd:
             result = rt.run(store=store)
             digests.append(result.manifest.metrics_digest)
             ids.append(result.run_id)
-        assert ids[0] != ids[1]                 # 历史不可变：新 run_id
-        assert digests[0] == digests[1]          # R1 锚点
+        assert ids[0] != ids[1]  # 历史不可变：新 run_id
+        assert digests[0] == digests[1]  # R1 锚点
         assert digests[0]
 
     def test_artifact_layout_complete(self, runtime_config, tmp_path):
@@ -91,8 +92,7 @@ class TestR1EndToEnd:
         rt = BTFRuntime().load_config(runtime_config).build()
         result = rt.run(store=store)
         directory = tmp_path / result.run_id
-        for name in (MANIFEST, SNAPSHOTS, TRADES, FILLS, REJECTIONS, METRICS,
-                     EVENTS):
+        for name in (MANIFEST, SNAPSHOTS, TRADES, FILLS, REJECTIONS, METRICS, EVENTS):
             assert (directory / name).is_file(), name
         assert result.manifest.status == STATUS_COMPLETED
         assert result.metrics["n_trading_days"] == 5.0
@@ -117,8 +117,7 @@ class TestR1EndToEnd:
         assert len(bundle.snapshots) == 5
         assert len(bundle.fills) == 1
         assert bundle.metrics == store.read_metrics(run_id)
-        assert bundle.manifest.metrics_digest == rt.load_manifest(
-            run_id, store).metrics_digest
+        assert bundle.manifest.metrics_digest == rt.load_manifest(run_id, store).metrics_digest
 
     def test_crash_run_leaves_failed_manifest(self, runtime_config, tmp_path):
         """崩溃可审计（08 §13.2）：骨架已写 → 异常后落 FAILED + 原因。"""

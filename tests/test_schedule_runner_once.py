@@ -3,6 +3,7 @@
 
 判据对应：B1（参数序）／B2（est_error）／B3（once 语义）／B4（非 once 回归）／B5（预算）。
 """
+
 import inspect
 
 import fetch.backfill as backfill
@@ -32,6 +33,7 @@ class _Cp:
 
 # ---------------- B3：once 语义 ----------------
 
+
 def test_build_tasks_once_sentinel_unchanged():
     tasks, kind = sr.build_tasks("cn_gdp", BACKFILL_TARGETS["cn_gdp"], dry_run=True)
     assert tasks == [None] and kind == "once"
@@ -41,22 +43,21 @@ def test_once_pending_survives_completed_marker():
     """T1：连续两跑 pending 仍非空（不会因 completed 被跳过）。"""
     cp = _Cp()
     for _ in range(2):
-        pending, skipped = backfill._compute_pending(
-            "cn_gdp", {"mode": "once"}, [None], "once", cp)
+        pending, skipped = backfill._compute_pending("cn_gdp", {"mode": "once"}, [None], "once", cp)
         assert pending == [None] and skipped == 0
-        cp.mark_done("cn_gdp", "once")      # 跑完写标记，下次仍不得跳过
+        cp.mark_done("cn_gdp", "once")  # 跑完写标记，下次仍不得跳过
 
 
 def test_once_not_skipped_even_if_sentinel_matches_marker():
     """T3 负例：若有人把哨兵改成 ["once"] 且 is_done 命中，仍不得被跳过。"""
     cp = _Cp()
     cp.mark_done("cn_gdp", "once")
-    pending, skipped = backfill._compute_pending(
-        "cn_gdp", {"mode": "once"}, ["once"], "once", cp)
+    pending, skipped = backfill._compute_pending("cn_gdp", {"mode": "once"}, ["once"], "once", cp)
     assert pending == ["once"] and skipped == 0
 
 
 # ---------------- B4：非 once 回归 ----------------
+
 
 def test_non_once_breakpoint_behavior_unchanged():
     """T2：range 型仍按断点跳过（行为零变化）。"""
@@ -68,6 +69,7 @@ def test_non_once_breakpoint_behavior_unchanged():
 
 
 # ---------------- B1：参数序 ----------------
+
 
 def test_est_requests_param_order(monkeypatch):
     """参数序锁定：必须是 (name, conf, tasks, kind, cp)，防「假绿恒 0」复发。"""
@@ -86,15 +88,16 @@ def test_est_requests_param_order(monkeypatch):
     cp = _Cp()
     conf = {"mode": "once"}
     assert sr._est_requests("cn_gdp", conf, cp) == 1
-    assert seen == {"name": "cn_gdp", "conf": conf, "kind": "once",
-                    "tasks": [None], "cp": cp}
+    assert seen == {"name": "cn_gdp", "conf": conf, "kind": "once", "tasks": [None], "cp": cp}
 
 
 # ---------------- B2：估算失败不伪装 ----------------
 
+
 def test_est_error_not_disguised_as_ok(monkeypatch):
-    monkeypatch.setattr(sr, "build_tasks",
-                        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        sr, "build_tasks", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
     rows = sr.select(only=["us_tradecal"], cp=_Cp())
     assert rows and rows[0][4] == "est_error"
     assert rows[0][3] == 0
@@ -102,14 +105,15 @@ def test_est_error_not_disguised_as_ok(monkeypatch):
 
 # ---------------- B5：refresh 拒绝 / 预算 ----------------
 
+
 def test_bare_refresh_rejected(monkeypatch):
     assert sr.run(refresh=True) == 1
 
 
 def test_budget_exceeded_returns_2(monkeypatch):
     monkeypatch.setattr(sr, "Checkpoint", lambda *a, **kw: _Cp())
-    monkeypatch.setattr(sr, "select",
-                        lambda *a, **kw: [("t1", "M", True, 500, "ok"),
-                                          ("t2", "M", True, 600, "ok")])
+    monkeypatch.setattr(
+        sr, "select", lambda *a, **kw: [("t1", "M", True, 500, "ok"), ("t2", "M", True, 600, "ok")]
+    )
     assert sr.run(dry_run=True, budget=600) == 2
     assert sr.run(dry_run=True, budget=2000) == 0

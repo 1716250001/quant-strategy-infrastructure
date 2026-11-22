@@ -113,6 +113,7 @@ config/ — A股三层轮动金字塔策略 · 统一配置中心（W3 起为包
   gap_update.py / intraday_update.py → 迁入 fetch/_legacy/（2026-11-05 W4）
   utils.py                    → 拆为 tools/export/fund_classify.py
 """
+
 # 版本单一真源（2026-09-30 CLI 审查 P1-2，对标 btf P3-4）：
 # pyproject.toml 经 setuptools attr 读取本值，main.py --version 亦读本值
 # —— 全项目不得另写版本号。纯字面量赋值，setuptools 可静态解析。

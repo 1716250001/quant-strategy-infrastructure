@@ -15,6 +15,7 @@
 断点续跑：随时 Ctrl-C；重跑同命令会自动跳过已完成部分（断点 key =
 `{指数代码}|{月末日}`）。自检失败时脚本退出码 1，断点已保存。
 """
+
 import argparse
 import os
 import re
@@ -37,8 +38,9 @@ RE_SKIP = re.compile(r"任务数=\s*(\d+)\s+待跑=\s*\d+\s+跳过=\s*(\d+)")
 
 def _run(cmd, log_path):
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
-    p = subprocess.run(cmd, cwd=_ROOT, capture_output=True,
-                       text=True, encoding="utf-8", errors="replace", env=env)
+    p = subprocess.run(
+        cmd, cwd=_ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env
+    )
     out = (p.stdout or "") + (p.stderr or "")
     with open(log_path, "w", encoding="utf-8") as f:
         f.write(out)
@@ -53,8 +55,9 @@ def main():
     ap.add_argument("--stall-limit", type=int, default=3, help="连续 N 批待跑不降则退出")
     # ⭐ 2026-11-18 P1：补拉场景下额外校验"清单内每个码是否真落盘"。
     #    引擎的「成功=N」不可信（cb_issue 实证：成功=1 但库内 0 行）。
-    ap.add_argument("--codes-file", default=None,
-                    help="给出则每批后额外跑 verify_landed 校验清单落盘")
+    ap.add_argument(
+        "--codes-file", default=None, help="给出则每批后额外跑 verify_landed 校验清单落盘"
+    )
     a = ap.parse_args()
 
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -66,14 +69,23 @@ def main():
         ts = time.strftime("%H:%M:%S")
         print(f"\n===== BATCH {i}  {ts}  (limit={a.batch}) =====", flush=True)
 
-        rc, _ = _run([PY, checker, "--table", a.table, "--snapshot"],
-                     os.path.join(LOG_DIR, f"snap_{i:02d}.log"))
+        rc, _ = _run(
+            [PY, checker, "--table", a.table, "--snapshot"],
+            os.path.join(LOG_DIR, f"snap_{i:02d}.log"),
+        )
         if rc != 0:
             print("  [FATAL] 快照失败，停止", flush=True)
             return 2
 
-        cmd = [PY, os.path.join(_ROOT, "main.py"), "backfill",
-               "--only", a.table, "--limit", str(a.batch)]
+        cmd = [
+            PY,
+            os.path.join(_ROOT, "main.py"),
+            "backfill",
+            "--only",
+            a.table,
+            "--limit",
+            str(a.batch),
+        ]
         if a.codes_file:
             # 按清单补拉：不加 --force-listed，让断点生效——已成功的不重跑，
             # 未落盘的（如空日期被拒）下批自然重试。
@@ -97,21 +109,25 @@ def main():
         skip_m = RE_SKIP.findall(out)  # 真实进度：任务数/跳过数
         if skip_m:
             n_tasks, skipped = (int(x) for x in skip_m[-1])
-            remain = n_tasks - skipped       # 真实剩余待跑
+            remain = n_tasks - skipped  # 真实剩余待跑
         else:
             n_tasks, skipped, remain = -1, -1, -1
         expect = ok + empty
-        print(f"  rc={rc} 成功={ok} 空={empty} 失败={fail} | "
-              f"真实剩余={remain}（已跳过={skipped}/{n_tasks}）| "
-              f"本批读取={pend_show} expect={expect}", flush=True)
+        print(
+            f"  rc={rc} 成功={ok} 空={empty} 失败={fail} | "
+            f"真实剩余={remain}（已跳过={skipped}/{n_tasks}）| "
+            f"本批读取={pend_show} expect={expect}",
+            flush=True,
+        )
 
         if rc != 0:
             print("  [FATAL] backfill 退出码非 0，停止（断点已保存）", flush=True)
             return 2
 
-        vrc, vout = _run([PY, checker, "--table", a.table, "--verify",
-                          "--expect", str(expect)],
-                         os.path.join(LOG_DIR, f"verify_{i:02d}.log"))
+        vrc, vout = _run(
+            [PY, checker, "--table", a.table, "--verify", "--expect", str(expect)],
+            os.path.join(LOG_DIR, f"verify_{i:02d}.log"),
+        )
         for line in vout.strip().splitlines():
             if line.startswith("[VERIFY]") or "[FAIL]" in line or "[WARN]" in line:
                 print("  " + line, flush=True)
@@ -121,9 +137,10 @@ def main():
 
         # P1（2026-11-18）：清单落盘校验——引擎的「成功=N」不可信
         if a.codes_file:
-            lrc, lout = _run([PY, verifier, "--table", a.table,
-                              "--codes-file", a.codes_file],
-                             os.path.join(LOG_DIR, f"landed_{i:02d}.log"))
+            lrc, lout = _run(
+                [PY, verifier, "--table", a.table, "--codes-file", a.codes_file],
+                os.path.join(LOG_DIR, f"landed_{i:02d}.log"),
+            )
             for line in lout.strip().splitlines():
                 if line.startswith("[落盘校验]") or "未落盘" in line or "✅" in line:
                     print("  " + line, flush=True)
@@ -139,8 +156,9 @@ def main():
         # 停滞；连续 N 批不降才停，交人工排查（避免无限空转烧配额）。
         if prev_pend is not None and remain >= prev_pend:
             stall += 1
-            print(f"  [WARN] 真实剩余未下降（{prev_pend} -> {remain}），连续 {stall} 次",
-                  flush=True)
+            print(
+                f"  [WARN] 真实剩余未下降（{prev_pend} -> {remain}），连续 {stall} 次", flush=True
+            )
             if stall >= a.stall_limit:
                 print("  ⛔ 疑似原地打转（配额耗尽/全空），停止排查", flush=True)
                 return 1

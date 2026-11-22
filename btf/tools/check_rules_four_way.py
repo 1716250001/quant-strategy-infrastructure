@@ -26,6 +26,7 @@ X-1 的 RECOVERY 自我维持 bug 正是在 8 个阈值全对的情况下逃逸�
 roe/dv 为**百分数**）；文档侧键名（pe_ttm_max/roe_waa_min）经 JSON 的
 `aliases` 映射，不参与本脚本比对。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -43,14 +44,20 @@ EXIT_PASS, EXIT_FAIL, EXIT_ERROR = 0, 2, 3
 #: L0-LIQ 规则源抓取（CRISIS / WATCH 两段；原文为单行自然语言）
 _RE_CRISIS = re.compile(
     r"CRISIS=上证≤\s*(-?[\d.]+)%.*?跌停占比≥\s*([\d.]+)%.*?跌停≥\s*(\d+)"
-    r".*?小盘≤\s*(-?[\d.]+)%", re.S)
+    r".*?小盘≤\s*(-?[\d.]+)%",
+    re.S,
+)
 _RE_WATCH = re.compile(
     r"WATCH=上证≤\s*(-?[\d.]+)%.*?跌停≥\s*(\d+).*?跌停占比≥\s*([\d.]+)%"
-    r".*?小盘≤\s*(-?[\d.]+)%", re.S)
+    r".*?小盘≤\s*(-?[\d.]+)%",
+    re.S,
+)
 #: L2 硬筛子（锚点：六层体系代码块 "PE<30+PB<3+ROE>5%+股息率>1%"）
 _RE_L2 = re.compile(
     r"PE<\s*([\d.]+)\s*\+\s*PB<\s*([\d.]+)\s*\+\s*ROE>\s*([\d.]+)%\s*\+"
-    r"\s*股息率>\s*([\d.]+)%", re.S)
+    r"\s*股息率>\s*([\d.]+)%",
+    re.S,
+)
 
 # ── 状态机语义锚点（X-4 ／ Z-6；19 号 §17.3.5 / §26.5）──
 # 阈值数值一致 ≠ 状态机语义正确：X-1 的 RECOVERY 自我维持 bug 在 8 个阈值
@@ -81,8 +88,16 @@ _RE_KV = re.compile(r"[\"']([a-z_]+)[\"']\s*:\s*(-?[\d.]+)")
 #: screening.py 默认参数绑定
 _RE_BIND = re.compile(r"([a-z_]+)\s*=\s*paths\.V75_DEFAULTS\[[\"']([a-z_]+)[\"']\]")
 
-_LIQ_KEYS = ("sh_crisis", "sh_watch", "small_crisis", "small_watch",
-             "down_crisis", "down_watch", "ratio_crisis", "ratio_watch")
+_LIQ_KEYS = (
+    "sh_crisis",
+    "sh_watch",
+    "small_crisis",
+    "small_watch",
+    "down_crisis",
+    "down_watch",
+    "ratio_crisis",
+    "ratio_watch",
+)
 
 
 def _nums(text: str, pattern: re.Pattern[str], cast=float) -> list:
@@ -98,15 +113,20 @@ def grab_source(path: Path) -> dict[str, dict[str, float]]:
     crisis, watch = _nums(text, _RE_CRISIS), _nums(text, _RE_WATCH)
     liq: dict[str, float] = {}
     if len(crisis) == 4 and len(watch) == 4:
-        liq = {"sh_crisis": crisis[0], "ratio_crisis": crisis[1],
-               "down_crisis": crisis[2], "small_crisis": crisis[3],
-               "sh_watch": watch[0], "down_watch": watch[1],
-               "ratio_watch": watch[2], "small_watch": watch[3]}
+        liq = {
+            "sh_crisis": crisis[0],
+            "ratio_crisis": crisis[1],
+            "down_crisis": crisis[2],
+            "small_crisis": crisis[3],
+            "sh_watch": watch[0],
+            "down_watch": watch[1],
+            "ratio_watch": watch[2],
+            "small_watch": watch[3],
+        }
     l2_raw = _nums(text, _RE_L2)
     l2: dict[str, float] = {}
     if len(l2_raw) == 4:
-        l2 = {"pe_max": l2_raw[0], "pb_max": l2_raw[1],
-              "roe_min": l2_raw[2], "dv_min": l2_raw[3]}
+        l2 = {"pe_max": l2_raw[0], "pb_max": l2_raw[1], "roe_min": l2_raw[2], "dv_min": l2_raw[3]}
     return {"L0_LIQ": liq, "L2_filter": l2}
 
 
@@ -114,6 +134,7 @@ def grab_paths(path: Path) -> dict[str, dict[str, float]]:
     """② md_core/paths.py 镜像常量。"""
     text = path.read_text(encoding="utf-8")
     v75_match, liq_match = _RE_V75.search(text), _RE_LIQ.search(text)
+
     def _as_float(block: str) -> dict[str, float]:
         return {k: float(v) for k, v in _RE_KV.findall(block)}
 
@@ -162,9 +183,11 @@ def _code_only(text: str) -> str:
     import tokenize
 
     try:
-        kept = [tok.string for tok in tokenize.generate_tokens(
-            io.StringIO(text).readline)
-            if tok.type not in (tokenize.COMMENT, tokenize.STRING)]
+        kept = [
+            tok.string
+            for tok in tokenize.generate_tokens(io.StringIO(text).readline)
+            if tok.type not in (tokenize.COMMENT, tokenize.STRING)
+        ]
     except (SyntaxError, tokenize.TokenError, ValueError):
         return text
     return " ".join(kept)
@@ -194,21 +217,24 @@ def run_state_machine_checks(root: Path, btf_root: Path) -> list[str]:
 
     text = _code_only(liq_path.read_text(encoding="utf-8"))
     if _RE_BTF_CONFIRM.search(text) is None:
-        fails.append("③ btf `_finalize` 缺「入闸确认期」判定"
-                     "（`days + 1 < confirm_days`）——Z-6 回退：危机次日即恢复")
+        fails.append(
+            "③ btf `_finalize` 缺「入闸确认期」判定"
+            "（`days + 1 < confirm_days`）——Z-6 回退：危机次日即恢复"
+        )
     if _RE_BTF_WINDOW.search(text) is None:
-        fails.append("③ btf `_finalize` 缺恢复期窗口判定"
-                     "（`days + 1 < recovery_days`）")
+        fails.append("③ btf `_finalize` 缺恢复期窗口判定（`days + 1 < recovery_days`）")
     if _RE_BTF_PHASE.search(text) is None:
         fails.append("③ btf 缺状态机记忆 `phase_days`（单步递推）")
     held = _RE_BTF_SELF_HOLD.search(text)
     if held is not None:
         fails.append(
             f"③ btf `_finalize` 出现 RECOVERY 自我维持（{held.group(0)!r}）——"
-            f"X-1 回归：状态一旦进入 RECOVERY 将永不退出")
+            f"X-1 回归：状态一旦进入 RECOVERY 将永不退出"
+        )
     for name, pattern, label in (
-            ("confirm_days", _RE_BTF_CONFIRM_DAYS, "入闸确认期"),
-            ("recovery_days", _RE_BTF_RECOVERY_DAYS, "恢复期")):
+        ("confirm_days", _RE_BTF_CONFIRM_DAYS, "入闸确认期"),
+        ("recovery_days", _RE_BTF_RECOVERY_DAYS, "恢复期"),
+    ):
         found = pattern.search(text)
         if found is None:
             fails.append(f"③ btf 未声明 {name} 默认值（{label}窗口）")
@@ -250,30 +276,34 @@ def run_checks(root: Path, json_path: Path) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="规则四方机检（H2 单一真源）")
     parser.add_argument("--root", default=str(CHICHAO_ROOT), help="赤潮根目录")
-    parser.add_argument("--json", default=str(RULES_MIRROR),
-                        help="btf 规则缓存 JSON")
+    parser.add_argument("--json", default=str(RULES_MIRROR), help="btf 规则缓存 JSON")
     args = parser.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
     root, json_path = Path(args.root), Path(args.json)
-    for need in (root / "rules" / "single-source.md", root / "md_core" / "paths.py",
-                 root / "md_core" / "screening.py", json_path):
+    for need in (
+        root / "rules" / "single-source.md",
+        root / "md_core" / "paths.py",
+        root / "md_core" / "screening.py",
+        json_path,
+    ):
         if not need.is_file():
             print(f"[error] 缺失: {need}", file=sys.stderr)
             return EXIT_ERROR
 
     btf_root = Path(__file__).resolve().parent.parent
-    fails = (run_checks(root, json_path)
-             + run_state_machine_checks(root, btf_root))
+    fails = run_checks(root, json_path) + run_state_machine_checks(root, btf_root)
     if fails:
         print(f"[FAIL] 规则机检：{len(fails)} 处不一致（数值四方 + 状态机语义锚点）")
         for item in fails:
             print(f"   - {item}")
         return EXIT_FAIL
-    print("[PASS] 规则机检：源 ↔ 镜像 ↔ 消费绑定 ↔ btf 缓存 数值一致；"
-          "状态机 RECOVERY「3 日恢复」语义锚点一致")
+    print(
+        "[PASS] 规则机检：源 ↔ 镜像 ↔ 消费绑定 ↔ btf 缓存 数值一致；"
+        "状态机 RECOVERY「3 日恢复」语义锚点一致"
+    )
     return EXIT_PASS
 
 

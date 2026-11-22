@@ -26,6 +26,7 @@ vs `parquet_reader` **0.463s**（交替两轮，首轮为页缓存冷启动）�
 22.5s**（外推 1871s，余量 0.96x）**假失败** ⇒ **L5 基准须隔离单跑**（同 D-8 族：
 墙钟门槛 + 本机漂移 + 并发负载）。预算 1800s 是 09 §14.5 的**需求**，不因机器态放宽。
 """
+
 from __future__ import annotations
 
 import time
@@ -38,14 +39,32 @@ from btf.optimize.grid import GridSearchOptimizer
 pytestmark = [pytest.mark.l5]
 
 ROOT = Path(MARKET_DATA_DIR)
-B4_LIMIT_SECONDS = 1800.0        # 1000 组 × B2 场景预算（09 §14.5）
-N_COMBOS = 12                    # 证据样本（外推基数）
+B4_LIMIT_SECONDS = 1800.0  # 1000 组 × B2 场景预算（09 §14.5）
+N_COMBOS = 12  # 证据样本（外推基数）
 WORKERS = 8
 
-SYMS = ["600519.SH", "601318.SH", "600036.SH", "000858.SZ", "000333.SZ",
-        "600030.SH", "601988.SH", "600887.SH", "000001.SZ", "002415.SZ",
-        "600276.SH", "601166.SH", "000651.SZ", "600900.SH", "601398.SH",
-        "000002.SZ", "600028.SH", "601288.SH", "600009.SH", "000063.SZ"]
+SYMS = [
+    "600519.SH",
+    "601318.SH",
+    "600036.SH",
+    "000858.SZ",
+    "000333.SZ",
+    "600030.SH",
+    "601988.SH",
+    "600887.SH",
+    "000001.SZ",
+    "002415.SZ",
+    "600276.SH",
+    "601166.SH",
+    "000651.SZ",
+    "600900.SH",
+    "601398.SH",
+    "000002.SZ",
+    "600028.SH",
+    "601288.SH",
+    "600009.SH",
+    "000063.SZ",
+]
 
 
 def _config() -> dict:
@@ -58,24 +77,20 @@ def _config() -> dict:
             "period": {"start": "2016-01-01", "end": "2025-12-31"},
             "initial_cash": 10_000_000,
         },
-        "data": {"feed": "tushare_parquet",
-                 "feed_params": {"root": str(ROOT)}},
-        "execution": {"handler": "next_open", "cost_model": "flat_rate",
-                      "rebalancer": "full"},
+        "data": {"feed": "tushare_parquet", "feed_params": {"root": str(ROOT)}},
+        "execution": {"handler": "next_open", "cost_model": "flat_rate", "rebalancer": "full"},
         # X-7（Q1=A）：显式声明无风控裸奔（默认层已拒绝空链）
         "risk": {"rules": [], "allow_empty_chain": True},
     }
 
 
-GRID = {"run.params.max_names": [2, 4, 6, 8, 10, 12],
-        "run.params.rebalance_day": [1, 2]}
+GRID = {"run.params.max_names": [2, 4, 6, 8, 10, 12], "run.params.rebalance_day": [1, 2]}
 
 
 @pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason="主库不可用")
 def test_b4_grid_search_evidence():
     """B4 证据段：12 组合 × 8 进程实测 → 外推 1000 组 < 30min。"""
-    report = GridSearchOptimizer(workers=WORKERS).run(
-        _config(), GRID, objective="final_nav")
+    report = GridSearchOptimizer(workers=WORKERS).run(_config(), GRID, objective="final_nav")
     assert report["n_combos"] == N_COMBOS
     assert all(r["n_days"] > 2400 for r in report["results"])
 
@@ -93,30 +108,35 @@ def test_b4_grid_search_budget():
 
     def _measure() -> float:
         t0 = time.perf_counter()
-        report = GridSearchOptimizer(workers=WORKERS).run(
-            _config(), GRID, objective="final_nav")
+        report = GridSearchOptimizer(workers=WORKERS).run(_config(), GRID, objective="final_nav")
         wall = time.perf_counter() - t0
-        print(f"\nB4: {N_COMBOS} 组合 × {WORKERS} 进程 {wall:.1f}s | "
-              f"线性外推 1000 组 {wall * 1000 / N_COMBOS:.0f}s"
-              f"（预算 {B4_LIMIT_SECONDS:.0f}s）")
+        print(
+            f"\nB4: {N_COMBOS} 组合 × {WORKERS} 进程 {wall:.1f}s | "
+            f"线性外推 1000 组 {wall * 1000 / N_COMBOS:.0f}s"
+            f"（预算 {B4_LIMIT_SECONDS:.0f}s）"
+        )
         assert report["n_combos"] == N_COMBOS
         return wall
 
     _perf.run_budget(
-        "B4", _measure, B4_LIMIT_SECONDS,
+        "B4",
+        _measure,
+        B4_LIMIT_SECONDS,
         hint="回查 worker 数据路径（谓词下推 / 年表缓存 / 进程数适配）",
-        seconds=lambda wall: wall * 1000 / N_COMBOS)
-
+        seconds=lambda wall: wall * 1000 / N_COMBOS,
+    )
 
 
 @pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason="主库不可用")
 def test_b4_pool_matches_inline_single_run():
     """一致性锚点：进程池组合结果 == 进程内单跑（同链路确定性，跨进程）。"""
     grid = {"run.params.max_names": [8], "run.params.rebalance_day": [1]}
-    pooled = GridSearchOptimizer(workers=2).run(
-        _config(), grid, objective="final_nav")["results"][0]
-    inline = GridSearchOptimizer(workers=0).run(
-        _config(), grid, objective="final_nav")["results"][0]
+    pooled = GridSearchOptimizer(workers=2).run(_config(), grid, objective="final_nav")["results"][
+        0
+    ]
+    inline = GridSearchOptimizer(workers=0).run(_config(), grid, objective="final_nav")["results"][
+        0
+    ]
     assert pooled["n_days"] == inline["n_days"]
     assert pooled["n_fills"] == inline["n_fills"]
     for key in ("final_nav", "total_return", "max_drawdown", "n_fills"):

@@ -108,6 +108,7 @@ Feed 能力表（**以代码为准，不猜**）
   并跳过 `pytest_tmp` / `_extracted` 目录；但这不是配置过滤器的替代品，
   **建议扫具体项目产物目录**（如 `.context/xxx/outputs`）以获得可执行的通过结论。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -130,8 +131,16 @@ from btf.config.paths import MARKET_DATA_DIR
 
 DEFAULT_DATA_DIR = os.environ.get("BTF_DATA_DIR") or str(MARKET_DATA_DIR)
 
-_SKIP_DIRS = {".venv-btf", "__pycache__", ".git", ".ruff_cache", "node_modules",
-              ".ipynb_checkpoints", "pytest_tmp", "_extracted"}
+_SKIP_DIRS = {
+    ".venv-btf",
+    "__pycache__",
+    ".git",
+    ".ruff_cache",
+    "node_modules",
+    ".ipynb_checkpoints",
+    "pytest_tmp",
+    "_extracted",
+}
 
 
 @dataclass(frozen=True)
@@ -146,8 +155,8 @@ FEED_CAPS: dict[str, FeedCap] = {
     "tushare_parquet": FeedCap(
         tables=frozenset({"daily"}),
         evidence=(
-            "btf/data/feed.py:481-487  TushareParquetFeed.bars_of(..., daily_table: str = \"daily\")",
-            "btf/data/feed.py:524-530  TushareParquetFeed.bars(... daily_table: str = \"daily\")",
+            'btf/data/feed.py:481-487  TushareParquetFeed.bars_of(..., daily_table: str = "daily")',
+            'btf/data/feed.py:524-530  TushareParquetFeed.bars(... daily_table: str = "daily")',
             "btf/data/feed.py:309-311  docstring：表选择「由调用方声明」（engine/runtime 无调用点传该参数）",
         ),
     ),
@@ -189,11 +198,13 @@ def judge(feed: str, symbol: str) -> tuple[str, str, str]:
     if cap is None:
         raise EnvError(
             f"未注册的 feed={feed!r}：平台注册表仅 "
-            f"{sorted(FEED_CAPS)}（依据 btf/registry/catalog.py:65-66）")
+            f"{sorted(FEED_CAPS)}（依据 btf/registry/catalog.py:65-66）"
+        )
     table = route_table(symbol)
     hit = table in cap.tables
-    detail = (f"能力表 {'含' if hit else '不含'} {table}（{feed} 支持 "
-              f"{'/'.join(sorted(cap.tables))}）")
+    detail = (
+        f"能力表 {'含' if hit else '不含'} {table}（{feed} 支持 {'/'.join(sorted(cap.tables))}）"
+    )
     return table, ("OK" if hit else "MISMATCH"), detail
 
 
@@ -224,7 +235,9 @@ def load_config(path: Path) -> dict:
 
 
 def enumerate_universe(
-    universe: dict | None, period: dict | None, data_dir: Path,
+    universe: dict | None,
+    period: dict | None,
+    data_dir: Path,
 ) -> tuple[list[str], str | None, str]:
     """返回 (symbols, skip_reason, detail)。skip_reason 非空 ⇒ 该配置记 SKIP。"""
     if not universe:
@@ -236,10 +249,15 @@ def enumerate_universe(
             return [], "source=explicit 但 symbols 为空（零标宇宙）", "explicit"
         return syms, None, f"explicit（{len(syms)} 标的）"
     if source == "all":
-        return [], (
-            "source=all 不可枚举（需 stock_basic 期间并集 + 逐日循环；本工具不做静态推断）。"
-            "结构提示：_all 经 feed.universe_span → stock_basic 股票池，路由恒 daily"
-            "（universe_resolver.py:129-168），故 parquet 在 all 下无 ETF 零 bar 风险"), "all（SKIP）"
+        return (
+            [],
+            (
+                "source=all 不可枚举（需 stock_basic 期间并集 + 逐日循环；本工具不做静态推断）。"
+                "结构提示：_all 经 feed.universe_span → stock_basic 股票池，路由恒 daily"
+                "（universe_resolver.py:129-168），故 parquet 在 all 下无 ETF 零 bar 风险"
+            ),
+            "all（SKIP）",
+        )
     if source == "index":
         name = universe.get("index")
         if not name:
@@ -253,11 +271,23 @@ def enumerate_universe(
             prov = IndexUniverseProvider(data_dir)
             codes = prov.union_codes(code, _ymd(period["start"]), _ymd(period["end"]))
         except Exception as exc:
-            return [], (f"index 成分不可枚举（{type(exc).__name__}: {exc}）——"
-                        f"核对 --data-dir={data_dir} 的 index_weight"), "index（不可枚举）"
+            return (
+                [],
+                (
+                    f"index 成分不可枚举（{type(exc).__name__}: {exc}）——"
+                    f"核对 --data-dir={data_dir} 的 index_weight"
+                ),
+                "index（不可枚举）",
+            )
         if not codes:
-            return [], (f"index={name}（{code}）在区间内无 index_weight 成分快照"
-                        f"（--data-dir={data_dir}）"), "index（无快照）"
+            return (
+                [],
+                (
+                    f"index={name}（{code}）在区间内无 index_weight 成分快照"
+                    f"（--data-dir={data_dir}）"
+                ),
+                "index（无快照）",
+            )
         return codes, None, f"index={name}（{code}，并集 {len(codes)} 标的）"
     return [], f"run.universe.source={source!r} 未支持（平台仅 explicit|all|index）", source
 
@@ -270,29 +300,35 @@ def _period_of(cfg: dict) -> dict | None:
 
 # ── 单配置检查 ──
 def check_config(
-    path: Path, feed_override: str | None, data_dir: Path, probe: bool,
+    path: Path,
+    feed_override: str | None,
+    data_dir: Path,
+    probe: bool,
 ) -> dict:
     cfg = load_config(path)
     data = cfg.get("data") or {}
     feed = feed_override or data.get("feed")
     feed = str(feed) if feed else None
     if feed and feed not in FEED_CAPS:
-        raise EnvError(
-            f"{path.name}: data.feed={feed!r} 未注册（平台仅 {sorted(FEED_CAPS)}）")
+        raise EnvError(f"{path.name}: data.feed={feed!r} 未注册（平台仅 {sorted(FEED_CAPS)}）")
     universe = (cfg.get("run") or {}).get("universe")
     period = _period_of(cfg)
     res: dict = {
-        "config": str(path), "feed": feed, "feed_known": feed in FEED_CAPS,
+        "config": str(path),
+        "feed": feed,
+        "feed_known": feed in FEED_CAPS,
         "period": f"{period.get('start')}..{period.get('end')}" if period else None,
-        "rows": [], "skips": [], "probe": [],
+        "rows": [],
+        "skips": [],
+        "probe": [],
     }
     if not feed:
         if not (cfg.get("run") or {}).get("strategy"):
             res["skips"].append(
-                "非 btf 回测配置（无 run.strategy 且无 data.feed；如策略片段/脚手架/图表模板）——跳过")
+                "非 btf 回测配置（无 run.strategy 且无 data.feed；如策略片段/脚手架/图表模板）——跳过"
+            )
         else:
-            res["skips"].append(
-                "data.feed 缺失（无法判定路由；schema 要求 data.feed 必填）")
+            res["skips"].append("data.feed 缺失（无法判定路由；schema 要求 data.feed 必填）")
         res["source_detail"] = "—"
         return res
     syms, skip, detail = enumerate_universe(universe, period, data_dir)
@@ -302,8 +338,9 @@ def check_config(
         return res
     for sym in dict.fromkeys(syms):
         table, verdict, detail_row = judge(feed, sym)
-        res["rows"].append({"symbol": sym, "table": table,
-                            "verdict": verdict, "detail": detail_row})
+        res["rows"].append(
+            {"symbol": sym, "table": table, "verdict": verdict, "detail": detail_row}
+        )
     if probe:
         res["probe"] = _probe(feed, list(dict.fromkeys(syms)), period, data_dir)
     return res
@@ -315,8 +352,13 @@ def _probe(feed: str, symbols: list[str], period: dict | None, data_dir: Path) -
     from btf.domain.types import TradingDate
 
     if not period or not period.get("start") or not period.get("end"):
-        return [{"estimate": True, "status": "PROBE_SKIP",
-                 "note": "缺 run.period.start/end，无法数 bar（非静默跳过）"}]
+        return [
+            {
+                "estimate": True,
+                "status": "PROBE_SKIP",
+                "note": "缺 run.period.start/end，无法数 bar（非静默跳过）",
+            }
+        ]
     cls = {"tushare_parquet": TushareParquetFeed, "mixed": MixedDailyFeed}[feed]
     f = cls(data_dir)
     s = TradingDate.from_ymd(_ymd(period["start"]))
@@ -325,11 +367,16 @@ def _probe(feed: str, symbols: list[str], period: dict | None, data_dir: Path) -
     for sym in symbols:
         try:
             n = len(f.bars_of(sym, s, e))
-            out.append({"symbol": sym, "bars": n,
-                        "status": "ZERO_BARS" if n == 0 else "HAS_BARS"})
+            out.append({"symbol": sym, "bars": n, "status": "ZERO_BARS" if n == 0 else "HAS_BARS"})
         except Exception as exc:
-            out.append({"symbol": sym, "bars": None, "status": "PROBE_ERROR",
-                        "note": f"{type(exc).__name__}: {exc}"})
+            out.append(
+                {
+                    "symbol": sym,
+                    "bars": None,
+                    "status": "PROBE_ERROR",
+                    "note": f"{type(exc).__name__}: {exc}",
+                }
+            )
     return out
 
 
@@ -337,12 +384,36 @@ def _probe(feed: str, symbols: list[str], period: dict | None, data_dir: Path) -
 def selftest() -> bool:
     cases = [
         # (feed, symbol, 期望 verdict, 期望 table, 说明)
-        ("tushare_parquet", "510210.SH", "MISMATCH", "fund_daily", "ETF+parquet → 能力表无 fund_daily（P17 本体）"),
+        (
+            "tushare_parquet",
+            "510210.SH",
+            "MISMATCH",
+            "fund_daily",
+            "ETF+parquet → 能力表无 fund_daily（P17 本体）",
+        ),
         ("mixed", "510210.SH", "OK", "fund_daily", "ETF+mixed → 代码段路由 fund_daily"),
         ("tushare_parquet", "600519.SH", "OK", "daily", "股票+parquet → 默认 daily 命中"),
-        ("mixed", "000300.SH", "OK", "index_daily", "指数+mixed → 路由 index_daily（feed.py:819；实测 81 bar）"),
-        ("tushare_parquet", "000300.SH", "MISMATCH", "index_daily", "指数+parquet → 能力表无 index_daily"),
-        ("tushare_parquet", "920627.BJ", "OK", "daily", "北交所(92 段)+parquet → daily（非 ETF 误判）"),
+        (
+            "mixed",
+            "000300.SH",
+            "OK",
+            "index_daily",
+            "指数+mixed → 路由 index_daily（feed.py:819；实测 81 bar）",
+        ),
+        (
+            "tushare_parquet",
+            "000300.SH",
+            "MISMATCH",
+            "index_daily",
+            "指数+parquet → 能力表无 index_daily",
+        ),
+        (
+            "tushare_parquet",
+            "920627.BJ",
+            "OK",
+            "daily",
+            "北交所(92 段)+parquet → daily（非 ETF 误判）",
+        ),
         ("mixed", "159915.SZ", "OK", "fund_daily", "深市 ETF+mixed → fund_daily"),
     ]
     ok = True
@@ -355,20 +426,28 @@ def selftest() -> bool:
             print(f"{feed:<16}{sym:<12}{'ERR':<13}{type(exc).__name__:<10}{want_v}  ✗  ({why})")
             ok = False
             continue
-        good = (table == want_t and verdict == want_v)
-        print(f"{feed:<16}{sym:<12}{table:<13}{verdict:<10}{want_v}  {'✓' if good else '✗'}  ({why})")
+        good = table == want_t and verdict == want_v
+        print(
+            f"{feed:<16}{sym:<12}{table:<13}{verdict:<10}{want_v}  {'✓' if good else '✗'}  ({why})"
+        )
         ok &= good
     # 负向：未注册 feed 必须抛错（不得静默按 daily 判定）
     try:
         judge("memory_feed", "510210.SH")
-        print(f"{'memory_feed':<16}{'510210.SH':<12}{'—':<13}{'NO-RAISE':<10}ValueError  ✗  (未注册 feed 必须抛错)")
+        print(
+            f"{'memory_feed':<16}{'510210.SH':<12}{'—':<13}{'NO-RAISE':<10}ValueError  ✗  (未注册 feed 必须抛错)"
+        )
         ok = False
     except EnvError as exc:
-        print(f"{'memory_feed':<16}{'510210.SH':<12}{'—':<13}{'EnvError':<10}ValueError  ✓  (未注册 feed 抛错：{str(exc)[:38]}…)")
+        print(
+            f"{'memory_feed':<16}{'510210.SH':<12}{'—':<13}{'EnvError':<10}ValueError  ✓  (未注册 feed 抛错：{str(exc)[:38]}…)"
+        )
     except Exception as exc:
-        print(f"{'memory_feed':<16}{'510210.SH':<12}{'—':<13}{type(exc).__name__:<10}ValueError  ✗  (异常类型不符)")
+        print(
+            f"{'memory_feed':<16}{'510210.SH':<12}{'—':<13}{type(exc).__name__:<10}ValueError  ✗  (异常类型不符)"
+        )
         ok = False
-    print(f"[selftest] {'PASS' if ok else 'FAIL'}（{len(cases)+1} 条用例，含负向）")
+    print(f"[selftest] {'PASS' if ok else 'FAIL'}（{len(cases) + 1} 条用例，含负向）")
     return ok
 
 
@@ -386,12 +465,16 @@ def _iter_configs(root: Path):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Feed × 标的路由预检（P17：tushare_parquet 跑 ETF/指数静默零 bar）")
+        description="Feed × 标的路由预检（P17：tushare_parquet 跑 ETF/指数静默零 bar）"
+    )
     ap.add_argument("--config", help="单个配置（.yaml/.yml/.json）")
     ap.add_argument("--root", help="递归扫描根目录（*.yaml/*.yml + manifest.json）")
     ap.add_argument("--feed", help="覆盖 data.feed（试跑对照：改成 mixed 看是否变 OK）")
-    ap.add_argument("--data-dir", default=DEFAULT_DATA_DIR,
-                    help=f"镜像根（仅 index 枚举与 --probe 用；默认 {DEFAULT_DATA_DIR}）")
+    ap.add_argument(
+        "--data-dir",
+        default=DEFAULT_DATA_DIR,
+        help=f"镜像根（仅 index 枚举与 --probe 用；默认 {DEFAULT_DATA_DIR}）",
+    )
     ap.add_argument("--probe", action="store_true", help="真起 Feed 数 bar（ZERO_BARS 也判不通过）")
     ap.add_argument("--json", action="store_true", help="JSON 输出")
     ap.add_argument("--selftest", action="store_true")
@@ -410,8 +493,10 @@ def main(argv=None) -> int:
             print("[result] exit=2（环境错误）")
             return 2
         if a.feed and a.feed not in FEED_CAPS:
-            print(f"[env] --feed={a.feed!r} 未注册（平台仅 {sorted(FEED_CAPS)}；"
-                  f"依据 btf/registry/catalog.py:65-66）")
+            print(
+                f"[env] --feed={a.feed!r} 未注册（平台仅 {sorted(FEED_CAPS)}；"
+                f"依据 btf/registry/catalog.py:65-66）"
+            )
             print("[result] exit=2（环境错误）")
             return 2
 
@@ -443,10 +528,18 @@ def main(argv=None) -> int:
             except EnvError as exc:
                 # 批量扫描时单个坏配置不得中断全局：显式记入 ERROR 清单（不静默）
                 config_errors.append((str(p), str(exc)))
-                results.append({"config": str(p), "feed": None, "feed_known": False,
-                                "period": None, "rows": [], "probe": [],
-                                "source_detail": "读配置失败",
-                                "skips": [f"配置无法解析（已列入 ERROR 清单）：{exc}"]})
+                results.append(
+                    {
+                        "config": str(p),
+                        "feed": None,
+                        "feed_known": False,
+                        "period": None,
+                        "rows": [],
+                        "probe": [],
+                        "source_detail": "读配置失败",
+                        "skips": [f"配置无法解析（已列入 ERROR 清单）：{exc}"],
+                    }
+                )
 
         # 汇总
         n_ok = n_bad = n_skip_cfg = n_judged = 0
@@ -482,14 +575,27 @@ def main(argv=None) -> int:
 
         if a.json:
             # JSON 模式：判定摘要并入同一文档（不再向 stdout 追加非 JSON 行，保证可解析）
-            print(json.dumps({"results": results,
-                              "summary": {"configs": len(results),
-                                          "judged_symbols": n_judged, "ok": n_ok,
-                                          "mismatch": n_bad, "skip_configs": n_skip_cfg,
-                                          "zero_bars": len(zero_bars),
-                                          "config_errors": len(config_errors),
-                                          "exit_code": code, "message": msg}},
-                             ensure_ascii=False, indent=2, default=str))
+            print(
+                json.dumps(
+                    {
+                        "results": results,
+                        "summary": {
+                            "configs": len(results),
+                            "judged_symbols": n_judged,
+                            "ok": n_ok,
+                            "mismatch": n_bad,
+                            "skip_configs": n_skip_cfg,
+                            "zero_bars": len(zero_bars),
+                            "config_errors": len(config_errors),
+                            "exit_code": code,
+                            "message": msg,
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    default=str,
+                )
+            )
             return code
         if len(paths) > 1:
             # 批量模式：每配置一行判定（显式），非 OK 才展开明细
@@ -504,28 +610,35 @@ def main(argv=None) -> int:
                     tag = "OK"
                 else:
                     tag = "SKIP"
-                print(f"{tag:<10}{r['feed']!s:<17}{r['source_detail'][:24]:<26}"
-                      f"{len(rows):<9}{Path(r['config']).name}  ← {r['config']}")
+                print(
+                    f"{tag:<10}{r['feed']!s:<17}{r['source_detail'][:24]:<26}"
+                    f"{len(rows):<9}{Path(r['config']).name}  ← {r['config']}"
+                )
                 for x in bad:
                     print(f"           ✗ {x['symbol']} → {x['table']}（{x['detail']}）")
                 for s in r["skips"]:
                     print(f"           ⏭ {s[:150]}")
                 for pr in r["probe"]:
                     if pr.get("status") in ("ZERO_BARS", "PROBE_ERROR"):
-                        print(f"           ⚠ probe {pr.get('symbol')} {pr['status']} bars={pr.get('bars')}")
+                        print(
+                            f"           ⚠ probe {pr.get('symbol')} {pr['status']} bars={pr.get('bars')}"
+                        )
         else:
             for r in results:
                 feed_s = r["feed"] or "（缺 data.feed）"
                 print("=" * 78)
                 print(f"[config] {r['config']}")
-                print(f"[config] feed={feed_s}  universe={r['source_detail']}  "
-                      f"period={r['period']}")
+                print(
+                    f"[config] feed={feed_s}  universe={r['source_detail']}  period={r['period']}"
+                )
                 if r["rows"]:
                     print(f"  {'symbol':<12}{'路由表':<14}{'能力表命中':<12}verdict")
                     for x in r["rows"]:
                         hit = "含" if x["verdict"] == "OK" else "不含"
-                        print(f"  {x['symbol']:<12}{x['table']:<14}{hit:<12}{x['verdict']}"
-                              + ("" if x["verdict"] == "OK" else f"   ← {x['detail']}"))
+                        print(
+                            f"  {x['symbol']:<12}{x['table']:<14}{hit:<12}{x['verdict']}"
+                            + ("" if x["verdict"] == "OK" else f"   ← {x['detail']}")
+                        )
                 for pr in r["probe"]:
                     if "symbol" in pr:
                         print(f"  [probe] {pr['symbol']:<12}bars={pr['bars']}  {pr['status']}")
@@ -534,8 +647,10 @@ def main(argv=None) -> int:
 
             print()
             print("=" * 78)
-            print(f"【判定】标的合计 {n_judged}：OK={n_ok} / MISMATCH={n_bad}"
-                  f"；SKIP 配置 {n_skip_cfg} 个")
+            print(
+                f"【判定】标的合计 {n_judged}：OK={n_ok} / MISMATCH={n_bad}"
+                f"；SKIP 配置 {n_skip_cfg} 个"
+            )
             print(f"【MISMATCH】{len(mismatches)} 条")
             for cfg, x in mismatches:
                 print(f"  ✗ {Path(cfg).name}：{x['symbol']} 路由 {x['table']}——{x['detail']}")
@@ -543,8 +658,7 @@ def main(argv=None) -> int:
                 print(f"【ERROR（配置无法解析）】{len(config_errors)} 条")
                 for cfg, err in config_errors:
                     print(f"  ✗ {cfg}：{err}")
-            print(f"【SKIP】{len(skips)} 条"
-                  + ("" if not skips else "（逐条列出，不静默）"))
+            print(f"【SKIP】{len(skips)} 条" + ("" if not skips else "（逐条列出，不静默）"))
             for cfg, s in skips:
                 print(f"  ⏭ {Path(cfg).name}：{s}")
             if zero_bars:
@@ -554,8 +668,10 @@ def main(argv=None) -> int:
             if probe_errors:
                 print(f"【PROBE 不可用】{len(probe_errors)} 条（显式列出）")
                 for cfg, pr in probe_errors:
-                    print(f"  ⚠ {Path(cfg).name}：{pr.get('symbol') or ''} {pr['status']} "
-                          f"{pr.get('note','')}")
+                    print(
+                        f"  ⚠ {Path(cfg).name}：{pr.get('symbol') or ''} {pr['status']} "
+                        f"{pr.get('note', '')}"
+                    )
 
         # 退出码：见上（MISMATCH→1 / 解析错误或全 SKIP→2 / 全 OK→0）
         print(f"[result] exit={code}（{msg}）")

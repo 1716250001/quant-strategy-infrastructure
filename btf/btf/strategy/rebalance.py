@@ -5,6 +5,7 @@
 永不直接构造订单；订单生成（差额/整手化/排序）集中于 Rebalancer，
 保证「同一目标 ⇒ 同一订单清单」的可复现性。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping

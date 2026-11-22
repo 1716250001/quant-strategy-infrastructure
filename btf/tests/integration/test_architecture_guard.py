@@ -4,6 +4,7 @@
 l2：写临时违例模块 → lint-imports / 白名单脚本子进程 → 断言失败且
 点名违例 → finally 清理（违例文件绝不残留）。
 """
+
 from __future__ import annotations
 
 import os
@@ -15,27 +16,38 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 LINT_IMPORTS = Path(sys.executable).parent / (
-    "lint-imports.exe" if os.name == "nt" else "lint-imports")
+    "lint-imports.exe" if os.name == "nt" else "lint-imports"
+)
 
 #: 三例故意违例（4.4 验收口径：铁律 3 / 铁律 5 / 铁律 2 各一）
 VIOLATIONS = [
-    ("btf/domain/_guard_violation.py",
-     "import pandas  # 违例1：第三方入 domain（铁律 3）\n",
-     ["Domain zero-dependency", "pandas"]),
-    ("btf/viz/_guard_violation.py",
-     "from btf.engine.loop import Engine  # 违例2：viz → engine（铁律 5）\n",
-     ["btf.viz", "btf.engine"]),
-    ("btf/execution/_guard_violation.py",
-     "from btf.risk.manager import RiskVerdict  # 违例3：引擎四模块互引（铁律 2）\n",
-     ["Engine-layer four modules mutually independent"]),
+    (
+        "btf/domain/_guard_violation.py",
+        "import pandas  # 违例1：第三方入 domain（铁律 3）\n",
+        ["Domain zero-dependency", "pandas"],
+    ),
+    (
+        "btf/viz/_guard_violation.py",
+        "from btf.engine.loop import Engine  # 违例2：viz → engine（铁律 5）\n",
+        ["btf.viz", "btf.engine"],
+    ),
+    (
+        "btf/execution/_guard_violation.py",
+        "from btf.risk.manager import RiskVerdict  # 违例3：引擎四模块互引（铁律 2）\n",
+        ["Engine-layer four modules mutually independent"],
+    ),
 ]
 
 
 def _run_lint() -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(LINT_IMPORTS), "--config", "pyproject.toml"],
-        cwd=ROOT, capture_output=True, text=True,
-        encoding="utf-8", errors="replace")
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
 
 @pytest.mark.l2
@@ -73,8 +85,12 @@ def test_domain_whitelist_intercepts_stdlib_violation():
         f.write_text("import json  # 白名单外标准库\n", encoding="utf-8")
         r = subprocess.run(
             [sys.executable, "tools/check_domain_whitelist.py"],
-            cwd=ROOT, capture_output=True, text=True,
-            encoding="utf-8", errors="replace")
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         assert r.returncode == 1
         assert "_wl_violation.py" in r.stdout
         assert "json" in r.stdout
@@ -95,20 +111,23 @@ def test_plugin_boundary_intercepts_core_registration():
     f = ROOT / "btf" / "strategy" / "_boundary_violation.py"
     try:
         f.write_text(
-            "from btf import registry\n"
-            "registry.register('data_feed', 'rogue', object)\n",
-            encoding="utf-8")
+            "from btf import registry\nregistry.register('data_feed', 'rogue', object)\n",
+            encoding="utf-8",
+        )
         r = subprocess.run(
             [sys.executable, "tools/check_plugin_boundary.py", "--update"],
-            cwd=ROOT, capture_output=True, text=True,
-            encoding="utf-8", errors="replace")
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         # 注册点检查与基线独立：核心注册必须 FAIL（exit 1）
         assert r.returncode == 1
         assert "_boundary_violation.py" in r.stdout
         # 违例态不得写入基线（注册点先失败短路 --update）
-        assert (not baseline.exists()
-                or "_boundary_violation" not in baseline.read_text("utf-8"))
+        assert not baseline.exists() or "_boundary_violation" not in baseline.read_text("utf-8")
     finally:
         f.unlink(missing_ok=True)
         if saved is not None:
-            baseline.write_bytes(saved)       # 恢复原基线（不重刷）
+            baseline.write_bytes(saved)  # 恢复原基线（不重刷）

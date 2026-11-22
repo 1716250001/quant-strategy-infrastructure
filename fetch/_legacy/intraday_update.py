@@ -52,6 +52,7 @@ from fetch.base import (
 # 分页拉取 (针对index_daily等大返回量的API)
 # ============================================================
 
+
 def _fetch_by_date_paged(pro, api_name, limiter, trade_date, page_size=4500):
     """
     按trade_date分页拉取数据。
@@ -118,7 +119,11 @@ def update_one_api(pro, api_name, limiter, trade_date, dry_run=False):
     # 按 ts_code 分组，合并追加到各文件（统一走 common.parquet_store）
     t_start = time.time()
     stat = upsert_grouped(
-        df, dir_path, key_col=key_col, subset=date_col, sort_by=date_col,
+        df,
+        dir_path,
+        key_col=key_col,
+        subset=date_col,
+        sort_by=date_col,
     )
     success = stat["processed"]
     fail = stat["fail"]
@@ -154,7 +159,8 @@ def _guard_deprecated():
         f"        python main.py intraday-update       # 补缺口 + 复核最近 1 个交易日\n"
         f"        python main.py gap-update            # 每日增量更新（默认复核 3 日）\n"
         f"        python -m fetch.daily_update --help  # 引擎本体\n"
-        f"{'=' * 74}\n")
+        f"{'=' * 74}\n"
+    )
 
 
 # ============================================================
@@ -220,10 +226,12 @@ def run_update(trade_date=None, dry_run=False):
 # CLI入口
 # ============================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(description="尾盘增量更新 (已废弃, 请用 main.py intraday-update)")
-    parser.add_argument("--date", default=None,
-                        help="目标日期 YYYYMMDD (默认: 自动获取最近交易日)")
+    parser = argparse.ArgumentParser(
+        description="尾盘增量更新 (已废弃, 请用 main.py intraday-update)"
+    )
+    parser.add_argument("--date", default=None, help="目标日期 YYYYMMDD (默认: 自动获取最近交易日)")
     parser.add_argument("--dry-run", action="store_true", help="空跑模式, 只统计不写入")
     args = parser.parse_args()
 

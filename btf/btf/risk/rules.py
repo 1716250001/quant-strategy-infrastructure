@@ -15,6 +15,7 @@
     cash_check:    fee_buffer=0.001, lot_size=100
     tradability:   reject_st=False
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,8 +38,7 @@ class MaxWeightRule:
 
     contract_version = CONTRACT_VERSION
 
-    def __init__(self, max_weight: float = 0.10, lot_size: int = 100,
-                 *, strict: bool = True):
+    def __init__(self, max_weight: float = 0.10, lot_size: int = 100, *, strict: bool = True):
         if not 0 < max_weight <= 1:
             raise ValueError(f"max_weight 须 ∈(0,1]，得 {max_weight}")
         self.max_weight = max_weight
@@ -50,15 +50,15 @@ class MaxWeightRule:
         #: 需保留历史宽松语义者显式配 `risk.rules.params.strict=false`。
         self.strict = strict
 
-    def check(self, order: Order, portfolio: PortfolioRiskView,
-              states: Mapping[str, TradingState]) -> RiskVerdict:
+    def check(
+        self, order: Order, portfolio: PortfolioRiskView, states: Mapping[str, TradingState]
+    ) -> RiskVerdict:
         if order.side is not OrderSide.BUY:
-            return RiskVerdict.allow()                 # 卖出降权重
+            return RiskVerdict.allow()  # 卖出降权重
         price = portfolio.close_of(order.symbol)
         if not price or price <= 0:
             if self.strict:
-                return RiskVerdict.reject(
-                    "risk:max_weight: 无盯市价（strict 拒单）")
+                return RiskVerdict.reject("risk:max_weight: 无盯市价（strict 拒单）")
             logger.debug("max_weight 降级：无盯市价 %s（撮合层兜底）", order.symbol)
             return RiskVerdict.allow()
         pos = portfolio.positions.get(order.symbol)
@@ -85,27 +85,26 @@ class CashCheckRule:
 
     contract_version = CONTRACT_VERSION
 
-    def __init__(self, fee_buffer: float = 0.001, lot_size: int = 100,
-                 *, strict: bool = True):
+    def __init__(self, fee_buffer: float = 0.001, lot_size: int = 100, *, strict: bool = True):
         if fee_buffer < 0:
             raise ValueError(f"fee_buffer 须 ≥0，得 {fee_buffer}")
         self.fee_buffer = fee_buffer
         self.lot_size = lot_size
-        self.strict = strict          # 数据缺失语义：见 MaxWeightRule（P0-3/X-7）
+        self.strict = strict  # 数据缺失语义：见 MaxWeightRule（P0-3/X-7）
         self._available = 0.0
 
     def on_batch_start(self, portfolio: PortfolioRiskView) -> None:
         self._available = portfolio.cash
 
-    def check(self, order: Order, portfolio: PortfolioRiskView,
-              states: Mapping[str, TradingState]) -> RiskVerdict:
+    def check(
+        self, order: Order, portfolio: PortfolioRiskView, states: Mapping[str, TradingState]
+    ) -> RiskVerdict:
         if order.side is not OrderSide.BUY:
             return RiskVerdict.allow()
         price = portfolio.close_of(order.symbol)
         if not price or price <= 0:
             if self.strict:
-                return RiskVerdict.reject(
-                    "risk:cash_check: 无盯市价（strict 拒单）")
+                return RiskVerdict.reject("risk:cash_check: 无盯市价（strict 拒单）")
             logger.debug("cash_check 降级：无盯市价 %s（撮合层兜底）", order.symbol)
             return RiskVerdict.allow()
         unit = price * (1 + self.fee_buffer)
@@ -132,15 +131,15 @@ class TradabilityRule:
 
     def __init__(self, reject_st: bool = False, *, strict: bool = True):
         self.reject_st = reject_st
-        self.strict = strict          # 数据缺失语义：见 MaxWeightRule（P0-3/X-7）
+        self.strict = strict  # 数据缺失语义：见 MaxWeightRule（P0-3/X-7）
 
-    def check(self, order: Order, portfolio: PortfolioRiskView,
-              states: Mapping[str, TradingState]) -> RiskVerdict:
+    def check(
+        self, order: Order, portfolio: PortfolioRiskView, states: Mapping[str, TradingState]
+    ) -> RiskVerdict:
         state = states.get(order.symbol)
         if state is None:
             if self.strict:
-                return RiskVerdict.reject(
-                    "risk:tradability: 无状态面板（strict 拒单）")
+                return RiskVerdict.reject("risk:tradability: 无状态面板（strict 拒单）")
             logger.debug("tradability 降级：无状态 %s（撮合层兜底）", order.symbol)
             return RiskVerdict.allow()
         if state.is_delisted:

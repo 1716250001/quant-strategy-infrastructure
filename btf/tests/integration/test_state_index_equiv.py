@@ -5,6 +5,7 @@
 排序后的年表与 `{ymd: (lo, hi)}` 索引必须与**原实现**（`large_string` 排序）逐
 键＋逐行相等。样本年 2024（主库真实数据）。
 """
+
 from __future__ import annotations
 
 import pyarrow.compute as pc
@@ -15,9 +16,9 @@ from btf.data.state import StateSynthesizer
 pytestmark = [pytest.mark.l2]
 
 requires_mainlib = pytest.mark.skipif(
-    not (MARKET_DATA_DIR / "daily").is_dir()
-    or not (MARKET_DATA_DIR / "stk_limit").is_dir(),
-    reason=f"主库不可用: {MARKET_DATA_DIR}")
+    not (MARKET_DATA_DIR / "daily").is_dir() or not (MARKET_DATA_DIR / "stk_limit").is_dir(),
+    reason=f"主库不可用: {MARKET_DATA_DIR}",
+)
 
 YEAR = 2024
 
@@ -29,9 +30,11 @@ def _reference(t):
     ordered = grouped.sort_by("trade_date")
     index: dict[str, tuple[int, int]] = {}
     start = 0
-    for day, count in zip(ordered.column("trade_date").to_pylist(),
-                          ordered.column("ts_code_count").to_pylist(),
-                          strict=True):
+    for day, count in zip(
+        ordered.column("trade_date").to_pylist(),
+        ordered.column("ts_code_count").to_pylist(),
+        strict=True,
+    ):
         index[day] = (start, start + count)
         start += count
     return s, index

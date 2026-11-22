@@ -35,6 +35,7 @@
 协议签名（04 §8.3.3 原文，M1 简化偏差本轮对齐——fees 含 date 分段选段所需；
 apply(order, ref_price, state, bar) 为 v0.5 VPP 成交量约束预留）。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -52,15 +53,17 @@ PAR_VALUE = 1.0
 class CostModel(Protocol):
     """费用协议（04 §8.3.3）：fees(symbol, side, qty, price, date) → Fee（元）。纯函数。"""
 
-    def fees(self, symbol: str, side: OrderSide, qty: int, price: float,
-             date: TradingDate) -> Fee: ...
+    def fees(
+        self, symbol: str, side: OrderSide, qty: int, price: float, date: TradingDate
+    ) -> Fee: ...
 
 
 class SlippageModel(Protocol):
     """滑点协议（04 §8.3.3）：撮合基准价 → 实际成交价。纯函数（无随机——确定性纪律）。"""
 
-    def apply(self, order: Order, ref_price: float,
-              state: TradingState, bar: Bar | None) -> float: ...
+    def apply(
+        self, order: Order, ref_price: float, state: TradingState, bar: Bar | None
+    ) -> float: ...
 
 
 @dataclass(frozen=True)
@@ -71,33 +74,33 @@ class FeeSegment:
     时间变化，不是纯费率数值分段（transfer_fee 适用市场随时间变化）。
     """
 
-    effective_from: TradingDate | None      # None = 无限早（首段）
-    stamp_duty_sell: float                  # 印花税（仅卖出）
-    transfer_fee_rate: float                # 过户费率（basis 口径）
-    transfer_scope: str = "both"            # "sh_only" | "both"
-    transfer_basis: str = "amount"          # "amount" 成交额 | "par" 面额
+    effective_from: TradingDate | None  # None = 无限早（首段）
+    stamp_duty_sell: float  # 印花税（仅卖出）
+    transfer_fee_rate: float  # 过户费率（basis 口径）
+    transfer_scope: str = "both"  # "sh_only" | "both"
+    transfer_basis: str = "amount"  # "amount" 成交额 | "par" 面额
 
 
 #: 内置 A 股分段费率表（变更点合并切分：过户费三段 × 印花税两段 → 4 段）
 A_SHARE_SEGMENTS: tuple[FeeSegment, ...] = (
-    FeeSegment(                               # 2015-08-01 前：仅沪市按面额 0.6‰
+    FeeSegment(  # 2015-08-01 前：仅沪市按面额 0.6‰
         effective_from=None,
         stamp_duty_sell=0.001,
-        transfer_fee_rate=0.0006,             # 元/股（面额 0.6‰ × 1 元面值）
+        transfer_fee_rate=0.0006,  # 元/股（面额 0.6‰ × 1 元面值）
         transfer_scope="sh_only",
         transfer_basis="par",
     ),
-    FeeSegment(                               # 2015-08-01：沪深双向 0.002%（成交额）
+    FeeSegment(  # 2015-08-01：沪深双向 0.002%（成交额）
         effective_from=TradingDate.from_ymd("20150801"),
         stamp_duty_sell=0.001,
         transfer_fee_rate=0.00002,
     ),
-    FeeSegment(                               # 2022-04-29：过户费减半 0.001%
+    FeeSegment(  # 2022-04-29：过户费减半 0.001%
         effective_from=TradingDate.from_ymd("20220429"),
         stamp_duty_sell=0.001,
         transfer_fee_rate=0.00001,
     ),
-    FeeSegment(                               # 2023-08-28：印花税减半 0.05%（H3）
+    FeeSegment(  # 2023-08-28：印花税减半 0.05%（H3）
         effective_from=TradingDate.from_ymd("20230828"),
         stamp_duty_sell=0.0005,
         transfer_fee_rate=0.00001,
@@ -105,8 +108,7 @@ A_SHARE_SEGMENTS: tuple[FeeSegment, ...] = (
 )
 
 
-def _segment_at(segments: tuple[FeeSegment, ...],
-                date: TradingDate) -> FeeSegment:
+def _segment_at(segments: tuple[FeeSegment, ...], date: TradingDate) -> FeeSegment:
     """date 生效段（effective_from ≤ date 的最晚段；早于全部段 → 显式报错）。"""
     hit: FeeSegment | None = None
     for seg in segments:
@@ -116,7 +118,8 @@ def _segment_at(segments: tuple[FeeSegment, ...],
         raise ValueError(
             f"费率表未覆盖 {date.to_ymd()}（早于首段 "
             f"{segments[0].effective_from.to_ymd() if segments[0].effective_from else '?'}"
-            f"——自定义段表须以 None 首段覆盖全程）")
+            f"——自定义段表须以 None 首段覆盖全程）"
+        )
     return hit
 
 
@@ -126,8 +129,7 @@ class ZeroCostModel:
 
     contract_version = CONTRACT_VERSION
 
-    def fees(self, symbol: str, side: OrderSide, qty: int, price: float,
-             date: TradingDate) -> Fee:
+    def fees(self, symbol: str, side: OrderSide, qty: int, price: float, date: TradingDate) -> Fee:
         return Fee.zero()
 
 
@@ -142,12 +144,11 @@ class AShareTieredFeeModel:
 
     contract_version: ClassVar[str] = CONTRACT_VERSION
 
-    commission_rate: float = 2.5e-4          # 万 2.5（券商默认口径）
-    commission_min: float = 5.0              # 单笔最低佣金（元，双向）
+    commission_rate: float = 2.5e-4  # 万 2.5（券商默认口径）
+    commission_min: float = 5.0  # 单笔最低佣金（元，双向）
     segments: tuple[FeeSegment, ...] = A_SHARE_SEGMENTS
 
-    def fees(self, symbol: str, side: OrderSide, qty: int, price: float,
-             date: TradingDate) -> Fee:
+    def fees(self, symbol: str, side: OrderSide, qty: int, price: float, date: TradingDate) -> Fee:
         seg = _segment_at(self.segments, date)
         turnover = qty * price
         commission = max(turnover * self.commission_rate, self.commission_min)
@@ -155,18 +156,23 @@ class AShareTieredFeeModel:
         # **免印花税**（境内二级市场免征）——判定复用 `is_fund_code`（品种维度，
         # 禁第二套判定）；其余科目不变；股票侧逐位不变。
         # N30 实证：510880 曾误收印花税 11,448.88 元（占费用总额 61.2%）。
-        stamp = (turnover * seg.stamp_duty_sell
-                 if (side is OrderSide.SELL and not is_fund_code(symbol))
-                 else 0.0)
+        stamp = (
+            turnover * seg.stamp_duty_sell
+            if (side is OrderSide.SELL and not is_fund_code(symbol))
+            else 0.0
+        )
         if seg.transfer_scope == "sh_only" and not symbol.endswith(".SH"):
-            transfer = 0.0                     # 2015-08 前深市不收过户费
+            transfer = 0.0  # 2015-08 前深市不收过户费
         elif seg.transfer_basis == "par":
             transfer = qty * PAR_VALUE * seg.transfer_fee_rate
         else:
             transfer = turnover * seg.transfer_fee_rate
-        return Fee(commission=round(commission, 2), stamp_duty=round(stamp, 2),
-                   transfer_fee=round(transfer, 2),
-                   total=round(commission + stamp + transfer, 2))
+        return Fee(
+            commission=round(commission, 2),
+            stamp_duty=round(stamp, 2),
+            transfer_fee=round(transfer, 2),
+            total=round(commission + stamp + transfer, 2),
+        )
 
 
 @dataclass(frozen=True)
@@ -181,18 +187,22 @@ class FlatRateCostModel:
 
     commission_rate: float = 2.5e-4
     min_commission: float = 5.0
-    stamp_duty_rate: float = 5e-4      # 仅卖出
+    stamp_duty_rate: float = 5e-4  # 仅卖出
     transfer_rate: float = 1e-5
 
-    def fees(self, symbol: str, side: OrderSide, qty: int, price: float,
-             date: TradingDate) -> Fee:  # date 未用（现行常数口径）
+    def fees(
+        self, symbol: str, side: OrderSide, qty: int, price: float, date: TradingDate
+    ) -> Fee:  # date 未用（现行常数口径）
         turnover = qty * price
         commission = max(turnover * self.commission_rate, self.min_commission)
         stamp = turnover * self.stamp_duty_rate if side is OrderSide.SELL else 0.0
         transfer = turnover * self.transfer_rate
-        return Fee(commission=round(commission, 2), stamp_duty=round(stamp, 2),
-                   transfer_fee=round(transfer, 2),
-                   total=round(commission + stamp + transfer, 2))
+        return Fee(
+            commission=round(commission, 2),
+            stamp_duty=round(stamp, 2),
+            transfer_fee=round(transfer, 2),
+            total=round(commission + stamp + transfer, 2),
+        )
 
 
 # ── 滑点（扩展点 4：FixedSlippage / PctSlippage；未配置→NoSlippage + 报告标注）──
@@ -204,8 +214,7 @@ class NoSlippage:
 
     contract_version = CONTRACT_VERSION
 
-    def apply(self, order: Order, ref_price: float,
-              state: TradingState, bar: Bar | None) -> float:
+    def apply(self, order: Order, ref_price: float, state: TradingState, bar: Bar | None) -> float:
         return ref_price
 
 
@@ -215,12 +224,10 @@ class FixedSlippage:
 
     contract_version = CONTRACT_VERSION
 
-    amount: float = 0.01                     # 元（默认一档报价）
+    amount: float = 0.01  # 元（默认一档报价）
 
-    def apply(self, order: Order, ref_price: float,
-              state: TradingState, bar: Bar | None) -> float:
-        return (ref_price + self.amount if order.side is OrderSide.BUY
-                else ref_price - self.amount)
+    def apply(self, order: Order, ref_price: float, state: TradingState, bar: Bar | None) -> float:
+        return ref_price + self.amount if order.side is OrderSide.BUY else ref_price - self.amount
 
 
 @dataclass(frozen=True)
@@ -229,12 +236,14 @@ class PctSlippage:
 
     contract_version = CONTRACT_VERSION
 
-    pct: float = 0.001                       # 0.1%
+    pct: float = 0.001  # 0.1%
 
-    def apply(self, order: Order, ref_price: float,
-              state: TradingState, bar: Bar | None) -> float:
-        return (ref_price * (1 + self.pct) if order.side is OrderSide.BUY
-                else ref_price * (1 - self.pct))
+    def apply(self, order: Order, ref_price: float, state: TradingState, bar: Bar | None) -> float:
+        return (
+            ref_price * (1 + self.pct)
+            if order.side is OrderSide.BUY
+            else ref_price * (1 - self.pct)
+        )
 
 
 @dataclass(frozen=True)
@@ -273,7 +282,8 @@ class SqrtImpactSlippage:
             raise ValueError(
                 f"sqrt_impact 参数须 η≥0、σ≥0、impact_cap>0，得 "
                 f"eta={self.eta!r}, sigma={self.sigma!r}, "
-                f"impact_cap={self.impact_cap!r}")
+                f"impact_cap={self.impact_cap!r}"
+            )
 
     def impact_of(self, qty: int, volume: float) -> float:
         """单边冲击（分数；同公式单点，供单测/报告复算）。"""
@@ -282,16 +292,13 @@ class SqrtImpactSlippage:
         raw = self.eta * self.sigma * (qty / volume) ** 0.5
         return min(raw, self.impact_cap)
 
-    def apply(self, order: Order, ref_price: float,
-              state: TradingState, bar: Bar | None) -> float:
+    def apply(self, order: Order, ref_price: float, state: TradingState, bar: Bar | None) -> float:
         if bar is None:
             return ref_price
-        impact = self.impact_of(int(order.qty),
-                                float(getattr(bar, "volume", 0.0) or 0.0))
+        impact = self.impact_of(int(order.qty), float(getattr(bar, "volume", 0.0) or 0.0))
         if impact == 0.0:
             return ref_price
-        return (ref_price * (1 + impact) if order.side is OrderSide.BUY
-                else ref_price * (1 - impact))
+        return ref_price * (1 + impact) if order.side is OrderSide.BUY else ref_price * (1 - impact)
 
 
 __all__ = [

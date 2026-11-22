@@ -5,6 +5,7 @@
 Order 是不可变指令，Fill 是成交回报——引擎内核永不隐式修改订单状态，
 状态流转只经事件（OrderSubmittedEvent / OrderRejectedEvent / FillEvent）。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,8 +17,8 @@ from btf.domain.types import TradingDate
 class OrderType(Enum):
     """订单类型（MVP：MARKET/LIMIT；↗ v0.5 STOP/TWP/VWAP）。"""
 
-    MARKET = "market"      # 次日开盘 or 当日收盘撮合（FillTiming 配置）
-    LIMIT = "limit"        # 触价即成简化
+    MARKET = "market"  # 次日开盘 or 当日收盘撮合（FillTiming 配置）
+    LIMIT = "limit"  # 触价即成简化
 
 
 class OrderSide(Enum):
@@ -33,14 +34,14 @@ class RejectCode(Enum):
     T_PLUS_1 → INSUFFICIENT_CASH
     """
 
-    SUSPENDED = "suspended"            # 停牌/退市/当日无行情 → 拒单
-    LIMIT_UP = "limit_up"              # 涨停买入拒（买不进）
-    LIMIT_DOWN = "limit_down"          # 跌停卖出拒（卖不出）
-    LOT_SIZE = "lot_size"              # 非整手倍数 → 拒单（引擎强制取整纪律）
-    VOLUME_CAP = "volume_cap"          # VPP 撮合量上限 < 一手（v0.5，G10）
-    T_PLUS_1 = "t_plus_1"              # T+N 可卖数量不足（当日买入部分不可卖）
+    SUSPENDED = "suspended"  # 停牌/退市/当日无行情 → 拒单
+    LIMIT_UP = "limit_up"  # 涨停买入拒（买不进）
+    LIMIT_DOWN = "limit_down"  # 跌停卖出拒（卖不出）
+    LOT_SIZE = "lot_size"  # 非整手倍数 → 拒单（引擎强制取整纪律）
+    VOLUME_CAP = "volume_cap"  # VPP 撮合量上限 < 一手（v0.5，G10）
+    T_PLUS_1 = "t_plus_1"  # T+N 可卖数量不足（当日买入部分不可卖）
     INSUFFICIENT_CASH = "insufficient_cash"  # 现金不足（含费用预估）
-    RISK_REJECTED = "risk_rejected"    # 预交易风控否决（06 §10.6；message 含规则名）
+    RISK_REJECTED = "risk_rejected"  # 预交易风控否决（06 §10.6；message 含规则名）
 
 
 @dataclass(frozen=True)
@@ -55,11 +56,11 @@ class Order:
     symbol: str
     side: OrderSide
     order_type: OrderType
-    qty: int                       # 委托数量（股；引擎强制 lot_size 取整，余数拒绝）
+    qty: int  # 委托数量（股；引擎强制 lot_size 取整，余数拒绝）
     limit_price: float | None
-    created_at: TradingDate        # 策略下单日（T 日收盘决策 → T+1 执行为默认时序）
-    tif: str = "day"               # Time-In-Force：MVP 仅当日有效
-    tag: str | None = None         # 策略标签（归因分析用）
+    created_at: TradingDate  # 策略下单日（T 日收盘决策 → T+1 执行为默认时序）
+    tif: str = "day"  # Time-In-Force：MVP 仅当日有效
+    tag: str | None = None  # 策略标签（归因分析用）
 
 
 @dataclass(frozen=True)
@@ -70,9 +71,9 @@ class Fee:
     三段过户费/两段印花税的日期分段 FeeSchedule 属 M2 任务 5.1。
     """
 
-    commission: float              # 佣金
-    stamp_duty: float              # 印花税（仅卖出）
-    transfer_fee: float            # 过户费
+    commission: float  # 佣金
+    stamp_duty: float  # 印花税（仅卖出）
+    transfer_fee: float  # 过户费
     total: float
 
     @classmethod
@@ -89,10 +90,10 @@ class Fill:
     symbol: str
     side: OrderSide
     qty: int
-    price: float                   # 实际成交价（含滑点后）
-    fee: Fee                       # 费用明细（分项，成本归因用）
+    price: float  # 实际成交价（含滑点后）
+    fee: Fee  # 费用明细（分项，成本归因用）
     fill_date: TradingDate
-    fill_timing: str               # "open"|"close"（撮合基准，报告披露用）
+    fill_timing: str  # "open"|"close"（撮合基准，报告披露用）
     #: 撮合基准价（**滑点前**：`next_open` 时为当 bar open）——**F9（2026-10-06）**：
     #: 用于把"价内滑点成本"从成交价里**还原出来**（`price − ref_price`），
     #: 供报告「假设与披露」单列（此前该成本**只在价内**、`fee` 不计入 ⇒
@@ -108,7 +109,7 @@ class Fill:
         """
         if self.ref_price is None:
             return None
-        signed = (self.price - self.ref_price)
+        signed = self.price - self.ref_price
         if self.side is OrderSide.SELL:
             signed = -signed
         return self.qty * signed

@@ -37,6 +37,7 @@ tools/factor_library.py — 因子库（全收益基准 + 风格因子）
     F, meta = load_factors()            # 全收益规模基准
     F2, meta2 = load_factors(style=True)  # + 风格因子
 """
+
 import argparse
 import os
 
@@ -71,8 +72,7 @@ def _load_index(code, data_dir):
     index_daily 已迁移为按年分区，不能再按 {code}.parquet 定位文件
     （旧写法会静默返回 None，导致因子库整体为空）。
     """
-    d = reader.read_code("index_daily", code,
-                         columns=["trade_date", "close"], root=data_dir)
+    d = reader.read_code("index_daily", code, columns=["trade_date", "close"], root=data_dir)
     if d is None or d.empty:
         return None
     d = d.dropna()
@@ -122,8 +122,9 @@ def regress(fund_ret, factors, orth=False):
         c = np.corrcoef(xs.T)
         w, v = np.linalg.eigh(c)
         w = np.maximum(w, 1e-10)
-        factors = pd.DataFrame(xs @ (v @ np.diag(w ** -0.5) @ v.T),
-                               index=factors.index, columns=factors.columns)
+        factors = pd.DataFrame(
+            xs @ (v @ np.diag(w**-0.5) @ v.T), index=factors.index, columns=factors.columns
+        )
     j = pd.concat([fund_ret.rename("f"), factors], axis=1, join="inner").dropna()
     if len(j) < 250:
         return None
@@ -136,9 +137,11 @@ def regress(fund_ret, factors, orth=False):
     s2 = resid @ resid / (n - k)
     se = np.sqrt(s2 * np.linalg.inv(x.T @ x)[0, 0])
     return {
-        "alpha_comp": (1 + cf[0]) ** 245 - 1,   # 复利年化（主口径）
-        "alpha_lin": cf[0] * 245,               # 线性年化（对照）
-        "t": cf[0] / se, "r2": 1 - np.var(resid) / np.var(y), "n": len(j),
+        "alpha_comp": (1 + cf[0]) ** 245 - 1,  # 复利年化（主口径）
+        "alpha_lin": cf[0] * 245,  # 线性年化（对照）
+        "t": cf[0] / se,
+        "r2": 1 - np.var(resid) / np.var(y),
+        "n": len(j),
         "betas": {k: cf[1 + i] for i, k in enumerate(fc)},
         "cors": {k: float(j["f"].corr(j[k])) for k in fc},
     }
@@ -151,13 +154,16 @@ def main(argv=None):
           --style   是否含风格因子（默认含）
           --matrix  是否打印完整相关矩阵（默认打印）
     """
-    ap = argparse.ArgumentParser(
-        description="因子库（全收益基准 + 风格因子）")
-    ap.add_argument("--style", action="store_true", default=True,
-                    help="含风格因子（默认含）")
+    ap = argparse.ArgumentParser(description="因子库（全收益基准 + 风格因子）")
+    ap.add_argument("--style", action="store_true", default=True, help="含风格因子（默认含）")
     ap.add_argument("--no-style", dest="style", action="store_false")
-    ap.add_argument("--no-matrix", dest="matrix", action="store_false",
-                    default=True, help="不打印相关矩阵，只看清单")
+    ap.add_argument(
+        "--no-matrix",
+        dest="matrix",
+        action="store_false",
+        default=True,
+        help="不打印相关矩阵，只看清单",
+    )
     a = ap.parse_args(argv)
 
     f, meta = load_factors(style=a.style)

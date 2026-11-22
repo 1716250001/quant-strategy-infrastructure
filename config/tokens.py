@@ -3,6 +3,7 @@
 
 凭据读取优先级：环境变量 > 代码目录 .env > 空串；明文不入库。
 """
+
 import os
 
 from config.paths import CODE_DIR
@@ -34,13 +35,16 @@ def _secret(name: str) -> str:
     return ""
 
 
-TS_TOKEN = _secret("TS_TOKEN")          # Tushare（2000 积分档；2026-09-24 老大提供重填，09-25 G2 移入 .env）
+TS_TOKEN = _secret(
+    "TS_TOKEN"
+)  # Tushare（2000 积分档；2026-09-24 老大提供重填，09-25 G2 移入 .env）
 PUSHPLUS_TOKEN = _secret("PUSHPLUS_TOKEN")  # PushPlus 微信推送（同上）
-WIND_API_KEY = _secret("WIND_API_KEY")  # Wind AIFin（ak_ 前缀；同上）。⚠ 2026-09-25 Wind 研究暂停、代码剥离至 _scratch\wind-研究暂存\——本 key 仅保留供暂存脚本环境变量续用（暂存脚本均直读环境变量，不 import 本常量）
+WIND_API_KEY = _secret(
+    "WIND_API_KEY"
+)  # Wind AIFin（ak_ 前缀；同上）。⚠ 2026-09-25 Wind 研究暂停、代码剥离至 _scratch\wind-研究暂存\——本 key 仅保留供暂存脚本环境变量续用（暂存脚本均直读环境变量，不 import 本常量）
 
 # ============================================================
 # 1b. PushPlus 微信推送配置
 # ============================================================
-PUSHPLUS_CHANNEL = "wechat"       # 默认渠道: wechat(微信公众号)
-PUSHPLUS_TEMPLATE = "markdown"    # 默认模板: markdown
-
+PUSHPLUS_CHANNEL = "wechat"  # 默认渠道: wechat(微信公众号)
+PUSHPLUS_TEMPLATE = "markdown"  # 默认模板: markdown

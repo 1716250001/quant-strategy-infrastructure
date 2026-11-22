@@ -10,6 +10,7 @@
 
 注意：`bt dataset freeze` 不跑回测（只 build 装配 + 指纹实算）。
 """
+
 from __future__ import annotations
 
 import json
@@ -23,8 +24,7 @@ from btf.config.paths import MARKET_DATA_DIR
 pytestmark = [pytest.mark.l4]
 
 ROOT = Path(MARKET_DATA_DIR)
-requires_mainlib = pytest.mark.skipif(
-    not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
+requires_mainlib = pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -35,8 +35,7 @@ def _write_config(tmp_path: Path) -> Path:
         "run": {
             "strategy": "tests.fixtures.buyhold:ConfigBuyHold",
             "params": {"symbol": "000001.SZ", "weight": 0.9},
-            "universe": {"source": "explicit",
-                         "symbols": ["000001.SZ", "600000.SH"]},
+            "universe": {"source": "explicit", "symbols": ["000001.SZ", "600000.SH"]},
             "period": {"start": "2024-01-01", "end": "2024-06-30"},
             "initial_cash": 1_000_000,
         },
@@ -67,27 +66,24 @@ class TestDatasetFreezeEndToEnd:
         tmp_path = _writable
         cfg = _write_config(tmp_path)
         fdir = tmp_path / "freeze"
-        assert main(["dataset", "freeze", "--config", str(cfg),
-                     "--out", str(fdir)]) == 0
+        assert main(["dataset", "freeze", "--config", str(cfg), "--out", str(fdir)]) == 0
         files = list(fdir.iterdir())
         assert len(files) == 1, f"冻结目录应恰一份清单：{files}"
         frozen = json.loads(files[0].read_text(encoding="utf-8"))
 
-        for key in ("anchor_date", "tables", "content_hash", "mode",
-                    "created_at"):
+        for key in ("anchor_date", "tables", "content_hash", "mode", "created_at"):
             assert frozen.get(key) not in (None, "", []), key
         assert frozen["content_hash"].startswith("sha256:")
         assert all({"name", "rows"} <= set(t) for t in frozen["tables"])
 
         out_dir = tmp_path / "runs"
-        assert main(["run", "--config", str(cfg),
-                     "--out", str(out_dir)]) == 0
+        assert main(["run", "--config", str(cfg), "--out", str(out_dir)]) == 0
         run_dir = next(p for p in out_dir.iterdir() if p.is_dir())
-        manifest = json.loads((run_dir / "manifest.json").read_text(
-            encoding="utf-8"))
+        manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
         dv = manifest["data_version"]
         assert frozen["content_hash"] == dv["content_hash"], (
-            "冻结清单与 manifest 指纹不同源（R2 违例）")
+            "冻结清单与 manifest 指纹不同源（R2 违例）"
+        )
         assert frozen["anchor_date"] == dv["anchor_date"]
 
     def test_readonly_and_idempotent_refreeze(self, _writable: Path):
@@ -97,13 +93,11 @@ class TestDatasetFreezeEndToEnd:
         tmp_path = _writable
         cfg = _write_config(tmp_path)
         fdir = tmp_path / "freeze"
-        assert main(["dataset", "freeze", "--config", str(cfg),
-                     "--out", str(fdir)]) == 0
+        assert main(["dataset", "freeze", "--config", str(cfg), "--out", str(fdir)]) == 0
         path = next(iter(fdir.iterdir()))
         assert not os.access(path, os.W_OK), "冻结清单未置只读（R3）"
         before = path.read_bytes()
 
-        assert main(["dataset", "freeze", "--config", str(cfg),
-                     "--out", str(fdir)]) == 0
+        assert main(["dataset", "freeze", "--config", str(cfg), "--out", str(fdir)]) == 0
         assert path.read_bytes() == before, "幂等复冻覆写了清单（R3 违例）"
         assert len(list(fdir.iterdir())) == 1

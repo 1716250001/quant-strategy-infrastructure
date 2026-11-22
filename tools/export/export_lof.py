@@ -7,6 +7,7 @@ tools/export_lof.py — 导出场内 LOF 完整列表为 Excel
     build_lof_table() / export_excel() / main()，可被复用与测试
   - 输出路径原为硬编码绝对路径，现统一取 common.paths.DOC_DIR
 """
+
 import os
 
 import openpyxl
@@ -64,8 +65,9 @@ def build_lof_table():
     fund_files = set(reader.codes_from_store("fund_daily"))
     on_market = fb[fb["ts_code"].isin(fund_files)].copy()
 
-    on_market["code"] = (on_market["ts_code"]
-                         .str.replace(".SH", "").str.replace(".SZ", "").str.replace(".BJ", ""))
+    on_market["code"] = (
+        on_market["ts_code"].str.replace(".SH", "").str.replace(".SZ", "").str.replace(".BJ", "")
+    )
     on_market["suffix"] = on_market["ts_code"].str[-2:]
     on_market["market_class"] = on_market.apply(classify_fund, axis=1)
     lof = on_market[on_market["market_class"] == "LOF"].copy()
@@ -90,12 +92,21 @@ def export_excel(lof, out_path):
         cell = ws.cell(row=1, column=col, value=h)
         cell.font = openpyxl.styles.Font(bold=True, size=11, color="FFFFFF")
         cell.alignment = openpyxl.styles.Alignment(horizontal="center")
-        cell.fill = openpyxl.styles.PatternFill(start_color="4472C4", end_color="4472C4",
-                                                fill_type="solid")
+        cell.fill = openpyxl.styles.PatternFill(
+            start_color="4472C4", end_color="4472C4", fill_type="solid"
+        )
 
     for _, row in lof.iterrows():
-        ws.append([row["序号"], row["代码"], row["简称"], row["基金类型"],
-                   row["投资方向"], row["上市日期"]])
+        ws.append(
+            [
+                row["序号"],
+                row["代码"],
+                row["简称"],
+                row["基金类型"],
+                row["投资方向"],
+                row["上市日期"],
+            ]
+        )
 
     for col, width in zip("ABCDEF", [6, 14, 42, 10, 24, 12], strict=False):
         ws.column_dimensions[col].width = width

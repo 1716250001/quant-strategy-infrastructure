@@ -11,6 +11,7 @@ SemVer 纪律（04 §8.7）：
 
 本模块位于 domain（零第三方依赖最内层）——全部层可引用的版本单一真源。
 """
+
 from __future__ import annotations
 
 #: S1 协议集当前版本（M1 契约定稿基线）
@@ -28,11 +29,11 @@ def major_of(version: str) -> int:
         return int(head)
     except ValueError as exc:
         raise ContractVersionError(
-            f"非法契约版本号 {version!r}（期望 SemVer 'MAJOR.minor.patch'）") from exc
+            f"非法契约版本号 {version!r}（期望 SemVer 'MAJOR.minor.patch'）"
+        ) from exc
 
 
-def negotiate(plugin_name: str, declared: str | None,
-              host: str = CONTRACT_VERSION) -> None:
+def negotiate(plugin_name: str, declared: str | None, host: str = CONTRACT_VERSION) -> None:
     """版本协商（registry 加载插件时调用，04 §8.7）。
 
     - 未声明 / 主版本不符 → ContractVersionError（拒载，不静默降级）；
@@ -40,11 +41,13 @@ def negotiate(plugin_name: str, declared: str | None,
     """
     if not declared:
         raise ContractVersionError(
-            f"插件 {plugin_name!r} 未声明 contract_version（S1 契约要求，04 §8.7）")
+            f"插件 {plugin_name!r} 未声明 contract_version（S1 契约要求，04 §8.7）"
+        )
     if major_of(declared) != major_of(host):
         raise ContractVersionError(
             f"插件 {plugin_name!r} 契约版本 {declared!r} 与宿主 {host!r} "
-            f"主版本不符——拒绝加载（请适配 {major_of(host)}.x 契约或升级 btf）")
+            f"主版本不符——拒绝加载（请适配 {major_of(host)}.x 契约或升级 btf）"
+        )
 
 
 __all__ = ["CONTRACT_VERSION", "ContractVersionError", "major_of", "negotiate"]

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """cli.parser — 参数解析（_EPILOG / _NoSuppressSubcommands / build_parser，原样搬出）。"""
+
 import argparse
 
 from cli._shared import _add_date, _add_dry_run, _add_json
@@ -121,6 +122,7 @@ fix-resonance / daily-report / wind-index / scan-divergence / divergence-trigger
 monitor / qidian / qidian-legacy —— 代码与恢复说明见 _archive/ 对应目录。
 """
 
+
 class _NoSuppressSubcommands(argparse.RawDescriptionHelpFormatter):
     """隐藏 help=argparse.SUPPRESS 的子命令（Python 3.13 argparse 不自动隐藏）。
 
@@ -142,31 +144,38 @@ class _NoSuppressSubcommands(argparse.RawDescriptionHelpFormatter):
                 action._choices_actions = saved
         return super()._format_action(action)
 
+
 def build_parser():
     from config import __version__
+
     parser = argparse.ArgumentParser(
         prog="pyramid",
         description="A股三层轮动金字塔策略 · 统一入口",
         formatter_class=_NoSuppressSubcommands,
         epilog=_EPILOG,
     )
-    parser.add_argument("--version", action="version",
-                        version=f"%(prog)s {__version__}")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     # ── 数据维护 ──
     p = sub.add_parser("gap-update", help="每日增量更新（数据库最新日→今天，走 backfill 引擎）")
     _add_date(p)
     _add_dry_run(p)
-    p.add_argument("--group", default="core",
-                   help="接口组: core（默认）/ extend / all（逗号可组合）")
-    p.add_argument("--lookback", type=int, default=None,
-                   help="复核窗口交易日数（默认3；用于修复断点已记但当日数据残缺的情况）")
+    p.add_argument(
+        "--group", default="core", help="接口组: core（默认）/ extend / all（逗号可组合）"
+    )
+    p.add_argument(
+        "--lookback",
+        type=int,
+        default=None,
+        help="复核窗口交易日数（默认3；用于修复断点已记但当日数据残缺的情况）",
+    )
     p.add_argument("--only", default=None, help="只跑指定表, 逗号分隔")
     p.set_defaults(func=cmd_gap_update)
 
-    p = sub.add_parser("intraday-update",
-                       help="尾盘增量更新（= gap-update --lookback 1 的特例，保留入口）")
+    p = sub.add_parser(
+        "intraday-update", help="尾盘增量更新（= gap-update --lookback 1 的特例，保留入口）"
+    )
     _add_date(p)
     _add_dry_run(p)
     p.set_defaults(func=cmd_intraday_update)
@@ -179,27 +188,23 @@ def build_parser():
     _add_date(p, help_text="回溯截止日 YYYYMMDD (默认最新)")
     _add_dry_run(p)
     p.add_argument("--days", type=int, default=None, help="回溯交易日数 (默认5)")
-    p.add_argument("--repair", action="store_true",
-                   help="历史回补模式: 对行数过少的文件按代码补拉全历史")
-    p.add_argument("--repair-threshold", type=int, default=5,
-                   help="回补阈值(行数)，默认5")
-    p.add_argument("--limit", type=int, default=None,
-                   help="限制处理数量 (调试/分批用)")
+    p.add_argument(
+        "--repair", action="store_true", help="历史回补模式: 对行数过少的文件按代码补拉全历史"
+    )
+    p.add_argument("--repair-threshold", type=int, default=5, help="回补阈值(行数)，默认5")
+    p.add_argument("--limit", type=int, default=None, help="限制处理数量 (调试/分批用)")
     p.set_defaults(func=cmd_fund_nav)
 
     p = sub.add_parser("download-full", help="全市场数据下载（建库/重建）")
     p.add_argument("--reset", action="store_true", help="清除断点, 从头开始")
-    p.add_argument("--phase", type=str, default="all",
-                   help="指定阶段: meta / daily / fina / all")
-    p.add_argument("--workers", type=int, default=None,
-                   help="并发线程数 (默认4, 传1=串行)")
+    p.add_argument("--phase", type=str, default="all", help="指定阶段: meta / daily / fina / all")
+    p.add_argument("--workers", type=int, default=None, help="并发线程数 (默认4, 传1=串行)")
     _add_dry_run(p, help_text="空跑模式, 只统计不下载")
     p.set_defaults(func=cmd_download_full)
 
     p = sub.add_parser("download-cb", help="可转债数据下载")
     p.add_argument("--reset", action="store_true", help="清除断点, 从头开始")
-    p.add_argument("--workers", type=int, default=None,
-                   help="并发线程数 (默认4, 传1=串行)")
+    p.add_argument("--workers", type=int, default=None, help="并发线程数 (默认4, 传1=串行)")
     _add_dry_run(p, help_text="空跑, 只统计不下载")
     p.set_defaults(func=cmd_download_cb)
 
@@ -207,21 +212,37 @@ def build_parser():
     p.add_argument("--tier", default="A,B", help="分档: A/B/C/D, 逗号分隔 (默认 A,B)")
     p.add_argument("--only", default=None, help="只跑指定接口, 逗号分隔")
     p.add_argument("--workers", type=int, default=None, help="每接口并发线程数 (默认4)")
-    p.add_argument("--parallel-targets", type=int, default=None,
-                   help="同时跑几个接口 (默认取 config.BACKFILL_PARALLEL_TARGETS=4; "
-                        "传 1 则退化为串行)")
+    p.add_argument(
+        "--parallel-targets",
+        type=int,
+        default=None,
+        help="同时跑几个接口 (默认取 config.BACKFILL_PARALLEL_TARGETS=4; 传 1 则退化为串行)",
+    )
     p.add_argument("--limit", type=int, default=None, help="每接口最多跑N个任务")
-    p.add_argument("--list", action="store_true", dest="list_targets",
-                   help="列出全部补数目标（接口/档位/模式/布局/完成度）后退出")
-    p.add_argument("--force", action="store_true",
-                   help="忽略断点与'库内已有标的'，全部重拉"
-                        "（修复'断点说完成但数据不完整'，如 index_dailybasic 早期截断）")
-    p.add_argument("--codes-file", default=None,
-                   help="代码清单文件（UTF-8，一行一个 ts_code，# 注释）。"
-                        "替代 resolve_codes，绕过 fund_etf 白名单；仅允许 by_code 目标")
-    p.add_argument("--force-listed", action="store_true",
-                   help="与 --codes-file 联用：清单内代码即使库内已有也计入待跑"
-                        "（B 类缺口补数专用，不影响断点）")
+    p.add_argument(
+        "--list",
+        action="store_true",
+        dest="list_targets",
+        help="列出全部补数目标（接口/档位/模式/布局/完成度）后退出",
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="忽略断点与'库内已有标的'，全部重拉"
+        "（修复'断点说完成但数据不完整'，如 index_dailybasic 早期截断）",
+    )
+    p.add_argument(
+        "--codes-file",
+        default=None,
+        help="代码清单文件（UTF-8，一行一个 ts_code，# 注释）。"
+        "替代 resolve_codes，绕过 fund_etf 白名单；仅允许 by_code 目标",
+    )
+    p.add_argument(
+        "--force-listed",
+        action="store_true",
+        help="与 --codes-file 联用：清单内代码即使库内已有也计入待跑"
+        "（B 类缺口补数专用，不影响断点）",
+    )
     _add_dry_run(p, help_text="只估算请求数, 不发请求")
     p.set_defaults(func=cmd_backfill)
 
@@ -230,26 +251,39 @@ def build_parser():
     p.add_argument("--only", default=None, help="只跑指定表，逗号分隔")
     p.add_argument("--workers", type=int, default=1, help="每接口并发（默认 1）")
     p.add_argument("--limit", type=int, default=None, help="每表最多跑 N 个任务")
-    p.add_argument("--budget", type=int, default=2000,
-                   help="单轮请求预算（默认 2000；超限 RC=2 并列跳过清单）")
+    p.add_argument(
+        "--budget", type=int, default=2000, help="单轮请求预算（默认 2000；超限 RC=2 并列跳过清单）"
+    )
     p.add_argument("--apply", action="store_true", help="实际执行（不加则等同 --dry-run）")
     p.add_argument("--dry-run", action="store_true", help="只输出计划，不发请求（默认行为）")
-    p.add_argument("--refresh", action="store_true",
-                   help="忽略断点重拉（裸 --refresh 会被拒；须配 --freq 或 --only）")
+    p.add_argument(
+        "--refresh",
+        action="store_true",
+        help="忽略断点重拉（裸 --refresh 会被拒；须配 --freq 或 --only）",
+    )
     p.add_argument("--exclude", default=None, help="跳过这些表，逗号分隔（R10 备份窗口互斥）")
     p.set_defaults(func=cmd_schedule)
 
     p = sub.add_parser("check-coverage", help="数据覆盖体检（可转债 + ETF/LOF）")
-    p.add_argument("date", nargs="?", default=None,
-                   help="检查日期 YYYYMMDD (默认: 自动获取最近交易日)")
-    p.add_argument("--history", action="store_true",
-                   help="基金历史起点对账（EE-FUND-1 B1，四表×场内2963只逐码核验起点 gap>30d）")
-    p.add_argument("--strict", action="store_true",
-                   help="与 --history 联用：存在 A/B 缺口时非零退出码（回归门禁）")
-    p.add_argument("--scope",
-                   choices=("full", "fund_daily", "fund_nav", "fund_adj", "fund_share"),
-                   default="full",
-                   help="历史对账范围：full（四表全跑，默认）/ 单表名")
+    p.add_argument(
+        "date", nargs="?", default=None, help="检查日期 YYYYMMDD (默认: 自动获取最近交易日)"
+    )
+    p.add_argument(
+        "--history",
+        action="store_true",
+        help="基金历史起点对账（EE-FUND-1 B1，四表×场内2963只逐码核验起点 gap>30d）",
+    )
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        help="与 --history 联用：存在 A/B 缺口时非零退出码（回归门禁）",
+    )
+    p.add_argument(
+        "--scope",
+        choices=("full", "fund_daily", "fund_nav", "fund_adj", "fund_share"),
+        default="full",
+        help="历史对账范围：full（四表全跑，默认）/ 单表名",
+    )
     p.set_defaults(func=cmd_check_coverage)
 
     p = sub.add_parser("check-consumer", help="决策侧消费标的覆盖体检（A2池+作战包+持仓）")
@@ -266,25 +300,34 @@ def build_parser():
         #   （命令仍注册在 choices 中，可正常调用，regress R1 契约依赖）。
         _add_args(sub.add_parser(_flat, help=argparse.SUPPRESS))
 
-    p = db_sub.add_parser("meta-close",
-                          help="元数据刷新后的 R12 收尾（声明重算/补表重建；干跑/--apply）")
-    p.add_argument("--apply", action="store_true",
-                   help="写盘（先自动备份 known_gaps 与补表），并整跑 regress 自检")
-    p.add_argument("--dry-run", action="store_true",
-                   help="显式干跑（默认行为；与 --apply 同时给出时以 --dry-run 为准）")
+    p = db_sub.add_parser(
+        "meta-close", help="元数据刷新后的 R12 收尾（声明重算/补表重建；干跑/--apply）"
+    )
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="写盘（先自动备份 known_gaps 与补表），并整跑 regress 自检",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="显式干跑（默认行为；与 --apply 同时给出时以 --dry-run 为准）",
+    )
     p.set_defaults(func=cmd_db_meta_close)
 
     p = db_sub.add_parser("backup", help="日备（默认干跑；--execute 才真跑；--status 只读）")
     p.add_argument("--status", action="store_true", help="只看状态（零动作，复用 doctor 检查）")
     p.add_argument("--mirror", action="store_true", help="日备（默认干跑，只打印计划）")
     p.add_argument("--execute", action="store_true", help="真正执行日备（硬链快照＋校验）")
-    p.add_argument("--dry-run", action="store_true",
-                   help="显式干跑（与 --execute 同时给出时以干跑为准）")
+    p.add_argument(
+        "--dry-run", action="store_true", help="显式干跑（与 --execute 同时给出时以干跑为准）"
+    )
     p.set_defaults(func=cmd_db_backup)
 
     p = db_sub.add_parser("stale-fix", help="基金 source_empty 注册表对账（干跑/--apply）")
-    p.add_argument("--apply", action="store_true",
-                   help="清理 stale 并同步 evidence/count（先自备份）")
+    p.add_argument(
+        "--apply", action="store_true", help="清理 stale 并同步 evidence/count（先自备份）"
+    )
     _add_json(p, help_text="输出对账回执 JSON")
     p.set_defaults(func=cmd_db_stale_fix)
 
@@ -293,13 +336,22 @@ def build_parser():
     p.set_defaults(func=cmd_regress)
 
     # ── 数据速查 ──
-    p = sub.add_parser("freshness",
-                       help="数据新鲜度速查（v4.10 起＝新版自然日双条件；旧版交易日口径已废弃）")
-    p.add_argument("tables", nargs="?", default=None,
-                   help="逗号分隔的表名（默认全部 208 张，不是旧版 18 张核心表）")
+    p = sub.add_parser(
+        "freshness", help="数据新鲜度速查（v4.10 起＝新版自然日双条件；旧版交易日口径已废弃）"
+    )
+    p.add_argument(
+        "tables",
+        nargs="?",
+        default=None,
+        help="逗号分隔的表名（默认全部 208 张，不是旧版 18 张核心表）",
+    )
     p.add_argument("--all", action="store_true", help="[兼容保留] 显示全部表（现为默认行为）")
-    p.add_argument("--stale", type=int, default=None,
-                   help="只显示 ds（内容落后自然日数）≥ N 的表（⚠ 旧版是交易日，已改口径）")
+    p.add_argument(
+        "--stale",
+        type=int,
+        default=None,
+        help="只显示 ds（内容落后自然日数）≥ N 的表（⚠ 旧版是交易日，已改口径）",
+    )
     _add_json(p, help_text="输出新鲜度 JSON（机器可读；不打印横幅）")
     p.set_defaults(func=cmd_freshness)
 
@@ -313,26 +365,30 @@ def build_parser():
     p.set_defaults(func=cmd_peek)
 
     p = sub.add_parser("doctor", help="环境自检（依赖/路径/磁盘/断点/凭据）")
-    p.add_argument("--network", action="store_true",
-                   help="追加 tushare 连通性实测（消耗 1 次 API 调用）")
-    p.add_argument("--json", action="store_true", dest="json",
-                   help="输出 JSON")
+    p.add_argument(
+        "--network", action="store_true", help="追加 tushare 连通性实测（消耗 1 次 API 调用）"
+    )
+    p.add_argument("--json", action="store_true", dest="json", help="输出 JSON")
     p.set_defaults(func=cmd_doctor)
     # 注: ckpt / db-migrate 的平铺入口已并入 db 命令族登记（见上方 _DB_FAMILY），
     #     旧名 ckpt / db-migrate 作为隐藏别名保留。
 
-    p = sub.add_parser("config-check",
-                       help="config.py 完整性检查（主键/日期列/清单覆盖/归属）")
+    p = sub.add_parser("config-check", help="config.py 完整性检查（主键/日期列/清单覆盖/归属）")
     p.set_defaults(func=cmd_config_check)
 
     # ── alt 库（另类/海外数据，物理隔离于主库）──
     p = sub.add_parser("alt-update", help="alt 库每日增量更新（P0~P4 分级 + 新鲜度自检）")
-    p.add_argument("--tier", choices=_alt_tier_choices(),
-                   help="按优先级执行（可选值动态取自 alt.spec.TIERS）")
+    p.add_argument(
+        "--tier", choices=_alt_tier_choices(), help="按优先级执行（可选值动态取自 alt.spec.TIERS）"
+    )
     p.add_argument("--only", default=None, help="只更新某张表")
     _add_dry_run(p, help_text="只输出计划，不发请求")
-    p.add_argument("--lookback", type=int, default=None,
-                   help="复核窗口（交易日数），默认取模块内 DEFAULT_LOOKBACK")
+    p.add_argument(
+        "--lookback",
+        type=int,
+        default=None,
+        help="复核窗口（交易日数），默认取模块内 DEFAULT_LOOKBACK",
+    )
     p.add_argument("--force", action="store_true", help="⚠忽略刷新间隔强制全刷")
     p.add_argument("--status", action="store_true", help="只做新鲜度体检（零请求）")
     p.add_argument("--list", action="store_true", help="列出可更新表与策略")
@@ -348,48 +404,64 @@ def build_parser():
     p.add_argument("--only", default=None, help="只查某张表（用于重复检测/清理）")
     p.add_argument("--snapshot", action="store_true", help="记录主库基线")
     p.add_argument("--json", action="store_true", help="输出 JSON 摘要")
-    p.add_argument("--fix-dupes", action="store_true",
-                   help="⚠清理历史整行重复（默认只预演，需配合 --apply 才落盘）")
-    p.add_argument("--confirm-gaps", action="store_true",
-                   help="⚠把当前快照表独有日期登记为「已确认不可回补」")
+    p.add_argument(
+        "--fix-dupes",
+        action="store_true",
+        help="⚠清理历史整行重复（默认只预演，需配合 --apply 才落盘）",
+    )
+    p.add_argument(
+        "--confirm-gaps", action="store_true", help="⚠把当前快照表独有日期登记为「已确认不可回补」"
+    )
     p.add_argument("--apply", action="store_true", help="配合 --fix-dupes 实际执行")
-    p.add_argument("--report", nargs="?", const=True, default=False,
-                   help="生成结构报告 Markdown（可指定输出路径）")
+    p.add_argument(
+        "--report",
+        nargs="?",
+        const=True,
+        default=False,
+        help="生成结构报告 Markdown（可指定输出路径）",
+    )
     p.set_defaults(func=cmd_alt_audit)
 
     p = sub.add_parser("alt-backfill", help="alt 库历史回补（akshare 备用源）")
-    p.add_argument("--tier", choices=_alt_tier_choices(),
-                   help="按优先级执行（可选值动态取自 alt.spec.TIERS）")
+    p.add_argument(
+        "--tier", choices=_alt_tier_choices(), help="按优先级执行（可选值动态取自 alt.spec.TIERS）"
+    )
     p.add_argument("--only", default=None, help="只执行某张表")
     _add_dry_run(p, help_text="只预演，不发请求不写库")
     p.add_argument("--force", action="store_true", help="⚠忽略断点强制重跑")
     p.add_argument("--limit", type=int, default=None, help="最多执行前 N 张表")
-    p.add_argument("--date", default=None,
-                   help="按日型表的目标日期 YYYYMMDD（默认取最近交易日）")
+    p.add_argument("--date", default=None, help="按日型表的目标日期 YYYYMMDD（默认取最近交易日）")
     p.add_argument("--list", action="store_true", help="列出规格概览")
     p.set_defaults(func=cmd_alt_backfill)
 
     p = sub.add_parser("alt-us", help="美股建库（alt 库 mode=list 专用入口）")
     p.add_argument("--universe", action="store_true", help="⚠只重建标的全市场清单")
-    p.add_argument("--universe-from-cache", default=None,
-                   help="从本地缓存(parquet/pkl)生成清单，免重复拉取（省 7~8 分钟）")
+    p.add_argument(
+        "--universe-from-cache",
+        default=None,
+        help="从本地缓存(parquet/pkl)生成清单，免重复拉取（省 7~8 分钟）",
+    )
     p.add_argument("--limit", type=int, default=None, help="只跑前 N 只（试跑用）")
     p.add_argument("--rebuild", action="store_true", help="⚠忽略断点整表重建")
     p.add_argument("--workers", type=int, default=None, help="并发线程数（默认 4）")
-    p.add_argument("--delay", type=float, default=None,
-                   help="每只请求后延迟秒数（降速防风控，默认 0）")
+    p.add_argument(
+        "--delay", type=float, default=None, help="每只请求后延迟秒数（降速防风控，默认 0）"
+    )
     p.add_argument("--status", action="store_true", help="查看进度")
-    p.add_argument("--prune-ckpt", action="store_true",
-                   help="⚠清理断点虚记（断点已记但磁盘无数据），使它们重拉")
+    p.add_argument(
+        "--prune-ckpt",
+        action="store_true",
+        help="⚠清理断点虚记（断点已记但磁盘无数据），使它们重拉",
+    )
     p.add_argument("--yes", action="store_true", help="跳过确认")
     p.set_defaults(func=cmd_alt_us)
 
     p = sub.add_parser("alt-verify", help="alt 表规格校验（只读）")
-    p.add_argument("--tier", choices=_alt_tier_choices(),
-                   help="按优先级筛选（可选值动态取自 alt.spec.TIERS）")
+    p.add_argument(
+        "--tier", choices=_alt_tier_choices(), help="按优先级筛选（可选值动态取自 alt.spec.TIERS）"
+    )
     p.add_argument("--only", default=None, help="只校验某张表")
-    p.add_argument("--full-enum", action="store_true",
-                   help="enum 表跑全部枚举值（默认只跑首个）")
+    p.add_argument("--full-enum", action="store_true", help="enum 表跑全部枚举值（默认只跑首个）")
     p.add_argument("--list-todo", action="store_true", help="只列待校验表（零请求）")
     p.set_defaults(func=cmd_alt_verify)
 
@@ -397,8 +469,9 @@ def build_parser():
     p = sub.add_parser("micro-index", help="本地自建微盘指数（替代 Wind 8841431.WI）")
     p.add_argument("--start", default=None, help="起始日期 YYYYMMDD（默认20160101）")
     p.add_argument("--out-dir", default=None, help="输出目录")
-    p.add_argument("--exclude-st", action="store_true",
-                   help="剔除当前ST名单（含前视偏差，仅作敏感性对照）")
+    p.add_argument(
+        "--exclude-st", action="store_true", help="剔除当前ST名单（含前视偏差，仅作敏感性对照）"
+    )
     p.set_defaults(func=cmd_micro_index)
 
     p = sub.add_parser("factor-lib", help="因子库概览（全收益基准 + 风格因子）")

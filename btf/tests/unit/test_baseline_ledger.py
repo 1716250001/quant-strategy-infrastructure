@@ -11,6 +11,7 @@
     ② **变更路径真的写记录**：注入受控哈希（模拟核心文件改动）→ 历史追加
        一行、`changed_files` 精确、`reason` 落库。
 """
+
 from __future__ import annotations
 
 import json
@@ -30,7 +31,8 @@ def _boundary(monkeypatch, tmp_path):
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
-        "check_plugin_boundary_under_test", TOOLS / "check_plugin_boundary.py")
+        "check_plugin_boundary_under_test", TOOLS / "check_plugin_boundary.py"
+    )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     monkeypatch.setattr(mod, "BASELINE", tmp_path / "baseline.json")
@@ -43,30 +45,33 @@ class TestLedgerMechanism:
         """生产历史文件存在且每行可解析（含 retro 补记）。"""
         history = TOOLS / ".plugin_baseline_history.jsonl"
         assert history.is_file(), "AA-3：留痕文件缺失"
-        entries = [json.loads(line) for line in
-                   history.read_text(encoding="utf-8").splitlines() if line.strip()]
+        entries = [
+            json.loads(line)
+            for line in history.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         assert entries, "留痕文件为空"
         for entry in entries:
             assert entry["at"] and entry["kind"] in ("create", "update", "retro")
 
     def test_update_records_changed_files(self, _boundary, monkeypatch, tmp_path):
         """★ 变更路径：受控哈希变化 → 历史追加且 `changed_files` 精确。"""
-        monkeypatch.setattr(_boundary, "_core_hashes",
-                            lambda: {"btf/a.py": "h1", "btf/b.py": "h2"})
-        _boundary.check_baseline(update=True, reason="首建")     # 建立基线
-        monkeypatch.setattr(_boundary, "_core_hashes",
-                            lambda: {"btf/a.py": "h1", "btf/b.py": "h2-changed"})
+        monkeypatch.setattr(_boundary, "_core_hashes", lambda: {"btf/a.py": "h1", "btf/b.py": "h2"})
+        _boundary.check_baseline(update=True, reason="首建")  # 建立基线
+        monkeypatch.setattr(
+            _boundary, "_core_hashes", lambda: {"btf/a.py": "h1", "btf/b.py": "h2-changed"}
+        )
         problems, updated, changed, created = _boundary.check_baseline(
-            update=True, reason="AA-3 受控变更")
+            update=True, reason="AA-3 受控变更"
+        )
         assert updated and not problems and not created
         assert list(changed) == ["btf/b.py"], changed
         _boundary._record_history(changed, "AA-3 受控变更", created)
-        lines = (_boundary.BASELINE_HISTORY.read_text(
-            encoding="utf-8").strip().splitlines())
+        lines = _boundary.BASELINE_HISTORY.read_text(encoding="utf-8").strip().splitlines()
         entry = json.loads(lines[-1])
         assert entry["changed_files"] == ["btf/b.py"]
         assert entry["reason"] == "AA-3 受控变更"
-        assert entry["changed"]["btf/b.py"]["old"] == "h2"      # 旧→新可追溯
+        assert entry["changed"]["btf/b.py"]["old"] == "h2"  # 旧→新可追溯
         assert entry["changed"]["btf/b.py"]["new"] == "h2-changed"
 
     def test_no_change_writes_no_history(self, _boundary, monkeypatch):
@@ -74,6 +79,7 @@ class TestLedgerMechanism:
         monkeypatch.setattr(_boundary, "_core_hashes", lambda: {"btf/a.py": "h1"})
         _boundary.check_baseline(update=True, reason="首建")
         problems, updated, changed, _created = _boundary.check_baseline(
-            update=True, reason="无变更")
+            update=True, reason="无变更"
+        )
         assert updated and changed == {} and problems == []
         assert not _boundary.BASELINE_HISTORY.exists(), "无变更不应写历史"

@@ -8,6 +8,7 @@ import-linter forbidden 契约是黑名单式（列举已知第三方）；本�
 
 用法：python tools/check_domain_whitelist.py（`bt check` 第 6/9 项编排；违例 → 逐条列出，exit 1）
 """
+
 from __future__ import annotations
 
 import ast
@@ -24,8 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 #:     `OrderedDict`——标准库容器与 `dataclasses` 同级的中性依赖。
 #: 铁律 3 的**黑名单契约**（import-linter）仍拦全部第三方包，本表只是其白
 #: 名单对偶，故两项订正均不削弱"domain 零第三方"本义。
-WHITELIST = {"__future__", "typing", "dataclasses", "enum", "datetime",
-             "collections"}
+WHITELIST = {"__future__", "typing", "dataclasses", "enum", "datetime", "collections"}
 
 
 def _allowed(mod: str) -> bool:
@@ -40,7 +40,7 @@ def check() -> list[str]:
         tree = ast.parse(py.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                if node.level:                     # 相对导入：域内合法（level=1）
+                if node.level:  # 相对导入：域内合法（level=1）
                     continue
                 mod = node.module or ""
                 if mod and not _allowed(mod):
@@ -48,8 +48,7 @@ def check() -> list[str]:
             elif isinstance(node, ast.Import):
                 for alias in node.names:
                     if not _allowed(alias.name):
-                        problems.append(
-                            f"{py.relative_to(ROOT)}: import {alias.name}")
+                        problems.append(f"{py.relative_to(ROOT)}: import {alias.name}")
     return problems
 
 
@@ -60,8 +59,7 @@ def main() -> int:
         for p in problems:
             print(f"  - {p}")
         return 1
-    print("[ok] domain 白名单检查通过（btf/domain 仅依赖："
-          + ", ".join(sorted(WHITELIST)) + "）")
+    print("[ok] domain 白名单检查通过（btf/domain 仅依赖：" + ", ".join(sorted(WHITELIST)) + "）")
     return 0
 
 

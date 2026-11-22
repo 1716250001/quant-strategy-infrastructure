@@ -6,6 +6,7 @@
     ② 同一 run 的 api.report 与 `bt report` 输出字节一致（幂等）；
     ③ api.dataset 与 `bt dataset` 同构（委托同一子进程，退出码一致）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -59,17 +60,12 @@ class TestRunEquivalence:
         from btf.cli.main import main
 
         result = btf.run(str(config_path), out=tmp_path / "api_runs")
-        assert main(["run", "--config", str(config_path),
-                     "--out", str(tmp_path / "cli_runs")]) == 0
-        api_manifest = (tmp_path / "api_runs" / result.run_id
-                        / "manifest.json")
-        cli_runs = sorted(p for p in (tmp_path / "cli_runs").iterdir()
-                          if p.is_dir())
+        assert main(["run", "--config", str(config_path), "--out", str(tmp_path / "cli_runs")]) == 0
+        api_manifest = tmp_path / "api_runs" / result.run_id / "manifest.json"
+        cli_runs = sorted(p for p in (tmp_path / "cli_runs").iterdir() if p.is_dir())
         cli_manifest = cli_runs[-1] / "manifest.json"
-        api_digest = yaml.safe_load(
-            api_manifest.read_text(encoding="utf-8"))["metrics_digest"]
-        cli_digest = yaml.safe_load(
-            cli_manifest.read_text(encoding="utf-8"))["metrics_digest"]
+        api_digest = yaml.safe_load(api_manifest.read_text(encoding="utf-8"))["metrics_digest"]
+        cli_digest = yaml.safe_load(cli_manifest.read_text(encoding="utf-8"))["metrics_digest"]
         assert api_digest == cli_digest
 
     def test_api_run_returns_metrics(self, config_path, tmp_path):
@@ -94,21 +90,29 @@ class TestReportEquivalence:
 
         result = btf.run(str(config_path), out=tmp_path / "runs")
         run_id = result.run_id
-        html_api = btf.report(run_id, out=tmp_path / "api.html",
-                              out_dir=tmp_path / "runs")
-        assert main(["report", "--run", run_id,
-                     "--out", str(tmp_path / "cli.html"),
-                     "--out-dir", str(tmp_path / "runs")]) == 0
+        html_api = btf.report(run_id, out=tmp_path / "api.html", out_dir=tmp_path / "runs")
+        assert (
+            main(
+                [
+                    "report",
+                    "--run",
+                    run_id,
+                    "--out",
+                    str(tmp_path / "cli.html"),
+                    "--out-dir",
+                    str(tmp_path / "runs"),
+                ]
+            )
+            == 0
+        )
         assert html_api.read_bytes() == (tmp_path / "cli.html").read_bytes()
 
     def test_api_report_idempotent(self, config_path, tmp_path):
         import btf
 
         result = btf.run(str(config_path), out=tmp_path / "runs")
-        first = btf.report(result.run_id, out=tmp_path / "a.html",
-                           out_dir=tmp_path / "runs")
-        second = btf.report(result.run_id, out=tmp_path / "b.html",
-                            out_dir=tmp_path / "runs")
+        first = btf.report(result.run_id, out=tmp_path / "a.html", out_dir=tmp_path / "runs")
+        second = btf.report(result.run_id, out=tmp_path / "b.html", out_dir=tmp_path / "runs")
         assert first.read_bytes() == second.read_bytes()
 
 
@@ -120,14 +124,19 @@ class TestLazyFacade:
         import sys
 
         # 版本断言用**形制**（`X.Y.Z`）——不写死前缀（FF-3 定版：原 `startswith('0.5')`）
-        code = ("import btf, re, sys; "
-                "assert re.fullmatch(r'\\d+\\.\\d+\\.\\d+', btf.__version__), "
-                "btf.__version__; "
-                "assert 'pyarrow' not in sys.modules, '数据层被拉起'; "
-                "assert callable(btf.run) and callable(btf.report)")
-        r = subprocess.run([sys.executable, "-c", code],
-                           capture_output=True, text=True, cwd=str(
-                               Path(__file__).resolve().parents[2]))
+        code = (
+            "import btf, re, sys; "
+            "assert re.fullmatch(r'\\d+\\.\\d+\\.\\d+', btf.__version__), "
+            "btf.__version__; "
+            "assert 'pyarrow' not in sys.modules, '数据层被拉起'; "
+            "assert callable(btf.run) and callable(btf.report)"
+        )
+        r = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).resolve().parents[2]),
+        )
         assert r.returncode == 0, r.stderr
 
     def test_unknown_attribute_raises(self):

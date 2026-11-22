@@ -11,6 +11,7 @@ tools/list_lof.py — 场内 ETF / LOF 清单统计
 
 重构要点：原实现把流程写在模块顶层（import 即执行），现封装为 main()。
 """
+
 import os
 
 import pandas as pd
@@ -30,12 +31,14 @@ def load_on_market():
     fund_files = set(reader.codes_from_store("fund_daily"))
     on_market = fb[fb["ts_code"].isin(fund_files)].copy()
 
-    on_market["code"] = (on_market["ts_code"]
-                         .str.replace(".SH", "").str.replace(".SZ", "").str.replace(".BJ", ""))
+    on_market["code"] = (
+        on_market["ts_code"].str.replace(".SH", "").str.replace(".SZ", "").str.replace(".BJ", "")
+    )
     on_market["suffix"] = on_market["ts_code"].str[-2:]
     # 分类: 使用 tools.utils.classify_fund (include_53=False, 与原版行为一致)
     on_market["market_class"] = on_market.apply(
-        lambda r: classify_fund(r, include_53=False), axis=1)
+        lambda r: classify_fund(r, include_53=False), axis=1
+    )
     return on_market
 
 

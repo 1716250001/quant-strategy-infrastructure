@@ -1,4 +1,4 @@
-﻿#-*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 tools/fund_pool_builder.py — 公募主动权益基金池构建（清洗口径锁定版）
 
@@ -29,6 +29,7 @@ tools/fund_pool_builder.py — 公募主动权益基金池构建（清洗口径�
     python -m tools.fund_pool_builder                # 输出到 .temp/pool.csv
     python -m tools.fund_pool_builder --out pool.csv
 """
+
 import argparse
 import os
 import re
@@ -86,8 +87,10 @@ def ann_vol(d, skip_days=90, min_rows=100):
         r = r[r.abs() < 0.25]
         return float(r.std() * np.sqrt(245)) if len(r) >= min_rows else np.nan
     except Exception as exc:
-        print(f"[fund_pool_builder] 波动率计算失败（按 nan）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fund_pool_builder] 波动率计算失败（按 nan）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return np.nan
 
 
@@ -103,15 +106,22 @@ def detect_adj_break(d, cut="20260602"):
 
         def who(x):
             r_u = (x["adj_nav"] / x["unit_nav"] - 1).abs().median()
-            r_n = (x["adj_nav"] / x["accum_nav"] - 1).abs().median() if x["accum_nav"].notna().sum() >= 5 else np.nan
+            r_n = (
+                (x["adj_nav"] / x["accum_nav"] - 1).abs().median()
+                if x["accum_nav"].notna().sum() >= 5
+                else np.nan
+            )
             if np.isnan(r_n):
                 return "?"
             return "unit" if r_u < r_n else "accum"
+
         a, b = who(bef), who(aft)
         return (a != b) and ("?" not in (a, b))
     except Exception as exc:
-        print(f"[fund_pool_builder] 口径断层检测失败（按无断层）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[fund_pool_builder] 口径断层检测失败（按无断层）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return False
 
 
@@ -137,13 +147,18 @@ def build(data_dir=DEFAULT_DATA, out=None):
     s = step("1. 权益类(股票+混合)", s[s["fund_type"].isin(["股票型", "混合型"])])
 
     m_type = s["invest_type"].isin(["被动指数型", "增强指数型"])
-    m_name = s["name"].str.contains("联接|ETF|指数|LOF|MSCI|中证|国证|沪深|恒生|标普|纳指", na=False)
+    m_name = s["name"].str.contains(
+        "联接|ETF|指数|LOF|MSCI|中证|国证|沪深|恒生|标普|纳指", na=False
+    )
     m_bench = (s["n_comp"] == 1) & (s["max_w"] >= 0.99)
     s = step("2. 三重兜底剔被动", s[~(m_type | m_name | m_bench)])
 
     m_fj = s["ts_code"].str.match(r"^(15|16|167|150)\d") & s["name"].str.contains("分级", na=False)
     s = step("3. 剔分级基金", s[~m_fj])
-    s = step("4. 剔FOF/QDII", s[~s["name"].str.contains("FOF|QDII|美元|纳斯达克|标普|全球|海外", na=False)])
+    s = step(
+        "4. 剔FOF/QDII",
+        s[~s["name"].str.contains("FOF|QDII|美元|纳斯达克|标普|全球|海外", na=False)],
+    )
     s = step("5. 有载体", s[s["has_any"]])
 
     # ── 预读 fund_nav 面板，按标的建内存索引 ──
@@ -153,8 +168,7 @@ def build(data_dir=DEFAULT_DATA, out=None):
     print("  预读 fund_nav 面板...")
     panel = reader.read_range(
         "fund_nav",
-        columns=["ts_code", "nav_date", "net_asset", "adj_nav",
-                 "unit_nav", "accum_nav"],
+        columns=["ts_code", "nav_date", "net_asset", "adj_nav", "unit_nav", "accum_nav"],
         root=data_dir,
     )
     if panel.empty:
@@ -174,27 +188,32 @@ def build(data_dir=DEFAULT_DATA, out=None):
             if not dn.empty:
                 sz[c] = float(dn.sort_values("nav_date").iloc[-1]["net_asset"]) / 1e8
         except Exception as exc:
-            print(f"[fund_pool_builder] 规模提取失败 {c}: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[fund_pool_builder] 规模提取失败 {c}: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             continue
     s = s.copy()
     s["size_yi"] = s["ts_code"].map(sz)
     s = step("6. 规模>=2亿", s[(s["size_yi"].isna()) | (s["size_yi"] >= 2)])
 
     s = s.copy()
-    s["vol"] = s["ts_code"].map(
-        lambda c: ann_vol(nav_by_code[c]) if c in nav_by_code else np.nan)
+    s["vol"] = s["ts_code"].map(lambda c: ann_vol(nav_by_code[c]) if c in nav_by_code else np.nan)
     s = step("7. 剔债性(<8%)", s[(s["vol"].isna()) | (s["vol"] >= 0.08)])
 
     suf = re.compile(r"[-–—]?([A-Z]{1,2})$")
     s = s.copy()
-    s["key"] = s["management"] + "|" + s["name"].apply(
-        lambda n: suf.sub("", re.sub(r"\(.*?\)", "", str(n))).strip())
+    s["key"] = (
+        s["management"]
+        + "|"
+        + s["name"].apply(lambda n: suf.sub("", re.sub(r"\(.*?\)", "", str(n))).strip())
+    )
     s = step("8. 份额归并", s.drop_duplicates("key"))
 
     def nrow(c):
         d = nav_by_code.get(c)
         return 0 if d is None else len(d)
+
     s = s.copy()
     s["n_rows"] = s["ts_code"].map(nrow)
     s = step("9. 净值>=250日", s[s["n_rows"] >= 250])
@@ -202,7 +221,8 @@ def build(data_dir=DEFAULT_DATA, out=None):
     # 断层标记
     s = s.copy()
     s["adj_break"] = s["ts_code"].map(
-        lambda c: detect_adj_break(nav_by_code[c]) if c in nav_by_code else False)
+        lambda c: detect_adj_break(nav_by_code[c]) if c in nav_by_code else False
+    )
 
     print("清洗漏斗（顺序不可调换）:")
     prev = None
@@ -217,6 +237,7 @@ def build(data_dir=DEFAULT_DATA, out=None):
         # 此前默认路径经 ".." 推算指向不存在的目录，跑到最后一步才报
         # "Cannot save file into a non-existent directory"。
         from config import TEMP_DIR
+
         out = os.path.join(TEMP_DIR, "pool.csv")
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     s.to_csv(out, index=False, encoding="gbk")
@@ -229,8 +250,7 @@ def main(argv=None):
 
     argv: 参数列表（None 则取 sys.argv[1:]），便于从统一入口 main.py 调用。
     """
-    ap = argparse.ArgumentParser(
-        description="公募主动权益基金池构建（清洗口径锁定版）")
+    ap = argparse.ArgumentParser(description="公募主动权益基金池构建（清洗口径锁定版）")
     ap.add_argument("--data-dir", default=DEFAULT_DATA)
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)

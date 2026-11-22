@@ -20,6 +20,7 @@ tools/etf_flow.py — 宽基 ETF 份额与申赎资金流（D2 拆分产物）
 ⚠ 纪律（D2 红线）：本模块只产出**资金面证据**，不产出 β 值、仓位建议。
 ⚠ 口径提醒：引用沪市 ETF 份额变化时必须标注 T+1（上交所口径）。
 """
+
 import time
 
 import akshare as ak
@@ -30,26 +31,34 @@ from fetch.base import get_pro
 
 # ── 常量（自 fix_and_resonance.py 原样搬移，勿改口径）─────────────────
 INDEX_ETF_MAP = {
-    "上证50ETF":    {"codes": ["510050"], "market": "sse"},
-    "沪深300ETF":   {"codes": ["510300"], "market": "sse"},
-    "中证500ETF":   {"codes": ["510500"], "market": "sse"},
-    "中证1000ETF":  {"codes": ["512100"], "market": "sse"},
-    "中证2000ETF":  {"codes": ["563300"], "market": "sse"},
-    "科创50ETF":    {"codes": ["588000"], "market": "sse"},
-    "创业板ETF":    {"codes": ["159915"], "market": "szse"},
+    "上证50ETF": {"codes": ["510050"], "market": "sse"},
+    "沪深300ETF": {"codes": ["510300"], "market": "sse"},
+    "中证500ETF": {"codes": ["510500"], "market": "sse"},
+    "中证1000ETF": {"codes": ["512100"], "market": "sse"},
+    "中证2000ETF": {"codes": ["563300"], "market": "sse"},
+    "科创50ETF": {"codes": ["588000"], "market": "sse"},
+    "创业板ETF": {"codes": ["159915"], "market": "szse"},
 }
 REP_ETF_MAP = {name: info["codes"][0] for name, info in INDEX_ETF_MAP.items()}
 
 FALLBACK_NAVS = {
-    "上证50ETF": 3.05, "沪深300ETF": 4.80, "中证500ETF": 8.60,
-    "中证1000ETF": 3.40, "中证2000ETF": 1.50,
-    "科创50ETF": 1.00, "创业板ETF": 3.90,
+    "上证50ETF": 3.05,
+    "沪深300ETF": 4.80,
+    "中证500ETF": 8.60,
+    "中证1000ETF": 3.40,
+    "中证2000ETF": 1.50,
+    "科创50ETF": 1.00,
+    "创业板ETF": 3.90,
 }
 
 ETF_TO_INDEX = {
-    "上证50ETF": "上证50", "沪深300ETF": "沪深300", "中证500ETF": "中证500",
-    "中证1000ETF": "中证1000", "中证2000ETF": "中证2000",
-    "创业板ETF": "创业板指", "科创50ETF": "科创50",
+    "上证50ETF": "上证50",
+    "沪深300ETF": "沪深300",
+    "中证500ETF": "中证500",
+    "中证1000ETF": "中证1000",
+    "中证2000ETF": "中证2000",
+    "创业板ETF": "创业板指",
+    "科创50ETF": "科创50",
 }
 
 
@@ -74,12 +83,13 @@ def fetch_etf_shares(trade_dates, code_to_index, tdate):
                 continue
             td_clean = str(td)
             for _, row in df.iterrows():
-                code = str(row['基金代码'])
+                code = str(row["基金代码"])
                 idx_name = code_to_index.get(code)
                 if idx_name:
-                    shares = float(row['基金份额'])
+                    shares = float(row["基金份额"])
                     aggregate_by_date[idx_name][td_clean] = (
-                        aggregate_by_date[idx_name].get(td_clean, 0.0) + shares)
+                        aggregate_by_date[idx_name].get(td_clean, 0.0) + shares
+                    )
             if sse_latest_ok_date is None:
                 sse_latest_ok_date = str(td)
             print(f"  SSE {td}: {len(df)} funds")
@@ -94,16 +104,17 @@ def fetch_etf_shares(trade_dates, code_to_index, tdate):
         pro = get_pro()
         t_start = min(trade_dates) if trade_dates else tdate
         t_end = max(trade_dates) if trade_dates else tdate
-        df_fund = pro.fund_share(ts_code='159915.SZ', start_date=t_start, end_date=t_end)
+        df_fund = pro.fund_share(ts_code="159915.SZ", start_date=t_start, end_date=t_end)
         if df_fund is not None and len(df_fund) > 0:
-            df_fund['trade_date'] = df_fund['trade_date'].astype(str)
-            df_fund['shares_raw'] = df_fund['fd_share'].astype(float) * 10000
+            df_fund["trade_date"] = df_fund["trade_date"].astype(str)
+            df_fund["shares_raw"] = df_fund["fd_share"].astype(float) * 10000
             for _, row in df_fund.iterrows():
-                td = str(row['trade_date'])
-                idx_name = code_to_index.get('159915')
+                td = str(row["trade_date"])
+                idx_name = code_to_index.get("159915")
                 if idx_name:
-                    aggregate_by_date[idx_name][td] = (
-                        aggregate_by_date[idx_name].get(td, 0.0) + float(row['shares_raw']))
+                    aggregate_by_date[idx_name][td] = aggregate_by_date[idx_name].get(
+                        td, 0.0
+                    ) + float(row["shares_raw"])
             print(f"  SZSE fund_share: {len(df_fund)} records for 159915")
     except Exception as e:
         print(f"  [WARN] SZSE fund_share failed: {e}")
@@ -116,8 +127,9 @@ def build_shares_output(tformat, tdate, trade_dates, aggregate_by_date, sse_asof
     """生成 shares_output（含各指数份额变化），返回 (shares_output, all_shares)"""
     all_shares = {}
     for idx_name, by_date in aggregate_by_date.items():
-        records = [{"date": d, "shares": s, "source": "sse+szse"}
-                   for d, s in sorted(by_date.items())]
+        records = [
+            {"date": d, "shares": s, "source": "sse+szse"} for d, s in sorted(by_date.items())
+        ]
         all_shares[idx_name] = records
 
     shares_output = {
@@ -134,9 +146,9 @@ def build_shares_output(tformat, tdate, trade_dates, aggregate_by_date, sse_asof
     for name in INDEX_ETF_MAP:
         records = all_shares.get(name, [])
         if len(records) >= 2:
-            latest_total = records[-1]['shares']
-            prev5_total = records[max(0, len(records) - 6)]['shares']
-            prev20_total = records[0]['shares']
+            latest_total = records[-1]["shares"]
+            prev5_total = records[max(0, len(records) - 6)]["shares"]
+            prev20_total = records[0]["shares"]
             chg_5d = round((latest_total / prev5_total - 1) * 100, 2)
             chg_20d = round((latest_total / prev20_total - 1) * 100, 2)
             shares_output["etf_shares"][name] = {
@@ -167,12 +179,17 @@ def compute_fund_flows(all_shares, trade_dates):
     etf_prices = {}
     for name, code in REP_ETF_MAP.items():
         try:
-            ts_code = f"{code}.SZ" if code.startswith('159') else f"{code}.SH"
-            df = pro_fund.fund_daily(ts_code=ts_code,
-                                     start_date=trade_dates[-1], end_date=trade_dates[0],
-                                     fields='trade_date,close')
+            ts_code = f"{code}.SZ" if code.startswith("159") else f"{code}.SH"
+            df = pro_fund.fund_daily(
+                ts_code=ts_code,
+                start_date=trade_dates[-1],
+                end_date=trade_dates[0],
+                fields="trade_date,close",
+            )
             if df is not None and len(df) > 0:
-                etf_prices[name] = {row['trade_date']: float(row['close']) for _, row in df.iterrows()}
+                etf_prices[name] = {
+                    row["trade_date"]: float(row["close"]) for _, row in df.iterrows()
+                }
         except Exception as e:
             print(f"  [WARN] {name}({code}) 价格获取失败: {e}")
 
@@ -184,13 +201,18 @@ def compute_fund_flows(all_shares, trade_dates):
         records = all_shares.get(name, [])
         prices = etf_prices.get(name, {})
         if len(records) < 3:
-            fund_flows_summary[name] = {"flow_5d": None, "flow_20d": None, "nav": None, "nav_unit": "—"}
+            fund_flows_summary[name] = {
+                "flow_5d": None,
+                "flow_20d": None,
+                "nav": None,
+                "nav_unit": "—",
+            }
             continue
 
         latest_nav = None
         for r in reversed(records):
-            if r['date'] in prices:
-                latest_nav = prices[r['date']]
+            if r["date"] in prices:
+                latest_nav = prices[r["date"]]
                 break
         if latest_nav is None:
             latest_nav = FALLBACK_NAVS.get(name, 1.0)
@@ -199,14 +221,18 @@ def compute_fund_flows(all_shares, trade_dates):
         n_avail = len(records)
         complete_mask = [True] * n_avail
         for i in range(1, n_avail):
-            if records[i]['shares'] < records[i - 1]['shares'] * 0.6:
+            if records[i]["shares"] < records[i - 1]["shares"] * 0.6:
                 complete_mask[i] = False
-        complete_records = [(records[i], records[i]['date']) for i in range(n_avail) if complete_mask[i]]
+        complete_records = [
+            (records[i], records[i]["date"]) for i in range(n_avail) if complete_mask[i]
+        ]
 
         if len(complete_records) < 3:
             fund_flows_summary[name] = {
-                "flow_5d": None, "flow_20d": None,
-                "nav": round(latest_nav, 3), "nav_unit": "元/份",
+                "flow_5d": None,
+                "flow_20d": None,
+                "nav": round(latest_nav, 3),
+                "nav_unit": "元/份",
             }
             continue
 
@@ -217,7 +243,7 @@ def compute_fund_flows(all_shares, trade_dates):
             prev_rec, _ = complete_records[i - 1]
             curr_rec, td = complete_records[i]
             price_today = prices.get(td, latest_nav)
-            daily_flow = (curr_rec['shares'] - prev_rec['shares']) * price_today
+            daily_flow = (curr_rec["shares"] - prev_rec["shares"]) * price_today
             idx_from_end = n_comp - 1 - i
             if idx_from_end < 5:
                 flow_5d += daily_flow
@@ -255,6 +281,7 @@ def main(argv=None):
     tdate = argv[0] if argv else None
     if tdate is None:
         from common.calendar import recent_trade_dates as _rtd
+
         tdate = _rtd(1)[0]
     trade_dates = recent_trade_dates(20, end_date=tdate)
     code_to_index = {}

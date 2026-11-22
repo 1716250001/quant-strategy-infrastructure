@@ -10,6 +10,7 @@
 合并语义：深合并（嵌套 dict 递归；非 dict 后值整替）；校验独立于合并
 （btf.config.validation——先合并后校验，错误一次性全量列出）。
 """
+
 from __future__ import annotations
 
 import copy
@@ -64,8 +65,16 @@ DEFAULTS: dict[str, Any] = {
     # 数据指纹 / 代码版本 / 种子）——与 assumptions 同属"不可被关"的强制章节
     # （`viz.report._MANDATORY_SECTIONS`，BB-1 验收要求指纹在报告可见）。
     "report": {
-        "sections": ["summary", "equity", "drawdown", "monthly_heat",
-                     "trades", "assumptions", "reproduce", "appendix"],
+        "sections": [
+            "summary",
+            "equity",
+            "drawdown",
+            "monthly_heat",
+            "trades",
+            "assumptions",
+            "reproduce",
+            "appendix",
+        ],
     },
     # 数据不变量校验（**批 8：CC-1..CC-6**，19 号 §39.2 裁决六-1）：
     #   enabled=true  → 装配期对【运行宇宙 × 区间】校验（区间化 + 标的裁剪）
@@ -73,8 +82,7 @@ DEFAULTS: dict[str, Any] = {
     #                   不阻断整轮）；true → DataQualityError（fail-closed）
     #   max_symbols=200 → 宇宙超限时按字典序前缀公平抽样（披露 sampled_symbols）
     # 三项默认均"不静默"：关闭也会在产物里写明原因（铁律新 16）。
-    "data": {"quality": {"enabled": True, "strict": False,
-                         "max_symbols": 200}},
+    "data": {"quality": {"enabled": True, "strict": False, "max_symbols": 200}},
 }
 
 
@@ -118,7 +126,7 @@ def from_env(environ: Mapping[str, str] | None = None) -> dict[str, Any]:
     for key, raw in env.items():
         if not key.startswith("BTF_") or key in _PATH_ENV or raw == "":
             continue
-        path = [p.lower() for p in key[len("BTF_"):].split("__") if p]
+        path = [p.lower() for p in key[len("BTF_") :].split("__") if p]
         if not path:
             continue
         node = out
@@ -146,7 +154,7 @@ def load_yaml(source: str | Path | Mapping[str, Any]) -> dict[str, Any]:
     else:
         text = None
     if text is None:
-        path = Path(source)                       # type: ignore[arg-type]
+        path = Path(source)  # type: ignore[arg-type]
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -158,8 +166,7 @@ def load_yaml(source: str | Path | Mapping[str, Any]) -> dict[str, Any]:
     if data is None:
         return {}
     if not isinstance(data, dict):
-        raise ConfigSourceError(
-            f"YAML 顶层必须为映射，实际 {type(data).__name__}")
+        raise ConfigSourceError(f"YAML 顶层必须为映射，实际 {type(data).__name__}")
     return data
 
 

@@ -14,6 +14,7 @@
     - 区间早于**非必需表**起点（如 `etf_limit`/`adj_factor`）→ degraded
       （登记进报告披露，不阻断）
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -47,9 +48,11 @@ def check_etf_adjust_coverage(start_ymd: str) -> str | None:
     meta = TABLES.get(ETF_FACTOR_TABLE)
     if meta is None or not meta.start or start_ymd >= meta.start:
         return None
-    return (f"{ETF_FACTOR_TABLE} 未覆盖 {start_ymd}~{meta.start}"
-            f"（起点 {meta.start}）——ETF 复权因子缺失将回落 1.0，"
-            f"份额折算/不定期折算的价格跳变**不被抹平**（RC-04）")
+    return (
+        f"{ETF_FACTOR_TABLE} 未覆盖 {start_ymd}~{meta.start}"
+        f"（起点 {meta.start}）——ETF 复权因子缺失将回落 1.0，"
+        f"份额折算/不定期折算的价格跳变**不被抹平**（RC-04）"
+    )
 
 
 @dataclass(frozen=True)
@@ -69,7 +72,9 @@ class CoverageReport:
 
 
 def check_coverage(
-    start_ymd: str, end_ymd: str, *,
+    start_ymd: str,
+    end_ymd: str,
+    *,
     required: tuple[str, ...] = REQUIRED_TABLES,
     degraded: tuple[str, ...] = DEGRADED_TABLES,
 ) -> CoverageReport:
@@ -84,13 +89,15 @@ def check_coverage(
         if tbl_start and start_ymd < tbl_start:
             fatal.append(
                 f"{table} 未覆盖 {start_ymd}~{tbl_start}（表起点 {tbl_start}）"
-                f"——涨跌停/停牌约束在该区间不可用，成交偏乐观")
+                f"——涨跌停/停牌约束在该区间不可用，成交偏乐观"
+            )
     for table in degraded:
         meta = TABLES.get(table)
         tbl_start = meta.start if meta is not None else None
         if tbl_start and start_ymd < tbl_start:
             degraded_notes.append(
-                f"{table} 未覆盖 {start_ymd}~{tbl_start}（起点 {tbl_start}）"
-                f"——相关功能降级/回退")
-    return CoverageReport(period=(start_ymd, end_ymd),
-                          fatal=tuple(fatal), degraded=tuple(degraded_notes))
+                f"{table} 未覆盖 {start_ymd}~{tbl_start}（起点 {tbl_start}）——相关功能降级/回退"
+            )
+    return CoverageReport(
+        period=(start_ymd, end_ymd), fatal=tuple(fatal), degraded=tuple(degraded_notes)
+    )

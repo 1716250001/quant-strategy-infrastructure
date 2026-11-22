@@ -5,6 +5,7 @@
 本模块可被静态审查：源码零 `random` 字样）；支持 purge + embargo；
 窗口/参数非法即 `ValueError`（fail-closed）。
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -18,8 +19,7 @@ pytestmark = [pytest.mark.l1]
 
 def _days(n: int) -> list[TradingDate]:
     base = date(2015, 1, 5)
-    return [TradingDate.from_ymd((base + timedelta(days=i)).strftime("%Y%m%d"))
-            for i in range(n)]
+    return [TradingDate.from_ymd((base + timedelta(days=i)).strftime("%Y%m%d")) for i in range(n)]
 
 
 class TestSplitWindows:
@@ -45,18 +45,17 @@ class TestSplitWindows:
         days = _days(60)
         ws = split_windows(days, train=20, test=10, step=10, mode="anchored")
         assert len(ws) == 4
-        assert ws[1].train_start == days[0]          # 锚定首日
-        assert ws[1].train_end == days[29]           # 训练窗加长
+        assert ws[1].train_start == days[0]  # 锚定首日
+        assert ws[1].train_end == days[29]  # 训练窗加长
         assert ws[1].test_start == days[30]
 
     def test_purge_embargo_gap(self):
         days = _days(60)
-        ws = split_windows(days, train=20, test=10, step=10, purge=2,
-                           embargo=3)
+        ws = split_windows(days, train=20, test=10, step=10, purge=2, embargo=3)
         # gap = purge + embargo = 5：test_start = train_end 之后第 6 个交易日
         assert ws[0].test_start == days[25]
         assert ws[0].test_end == days[34]
-        assert len(ws) == 3                          # 更长的 gap ⇒ 折数减少
+        assert len(ws) == 3  # 更长的 gap ⇒ 折数减少
 
     def test_insufficient_days_rejected(self):
         with pytest.raises(ValueError, match="窗口不足"):

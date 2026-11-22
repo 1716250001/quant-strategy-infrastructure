@@ -5,6 +5,7 @@
 拆分目的：校验与合并是**纯函数式**的一步，独立后可在不涉及宇宙/组件/引擎的
 前提下被复用与测试（如批量配置预检、网格参数校验）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping

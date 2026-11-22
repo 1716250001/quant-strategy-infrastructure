@@ -5,6 +5,7 @@
 与 B2 基准的 MemoryFeed→真实 Feed 对照路径。
 纪律：同参数同结果、无副作用（协议要求）；仅内存数据，无 I/O。
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
@@ -55,11 +56,13 @@ class MemoryFeed:
     def universe(self, date: TradingDate) -> list[Instrument]:
         """构造时注入的 instruments，按上市/退市窗口过滤（静态身份）。"""
         return self._universe_where(
-            lambda inst: not (inst.list_date and inst.list_date > date)
-            and not (inst.delist_date and inst.delist_date < date))
+            lambda inst: (
+                not (inst.list_date and inst.list_date > date)
+                and not (inst.delist_date and inst.delist_date < date)
+            )
+        )
 
-    def universe_span(self, start: TradingDate,
-                      end: TradingDate) -> list[Instrument]:
+    def universe_span(self, start: TradingDate, end: TradingDate) -> list[Instrument]:
         """[start, end] 期间并集（P2-NEW-3，19 号 §22.3）。
 
         语义与 `universe` 同谓词闭式：`list_date ≤ end ∧ (delist_date 空 ∨
@@ -67,8 +70,11 @@ class MemoryFeed:
         （不像 parquet 回退路径会漏"期间上市且期间退市"的标的）。
         """
         return self._universe_where(
-            lambda inst: not (inst.list_date and inst.list_date > end)
-            and not (inst.delist_date and inst.delist_date < start))
+            lambda inst: (
+                not (inst.list_date and inst.list_date > end)
+                and not (inst.delist_date and inst.delist_date < start)
+            )
+        )
 
     def _universe_where(self, predicate) -> list[Instrument]:
         out = [inst for inst in self._instruments.values() if predicate(inst)]
@@ -77,8 +83,9 @@ class MemoryFeed:
     def bars_of(self, symbol: str, start: TradingDate, end: TradingDate) -> list[Bar]:
         return [b for b in self._by_symbol.get(symbol, []) if start <= b.date <= end]
 
-    def history(self, symbol: str, end: TradingDate,
-                fields: Sequence[str] | None = None, n_bars: int = 1) -> list[Bar]:
+    def history(
+        self, symbol: str, end: TradingDate, fields: Sequence[str] | None = None, n_bars: int = 1
+    ) -> list[Bar]:
         """截至 end 最近 n_bars 个 bar（协议口径，04 §8.3.1；全字段）。"""
         bars = self.bars_of(symbol, TradingDate.from_ymd("19000101"), end)
         return bars[-n_bars:] if n_bars > 0 else []
@@ -98,7 +105,7 @@ class MemoryFeed:
             for sym, series in self._by_symbol.items():
                 if wanted is not None and sym not in wanted:
                     continue
-                for b in series:            # 短序列线性扫（手写小数据集语义）
+                for b in series:  # 短序列线性扫（手写小数据集语义）
                     if b.date == d:
                         section[sym] = b
                         break
@@ -107,8 +114,11 @@ class MemoryFeed:
             yield d, section
 
     def trading_states(
-        self, date: TradingDate, symbols: Sequence[str] | None = None,
-        *, with_touch_flags: bool = True,
+        self,
+        date: TradingDate,
+        symbols: Sequence[str] | None = None,
+        *,
+        with_touch_flags: bool = True,
     ) -> Mapping[str, TradingState]:
         """with_touch_flags：MemoryFeed 手写状态自带标记，参数仅为协议对齐。"""
         ymd = date.to_ymd()
@@ -120,7 +130,9 @@ class MemoryFeed:
         }
 
     def corporate_actions(
-        self, start: TradingDate, end: TradingDate,
+        self,
+        start: TradingDate,
+        end: TradingDate,
         symbols: Sequence[str] | None = None,
     ) -> list[CorporateAction]:
         """区间行动流（升序确定性；签名=DataFeed 协议批量口径）。

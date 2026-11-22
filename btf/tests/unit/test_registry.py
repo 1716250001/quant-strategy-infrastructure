@@ -3,6 +3,7 @@
 
 六类扩展点注册冒烟 + 未知名显式报错 + 重名拒绝 + 程序化登记协商。
 """
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -30,8 +31,7 @@ class TestSixPointsSmoke:
         assert plugin is not None
 
     def test_flat_rate_cost_params(self):
-        model = registry.create(registry.COST_MODEL, "flat_rate",
-                                {"commission_rate": 3e-4})
+        model = registry.create(registry.COST_MODEL, "flat_rate", {"commission_rate": 3e-4})
         assert model.commission_rate == 3e-4
 
 

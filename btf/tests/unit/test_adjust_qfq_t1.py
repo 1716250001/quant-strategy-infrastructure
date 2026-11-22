@@ -4,6 +4,7 @@
 运算顺序逐字保持 `(a × f) / base`（改成 `a * (f/base)` 会因浮点不结合翻转 9 笔
 边界成交：`n_fills` 8,574→8,565，不报错——实测见派单 §一）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,9 +19,17 @@ SYM = "600000.SH"
 
 def _bar(ymd: str, px: float) -> Bar:
     d = TradingDate.from_ymd(ymd)
-    return Bar(symbol=SYM, date=d, open=px, high=px + 0.5, low=px - 0.5,
-               close=px + 0.2, volume=1000.0, amount=px * 1000.0,
-               pre_close=px - 0.1)
+    return Bar(
+        symbol=SYM,
+        date=d,
+        open=px,
+        high=px + 0.5,
+        low=px - 0.5,
+        close=px + 0.2,
+        volume=1000.0,
+        amount=px * 1000.0,
+        pre_close=px - 0.1,
+    )
 
 
 def test_t1_qfq_single_factor_lookup_and_exact_order():
@@ -34,7 +43,7 @@ def test_t1_qfq_single_factor_lookup_and_exact_order():
         calls["n"] += 1
         return orig(symbol, date)
 
-    svc.adj_factor = counting                    # type: ignore[method-assign]
+    svc.adj_factor = counting  # type: ignore[method-assign]
     bars = [_bar("20160104", 10.0), _bar("20160105", 11.0)]
     ref = TradingDate.from_ymd("20160104")
     out = svc.qfq(bars, ref)

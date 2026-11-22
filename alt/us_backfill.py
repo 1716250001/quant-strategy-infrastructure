@@ -22,6 +22,7 @@ alt/us_backfill.py — 美股建库（mode="list" 专用入口）
   python -m alt.us_backfill --workers 4         并发线程数（默认 4）
   python -m alt.us_backfill --status            查看进度
 """
+
 import argparse
 import os
 import socket
@@ -41,7 +42,7 @@ from common.paths import ensure_dir
 
 UNIVERSE = "us_universe"
 DAILY = "us_daily_qfq"
-BATCH = 3000          # 每批落盘阈值（只数）
+BATCH = 3000  # 每批落盘阈值（只数）
 
 # ⚠ 全局 socket 超时（2026-09-21 实测必需）: akshare 的 requests 调用**没有超时设置**，
 #   新浪源对部分标的的请求会**永久挂起**（实测 5 个 TCP 会话挂了 15 分钟、
@@ -62,11 +63,13 @@ def _patch_requests_timeout(timeout=25):
       不覆盖调用方已显式指定的 timeout）。
     """
     import requests
+
     _sess_req = requests.sessions.Session.request
 
     def sess_req(self, *a, **kw):
         kw.setdefault("timeout", timeout)
         return _sess_req(self, *a, **kw)
+
     requests.sessions.Session.request = sess_req
 
     _api_req = requests.api.request
@@ -74,6 +77,7 @@ def _patch_requests_timeout(timeout=25):
     def api_req(*a, **kw):
         kw.setdefault("timeout", timeout)
         return _api_req(*a, **kw)
+
     requests.api.request = api_req
 
 
@@ -110,6 +114,7 @@ def _mark_universe_done(verbose=True):
       该表是**快照型**（每次覆盖重建），故只需一个 __all__ 标记。
     """
     from alt.backfill import AltCheckpoint
+
     AltCheckpoint().mark_done(UNIVERSE, "__all__")
     if verbose:
         _log(f"[{UNIVERSE}] 断点已标记（__all__）")
@@ -122,6 +127,7 @@ def build_universe(verbose=True):
     除非显式 --universe 或 --rebuild。
     """
     import akshare as ak
+
     sp = spec_mod.get(UNIVERSE)
 
     if verbose:
@@ -131,20 +137,20 @@ def build_universe(verbose=True):
     if df is None or len(df) == 0:
         raise RuntimeError(f"{UNIVERSE}: 接口返回空")
     if verbose:
-        _log(f"[{UNIVERSE}] 完成: {len(df):,} 行 | {time.time()-t:.1f}s")
+        _log(f"[{UNIVERSE}] 完成: {len(df):,} 行 | {time.time() - t:.1f}s")
 
     # 快照表：无日期列；统一列类型（防 str/bool 混存导致 pyarrow 报错）
     df = _normalize_universe_types(df)
 
     target = alt_io.table_path(sp)
-    assert_writable(target)                     # 写入守卫：必须落在 alt 授权区
+    assert_writable(target)  # 写入守卫：必须落在 alt 授权区
     ensure_dir(os.path.dirname(target))
     tmp = target + ".tmp"
     df.to_parquet(tmp, index=False)
-    os.replace(tmp, target)                     # 原子覆盖
+    os.replace(tmp, target)  # 原子覆盖
     _mark_universe_done(verbose)
     if verbose:
-        _log(f"[{UNIVERSE}] 已写入 {target} ({os.path.getsize(target)/1024:.1f} KB)")
+        _log(f"[{UNIVERSE}] 已写入 {target} ({os.path.getsize(target) / 1024:.1f} KB)")
     return len(df)
 
 
@@ -171,8 +177,10 @@ def build_universe_from_cache(cache_path, verbose=True):
     os.replace(tmp, target)
     _mark_universe_done(verbose)
     if verbose:
-        _log(f"[{UNIVERSE}] 已从缓存写入 {target} ({len(df):,} 行, "
-             f"{os.path.getsize(target)/1024:.1f} KB)")
+        _log(
+            f"[{UNIVERSE}] 已从缓存写入 {target} ({len(df):,} 行, "
+            f"{os.path.getsize(target) / 1024:.1f} KB)"
+        )
     return len(df)
 
 
@@ -182,7 +190,8 @@ def load_universe_symbols():
     target = alt_io.table_path(sp)
     if not os.path.exists(target):
         raise FileNotFoundError(
-            f"清单未建库: {target}\n  请先跑: python -m alt.us_backfill --universe")
+            f"清单未建库: {target}\n  请先跑: python -m alt.us_backfill --universe"
+        )
     df = pd.read_parquet(target, columns=["symbol"])
     syms = [str(x) for x in df["symbol"].tolist() if str(x).strip()]
     seen, out = set(), []
@@ -199,15 +208,16 @@ def load_universe_symbols():
 def fetch_one(symbol, retries=2, delay=0.0):
     """拉单只美股日线（前复权）。返回 (symbol, DataFrame|None, err)"""
     import akshare as ak
+
     for attempt in range(retries + 1):
         try:
             d = ak.stock_us_daily(symbol=symbol, adjust="qfq")
             if delay:
-                time.sleep(delay)       # 降速防风控（可选）
+                time.sleep(delay)  # 降速防风控（可选）
             if d is None or len(d) == 0:
                 return symbol, None, "empty"
             d = d.copy()
-            d["symbol"] = symbol            # 注入标的列（接口不返回）
+            d["symbol"] = symbol  # 注入标的列（接口不返回）
             return symbol, d, None
         except Exception as e:
             if attempt >= retries:
@@ -218,7 +228,7 @@ def fetch_one(symbol, retries=2, delay=0.0):
 
 def build_daily(symbols, workers=4, rebuild=False, verbose=True, limit=None, delay=0.0):
     """逐只拉取并分批落盘。返回统计 dict。"""
-    _patch_requests_timeout(SOCKET_TIMEOUT)     # ★ 必须先启用超时保护
+    _patch_requests_timeout(SOCKET_TIMEOUT)  # ★ 必须先启用超时保护
     sp = spec_mod.get(DAILY)
     ckpt = AltCheckpoint()
 
@@ -229,8 +239,10 @@ def build_daily(symbols, workers=4, rebuild=False, verbose=True, limit=None, del
     if limit:
         todo = todo[:limit]
     if verbose:
-        _log(f"[{DAILY}] 清单 {len(symbols):,} 只 | 断点跳过 {skipped:,} | "
-             f"待拉 {len(todo):,}" + (f"（--limit {limit}）" if limit else ""))
+        _log(
+            f"[{DAILY}] 清单 {len(symbols):,} 只 | 断点跳过 {skipped:,} | "
+            f"待拉 {len(todo):,}" + (f"（--limit {limit}）" if limit else "")
+        )
 
     if not todo:
         _log(f"[{DAILY}] 全部已完成（如需重来: --rebuild）")
@@ -255,7 +267,7 @@ def build_daily(symbols, workers=4, rebuild=False, verbose=True, limit=None, del
 
     stat = {"ok": 0, "empty": 0, "fail": 0, "rows": 0, "added": 0}
     errs = []
-    buf = []                                # 缓冲区 [(symbol, DataFrame), ...]
+    buf = []  # 缓冲区 [(symbol, DataFrame), ...]
     buf_n = 0
     t0 = time.time()
 
@@ -283,7 +295,7 @@ def build_daily(symbols, workers=4, rebuild=False, verbose=True, limit=None, del
         else:
             stat["added"] += res.get("added", 0)
             for s in syms_in_buf:
-                ckpt.mark_done(DAILY, s)     # ✅ 落盘成功才记
+                ckpt.mark_done(DAILY, s)  # ✅ 落盘成功才记
         buf = []
         buf_n = 0
 
@@ -292,38 +304,44 @@ def build_daily(symbols, workers=4, rebuild=False, verbose=True, limit=None, del
         for i, (sym, d, err) in enumerate(ex.map(lambda s: fetch_one(s, delay=delay), todo), 1):
             if err == "empty":
                 stat["empty"] += 1
-                ckpt.mark_done(DAILY, sym)      # 返空：源端确实无数据，可立即记
+                ckpt.mark_done(DAILY, sym)  # 返空：源端确实无数据，可立即记
             elif err:
                 stat["fail"] += 1
-                errs.append(f"{sym}: {err}")    # 失败不记断点，留待续跑
+                errs.append(f"{sym}: {err}")  # 失败不记断点，留待续跑
             else:
                 stat["ok"] += 1
                 stat["rows"] += len(d)
-                buf.append((sym, d))            # ⚠ 只入缓冲，**不在此处记断点**
+                buf.append((sym, d))  # ⚠ 只入缓冲，**不在此处记断点**
                 buf_n += 1
 
             # 进度：每 500 只打印一次（便于及时发现停滞），落盘另有日志
             if i % 500 == 0:
                 _el = time.time() - _t_loop
                 _rate = i / max(_el, 1)
-                _log(f"    {i:,}/{len(todo):,} | 成功 {stat['ok']:,} 空 {stat['empty']} "
-                     f"失败 {stat['fail']} | {_rate:.2f}只/s | "
-                     f"剩余 ≈ {(len(todo)-i)/max(_rate,0.01)/60:.0f} 分钟")
+                _log(
+                    f"    {i:,}/{len(todo):,} | 成功 {stat['ok']:,} 空 {stat['empty']} "
+                    f"失败 {stat['fail']} | {_rate:.2f}只/s | "
+                    f"剩余 ≈ {(len(todo) - i) / max(_rate, 0.01) / 60:.0f} 分钟"
+                )
 
             if buf_n >= BATCH:
                 flush()
                 el = time.time() - t0
-                _log(f"  进度 {i:,}/{len(todo):,} | 成功 {stat['ok']:,} "
-                     f"空 {stat['empty']} 失败 {stat['fail']} | "
-                     f"{i/max(el,1):.1f}只/s | 已落盘 {stat['added']:,} 行")
+                _log(
+                    f"  进度 {i:,}/{len(todo):,} | 成功 {stat['ok']:,} "
+                    f"空 {stat['empty']} 失败 {stat['fail']} | "
+                    f"{i / max(el, 1):.1f}只/s | 已落盘 {stat['added']:,} 行"
+                )
 
     flush()
 
     el = time.time() - t0
     if verbose:
-        _log(f"\n[{DAILY}] 完成: 成功 {stat['ok']:,} | 返空 {stat['empty']} | "
-             f"失败 {stat['fail']} | 拉取 {stat['rows']:,} 行 | "
-             f"落盘新增 {stat['added']:,} 行 | 耗时 {el/60:.1f} 分钟")
+        _log(
+            f"\n[{DAILY}] 完成: 成功 {stat['ok']:,} | 返空 {stat['empty']} | "
+            f"失败 {stat['fail']} | 拉取 {stat['rows']:,} 行 | "
+            f"落盘新增 {stat['added']:,} 行 | 耗时 {el / 60:.1f} 分钟"
+        )
         if errs:
             _log("  失败/异常样例（前 8 条）:")
             for e in errs[:8]:
@@ -346,6 +364,7 @@ def prune_checkpoint(verbose=True):
     """
     import json as _json
     from datetime import datetime as _dt
+
     ckpt = AltCheckpoint()
     done = set(ckpt.data.get(DAILY, {}).get("done", []))
 
@@ -362,8 +381,7 @@ def prune_checkpoint(verbose=True):
 
     stale = sorted(done - syms)
     if verbose:
-        _log(f"[{DAILY}] 断点已记 {len(done):,} | 磁盘实际 {len(syms):,} | "
-             f"虚记 {len(stale):,}")
+        _log(f"[{DAILY}] 断点已记 {len(done):,} | 磁盘实际 {len(syms):,} | 虚记 {len(stale):,}")
     if not stale:
         return 0
 
@@ -377,8 +395,10 @@ def prune_checkpoint(verbose=True):
         _json.dump(ckpt.data, f, ensure_ascii=False, indent=1)
     os.replace(tmp, ckpt.path)
     if verbose:
-        _log(f"[{DAILY}] 已清理虚记 {len(stale):,} 个 → 断点保留 {len(keep):,} 个"
-             f"（这些标的将在下次运行时重拉）")
+        _log(
+            f"[{DAILY}] 已清理虚记 {len(stale):,} 个 → 断点保留 {len(keep):,} 个"
+            f"（这些标的将在下次运行时重拉）"
+        )
     return len(stale)
 
 
@@ -386,7 +406,7 @@ def show_status():
     ckpt = AltCheckpoint()
     for name in (UNIVERSE, DAILY):
         try:
-            spec_mod.get(name)   # 存在性探测（原 sp 赋值未使用；保留守卫）
+            spec_mod.get(name)  # 存在性探测（原 sp 赋值未使用；保留守卫）
         except KeyError:
             _log(f"  {name}: 未登记")
             continue
@@ -399,8 +419,9 @@ def show_status():
         syms = set()
         for f in sorted(files):
             try:
-                x = pd.read_parquet(os.path.join(d, f),
-                                    columns=["symbol"] if name == DAILY else None)
+                x = pd.read_parquet(
+                    os.path.join(d, f), columns=["symbol"] if name == DAILY else None
+                )
                 rows += len(x)
                 if "symbol" in x.columns:
                     syms.update(str(s) for s in x["symbol"].unique())
@@ -418,19 +439,25 @@ def main(argv=None):
     # 归档后 list 引擎的 R6-2 保护会因"盘上无数据"而自动放行，故必须在此硬拦。
     raise SystemExit(
         "us_daily_qfq 已废弃（§159 R10-C）：源端复权算法错误、本地无法清洗。"
-        "需要美股复权价请走 wind，或用 us_daily_raw + us_qfq_factor")
+        "需要美股复权价请走 wind，或用 us_daily_raw + us_qfq_factor"
+    )
     ap = argparse.ArgumentParser(description="美股建库（mode=list 专用）")
     ap.add_argument("--universe", action="store_true", help="只重建标的全市场清单")
-    ap.add_argument("--universe-from-cache", default=None,
-                    help="从本地缓存(parquet/pkl)生成清单，免重复拉取(省 7~8 分钟)")
+    ap.add_argument(
+        "--universe-from-cache",
+        default=None,
+        help="从本地缓存(parquet/pkl)生成清单，免重复拉取(省 7~8 分钟)",
+    )
     ap.add_argument("--limit", type=int, default=None, help="只跑前 N 只（试跑用）")
     ap.add_argument("--rebuild", action="store_true", help="忽略断点整表重建")
     ap.add_argument("--workers", type=int, default=4, help="并发线程数")
-    ap.add_argument("--delay", type=float, default=0.0,
-                    help="每只请求后延迟秒数（降速防风控，默认 0）")
+    ap.add_argument(
+        "--delay", type=float, default=0.0, help="每只请求后延迟秒数（降速防风控，默认 0）"
+    )
     ap.add_argument("--status", action="store_true", help="查看进度")
-    ap.add_argument("--prune-ckpt", action="store_true",
-                    help="清理断点虚记（断点已记但磁盘无数据），使它们重拉")
+    ap.add_argument(
+        "--prune-ckpt", action="store_true", help="清理断点虚记（断点已记但磁盘无数据），使它们重拉"
+    )
     ap.add_argument("--yes", action="store_true", help="跳过确认")
     args = ap.parse_args(argv)
 
@@ -483,8 +510,9 @@ def main(argv=None):
         except EOFError:
             _log("  （非交互环境，直接继续）")
 
-    build_daily(symbols, workers=args.workers, rebuild=args.rebuild,
-                limit=args.limit, delay=args.delay)
+    build_daily(
+        symbols, workers=args.workers, rebuild=args.rebuild, limit=args.limit, delay=args.delay
+    )
     _log("\n[状态]")
     show_status()
     return 0

@@ -8,6 +8,7 @@
     3. orders API 幂等：同输入重复生成 → 同一订单清单（可复现性）；
     4. ctx API 边界（04 §8.3.2）：公共成员白名单——无任何 I/O 痕迹。
 """
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -24,7 +25,7 @@ from btf.strategy.rebalance import TargetPortfolio
 from tests.fixtures.scenarios import make_bar, make_state
 
 D = TradingDate.from_ymd
-DATES = [D(f"2015010{i}") for i in range(5, 10)]   # 周一~周五
+DATES = [D(f"2015010{i}") for i in range(5, 10)]  # 周一~周五
 
 A, B = "000001.SZ", "000002.SZ"
 
@@ -45,13 +46,10 @@ def _two_asset_feed():
         states[(d.to_ymd(), A)] = _mk_state(A, d, 10.0)
         states[(d.to_ymd(), B)] = _mk_state(B, d, 20.0)
     instruments = {
-        A: Instrument(symbol=A, asset_class=AssetClass.STOCK,
-                      board="main", lot_size=100),
-        B: Instrument(symbol=B, asset_class=AssetClass.STOCK,
-                      board="main", lot_size=100),
+        A: Instrument(symbol=A, asset_class=AssetClass.STOCK, board="main", lot_size=100),
+        B: Instrument(symbol=B, asset_class=AssetClass.STOCK, board="main", lot_size=100),
     }
-    return MemoryFeed(bars=bars, states=states, instruments=instruments,
-                      dates=DATES), instruments
+    return MemoryFeed(bars=bars, states=states, instruments=instruments, dates=DATES), instruments
 
 
 class ScriptedStrategy(StrategyBase):
@@ -84,18 +82,24 @@ class TestG7CashChain:
         feed, instruments = _two_asset_feed()
         engine = Engine(
             feed,
-            ScriptedStrategy({"20150105": {A: 0.95},    # D1 收盘建仓 A
-                              "20150106": {B: 0.9}}),    # D2 收盘切换 B
-            start=DATES[0], end=DATES[-1],
-            initial_cash=1_000_000.0, instruments=instruments)
+            ScriptedStrategy(
+                {
+                    "20150105": {A: 0.95},  # D1 收盘建仓 A
+                    "20150106": {B: 0.9},
+                }
+            ),  # D2 收盘切换 B
+            start=DATES[0],
+            end=DATES[-1],
+            initial_cash=1_000_000.0,
+            instruments=instruments,
+        )
         r = engine.run()
         codes = {rej.code.value for _, rej in r.rejections}
-        assert "insufficient_cash" not in codes, \
+        assert "insufficient_cash" not in codes, (
             f"卖先买后失效：{[str(x) for _, x in r.rejections]}"
-        sells_a = [f for f in r.fills
-                   if f.symbol == A and f.side.value == "sell"]
-        buys_b = [f for f in r.fills
-                  if f.symbol == B and f.side.value == "buy"]
+        )
+        sells_a = [f for f in r.fills if f.symbol == A and f.side.value == "sell"]
+        buys_b = [f for f in r.fills if f.symbol == B and f.side.value == "buy"]
         assert len(sells_a) == 1 and sells_a[0].qty == 95_000
         assert len(buys_b) == 1 and buys_b[0].qty == 44_500
         # 顺序断言：同日撮合卖 A 先于买 B
@@ -113,22 +117,34 @@ class TestDiffMethod:
         （BUY 12500）——精确差额，无多余交易。"""
         from btf.domain.orders import Fee, Fill, OrderSide
         from btf.domain.types import AssetClass, Instrument
+
         instruments = {
-            s: Instrument(symbol=s, asset_class=AssetClass.STOCK,
-                          board="main", lot_size=100)
-            for s in (A, B)}
+            s: Instrument(symbol=s, asset_class=AssetClass.STOCK, board="main", lot_size=100)
+            for s in (A, B)
+        }
         reb = FullRebalancer(instruments)
         p = Portfolio(cash=500_000.0)
-        p.apply_fill(Fill(fill_id="F1", order_id="O1", symbol=A,
-                          side=OrderSide.BUY, qty=30_000, price=10.0,
-                          fee=Fee.zero(), fill_date=DATES[0],
-                          fill_timing="open"))
+        p.apply_fill(
+            Fill(
+                fill_id="F1",
+                order_id="O1",
+                symbol=A,
+                side=OrderSide.BUY,
+                qty=30_000,
+                price=10.0,
+                fee=Fee.zero(),
+                fill_date=DATES[0],
+                fill_timing="open",
+            )
+        )
         p.mark_all({A: 10.0, B: 20.0})
-        data = {A: make_bar(A, DATES[1], 10.1, 10.1, 10.0, 10.0, 10.0),
-                B: make_bar(B, DATES[1], 20.2, 20.2, 20.0, 20.0, 20.0)}
+        data = {
+            A: make_bar(A, DATES[1], 10.1, 10.1, 10.0, 10.0, 10.0),
+            B: make_bar(B, DATES[1], 20.2, 20.2, 20.0, 20.0, 20.0),
+        }
         orders = reb.generate_orders(
-            TargetPortfolio(rebalance_date=DATES[1], targets={A: 0.25, B: 0.5}),
-            p, {}, data)
+            TargetPortfolio(rebalance_date=DATES[1], targets={A: 0.25, B: 0.5}), p, {}, data
+        )
         sell_a = [o for o in orders if o.symbol == A]
         buy_b = [o for o in orders if o.symbol == B]
         assert len(sell_a) == 1 and sell_a[0].qty == 17_500
@@ -139,29 +155,35 @@ class TestDiffMethod:
         feed, instruments = _two_asset_feed()
         engine = Engine(
             feed,
-            ScriptedStrategy({"20150105": {A: 0.5, B: 0.5},
-                              "20150106": {B: 0.5}}),    # A 未列出
-            start=DATES[0], end=DATES[-1],
-            initial_cash=1_000_000.0, instruments=instruments)
+            ScriptedStrategy({"20150105": {A: 0.5, B: 0.5}, "20150106": {B: 0.5}}),  # A 未列出
+            start=DATES[0],
+            end=DATES[-1],
+            initial_cash=1_000_000.0,
+            instruments=instruments,
+        )
         r = engine.run()
-        sell_a = [f for f in r.fills
-                  if f.symbol == A and f.side.value == "sell"]
+        sell_a = [f for f in r.fills if f.symbol == A and f.side.value == "sell"]
         assert len(sell_a) == 1 and sell_a[0].qty == 50_000
 
     def test_lot_size_floor(self):
         """目标数量非整手 → 向下取整手（余额转现金）。"""
         from btf.domain.types import AssetClass, Instrument
+
         instruments = {
-            A: Instrument(symbol=A, asset_class=AssetClass.STOCK,
-                          board="main", lot_size=100)}
+            A: Instrument(symbol=A, asset_class=AssetClass.STOCK, board="main", lot_size=100)
+        }
         reb = FullRebalancer(instruments)
         from btf.strategy.rebalance import TargetPortfolio
+
         p = Portfolio(cash=100_000.0)
-        p.mark_all({A: 33.33})                      # 100000/33.33≈3000.3
+        p.mark_all({A: 33.33})  # 100000/33.33≈3000.3
         orders = reb.generate_orders(
             TargetPortfolio(rebalance_date=DATES[0], targets={A: 1.0}),
-            p, {}, {A: make_bar(A, DATES[0], 33.33, 33.33, 33.33, 33.33, 33.33)})
-        assert len(orders) == 1 and orders[0].qty == 3_000   # 3000 而非 3003
+            p,
+            {},
+            {A: make_bar(A, DATES[0], 33.33, 33.33, 33.33, 33.33, 33.33)},
+        )
+        assert len(orders) == 1 and orders[0].qty == 3_000  # 3000 而非 3003
 
 
 @pytest.mark.l2
@@ -171,34 +193,55 @@ class TestOrderSequence:
     def test_sells_before_buys_and_sorted(self):
         from btf.domain.types import AssetClass, Instrument
         from btf.strategy.rebalance import TargetPortfolio
+
         instruments = {
-            s: Instrument(symbol=s, asset_class=AssetClass.STOCK,
-                          board="main", lot_size=100)
-            for s in (A, B, "000003.SZ")}
+            s: Instrument(symbol=s, asset_class=AssetClass.STOCK, board="main", lot_size=100)
+            for s in (A, B, "000003.SZ")
+        }
         reb = FullRebalancer(instruments)
         # 持仓 A、000003；目标 B、000003（A 清仓）
         p = Portfolio(cash=0.0)
         from btf.domain.orders import Fee, Fill, OrderSide
-        p.apply_fill(Fill(fill_id="F1", order_id="O1", symbol=A,
-                          side=OrderSide.BUY, qty=10_000, price=10.0,
-                          fee=Fee.zero(), fill_date=DATES[0],
-                          fill_timing="open"))
-        p.apply_fill(Fill(fill_id="F2", order_id="O2", symbol="000003.SZ",
-                          side=OrderSide.BUY, qty=5_000, price=5.0,
-                          fee=Fee.zero(), fill_date=DATES[0],
-                          fill_timing="open"))
+
+        p.apply_fill(
+            Fill(
+                fill_id="F1",
+                order_id="O1",
+                symbol=A,
+                side=OrderSide.BUY,
+                qty=10_000,
+                price=10.0,
+                fee=Fee.zero(),
+                fill_date=DATES[0],
+                fill_timing="open",
+            )
+        )
+        p.apply_fill(
+            Fill(
+                fill_id="F2",
+                order_id="O2",
+                symbol="000003.SZ",
+                side=OrderSide.BUY,
+                qty=5_000,
+                price=5.0,
+                fee=Fee.zero(),
+                fill_date=DATES[0],
+                fill_timing="open",
+            )
+        )
         p.mark_all({A: 10.0, "000003.SZ": 5.0})
-        data = {s: make_bar(s, DATES[0], 10.0, 10.0, 10.0, 10.0, 10.0)
-                for s in instruments}
+        data = {s: make_bar(s, DATES[0], 10.0, 10.0, 10.0, 10.0, 10.0) for s in instruments}
         orders = reb.generate_orders(
-            TargetPortfolio(rebalance_date=DATES[0],
-                            targets={B: 0.5, "000003.SZ": 0.5}),
-            p, {}, data)
+            TargetPortfolio(rebalance_date=DATES[0], targets={B: 0.5, "000003.SZ": 0.5}),
+            p,
+            {},
+            data,
+        )
         sides = [o.side.value for o in orders]
         first_buy = sides.index("buy") if "buy" in sides else len(sides)
         assert all(s == "sell" for s in sides[:first_buy])
         sell_syms = [o.symbol for o in orders[:first_buy]]
-        assert sell_syms == sorted(sell_syms)      # A, 000003.SZ 字典序
+        assert sell_syms == sorted(sell_syms)  # A, 000003.SZ 字典序
 
 
 @pytest.mark.l2
@@ -208,20 +251,24 @@ class TestIdempotence:
     def test_generate_orders_deterministic(self):
         from btf.domain.types import AssetClass, Instrument
         from btf.strategy.rebalance import TargetPortfolio
+
         instruments = {
-            s: Instrument(symbol=s, asset_class=AssetClass.STOCK,
-                          board="main", lot_size=100)
-            for s in (A, B)}
+            s: Instrument(symbol=s, asset_class=AssetClass.STOCK, board="main", lot_size=100)
+            for s in (A, B)
+        }
         reb = FullRebalancer(instruments)
         p = Portfolio(cash=500_000.0)
         p.mark_all({A: 10.0, B: 20.0})
-        data = {A: make_bar(A, DATES[0], 10.0, 10.0, 10.0, 10.0, 10.0),
-                B: make_bar(B, DATES[0], 20.0, 20.0, 20.0, 20.0, 20.0)}
+        data = {
+            A: make_bar(A, DATES[0], 10.0, 10.0, 10.0, 10.0, 10.0),
+            B: make_bar(B, DATES[0], 20.0, 20.0, 20.0, 20.0, 20.0),
+        }
         target = TargetPortfolio(rebalance_date=DATES[0], targets={A: 0.5, B: 0.5})
         first = reb.generate_orders(target, p, {}, data)
         second = reb.generate_orders(target, p, {}, data)
-        assert [(o.symbol, o.side, o.qty) for o in first] == \
-               [(o.symbol, o.side, o.qty) for o in second]
+        assert [(o.symbol, o.side, o.qty) for o in first] == [
+            (o.symbol, o.side, o.qty) for o in second
+        ]
 
     def test_submit_target_repeat_no_duplicate_orders(self):
         """同一 target 重复提交：订单清单不翻倍（引擎每轮重生成覆盖）。"""
@@ -230,16 +277,20 @@ class TestIdempotence:
         class RepeatStrategy(StrategyBase):
             def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
                 if date == DATES[0]:
-                    t = TargetPortfolio(date, {A: 0.5})   # 同日两次提交
+                    t = TargetPortfolio(date, {A: 0.5})  # 同日两次提交
                     ctx.submit_target(t)
                     ctx.submit_target(t)
 
-        engine = Engine(feed, RepeatStrategy(),
-                        start=DATES[0], end=DATES[-1],
-                        initial_cash=1_000_000.0, instruments=instruments)
+        engine = Engine(
+            feed,
+            RepeatStrategy(),
+            start=DATES[0],
+            end=DATES[-1],
+            initial_cash=1_000_000.0,
+            instruments=instruments,
+        )
         r = engine.run()
-        buys = [f for f in r.fills
-                if f.symbol == A and f.side.value == "buy"]
+        buys = [f for f in r.fills if f.symbol == A and f.side.value == "buy"]
         assert len(buys) == 1 and buys[0].qty == 50_000  # 500000/10.0
 
 
@@ -248,8 +299,16 @@ class TestCtxApiBoundary:
     """ctx API 边界（04 §8.3.2）：公共成员白名单——零 I/O 痕迹。"""
 
     ALLOWED: ClassVar[set[str]] = {
-        "universe", "bar", "history", "state", "portfolio", "current_date",
-        "start", "end", "submit_target", "submit_order",
+        "universe",
+        "bar",
+        "history",
+        "state",
+        "portfolio",
+        "current_date",
+        "start",
+        "end",
+        "submit_target",
+        "submit_order",
     }
 
     def test_public_api_whitelist(self):
@@ -258,7 +317,19 @@ class TestCtxApiBoundary:
 
     def test_no_io_attributes(self):
         """ctx 无文件/网络/子进程任何痕迹（04 §8.3.2 策略无 I/O 纪律）。"""
-        forbidden = {"open", "read", "write", "connect", "socket", "requests",
-                     "urllib", "subprocess", "system", "popen", "exec", "eval"}
+        forbidden = {
+            "open",
+            "read",
+            "write",
+            "connect",
+            "socket",
+            "requests",
+            "urllib",
+            "subprocess",
+            "system",
+            "popen",
+            "exec",
+            "eval",
+        }
         methods = {a.lower() for a in dir(StrategyContext)}
         assert not (methods & forbidden), methods & forbidden

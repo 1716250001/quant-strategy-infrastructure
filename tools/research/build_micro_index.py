@@ -36,6 +36,7 @@ Wind 自编微盘指数受额度限制（300积分/日）无法稳定获取。
     python -m tools.build_micro_index --exclude-st       # 剔当前ST（含前视偏差）
     python -m tools.build_micro_index --start 20160101
 """
+
 import argparse
 import os
 import sys
@@ -65,12 +66,15 @@ def build(data_dir=DEFAULT_DATA, start="20160101", out_dir=None, exclude_st=Fals
     #   都跑不完（旧 by_code 布局下每只只开 1 个文件，故旧写法尚可用）。
     #   改为各读一次年度文件再内存合并，只需秒级。
     print(f"[1/4] 读取全市场面板（{start} 起）...")
-    b = reader.read_range("daily_basic",
-                          columns=["ts_code", "trade_date", "total_mv"],
-                          start_date=start, root=data_dir)
-    p = reader.read_range("daily",
-                          columns=["ts_code", "trade_date", "pct_chg"],
-                          start_date=start, root=data_dir)
+    b = reader.read_range(
+        "daily_basic",
+        columns=["ts_code", "trade_date", "total_mv"],
+        start_date=start,
+        root=data_dir,
+    )
+    p = reader.read_range(
+        "daily", columns=["ts_code", "trade_date", "pct_chg"], start_date=start, root=data_dir
+    )
     if b.empty:
         print("  [ERROR] daily_basic 读取为空")
         return None
@@ -85,7 +89,9 @@ def build(data_dir=DEFAULT_DATA, start="20160101", out_dir=None, exclude_st=Fals
         # 次新：基于上市日期的时点化剔除，无前视
         if "list_date" in sb.columns:
             sb2 = sb[["ts_code", "list_date"]].drop_duplicates("ts_code").copy()
-            sb2["list_dt"] = pd.to_datetime(sb2["list_date"].astype(str), format="%Y%m%d", errors="coerce")
+            sb2["list_dt"] = pd.to_datetime(
+                sb2["list_date"].astype(str), format="%Y%m%d", errors="coerce"
+            )
             m = m.merge(sb2[["ts_code", "list_dt"]], on="ts_code", how="left")
             m["dt"] = pd.to_datetime(m["trade_date"], format="%Y%m%d", errors="coerce")
             m = m[(m["list_dt"].isna()) | ((m["dt"] - m["list_dt"]).dt.days >= 250)]
@@ -132,12 +138,15 @@ def build(data_dir=DEFAULT_DATA, start="20160101", out_dir=None, exclude_st=Fals
     for mode in ["daily", "monthly"]:
         df = construct(mode)
         out[mode] = df
-        yrs = (pd.to_datetime(df["trade_date"].iloc[-1]) -
-               pd.to_datetime(df["trade_date"].iloc[0])).days / 365.25
+        yrs = (
+            pd.to_datetime(df["trade_date"].iloc[-1]) - pd.to_datetime(df["trade_date"].iloc[0])
+        ).days / 365.25
         ann = df["nav"].iloc[-1] ** (1 / yrs) - 1
         vol = df["ret"].std() * np.sqrt(245)
         mdd = ((df["nav"] / df["nav"].cummax()) - 1).min()
-        print(f"   [{mode:7s}] {len(df)}日 年化{ann*100:6.2f}% 波动{vol*100:5.1f}% 回撤{mdd*100:6.1f}%")
+        print(
+            f"   [{mode:7s}] {len(df)}日 年化{ann * 100:6.2f}% 波动{vol * 100:5.1f}% 回撤{mdd * 100:6.1f}%"
+        )
         _atomic_write_parquet(df, os.path.join(out_dir, f"micro_{mode}.parquet"))
 
     print(f"[4/4] 已保存 → {out_dir}")
@@ -149,13 +158,15 @@ def main(argv=None):
 
     argv: 参数列表（None 则取 sys.argv[1:]），便于从统一入口 main.py 调用。
     """
-    ap = argparse.ArgumentParser(
-        description="本地自建微盘指数（替代 Wind 8841431.WI / 868008.WI）")
+    ap = argparse.ArgumentParser(description="本地自建微盘指数（替代 Wind 8841431.WI / 868008.WI）")
     ap.add_argument("--data-dir", default=DEFAULT_DATA)
     ap.add_argument("--start", default="20160101")
     ap.add_argument("--out-dir", default=None)
-    ap.add_argument("--exclude-st", action="store_true",
-                    help="剔除当前ST名单（含前视偏差，实测高估约+1.5pct/年，仅作敏感性对照）")
+    ap.add_argument(
+        "--exclude-st",
+        action="store_true",
+        help="剔除当前ST名单（含前视偏差，实测高估约+1.5pct/年，仅作敏感性对照）",
+    )
     a = ap.parse_args(argv)
     return build(a.data_dir, a.start, a.out_dir, a.exclude_st)
 

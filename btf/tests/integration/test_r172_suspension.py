@@ -9,6 +9,7 @@
 外加口径对齐（G#1）：`state._suspensions` 与 `quality._full_day_suspensions`
 对同一窗口给出**逐对相同**的全日停牌集合。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -19,8 +20,8 @@ from btf.domain.types import TradingDate
 pytestmark = [pytest.mark.l2]
 
 requires_mainlib = pytest.mark.skipif(
-    not (MARKET_DATA_DIR / "suspend_d").is_dir(),
-    reason=f"主库不可用: {MARKET_DATA_DIR}")
+    not (MARKET_DATA_DIR / "suspend_d").is_dir(), reason=f"主库不可用: {MARKET_DATA_DIR}"
+)
 
 #: 2024 年样本（真实记录，见派出单 §172 G）
 R_DAY = ("000007.SZ", "20240702")
@@ -67,9 +68,9 @@ def test_state_and_quality_alignment(synth):
 
     syms = {R_DAY[0], S_FULL_DAY[0], S_INTRADAY[0]}
     quality_set = _full_day_suspensions(
-        YearTableStore(MARKET_DATA_DIR), "20240101", "20241231", syms)
-    state_set = {(c, d) for (c, d) in synth._suspensions(2024)
-                 if c in syms}
+        YearTableStore(MARKET_DATA_DIR), "20240101", "20241231", syms
+    )
+    state_set = {(c, d) for (c, d) in synth._suspensions(2024) if c in syms}
     assert state_set == quality_set
     assert (S_FULL_DAY[0], S_FULL_DAY[1]) in state_set
     assert R_DAY not in state_set

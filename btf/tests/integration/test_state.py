@@ -4,6 +4,7 @@
 案例策略：从真实库**动态自洽查询**锁定案例（对数据漂移稳健）——
 先查源表找满足前提的行，再断言合成结果与源表口径一致。
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -36,15 +37,21 @@ class TestSuspension:
     def test_suspended_day_true(self, synth):
         """从 suspend_d 实查一行 → is_suspended=True。"""
         _skip_if_no_data()
-        t = pq.read_table(ROOT / "suspend_d" / "2023.parquet",
-                          columns=["ts_code", "trade_date"])
-        t = t.filter(__import__("pyarrow.compute", fromlist=["pc"]).equal(
-            t.column("trade_date"), "20230601"))
+        t = pq.read_table(ROOT / "suspend_d" / "2023.parquet", columns=["ts_code", "trade_date"])
+        t = t.filter(
+            __import__("pyarrow.compute", fromlist=["pc"]).equal(t.column("trade_date"), "20230601")
+        )
         if t.num_rows == 0:  # 该日无停牌则取文件首行日期
-            code = pq.read_table(ROOT / "suspend_d" / "2023.parquet",
-                                 columns=["ts_code"]).column(0)[0].as_py()
-            day = pq.read_table(ROOT / "suspend_d" / "2023.parquet",
-                                columns=["trade_date"]).column(0)[0].as_py()
+            code = (
+                pq.read_table(ROOT / "suspend_d" / "2023.parquet", columns=["ts_code"])
+                .column(0)[0]
+                .as_py()
+            )
+            day = (
+                pq.read_table(ROOT / "suspend_d" / "2023.parquet", columns=["trade_date"])
+                .column(0)[0]
+                .as_py()
+            )
             td = TradingDate.from_ymd(day)
             st = synth.states(td, [code])[code]
             assert st.is_suspended
@@ -99,19 +106,28 @@ class TestLimitPrices:
         _skip_if_no_data()
         import pyarrow.compute as pc
 
-        t = pq.read_table(ROOT / "daily" / "2023.parquet",
-                          columns=["ts_code", "trade_date", "close"])
+        t = pq.read_table(
+            ROOT / "daily" / "2023.parquet", columns=["ts_code", "trade_date", "close"]
+        )
         t = t.filter(pc.equal(t.column("trade_date"), "20230601"))
-        lim = pq.read_table(ROOT / "stk_limit" / "2023.parquet",
-                            columns=["ts_code", "trade_date", "up_limit"])
+        lim = pq.read_table(
+            ROOT / "stk_limit" / "2023.parquet", columns=["ts_code", "trade_date", "up_limit"]
+        )
         lim = lim.filter(pc.equal(lim.column("trade_date"), "20230601"))
-        lim_map = dict(zip(lim.column("ts_code").to_pylist(),
-                           lim.column("up_limit").to_pylist(), strict=True))
+        lim_map = dict(
+            zip(lim.column("ts_code").to_pylist(), lim.column("up_limit").to_pylist(), strict=True)
+        )
         codes = t.column("ts_code").to_pylist()
         closes = t.column("close").to_pylist()
         # 找收盘触及涨停的案例
-        hit = next((c for c, cl in zip(codes, closes, strict=True)
-                    if c in lim_map and cl >= lim_map[c] * 0.9999), None)
+        hit = next(
+            (
+                c
+                for c, cl in zip(codes, closes, strict=True)
+                if c in lim_map and cl >= lim_map[c] * 0.9999
+            ),
+            None,
+        )
         if hit is None:
             pytest.skip("2023-06-01 无涨停收盘案例（罕见）")
         st = synth.states(TradingDate(date(2023, 6, 1)), [hit])[hit]
@@ -128,8 +144,10 @@ class TestDelisted:
     def test_delisted_after_date(self, synth):
         """从 stock_basic 实查一只退市股 → delist_date 之后 is_delisted=True。"""
         _skip_if_no_data()
-        t = pq.read_table(ROOT / "metadata" / "stock_basic.parquet",
-                          columns=["ts_code", "delist_date", "list_status"])
+        t = pq.read_table(
+            ROOT / "metadata" / "stock_basic.parquet",
+            columns=["ts_code", "delist_date", "list_status"],
+        )
         import pyarrow.compute as pc
 
         t = t.filter(pc.equal(t.column("list_status"), "D"))

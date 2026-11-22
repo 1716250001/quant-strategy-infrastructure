@@ -40,6 +40,7 @@ alt/audit.py — alt 库数据体检
   python -m alt.audit --snapshot         # 记录主库基线（供隔离校验用）
   python -m alt.audit --json             # 输出 JSON 摘要
 """
+
 import argparse
 import json
 import os
@@ -59,7 +60,7 @@ from common.parquet_store import _atomic_write_parquet
 
 SNAPSHOT_FILE = os.path.join(ALT_META_DIR, "main_db_snapshot.json")
 ISO_LOG_FILE = os.path.join(ALT_META_DIR, "isolation_log.json")
-ISO_LOG_KEEP = 30          # 夹逼校验日志保留条数
+ISO_LOG_KEEP = 30  # 夹逼校验日志保留条数
 KNOWN_GAPS_FILE = os.path.join(ALT_META_DIR, "known_gaps.json")
 
 # alt 代码**只读**主库的这个顶层目录（交易日历等）。
@@ -126,16 +127,25 @@ def check_checkpoint(verbose=True):
         #     · DROPPED 却有文件 → "异常"（才是真问题：弃用表被建了）
         if sp is None:
             state = "异常" if files else "已弃用"
-            note = ("弃用表却被建库（应确认是否误建）" if files
-                    else "刻意不建（DROPPED 登记）")
-            rows.append({"table": name, "state": state, "files": len(files),
-                         "ckpt_done": len(done), "note": note})
+            note = "弃用表却被建库（应确认是否误建）" if files else "刻意不建（DROPPED 登记）"
+            rows.append(
+                {
+                    "table": name,
+                    "state": state,
+                    "files": len(files),
+                    "ckpt_done": len(done),
+                    "note": note,
+                }
+            )
             continue
 
         if has_ck and not files:
             # 快照表在无数据日不产文件属正常，需按"是否有日期型断点"区分
             if sp is not None and sp.layout == "by_year" and done:
-                state, note = "提示", f"断点有 {len(done)} 条日期记录但无文件（快照表无数据日属正常）"
+                state, note = (
+                    "提示",
+                    f"断点有 {len(done)} 条日期记录但无文件（快照表无数据日属正常）",
+                )
             else:
                 state, note = "异常", "断点显示已完成但目录无任何 parquet（疑似写失败被吞）"
         elif files and not has_ck:
@@ -147,20 +157,28 @@ def check_checkpoint(verbose=True):
             #   原判据一律报「异常」，导致审计长期挂 2 条假阳性；
             #   实证：hk_val_pct 的 oversize 断点 done=2,785 = 全部标的，并无丢失。
             _func = str(getattr(sp, "func", "") or "")
-            _oversize_ck = os.path.join(
-                ALT_META_DIR, f"oversize_{name}_checkpoint.json")
+            _oversize_ck = os.path.join(ALT_META_DIR, f"oversize_{name}_checkpoint.json")
             if _func.startswith("derived:"):
                 state, note = "正常", f"派生表（{_func}），不拉取、无需主断点"
             elif os.path.exists(_oversize_ck):
                 state, note = "正常", "专用引擎独立断点（oversize_*_checkpoint.json）"
             else:
-                state, note = "异常", (f"有 {len(files)} 个文件但断点无记录"
-                                      f"（断点丢失，会重复拉取）")
+                state, note = (
+                    "异常",
+                    (f"有 {len(files)} 个文件但断点无记录（断点丢失，会重复拉取）"),
+                )
         elif not files and not has_ck:
             state, note = "未建", "尚未建库"
 
-        rows.append({"table": name, "state": state, "files": len(files),
-                     "ckpt_done": len(done), "note": note})
+        rows.append(
+            {
+                "table": name,
+                "state": state,
+                "files": len(files),
+                "ckpt_done": len(done),
+                "note": note,
+            }
+        )
 
     if verbose:
         print("=" * 96)
@@ -173,16 +191,22 @@ def check_checkpoint(verbose=True):
         dropped = [r for r in rows if r["state"] == "已弃用"]
         print(f"  正常 {len(built)} | 提示 {len(tip)} | 异常 {len(bad)} | 未建 {len(notyet)}")
         if dropped:
-            print(f"  ⓘ 另有 {len(dropped)} 张**刻意弃用**表（DROPPED 登记，不算缺口）: "
-                  f"{', '.join(r['table'] for r in dropped)}")
+            print(
+                f"  ⓘ 另有 {len(dropped)} 张**刻意弃用**表（DROPPED 登记，不算缺口）: "
+                f"{', '.join(r['table'] for r in dropped)}"
+            )
         for r in bad:
-            print(f"    [异常] {r['table']:<26} 文件{r['files']:>3} 断点{r['ckpt_done']:>3}  {r['note']}")
+            print(
+                f"    [异常] {r['table']:<26} 文件{r['files']:>3} 断点{r['ckpt_done']:>3}  {r['note']}"
+            )
         for r in tip:
             print(f"    [提示] {r['table']:<26} {r['note']}")
         if notyet:
             names = [r["table"] for r in notyet]
-            print(f"    未建 {len(names)} 张: {', '.join(names[:10])}"
-                  + ("..." if len(names) > 10 else ""))
+            print(
+                f"    未建 {len(names)} 张: {', '.join(names[:10])}"
+                + ("..." if len(names) > 10 else "")
+            )
     return rows
 
 
@@ -213,8 +237,11 @@ def _load_known_gaps():
         v = json.load(open(KNOWN_GAPS_FILE, encoding="utf-8"))
         return v.get("confirmed", {}) if isinstance(v, dict) else {}
     except Exception as exc:
-        print(f"[alt.audit] 读 known_gaps 失败（按无登记处理，可能少报豁免）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[alt.audit] 读 known_gaps 失败（按无登记处理，可能少报豁免）: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return {}
 
 
@@ -236,8 +263,7 @@ def save_known_gaps(mapping, verbose=True):
     os.replace(tmp, KNOWN_GAPS_FILE)
     if verbose:
         n = sum(len(v) for v in payload["confirmed"].values())
-        print(f"已登记 {len(payload['confirmed'])} 张表 / {n} 个已确认缺口 → "
-              f"{KNOWN_GAPS_FILE}")
+        print(f"已登记 {len(payload['confirmed'])} 张表 / {n} 个已确认缺口 → {KNOWN_GAPS_FILE}")
     return payload
 
 
@@ -298,9 +324,9 @@ def check_date_sets(only=None, verbose=True):
     """
     rows = []
     specs = [sp_mod.get(only)] if only else list(sp_mod.ALL_SPECS)
-    ck_all = AltCheckpoint().data          # ⚠ N9：循环外读一次，循环内复用
-    known = _load_known_gaps()             # ⚠ N6：已确认缺口（不再报"需排查"）
-    skipped_list = []                      # mode="list" 的表（断点按标的，见下）
+    ck_all = AltCheckpoint().data  # ⚠ N9：循环外读一次，循环内复用
+    known = _load_known_gaps()  # ⚠ N6：已确认缺口（不再报"需排查"）
+    skipped_list = []  # mode="list" 的表（断点按标的，见下）
     for sp in specs:
         if sp.layout != "by_year":
             continue
@@ -321,14 +347,25 @@ def check_date_sets(only=None, verbose=True):
         try:
             df = _load(sp.name, sp)
         except Exception as e:
-            rows.append({"table": sp.name, "state": f"读取失败:{type(e).__name__}",
-                         "disk": 0, "ckpt": 0, "ckpt_only": [], "disk_only": []})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": f"读取失败:{type(e).__name__}",
+                    "disk": 0,
+                    "ckpt": 0,
+                    "ckpt_only": [],
+                    "disk_only": [],
+                }
+            )
             continue
         have = set()
         if sp.date_col in df.columns:
             have = set(df[sp.date_col].astype(str).unique())
-        done = {str(k)[5:] for k in ck_all.get(sp.name, {}).get("done", [])
-                if str(k).startswith("date:")}
+        done = {
+            str(k)[5:]
+            for k in ck_all.get(sp.name, {}).get("done", [])
+            if str(k).startswith("date:")
+        }
         ckpt_only = sorted(done - have)
         disk_only = sorted(have - done)
         # 已确认的独有日期与"新出现的"分开
@@ -337,19 +374,28 @@ def check_date_sets(only=None, verbose=True):
         confirmed = [d for d in ckpt_only if d in known_set]
 
         if disk_only:
-            state = "异常"                      # 磁盘有、断点无 → 会重复拉取
+            state = "异常"  # 磁盘有、断点无 → 会重复拉取
         elif fresh_only and sp.is_snapshot:
-            state = "需排查"                    # 快照表新出现 → 只能是被删/污染
+            state = "需排查"  # 快照表新出现 → 只能是被删/污染
         elif fresh_only:
-            state = "空数据日"                  # 传参型 → 多为源端返空（业务事实）
+            state = "空数据日"  # 传参型 → 多为源端返空（业务事实）
         elif confirmed:
-            state = "已确认"                    # 登记过的历史缺口
+            state = "已确认"  # 登记过的历史缺口
         else:
             state = "OK"
-        rows.append({"table": sp.name, "state": state, "disk": len(have),
-                     "ckpt": len(done), "ckpt_only": ckpt_only,
-                     "fresh_only": fresh_only, "confirmed": confirmed,
-                     "disk_only": disk_only, "is_snapshot": sp.is_snapshot})
+        rows.append(
+            {
+                "table": sp.name,
+                "state": state,
+                "disk": len(have),
+                "ckpt": len(done),
+                "ckpt_only": ckpt_only,
+                "fresh_only": fresh_only,
+                "confirmed": confirmed,
+                "disk_only": disk_only,
+                "is_snapshot": sp.is_snapshot,
+            }
+        )
 
     if verbose:
         print()
@@ -361,13 +407,19 @@ def check_date_sets(only=None, verbose=True):
         empty = [r for r in rows if r["state"] == "空数据日"]
         conf = [r for r in rows if r["state"] == "已确认"]
         bad = [r for r in rows if r["state"] == "异常"]
-        print(f"  日期完全吻合 {len(ok)} | 需排查 {len(suspect)} | 空数据日 {len(empty)}"
-              f" | 已确认 {len(conf)} | 磁盘有断点无 {len(bad)}")
+        print(
+            f"  日期完全吻合 {len(ok)} | 需排查 {len(suspect)} | 空数据日 {len(empty)}"
+            f" | 已确认 {len(conf)} | 磁盘有断点无 {len(bad)}"
+        )
         if skipped_list:
-            print(f"  ⓘ 另有 {len(skipped_list)} 张 list 模式表**未纳入本校验**"
-                  f"（其断点按标的记、无日期维度）: {', '.join(skipped_list)}")
-            print("     这些表的覆盖情况请用各自专用入口查看"
-                  "（如 `python -m alt.us_backfill --status`）")
+            print(
+                f"  ⓘ 另有 {len(skipped_list)} 张 list 模式表**未纳入本校验**"
+                f"（其断点按标的记、无日期维度）: {', '.join(skipped_list)}"
+            )
+            print(
+                "     这些表的覆盖情况请用各自专用入口查看"
+                "（如 `python -m alt.us_backfill --status`）"
+            )
 
         # ① 需排查：快照表**新出现**的独有日期（只能是数据被删/污染）
         if suspect:
@@ -386,8 +438,10 @@ def check_date_sets(only=None, verbose=True):
         # ② 已确认：登记过的历史缺口（不再打扰）
         if conf:
             n_days = sum(len(r["confirmed"]) for r in conf)
-            print(f"\n  [已确认] {len(conf)} 张表 / {n_days} 天已登记为不可回补"
-                  f"（快照表历史删除，见 {os.path.basename(KNOWN_GAPS_FILE)}）：")
+            print(
+                f"\n  [已确认] {len(conf)} 张表 / {n_days} 天已登记为不可回补"
+                f"（快照表历史删除，见 {os.path.basename(KNOWN_GAPS_FILE)}）："
+            )
             groups = {}
             for r in conf:
                 groups.setdefault(tuple(r["confirmed"]), []).append(r["table"])
@@ -397,8 +451,10 @@ def check_date_sets(only=None, verbose=True):
         # ③ 传参型：聚合摘要（源端返空属业务事实，不逐张铺开）
         if empty:
             n_days = sum(len(r["fresh_only"]) for r in empty)
-            print(f"\n  [正常] 传参型表 {len(empty)} 张 / 共 {n_days} 天无落盘 —— "
-                  f"源端返空（业务事实），非故障")
+            print(
+                f"\n  [正常] 传参型表 {len(empty)} 张 / 共 {n_days} 天无落盘 —— "
+                f"源端返空（业务事实），非故障"
+            )
             print("         注：'窗口内/外'无法进一步分层——能进断点的日期必然在窗口内，")
             print("             窗口外日期从未被尝试、不会进断点（实测窗口外均为 0 天）")
             for r in sorted(empty, key=lambda x: -len(x["fresh_only"]))[:6]:
@@ -410,9 +466,11 @@ def check_date_sets(only=None, verbose=True):
                 #   鉴别（实测 dtgc 的 0901/0908 夹在已落盘日期中间，却是真实
                 #   业务空数据），故不加任何"按位置判断"的规则以免误报。
                 recent = sorted(r["fresh_only"], reverse=True)
-                print(f"    {r['table']:<24}断点{r['ckpt']:>3}天/磁盘{r['disk']:>3}天"
-                      f"  独有 {n} 天（近→远）  {recent[:6]}"
-                      f"{'...' if n > 6 else ''}")
+                print(
+                    f"    {r['table']:<24}断点{r['ckpt']:>3}天/磁盘{r['disk']:>3}天"
+                    f"  独有 {n} 天（近→远）  {recent[:6]}"
+                    f"{'...' if n > 6 else ''}"
+                )
             if len(empty) > 6:
                 print(f"    ...（其余 {len(empty) - 6} 张同理）")
 
@@ -436,8 +494,16 @@ def check_dupes(only=None, verbose=True):
         try:
             df = _load(sp.name, sp)
         except Exception as e:
-            rows.append({"table": sp.name, "state": f"读取失败:{type(e).__name__}",
-                         "n": 0, "pk_dup": 0, "exact_dup": 0, "note": ""})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": f"读取失败:{type(e).__name__}",
+                    "n": 0,
+                    "pk_dup": 0,
+                    "exact_dup": 0,
+                    "note": "",
+                }
+            )
             continue
         n = len(df)
         # 复合主键重复
@@ -455,8 +521,16 @@ def check_dupes(only=None, verbose=True):
             state, note = "提示", f"主键重复 {pk_dup} 行（确认是否单日多行的业务事实）"
         else:
             state, note = "OK", ""
-        rows.append({"table": sp.name, "state": state, "n": n,
-                     "pk_dup": pk_dup, "exact_dup": exact_dup, "note": note})
+        rows.append(
+            {
+                "table": sp.name,
+                "state": state,
+                "n": n,
+                "pk_dup": pk_dup,
+                "exact_dup": exact_dup,
+                "note": note,
+            }
+        )
 
     if verbose:
         print()
@@ -468,9 +542,13 @@ def check_dupes(only=None, verbose=True):
         bad = [r for r in rows if r["state"] == "异常"]
         print(f"  干净 {len(ok)} | 提示 {len(tip)} | 异常 {len(bad)} | 共查 {len(rows)} 张")
         for r in bad:
-            print(f"    [异常] {r['table']:<26} {r['n']:>7,} 行  真重复 {r['exact_dup']:>5}  {r['note']}")
+            print(
+                f"    [异常] {r['table']:<26} {r['n']:>7,} 行  真重复 {r['exact_dup']:>5}  {r['note']}"
+            )
         for r in tip:
-            print(f"    [提示] {r['table']:<26} {r['n']:>7,} 行  主键重复 {r['pk_dup']:>5}  {r['note']}")
+            print(
+                f"    [提示] {r['table']:<26} {r['n']:>7,} 行  主键重复 {r['pk_dup']:>5}  {r['note']}"
+            )
     return rows
 
 
@@ -485,15 +563,32 @@ def check_gaps(target_date=None, verbose=True):
         if sp.layout != "by_year":
             continue
         if not _dir_files(sp.name):
-            rows.append({"table": sp.name, "state": "未建", "latest": "",
-                         "gap": 0, "permanent": 0, "note": ""})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": "未建",
+                    "latest": "",
+                    "gap": 0,
+                    "permanent": 0,
+                    "note": "",
+                }
+            )
             continue
         _reader.clear_cache(sp.name, root=ALT_DATA_DIR)
         from common.reader import latest_date
+
         latest = latest_date(sp.name, date_col=sp.date_col, root=ALT_DATA_DIR)
         if not latest:
-            rows.append({"table": sp.name, "state": "读不到日期", "latest": "",
-                         "gap": 0, "permanent": 0, "note": "仅有无日期数据"})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": "读不到日期",
+                    "latest": "",
+                    "gap": 0,
+                    "permanent": 0,
+                    "note": "仅有无日期数据",
+                }
+            )
             continue
 
         # ⚠ 排除未来交易日：open_dates 含未来日期，不截断会把缺口报到未来
@@ -533,8 +628,16 @@ def check_gaps(target_date=None, verbose=True):
             state, note = "永久缺口", f"{permanent} 天超出源端保留窗口，无法回补"
         else:
             state, note = "OK", ""
-        rows.append({"table": sp.name, "state": state, "latest": latest,
-                     "gap": n_rest, "permanent": permanent, "note": note})
+        rows.append(
+            {
+                "table": sp.name,
+                "state": state,
+                "latest": latest,
+                "gap": n_rest,
+                "permanent": permanent,
+                "note": note,
+            }
+        )
 
     if verbose:
         print()
@@ -548,7 +651,9 @@ def check_gaps(target_date=None, verbose=True):
         other = [r for r in rows if r["state"] not in ("OK", "缺口", "永久缺口")]
         print(f"  无缺口 {len(ok)} | 可补缺口 {len(g)} | 永久缺口 {len(pg)} | 其他 {len(other)}")
         for r in sorted(g, key=lambda x: -x["gap"]):
-            print(f"    [缺口] {r['table']:<26} 库内 {r['latest']}  可补 {r['gap']:>3} 天  {r['note']}")
+            print(
+                f"    [缺口] {r['table']:<26} 库内 {r['latest']}  可补 {r['gap']:>3} 天  {r['note']}"
+            )
         for r in pg:
             print(f"    [永久] {r['table']:<26} 库内 {r['latest']}  {r['note']}")
         for r in other:
@@ -580,21 +685,45 @@ def check_rotate(verbose=True):
         if sp.mode != "list":
             continue
         if not (sp.universe_from or "").startswith("master:"):
-            rows.append({"table": sp.name, "state": "us 语义（进度见 us_backfill）",
-                         "total": None, "stale": None, "stalled": None,
-                         "oldest": "", "rotate_days": sp.rotate_days or 0})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": "us 语义（进度见 us_backfill）",
+                    "total": None,
+                    "stale": None,
+                    "stalled": None,
+                    "oldest": "",
+                    "rotate_days": sp.rotate_days or 0,
+                }
+            )
             continue
         if not _dir_files(sp.name):
-            rows.append({"table": sp.name, "state": "未建库（预期）",
-                         "total": None, "stale": None, "stalled": None,
-                         "oldest": "", "rotate_days": sp.rotate_days or 0})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": "未建库（预期）",
+                    "total": None,
+                    "stale": None,
+                    "stalled": None,
+                    "oldest": "",
+                    "rotate_days": sp.rotate_days or 0,
+                }
+            )
             continue
         try:
             uni = load_universe(sp, verbose=False)
         except Exception as e:
-            rows.append({"table": sp.name, "state": f"清单读取失败:{type(e).__name__}",
-                         "total": None, "stale": None, "stalled": None,
-                         "oldest": "", "rotate_days": sp.rotate_days or 0})
+            rows.append(
+                {
+                    "table": sp.name,
+                    "state": f"清单读取失败:{type(e).__name__}",
+                    "total": None,
+                    "stale": None,
+                    "stalled": None,
+                    "oldest": "",
+                    "rotate_days": sp.rotate_days or 0,
+                }
+            )
             continue
         _fresh, stale, oldest, newest = state.progress(sp.name, uni, sp.rotate_days)
         limit = (sp.rotate_days or 7) * 2
@@ -603,24 +732,32 @@ def check_rotate(verbose=True):
         for s in uni:
             d = rec.get(str(s), "")
             if not d:
-                uncovered += 1          # 从未拉：首建进行中 → 提示，**非故障**
+                uncovered += 1  # 从未拉：首建进行中 → 提示，**非故障**
                 continue
             try:
                 if (today - datetime.strptime(d, "%Y-%m-%d")).days > limit:
-                    stalled += 1        # 有水位但超期 → 真停滞
+                    stalled += 1  # 有水位但超期 → 真停滞
             except Exception:
                 stalled += 1
         if stalled > 0:
             st = "轮转停滞"
         elif uncovered > 0:
-            st = f"建库中（未覆盖 {uncovered:,}）"   # 防狼来了：不计异常
+            st = f"建库中（未覆盖 {uncovered:,}）"  # 防狼来了：不计异常
         else:
             st = "OK"
-        rows.append({"table": sp.name, "state": st,
-                     "total": len(uni), "stale": stale, "stalled": stalled,
-                     "uncovered": uncovered,
-                     "oldest": oldest, "newest": newest,
-                     "rotate_days": sp.rotate_days or 7})
+        rows.append(
+            {
+                "table": sp.name,
+                "state": st,
+                "total": len(uni),
+                "stale": stale,
+                "stalled": stalled,
+                "uncovered": uncovered,
+                "oldest": oldest,
+                "newest": newest,
+                "rotate_days": sp.rotate_days or 7,
+            }
+        )
     if verbose:
         print("=" * 96)
         print("list 表轮转体检（v1.2：按逐只水位判，不按全表最新日）")
@@ -629,10 +766,12 @@ def check_rotate(verbose=True):
             if r["total"] is None:
                 print(f"  {r['table']:<26}{r['state']}")
             else:
-                print(f"  {r['table']:<26}标的 {r['total']:>6,} | "
-                      f"未覆盖 {r.get('uncovered', 0):>6,} | 陈旧 {r['stale']:>6,} | "
-                      f"停滞(>{r['rotate_days'] * 2}天) {r['stalled']:>6,} | "
-                      f"最旧 {r['oldest'] or '—'} | {r['state']}")
+                print(
+                    f"  {r['table']:<26}标的 {r['total']:>6,} | "
+                    f"未覆盖 {r.get('uncovered', 0):>6,} | 陈旧 {r['stale']:>6,} | "
+                    f"停滞(>{r['rotate_days'] * 2}天) {r['stalled']:>6,} | "
+                    f"最旧 {r['oldest'] or '—'} | {r['state']}"
+                )
     return rows
 
 
@@ -688,9 +827,11 @@ def fix_dupes(only=None, dry_run=True, verbose=True):
                 dedup = df.drop_duplicates(keep="last")
             else:
                 cols = [c for c in sp.subset if c in df.columns]
-                dedup = (df.drop_duplicates(subset=cols, keep="last")
-                         if len(cols) == len(sp.subset)
-                         else df.drop_duplicates(keep="last"))
+                dedup = (
+                    df.drop_duplicates(subset=cols, keep="last")
+                    if len(cols) == len(sp.subset)
+                    else df.drop_duplicates(keep="last")
+                )
             after = len(dedup)
             total_before += before
             total_after += after
@@ -704,11 +845,19 @@ def fix_dupes(only=None, dry_run=True, verbose=True):
 
         if touched:
             for f, b, a in touched:
-                print(f"  {'[将清理]' if dry_run else '[已清理]'} "
-                      f"{sp.name}/{f}: {b} → {a} 行（去 {b-a}）")
-            results.append({"table": sp.name, "before": total_before,
-                            "after": total_after, "removed": total_before - total_after,
-                            "files": len(touched)})
+                print(
+                    f"  {'[将清理]' if dry_run else '[已清理]'} "
+                    f"{sp.name}/{f}: {b} → {a} 行（去 {b - a}）"
+                )
+            results.append(
+                {
+                    "table": sp.name,
+                    "before": total_before,
+                    "after": total_after,
+                    "removed": total_before - total_after,
+                    "files": len(touched),
+                }
+            )
 
     print()
     if results:
@@ -752,12 +901,19 @@ def check_scale(verbose=True):
         t["files"] += len(files)
         t["rows"] += rows
         t["bytes"] += size
-        detail.append({"table": sp.name, "tier": sp.tier, "layout": sp.layout,
-                       "files": len(files), "rows": rows, "bytes": size})
+        detail.append(
+            {
+                "table": sp.name,
+                "tier": sp.tier,
+                "layout": sp.layout,
+                "files": len(files),
+                "rows": rows,
+                "bytes": size,
+            }
+        )
 
     # 弃用表是否被误建
-    misbuilt = [d["name"] for d in sp_mod.DROPPED
-                if _dir_files(d["name"])]
+    misbuilt = [d["name"] for d in sp_mod.DROPPED if _dir_files(d["name"])]
 
     if verbose:
         print()
@@ -772,18 +928,27 @@ def check_scale(verbose=True):
             v = by_tier.get(t)
             if not v:
                 continue
-            print(f"{t:<8}{v['tables']:>6}{v['files']:>7}{v['rows']:>12,}"
-                  f"{v['bytes']/1048576:>10.2f} MB")
+            print(
+                f"{t:<8}{v['tables']:>6}{v['files']:>7}{v['rows']:>12,}"
+                f"{v['bytes'] / 1048576:>10.2f} MB"
+            )
         print("-" * 96)
-        print(f"{'合计':<8}{sum(v['tables'] for v in by_tier.values()):>6}"
-              f"{total_files:>7}{total_rows:>12,}{total_bytes/1048576:>10.2f} MB")
+        print(
+            f"{'合计':<8}{sum(v['tables'] for v in by_tier.values()):>6}"
+            f"{total_files:>7}{total_rows:>12,}{total_bytes / 1048576:>10.2f} MB"
+        )
         if misbuilt:
             print(f"\n  [异常] 已弃用的表被误建: {misbuilt}")
         else:
             print(f"\n  [OK] 无弃用表被误建（DROPPED 共 {len(sp_mod.DROPPED)} 张）")
-    return {"detail": detail, "by_tier": by_tier, "total_rows": total_rows,
-            "total_files": total_files, "total_bytes": total_bytes,
-            "misbuilt": misbuilt}
+    return {
+        "detail": detail,
+        "by_tier": by_tier,
+        "total_rows": total_rows,
+        "total_files": total_files,
+        "total_bytes": total_bytes,
+        "misbuilt": misbuilt,
+    }
 
 
 # ============================================================
@@ -828,8 +993,7 @@ def _diff_fingerprint(before, after):
     """比对两份指纹 → (新增, 删除, 既有被改写)"""
     added = sorted(set(after) - set(before))
     removed = sorted(set(before) - set(after))
-    touched = sorted(k for k in (set(before) & set(after))
-                     if after[k] > before[k] + 1.0)
+    touched = sorted(k for k in (set(before) & set(after)) if after[k] > before[k] + 1.0)
     return added, removed, touched
 
 
@@ -846,7 +1010,7 @@ def _classify_changes(added, removed, touched):
       若一律打印"需立即排查"，用户很快又会对告警脱敏。
     """
     suspicious, external = [], []
-    suspicious.extend(removed)          # 删除文件属破坏性，一律警惕
+    suspicious.extend(removed)  # 删除文件属破坏性，一律警惕
     for k in list(touched) + list(added):
         top = str(k).replace("/", os.sep).split(os.sep)[0].lower()
         (suspicious if top in _ALT_READ_SCOPE_TOP else external).append(k)
@@ -858,7 +1022,7 @@ def _write_snapshot(summary):
     ensure_alt_dirs()
     s = dict(summary)
     s["snapshot_at"] = datetime.now().isoformat(timespec="seconds")
-    assert_writable(SNAPSHOT_FILE)          # M1：落盘前过写入守卫
+    assert_writable(SNAPSHOT_FILE)  # M1：落盘前过写入守卫
     tmp = SNAPSHOT_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(s, f, ensure_ascii=False, indent=1)
@@ -871,8 +1035,10 @@ def save_snapshot(verbose=True):
     s = _write_snapshot(_scan_main_db())
     if verbose:
         print(f"主库基线已记录 → {SNAPSHOT_FILE}")
-        print(f"  parquet {s['count']:,} 个，最新修改 "
-              f"{datetime.fromtimestamp(s['newest_mtime']):%Y-%m-%d %H:%M:%S}")
+        print(
+            f"  parquet {s['count']:,} 个，最新修改 "
+            f"{datetime.fromtimestamp(s['newest_mtime']):%Y-%m-%d %H:%M:%S}"
+        )
         print("  ⚠ 静态基线仅供信息展示；越界判定以 isolation_guard 的前后夹逼为准")
     return s
 
@@ -884,8 +1050,9 @@ def _load_iso_log():
         v = json.load(open(ISO_LOG_FILE, encoding="utf-8"))
         return v if isinstance(v, list) else []
     except Exception as exc:
-        print(f"[alt.audit] 读隔离日志失败（按空处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[alt.audit] 读隔离日志失败（按空处理）: {type(exc).__name__}: {exc}", file=sys.stderr
+        )
         return []
 
 
@@ -894,7 +1061,7 @@ def _append_iso_log(rec):
         logs = _load_iso_log()
         logs.append(rec)
         ensure_alt_dirs()
-        assert_writable(ISO_LOG_FILE)       # M1：落盘前过写入守卫
+        assert_writable(ISO_LOG_FILE)  # M1：落盘前过写入守卫
         tmp = ISO_LOG_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(logs[-ISO_LOG_KEEP:], f, ensure_ascii=False, indent=1)
@@ -927,6 +1094,7 @@ def isolation_guard(verbose=True, record=True, label="alt 写操作"):
     """
     before = _scan_full_fingerprint()
     from alt.config import violation_count as _vc
+
     v_before = _vc()
     if verbose:
         s = _fingerprint_summary(before)
@@ -945,39 +1113,59 @@ def isolation_guard(verbose=True, record=True, label="alt 写操作"):
         v_after = _vc()
         attempted = v_after - v_before
         from alt.config import violation_records as _vr
+
         attempted_detail = _vr()[v_before:] if attempted else []
-        verdict = ("clean" if not (added or removed or touched)
-                   else ("suspicious" if (suspicious or attempted) else "external"))
-        outcome.update({
-            "t1": datetime.now().isoformat(timespec="seconds"),
-            "before_count": len(before), "after_count": len(after),
-            "added": len(added), "removed": len(removed), "touched": len(touched),
-            "suspicious": len(suspicious), "external": len(external),
-            "suspicious_sample": suspicious[:10], "external_sample": external[:10],
-            "write_violations": attempted,
-            "write_violation_sample": attempted_detail[:5],
-            "verdict": verdict,
-            "clean": verdict == "clean",
-            "attribution_note": ("external 归因为推断：变更发生在 alt 只读范围"
-                                 "（metadata/）之外，故推定为并行主库流水线；"
-                                 "本次 write_violations=0 表明 alt 未尝试越界"),
-        })
+        verdict = (
+            "clean"
+            if not (added or removed or touched)
+            else ("suspicious" if (suspicious or attempted) else "external")
+        )
+        outcome.update(
+            {
+                "t1": datetime.now().isoformat(timespec="seconds"),
+                "before_count": len(before),
+                "after_count": len(after),
+                "added": len(added),
+                "removed": len(removed),
+                "touched": len(touched),
+                "suspicious": len(suspicious),
+                "external": len(external),
+                "suspicious_sample": suspicious[:10],
+                "external_sample": external[:10],
+                "write_violations": attempted,
+                "write_violation_sample": attempted_detail[:5],
+                "verdict": verdict,
+                "clean": verdict == "clean",
+                "attribution_note": (
+                    "external 归因为推断：变更发生在 alt 只读范围"
+                    "（metadata/）之外，故推定为并行主库流水线；"
+                    "本次 write_violations=0 表明 alt 未尝试越界"
+                ),
+            }
+        )
         if verbose:
-            vtxt = (f"本次操作期间 alt 发生 {attempted} 次越界写入尝试"
-                    if attempted else "本次操作 alt 未发生越界写入尝试（计数器 0）")
+            vtxt = (
+                f"本次操作期间 alt 发生 {attempted} 次越界写入尝试"
+                if attempted
+                else "本次操作 alt 未发生越界写入尝试（计数器 0）"
+            )
             if verdict == "clean":
                 print("  [隔离] [OK] 操作后主库指纹零变更 —— alt 未触碰主库")
                 print(f"         {vtxt}")
             elif verdict == "external":
-                print(f"  [隔离] [提示] 操作期间主库有 {len(external)} 个文件变动，"
-                      f"**全部落在 alt 只读范围之外**（alt 只读 metadata/）")
+                print(
+                    f"  [隔离] [提示] 操作期间主库有 {len(external)} 个文件变动，"
+                    f"**全部落在 alt 只读范围之外**（alt 只读 metadata/）"
+                )
                 print("         → 推定（**推断，非证明**）为并行的主库盘后流水线")
                 print(f"         {vtxt} —— 未见越界尝试，故倾向支持该推定。样例：")
                 for k in external[:5]:
                     print(f"           {k}")
             else:
-                print(f"  [隔离] [!!] 操作期间主库发生**可疑变更**："
-                      f"新增 {len(added)} | 删除 {len(removed)} | 改写 {len(touched)}")
+                print(
+                    f"  [隔离] [!!] 操作期间主库发生**可疑变更**："
+                    f"新增 {len(added)} | 删除 {len(removed)} | 改写 {len(touched)}"
+                )
                 if attempted:
                     print(f"         ⚠⚠ alt 越界写入尝试 {attempted} 次（被拦截）：")
                     for r in attempted_detail[:5]:
@@ -1015,8 +1203,10 @@ def check_isolation(verbose=True):
         try:
             base = json.load(open(SNAPSHOT_FILE, encoding="utf-8"))
         except Exception as exc:
-            print(f"[alt.audit] 读主库快照失败（隔离比对退化为无基线）: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[alt.audit] 读主库快照失败（隔离比对退化为无基线）: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             base = None
     res = {"now": now, "base": base}
     if verbose:
@@ -1030,10 +1220,14 @@ def check_isolation(verbose=True):
         else:
             d = now["count"] - base["count"]
             newer = now["newest_mtime"] > base["newest_mtime"] + 1
-            print(f"  ① 静态基线: {base['count']:,} 个 @ "
-                  f"{datetime.fromtimestamp(base['newest_mtime']):%Y-%m-%d %H:%M:%S}")
-            print(f"     主库现状: {now['count']:,} 个 @ "
-                  f"{datetime.fromtimestamp(now['newest_mtime']):%Y-%m-%d %H:%M:%S}")
+            print(
+                f"  ① 静态基线: {base['count']:,} 个 @ "
+                f"{datetime.fromtimestamp(base['newest_mtime']):%Y-%m-%d %H:%M:%S}"
+            )
+            print(
+                f"     主库现状: {now['count']:,} 个 @ "
+                f"{datetime.fromtimestamp(now['newest_mtime']):%Y-%m-%d %H:%M:%S}"
+            )
             if d == 0 and not newer:
                 print("     [OK] 与基线一致")
             else:
@@ -1046,28 +1240,41 @@ def check_isolation(verbose=True):
         else:
             last = logs[-1]
             v = last.get("verdict") or ("clean" if last.get("clean") else "unknown")
-            vtxt = {"clean": "零变更 ✓",
-                    "external": "已归因主库自身流程 ○（推断）",
-                    "suspicious": "**可疑变更** ✗"}.get(v, str(v))
-            print(f"  ② 夹逼校验（最近一次）: {last.get('t0','?')} → {last.get('t1','?')}")
-            print(f"     操作: {last.get('label','?')}   结论: {vtxt}")
-            print(f"     变更: 新增 {last.get('added',0)} | 删除 {last.get('removed',0)}"
-                  f" | 改写 {last.get('touched',0)}"
-                  f"（外部归因 {last.get('external',0)}"
-                  f" | 可疑 {last.get('suspicious',0)}）")
+            vtxt = {
+                "clean": "零变更 ✓",
+                "external": "已归因主库自身流程 ○（推断）",
+                "suspicious": "**可疑变更** ✗",
+            }.get(v, str(v))
+            print(f"  ② 夹逼校验（最近一次）: {last.get('t0', '?')} → {last.get('t1', '?')}")
+            print(f"     操作: {last.get('label', '?')}   结论: {vtxt}")
+            print(
+                f"     变更: 新增 {last.get('added', 0)} | 删除 {last.get('removed', 0)}"
+                f" | 改写 {last.get('touched', 0)}"
+                f"（外部归因 {last.get('external', 0)}"
+                f" | 可疑 {last.get('suspicious', 0)}）"
+            )
             wv = last.get("write_violations", 0)
-            print(f"     越界写入尝试: {wv} 次"
-                  + ("（计数器 0 = 本次操作 alt 未尝试越界，为该推定的支持证据）"
-                     if not wv else " ⚠⚠ 需立即排查"))
-            print("     注：'外部归因'是**推断**（变更在 alt 只读范围外 → 推定为主库"
-                  "流水线），非证明；越界计数器提供直接证据。")
+            print(
+                f"     越界写入尝试: {wv} 次"
+                + (
+                    "（计数器 0 = 本次操作 alt 未尝试越界，为该推定的支持证据）"
+                    if not wv
+                    else " ⚠⚠ 需立即排查"
+                )
+            )
+            print(
+                "     注：'外部归因'是**推断**（变更在 alt 只读范围外 → 推定为主库"
+                "流水线），非证明；越界计数器提供直接证据。"
+            )
             n_susp = sum(1 for x in logs if x.get("verdict") == "suspicious")
             n_ext = sum(1 for x in logs if x.get("verdict") == "external")
             n_wv = sum(x.get("write_violations", 0) for x in logs)
-            print(f"     历史 {len(logs)} 次夹逼：零变更 {len(logs)-n_susp-n_ext}"
-                  f" | 推定归因 {n_ext} | 可疑 {n_susp} | 累计越界尝试 {n_wv} 次")
-        res["clean_recent"] = (logs[-1].get("verdict") if logs else None)
-        res["changed"] = None      # 静态比对不再作为判定结果
+            print(
+                f"     历史 {len(logs)} 次夹逼：零变更 {len(logs) - n_susp - n_ext}"
+                f" | 推定归因 {n_ext} | 可疑 {n_susp} | 累计越界尝试 {n_wv} 次"
+            )
+        res["clean_recent"] = logs[-1].get("verdict") if logs else None
+        res["changed"] = None  # 静态比对不再作为判定结果
     return res
 
 
@@ -1096,15 +1303,16 @@ def gen_report(path=None, verbose=True):
     scale = check_scale(verbose=False)
     a("| 层级 | 表数 | 文件 | 行数 | 体积 |")
     a("|---|---:|---:|---:|---:|")
-    for t in sp_mod.TIERS:      # P1-4: 动态派生（原硬编码漏 P4）
+    for t in sp_mod.TIERS:  # P1-4: 动态派生（原硬编码漏 P4）
         v = scale["by_tier"].get(t)
         if not v:
             continue
-        a(f"| {t} | {v['tables']} | {v['files']} | {v['rows']:,} | "
-          f"{v['bytes']/1048576:.2f} MB |")
-    a(f"| **合计** | **{sum(v['tables'] for v in scale['by_tier'].values())}** | "
-      f"**{scale['total_files']}** | **{scale['total_rows']:,}** | "
-      f"**{scale['total_bytes']/1048576:.2f} MB** |")
+        a(f"| {t} | {v['tables']} | {v['files']} | {v['rows']:,} | {v['bytes'] / 1048576:.2f} MB |")
+    a(
+        f"| **合计** | **{sum(v['tables'] for v in scale['by_tier'].values())}** | "
+        f"**{scale['total_files']}** | **{scale['total_rows']:,}** | "
+        f"**{scale['total_bytes'] / 1048576:.2f} MB** |"
+    )
     a("")
 
     if sp_mod.DROPPED:
@@ -1128,7 +1336,7 @@ def gen_report(path=None, verbose=True):
 
     a("## 二、逐表明细")
     a("")
-    for tier in sp_mod.TIERS:   # P1-4: 动态派生（原硬编码漏 P4）
+    for tier in sp_mod.TIERS:  # P1-4: 动态派生（原硬编码漏 P4）
         specs = sp_mod.BY_TIER.get(tier, [])
         if not specs:
             continue
@@ -1143,24 +1351,31 @@ def gen_report(path=None, verbose=True):
                 try:
                     df = _load(sp.name, sp)
                     if sp.date_col in df.columns and len(df):
-                        d = pd.to_datetime(df[sp.date_col].astype(str),
-                                           format="%Y%m%d", errors="coerce").dropna()
+                        d = pd.to_datetime(
+                            df[sp.date_col].astype(str), format="%Y%m%d", errors="coerce"
+                        ).dropna()
                         if len(d):
                             past = d[d <= today]
                             latest = past.max() if len(past) else d.max()
                             age = int((today - latest).days)
                             rng = f"{d.min():%Y%m%d} ~ {d.max():%Y%m%d}"
-                            fresh = (f"{age}天前" if age <= sp.max_age_days
-                                     else f"⚠陈旧{age}天")
+                            fresh = f"{age}天前" if age <= sp.max_age_days else f"⚠陈旧{age}天"
                 except Exception as exc:
-                    print(f"[alt.audit] 新鲜度读取失败 {sp.name}: "
-                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                    print(
+                        f"[alt.audit] 新鲜度读取失败 {sp.name}: {type(exc).__name__}: {exc}",
+                        file=sys.stderr,
+                    )
                     fresh = "读取失败"
-            sub = sp.subset if isinstance(sp.subset, str) else (
-                "+".join(map(str, sp.subset)) if sp.subset else "—")
+            sub = (
+                sp.subset
+                if isinstance(sp.subset, str)
+                else ("+".join(map(str, sp.subset)) if sp.subset else "—")
+            )
             note = sp.note[:44]
-            a(f"| `{sp.name}` | `{sp.func}` | {sp.layout} | `{sp.date_col}` | "
-              f"`{sub}` | {n:,} | {rng} | {fresh} | {note} |")
+            a(
+                f"| `{sp.name}` | `{sp.func}` | {sp.layout} | `{sp.date_col}` | "
+                f"`{sub}` | {n:,} | {rng} | {fresh} | {note} |"
+            )
         a("")
 
     a("## 三、用法速查")
@@ -1196,11 +1411,12 @@ def gen_report(path=None, verbose=True):
             ds = known[k]
             a(f"| `{k}` | {', '.join(ds)}（{len(ds)} 天） |")
         a("")
-        a(f"合计 **{len(known)} 张表 / "
-          f"{sum(len(v) for v in known.values())} 天**。")
+        a(f"合计 **{len(known)} 张表 / {sum(len(v) for v in known.values())} 天**。")
         a("")
-        a("> 判据：快照表只采当日、已禁用复核窗口，其断点里的历史日期不可能来自"
-          "业务性空数据，只能是被删或修复前的污染遗留。")
+        a(
+            "> 判据：快照表只采当日、已禁用复核窗口，其断点里的历史日期不可能来自"
+            "业务性空数据，只能是被删或修复前的污染遗留。"
+        )
         a("")
 
     text = "\n".join(lines)
@@ -1219,7 +1435,7 @@ def gen_report(path=None, verbose=True):
         f.write(text)
     if verbose:
         print(f"结构报告已生成: {path}")
-        print(f"  {len(text.splitlines())} 行 / {len(text.encode('utf-8'))/1024:.1f} KB")
+        print(f"  {len(text.splitlines())} 行 / {len(text.encode('utf-8')) / 1024:.1f} KB")
     return path
 
 
@@ -1227,8 +1443,7 @@ def gen_report(path=None, verbose=True):
 # 汇总入口
 # ============================================================
 def run(which=None, only=None, as_json=False):
-    which = which or ["checkpoint", "date_sets", "dupes", "gaps", "scale",
-                      "isolation", "rotate"]
+    which = which or ["checkpoint", "date_sets", "dupes", "gaps", "scale", "isolation", "rotate"]
     out = {"audited_at": datetime.now().isoformat(timespec="seconds")}
     if "checkpoint" in which:
         out["checkpoint"] = check_checkpoint()
@@ -1263,8 +1478,10 @@ def run(which=None, only=None, as_json=False):
     print("=" * 96)
     print(f"体检完成：{n_bad} 项待处理")
     if n_conf:
-        print(f"  已登记不可回补缺口 {n_conf} 张（不计入待处理，"
-              f"见 {os.path.basename(KNOWN_GAPS_FILE)}）")
+        print(
+            f"  已登记不可回补缺口 {n_conf} 张（不计入待处理，"
+            f"见 {os.path.basename(KNOWN_GAPS_FILE)}）"
+        )
     if n_empty:
         print(f"  传参型表 {n_empty} 张存在'源端返空'的断点日期（业务事实，不计入）")
     print("=" * 96)
@@ -1272,7 +1489,7 @@ def run(which=None, only=None, as_json=False):
     if as_json:
         ensure_alt_dirs()
         p = os.path.join(ALT_META_DIR, "audit_report.json")
-        assert_writable(p)                  # M1：落盘前过写入守卫
+        assert_writable(p)  # M1：落盘前过写入守卫
         with open(p, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False, indent=1, default=str)
         print(f"JSON 摘要已存: {p}")
@@ -1294,13 +1511,22 @@ def main(argv=None):
     ap.add_argument("--only", help="只查某张表（用于重复检测/清理）")
     ap.add_argument("--snapshot", action="store_true", help="记录主库基线")
     ap.add_argument("--json", action="store_true", help="输出 JSON 摘要")
-    ap.add_argument("--fix-dupes", action="store_true",
-                    help="清理历史整行重复（默认只预演，加 --apply 才落盘）")
-    ap.add_argument("--confirm-gaps", action="store_true",
-                    help="把当前快照表的独有日期登记为「已确认不可回补」（不再报需排查）")
+    ap.add_argument(
+        "--fix-dupes", action="store_true", help="清理历史整行重复（默认只预演，加 --apply 才落盘）"
+    )
+    ap.add_argument(
+        "--confirm-gaps",
+        action="store_true",
+        help="把当前快照表的独有日期登记为「已确认不可回补」（不再报需排查）",
+    )
     ap.add_argument("--apply", action="store_true", help="配合 --fix-dupes 实际执行")
-    ap.add_argument("--report", nargs="?", const=True, default=False,
-                    help="生成结构报告 Markdown（可指定输出路径）")
+    ap.add_argument(
+        "--report",
+        nargs="?",
+        const=True,
+        default=False,
+        help="生成结构报告 Markdown（可指定输出路径）",
+    )
     a = ap.parse_args(argv)
 
     if a.snapshot:
@@ -1317,16 +1543,23 @@ def main(argv=None):
         save_snapshot()
         return 0
 
-
     if a.report:
         gen_report(a.report if isinstance(a.report, str) else None)
         return 0
 
-    which = [k for f, k, _ in (
-        (a.checkpoint, "checkpoint", ""), (a.date_sets, "date_sets", ""),
-        (a.dupes, "dupes", ""), (a.gaps, "gaps", ""),
-        (a.scale, "scale", ""), (a.isolation, "isolation", ""),
-        (a.rotate, "rotate", "")) if f]
+    which = [
+        k
+        for f, k, _ in (
+            (a.checkpoint, "checkpoint", ""),
+            (a.date_sets, "date_sets", ""),
+            (a.dupes, "dupes", ""),
+            (a.gaps, "gaps", ""),
+            (a.scale, "scale", ""),
+            (a.isolation, "isolation", ""),
+            (a.rotate, "rotate", ""),
+        )
+        if f
+    ]
     run(which or None, only=a.only, as_json=a.json)
     return 0
 

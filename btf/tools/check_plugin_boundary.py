@@ -25,6 +25,7 @@
      但**基线刷新仍不自动**——核心文件变更后须由人显式 `--update --reason` 留痕
      （AA-3）；门禁只**比对**、绝不自动刷新（否则"基线漂移"会被静默掩盖）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -51,10 +52,21 @@ BASELINE_HISTORY = ROOT / "tools" / ".plugin_baseline_history.jsonl"
 #: `btf/registry` 仍**刻意排除**（名字表本体 = 合法登记点；扩展登记必须可见，
 #: 另见 :74-84 的 AST 扫描豁免）。
 CORE = [
-    "btf/domain", "btf/engine", "btf/execution", "btf/risk",
-    "btf/portfolio", "btf/strategy", "btf/data", "btf/analytics",
-    "btf/experiment", "btf/config", "btf/cli", "btf/viz", "btf/runtime",
-    "btf/app", "btf/optimize",
+    "btf/domain",
+    "btf/engine",
+    "btf/execution",
+    "btf/risk",
+    "btf/portfolio",
+    "btf/strategy",
+    "btf/data",
+    "btf/analytics",
+    "btf/experiment",
+    "btf/config",
+    "btf/cli",
+    "btf/viz",
+    "btf/runtime",
+    "btf/app",
+    "btf/optimize",
 ]
 CORE_FILES = ["btf/__init__.py"]
 
@@ -71,8 +83,13 @@ def _find_register_calls(path: Path) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             fn = node.func
-            name = (fn.attr if isinstance(fn, ast.Attribute)
-                    else fn.id if isinstance(fn, ast.Name) else "")
+            name = (
+                fn.attr
+                if isinstance(fn, ast.Attribute)
+                else fn.id
+                if isinstance(fn, ast.Name)
+                else ""
+            )
             if name == "register":
                 hits.append(f"{path.relative_to(ROOT)}:{node.lineno}")
     return hits
@@ -83,11 +100,12 @@ def check_register_points() -> list[str]:
     for py in sorted(ROOT.glob("btf/**/*.py")):
         rel = py.relative_to(ROOT).as_posix()
         if rel.startswith("btf/registry/"):
-            continue                     # 名字表本体 = 唯一内置登记点
+            continue  # 名字表本体 = 唯一内置登记点
         for hit in _find_register_calls(py):
             problems.append(
                 f"核心包出现程序化注册 {hit}——扩展登记必须走配置声明"
-                f"（registry catalog）或启动期注入（tests/examples）")
+                f"（registry catalog）或启动期注入（tests/examples）"
+            )
     return problems
 
 
@@ -112,8 +130,7 @@ def _core_hashes() -> dict[str, str]:
     return out
 
 
-def _record_history(changed: dict[str, dict[str, str | None]],
-                    reason: str, created: bool) -> Path:
+def _record_history(changed: dict[str, dict[str, str | None]], reason: str, created: bool) -> Path:
     """追加基线刷新留痕（AA-3；返回历史文件路径）。"""
     entry = {
         "at": datetime.now().isoformat(timespec="seconds"),
@@ -127,9 +144,9 @@ def _record_history(changed: dict[str, dict[str, str | None]],
     return BASELINE_HISTORY
 
 
-def check_baseline(update: bool, reason: str = ""
-                   ) -> tuple[list[str], bool, dict[str, dict[str, str | None]],
-                              bool]:
+def check_baseline(
+    update: bool, reason: str = ""
+) -> tuple[list[str], bool, dict[str, dict[str, str | None]], bool]:
     """检查/刷新基线。返回 `(problems, updated, changed, created)`。
 
     `changed` = `{文件: {old, new}}`（AA-3 留痕用；`created=True` 表首建基线）。
@@ -138,12 +155,12 @@ def check_baseline(update: bool, reason: str = ""
     if update or not BASELINE.exists():
         created = not BASELINE.exists()
         old = {} if created else json.loads(BASELINE.read_text(encoding="utf-8"))
-        changed = {f: {"old": old.get(f), "new": current.get(f)}
-                   for f in sorted(set(old) | set(current))
-                   if old.get(f) != current.get(f)}
-        BASELINE.write_text(
-            json.dumps(current, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8")
+        changed = {
+            f: {"old": old.get(f), "new": current.get(f)}
+            for f in sorted(set(old) | set(current))
+            if old.get(f) != current.get(f)
+        }
+        BASELINE.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return [], update, changed, created
     old = json.loads(BASELINE.read_text(encoding="utf-8"))
     problems = []
@@ -151,17 +168,21 @@ def check_baseline(update: bool, reason: str = ""
         if old.get(f) != current.get(f):
             problems.append(
                 f"{f}: {'新增/修改' if f in current else '删除'}"
-                f"（核心包 diff 非零——扩展工作流违例；核心自身变更请 --update 并走评审）")
+                f"（核心包 diff 非零——扩展工作流违例；核心自身变更请 --update 并走评审）"
+            )
     return problems, False, {}, False
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="插件边界检查（04 §8.5）")
-    parser.add_argument("--update", action="store_true",
-                        help="刷新核心基线（核心自身开发变更后使用）")
-    parser.add_argument("--reason", default="",
-                        help="刷新依据（AA-3 留痕；建议写明批次/项号，如 "
-                             "'Z-1 报告转义修复'）")
+    parser.add_argument(
+        "--update", action="store_true", help="刷新核心基线（核心自身开发变更后使用）"
+    )
+    parser.add_argument(
+        "--reason",
+        default="",
+        help="刷新依据（AA-3 留痕；建议写明批次/项号，如 'Z-1 报告转义修复'）",
+    )
     args = parser.parse_args(argv)
 
     problems = check_register_points()
@@ -172,25 +193,26 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {p}")
         return 1
 
-    baseline_problems, updated, changed, created = check_baseline(
-        args.update, args.reason)
+    baseline_problems, updated, changed, created = check_baseline(args.update, args.reason)
     if updated:
-        print(f"[ok] 核心基线已刷新（{len(_core_hashes())} 个文件）"
-              f" → tools/.plugin_baseline.json")
+        print(f"[ok] 核心基线已刷新（{len(_core_hashes())} 个文件） → tools/.plugin_baseline.json")
         if changed:
             history = _record_history(changed, args.reason, created=created)
-            print(f"[留痕] 变更 {len(changed)} 文件（AA-3）→ "
-                  f"{history.relative_to(ROOT).as_posix()}")
+            print(
+                f"[留痕] 变更 {len(changed)} 文件（AA-3）→ {history.relative_to(ROOT).as_posix()}"
+            )
             for f, h in list(changed.items())[:12]:
-                old_s = (h['old'] or '—')[:8]
-                new_s = (h['new'] or '—')[:8]
+                old_s = (h["old"] or "—")[:8]
+                new_s = (h["new"] or "—")[:8]
                 print(f"  - {f}  {old_s} → {new_s}")
             if len(changed) > 12:
                 print(f"  …（其余 {len(changed) - 12} 项见历史文件）")
-            print("[CHANGELOG 建议行] 基线刷新：核心 "
-                  f"{len(changed)} 文件（{', '.join(sorted(changed)[:6])}"
-                  f"{' …' if len(changed) > 6 else ''}）"
-                  f"；依据={args.reason or '(未注明)'}")
+            print(
+                "[CHANGELOG 建议行] 基线刷新：核心 "
+                f"{len(changed)} 文件（{', '.join(sorted(changed)[:6])}"
+                f"{' …' if len(changed) > 6 else ''}）"
+                f"；依据={args.reason or '(未注明)'}"
+            )
         else:
             print("[留痕] 核心基线无变更（未写历史；AA-3）")
         return 0

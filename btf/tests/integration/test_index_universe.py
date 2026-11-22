@@ -4,6 +4,7 @@
 验收（18 号 V5-4）：`hs300` 宇宙逐月与 index_weight 复算一致。
 PIT 锚点：月末快照在**次月首日前**可用（快照日 < 查询日）；无前向填充。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,8 +24,7 @@ pytestmark = [pytest.mark.l4]
 ROOT = Path(MARKET_DATA_DIR)
 IW = ROOT / "index_weight" / "index_weight.parquet"
 
-requires_mainlib = pytest.mark.skipif(
-    not IW.is_file(), reason=f"index_weight 不可用: {IW}")
+requires_mainlib = pytest.mark.skipif(not IW.is_file(), reason=f"index_weight 不可用: {IW}")
 
 
 def _raw_snapshot(index_code: str, ymd: str) -> list[str]:
@@ -58,7 +58,7 @@ class TestProviderPit:
         # 201902 宇宙 = 20190131 快照（2019 首个可用月——201901 无前月快照
         # 之外的数据？index_weight 起点更早，201901 → 20181228 快照）
         for month, codes in monthly.items():
-            assert len(codes) == 300, month       # hs300 每快照恰 300 成分
+            assert len(codes) == 300, month  # hs300 每快照恰 300 成分
             # 复算：该月首日前最后一份快照
             snapshots = provider.snapshots("000300.SH")
             prior = [d for d in snapshots if d < f"{month}01"][-1]
@@ -70,8 +70,7 @@ class TestProviderPit:
         snaps = provider.snapshots("000300.SH")
         day = snaps[-1]
         prior = [d for d in snaps if d < day][-1]
-        assert provider.codes_before("000300.SH", day) == \
-            _raw_snapshot("000300.SH", prior)
+        assert provider.codes_before("000300.SH", day) == _raw_snapshot("000300.SH", prior)
 
     def test_no_forward_fill_before_first_snapshot(self):
         """首份快照之前 → 空列表（诚实无数据，不前向填充）。"""
@@ -85,7 +84,7 @@ class TestProviderPit:
         union = provider.union_codes("000300.SH", "20190101", "20191231")
         monthly = provider.monthly_codes("000300.SH", "20190101", "20191231")
         assert union == sorted({c for codes in monthly.values() for c in codes})
-        assert len(union) >= 300                # 有成分调整 → 并集 > 300
+        assert len(union) >= 300  # 有成分调整 → 并集 > 300
 
     def test_missing_table_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="index_weight"):
@@ -106,12 +105,10 @@ class TestRuntimeIndexUniverse:
                 "period": {"start": "2019-01-01", "end": "2019-06-30"},
                 "initial_cash": 1_000_000.0,
             },
-            "data": {"feed": "tushare_parquet",
-                     "feed_params": {"root": str(ROOT)}},
+            "data": {"feed": "tushare_parquet", "feed_params": {"root": str(ROOT)}},
             # X-7（Q1=A）：显式声明无风控裸奔（默认层已拒绝空链）
             "risk": {"rules": [], "allow_empty_chain": True},
-            "execution": {"handler": "next_open", "cost_model": "zero",
-                          "rebalancer": "full"},
+            "execution": {"handler": "next_open", "cost_model": "zero", "rebalancer": "full"},
         }
 
     def test_index_source_builds_union_superset(self):
@@ -142,7 +139,7 @@ class TestRuntimeIndexUniverse:
         from btf.runtime import BTFRuntime
 
         cfg = self._config(index="hs300")
-        cfg["run"]["universe"] = {"source": "hs300"}     # 旧写法（v0.2 报错口径）
+        cfg["run"]["universe"] = {"source": "hs300"}  # 旧写法（v0.2 报错口径）
         rt = BTFRuntime().load_config(cfg)
         with pytest.raises(ConfigError, match=r"universe\.source"):
             rt.build()

@@ -18,4 +18,5 @@ btf 文档守卫**不得 import 仓外包**（MM-3 前经仓外 import 取值，
 `from cc_strategies.qidian_replica import QidianStrategy;
 QidianStrategy.lookback_bars()`。
 """
+
 QIDIAN_LOOKBACK_BARS: int = 1020

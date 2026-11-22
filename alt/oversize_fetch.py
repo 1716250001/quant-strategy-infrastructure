@@ -56,15 +56,18 @@ if not os.environ.get("SSL_CERT_FILE"):
     _ssl_candidates.append(r"D:\yf_ca\cacert.pem")
     try:
         import certifi as _certifi
+
         _ssl_candidates.append(_certifi.where())
     except ImportError:
         pass
-    _ssl_candidates.extend([
-        str(Path(sys.prefix) / "Library" / "ssl" / "cacert.pem"),
-        str(Path(sys.prefix) / "cacert.pem"),
-        "/etc/ssl/certs/ca-certificates.crt",
-        "/etc/pki/tls/certs/ca-bundle.crt",
-    ])
+    _ssl_candidates.extend(
+        [
+            str(Path(sys.prefix) / "Library" / "ssl" / "cacert.pem"),
+            str(Path(sys.prefix) / "cacert.pem"),
+            "/etc/ssl/certs/ca-certificates.crt",
+            "/etc/pki/tls/certs/ca-bundle.crt",
+        ]
+    )
     for _c in _ssl_candidates:
         if os.path.exists(_c):
             os.environ["SSL_CERT_FILE"] = _c
@@ -83,6 +86,7 @@ from alt.urls import guess_url  # noqa: E402
 # 一、通用工具
 # ============================================================
 
+
 def _strip_hk_suffix(code: str) -> str:
     """'00700.HK' → '00700'"""
     return code.replace(".HK", "") if code.endswith(".HK") else code
@@ -91,6 +95,7 @@ def _strip_hk_suffix(code: str) -> str:
 def _load_hk_universe() -> list[str]:
     """从 master:hk_basic 加载港股清单，返回 ['00001', '00002', ..., '00700', ...]"""
     from alt.config import TS_DATA_DIR
+
     path = os.path.join(TS_DATA_DIR, "hk_basic", "hk_basic.parquet")
     if not os.path.exists(path):
         raise RuntimeError(f"master:hk_basic 不存在: {path}")
@@ -106,7 +111,7 @@ def _load_hk_universe() -> list[str]:
 # ============================================================
 
 HK_VAL_INDICATORS = ["市盈率(TTM)", "市盈率(静)", "市净率"]
-HK_VAL_PERIOD = "近十年"           # 百度接口 period：近十年=731点/2016-10-25起；全部=629点/2004起
+HK_VAL_PERIOD = "近十年"  # 百度接口 period：近十年=731点/2016-10-25起；全部=629点/2004起
 HK_VAL_SRC = "baidu"
 HK_VAL_SRC_HOST = guess_url("stock_hk_valuation_baidu")
 
@@ -115,8 +120,9 @@ INDICATOR_RETRY = 2
 INDICATOR_BACKOFF_SEC = 2.0
 
 
-def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
-                      ) -> tuple[pd.DataFrame | None, str | None]:
+def _fetch_hk_val_raw(
+    symbol: str, limiter: AltRateLimiter
+) -> tuple[pd.DataFrame | None, str | None]:
     """拉单只港股的估值时序（3 个 indicator 合并）。
 
     返回: (DataFrame[symbol, indicator, date, value], None) 成功
@@ -137,9 +143,9 @@ def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
     indicator_fails = []
 
     for ind in HK_VAL_INDICATORS:
+
         def _call(_ind=ind):
-            return ak.stock_hk_valuation_baidu(
-                symbol=symbol, indicator=_ind, period=HK_VAL_PERIOD)
+            return ak.stock_hk_valuation_baidu(symbol=symbol, indicator=_ind, period=HK_VAL_PERIOD)
 
         df, ok, err = limiter.call(_call, HK_VAL_SRC_HOST)
 
@@ -153,8 +159,7 @@ def _fetch_hk_val_raw(symbol: str, limiter: AltRateLimiter
         if not ok:
             # (b) 记失败指标后继续，不中止整只
             indicator_fails.append(ind)
-            print(f"    [WARN] {symbol} {ind} 失败（重试 {retries} 次后仍失败）: "
-                  f"{str(err)[:60]}")
+            print(f"    [WARN] {symbol} {ind} 失败（重试 {retries} 次后仍失败）: {str(err)[:60]}")
             continue
 
         if df is None or len(df) == 0:
@@ -212,9 +217,9 @@ def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
         sub = sub.sort_values("date").reset_index(drop=True)
 
         # CK-13: PE 剔非正值（留原始序列用于 CK-14 判 n_total）
-        n_total = len(sub)                                       # 窗口总点数
+        n_total = len(sub)  # 窗口总点数
         if ind in ("市盈率(TTM)", "市盈率(静)"):
-            valid = sub[sub["value"] > 0].copy()                  # 剔非正值
+            valid = sub[sub["value"] > 0].copy()  # 剔非正值
         else:
             # §155 R8-1：PB 同 PE，剔 value ≤ 0（派单 R1-4 未区分 PE/PB；
             # 原「PB 不剔」导致 224 行非正值被给出分位）
@@ -226,15 +231,15 @@ def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
         # 因为 CK-13 已经把 value ≤ 0 从 valid 里剔掉了，
         # 从 valid 取 cur_val 会导致 gate1(cur>0) 永真——
         # 审查方实测全港 51.1% 标的 PE 当前值为负，这些必须被 gate1 拦住。
-        cur_val = float(sub["value"].iloc[-1])                    # 当前值（原始序列末尾）
-        cur_date = int(sub["date"].iloc[-1])                      # 当前日期（原始序列末尾）
+        cur_val = float(sub["value"].iloc[-1])  # 当前值（原始序列末尾）
+        cur_date = int(sub["date"].iloc[-1])  # 当前日期（原始序列末尾）
 
         # CK-14 PE 类三道门禁
         pct_value = np.nan
         if ind in ("市盈率(TTM)", "市盈率(静)"):
-            gate1 = cur_val > 0                                   # 门 1：cur > 0（原始值，非过滤后）
-            gate2 = n_pos >= 100                                  # 门 2：正样本数 ≥ 100
-            gate3 = n_total >= 520                                # 门 3：窗口总点数 ≥ 520
+            gate1 = cur_val > 0  # 门 1：cur > 0（原始值，非过滤后）
+            gate2 = n_pos >= 100  # 门 2：正样本数 ≥ 100
+            gate3 = n_total >= 520  # 门 3：窗口总点数 ≥ 520
             if gate1 and gate2 and gate3 and n_pos > 0:
                 # 用 CK-13 过滤后的 valid 序列算分位（符合派单 CK-13 口径）
                 pct_value = float(np.sum(valid["value"].values <= cur_val)) / n_pos * 100.0
@@ -250,19 +255,22 @@ def _enrich_with_percentile(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
         # R1R-3: 只存当前值一行（消除 look-ahead）
         # date = "近十年" 窗口最新一天
-        row = pd.DataFrame([{
-            "symbol": symbol,
-            "indicator": ind,
-            "date": cur_date,                                      # 窗口最新日
-            "value": cur_val,                                      # 当前值（可能负/零）
-            "percentile": pct_value,                                # 当前值分位（可能 NaN）
-            "src": HK_VAL_SRC,
-        }])
+        row = pd.DataFrame(
+            [
+                {
+                    "symbol": symbol,
+                    "indicator": ind,
+                    "date": cur_date,  # 窗口最新日
+                    "value": cur_val,  # 当前值（可能负/零）
+                    "percentile": pct_value,  # 当前值分位（可能 NaN）
+                    "src": HK_VAL_SRC,
+                }
+            ]
+        )
         out_parts.append(row)
 
     if not out_parts:
-        return pd.DataFrame(columns=["symbol", "indicator", "date", "value",
-                                      "percentile", "src"])
+        return pd.DataFrame(columns=["symbol", "indicator", "date", "value", "percentile", "src"])
 
     return pd.concat(out_parts, ignore_index=True)
 
@@ -292,8 +300,10 @@ def _save_hk_val(df: pd.DataFrame, dest_dir: str) -> dict:
 # 三、断点续拉 Checkpoint
 # ============================================================
 
+
 def _cp_path(table: str) -> str:
     from alt.config import ALT_META_DIR
+
     return os.path.join(ALT_META_DIR, f"oversize_{table}_checkpoint.json")
 
 
@@ -321,10 +331,26 @@ def _filter_todo(all_syms: list[str], cp: dict) -> list[str]:
 # ============================================================
 
 S1_HK_SYMBOLS = [
-    "00700", "09988", "03690", "01810", "00981",      # 腾讯/阿里/美团/小米/中芯
-    "03968", "02318", "01211", "00005", "00001",      # 招行/平安/比亚迪/汇丰/长和
-    "00016", "00027", "00669", "01024", "02020",      # 新鸿基/银河/创科/快手/安踏
-    "02382", "06098", "00175", "01299", "00388",      # 舜宇/碧桂园服务/吉利/友邦/港交所
+    "00700",
+    "09988",
+    "03690",
+    "01810",
+    "00981",  # 腾讯/阿里/美团/小米/中芯
+    "03968",
+    "02318",
+    "01211",
+    "00005",
+    "00001",  # 招行/平安/比亚迪/汇丰/长和
+    "00016",
+    "00027",
+    "00669",
+    "01024",
+    "02020",  # 新鸿基/银河/创科/快手/安踏
+    "02382",
+    "06098",
+    "00175",
+    "01299",
+    "00388",  # 舜宇/碧桂园服务/吉利/友邦/港交所
 ]
 
 
@@ -333,9 +359,9 @@ def _run_s1_baseline(limiter: AltRateLimiter) -> tuple[int, int]:
 
     CK-25: 20 只全部非空 → S1 PASS；任一为空 → S1 FAIL。
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"[S1 基准集] 开始验证 {len(S1_HK_SYMBOLS)} 只港股")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     ok = 0
     empty = 0
@@ -373,11 +399,15 @@ def _run_s1_baseline(limiter: AltRateLimiter) -> tuple[int, int]:
 # 五、主入口：hk_val_pct 全量建库
 # ============================================================
 
-def run_hk_val_pct(*, symbols: list[str] | None = None,
-                   checkpoint: bool = True,
-                   dry_run: bool = False,
-                   s1_first: bool = True,
-                   max_syms: int | None = None) -> dict:
+
+def run_hk_val_pct(
+    *,
+    symbols: list[str] | None = None,
+    checkpoint: bool = True,
+    dry_run: bool = False,
+    s1_first: bool = True,
+    max_syms: int | None = None,
+) -> dict:
     """执行 hk_val_pct 全量建库。
 
     Args:
@@ -388,14 +418,15 @@ def run_hk_val_pct(*, symbols: list[str] | None = None,
         max_syms: 最多处理多少只（用于限制执行时间）
     """
     from alt.config import ALT_DATA_DIR
+
     dest_dir = os.path.join(ALT_DATA_DIR, "hk_val_pct")
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print("# hk_val_pct 取数（OS-R1 P0-2）")
     print("# 3 indicator × 2785 只 = 8,355 请求")
     print(f"# 档位: {HK_VAL_SRC_HOST} (other 15/分)")
     print("# 预计耗时: ~9 小时")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     limiter = AltRateLimiter(verbose=True)
 
@@ -408,8 +439,7 @@ def run_hk_val_pct(*, symbols: list[str] | None = None,
         universe = universe[:max_syms]
 
     # 2) 断点续拉过滤
-    cp = {"done": [], "empty": [], "fail": [],
-          "stats": {"ok": 0, "empty": 0, "fail": 0}}
+    cp = {"done": [], "empty": [], "fail": [], "stats": {"ok": 0, "empty": 0, "fail": 0}}
     if checkpoint:
         cp = _load_checkpoint("hk_val_pct")
         universe = _filter_todo(universe, cp)
@@ -431,8 +461,8 @@ def run_hk_val_pct(*, symbols: list[str] | None = None,
     os.makedirs(dest_dir, exist_ok=True)
 
     buf: list[pd.DataFrame] = []
-    buf_flush_threshold = 50          # 每 50 只 flush 一次
-    buf_rows_threshold = 50_000       # 或累计 5 万行就 flush
+    buf_flush_threshold = 50  # 每 50 只 flush 一次
+    buf_rows_threshold = 50_000  # 或累计 5 万行就 flush
 
     start_t = time.time()
     done_count = 0
@@ -454,12 +484,14 @@ def run_hk_val_pct(*, symbols: list[str] | None = None,
             print(f"  [{i:>5}/{len(universe)}] EMPTY {sym}")
         else:
             enriched = _enrich_with_percentile(raw, sym)
-            buf.append((sym, enriched))                    # 暂存，不记 done
+            buf.append((sym, enriched))  # 暂存，不记 done
 
         # 周期 flush
-        if (len(buf) >= buf_flush_threshold or
-                sum(len(d) for _, d in buf) >= buf_rows_threshold or
-                (i == len(universe) and buf)):
+        if (
+            len(buf) >= buf_flush_threshold
+            or sum(len(d) for _, d in buf) >= buf_rows_threshold
+            or (i == len(universe) and buf)
+        ):
             flush_df = pd.concat([d for _, d in buf], ignore_index=True)
             res = _save_hk_val(flush_df, dest_dir)
             if res.get("ok"):
@@ -470,8 +502,7 @@ def run_hk_val_pct(*, symbols: list[str] | None = None,
                 elapsed = time.time() - last_flush_t
                 rate = len(buf) / elapsed if elapsed > 0 else 0
                 total_rows += len(flush_df)
-                print(f"  [flush OK] {len(buf)} 只 / {len(flush_df):,} 行 "
-                      f"→ 速率 {rate:.0f} 只/s")
+                print(f"  [flush OK] {len(buf)} 只 / {len(flush_df):,} 行 → 速率 {rate:.0f} 只/s")
                 buf = []
                 last_flush_t = time.time()
             else:
@@ -479,8 +510,9 @@ def run_hk_val_pct(*, symbols: list[str] | None = None,
                 for sym_bad, _ in buf:
                     cp["fail"].append(sym_bad)
                     fail_count += 1
-                print(f"  [flush FAIL] {res.get('errors', '')[:120]} → "
-                      f"保留 {len(buf)} 只待下次重试")
+                print(
+                    f"  [flush FAIL] {res.get('errors', '')[:120]} → 保留 {len(buf)} 只待下次重试"
+                )
 
         # 周期 checkpoint 保存（每 20 只或失败时）
         if checkpoint and (i % 20 == 0 or err):
@@ -492,9 +524,11 @@ def run_hk_val_pct(*, symbols: list[str] | None = None,
             elapsed = time.time() - start_t
             rate = i / elapsed if elapsed > 0 else 0
             remaining = (len(universe) - i) / rate if rate > 0 else 0
-            print(f"  [进度] {i}/{len(universe)} | ok={done_count} empty={empty_count} "
-                  f"fail={fail_count} | 速率 {rate:.2f} 只/s | "
-                  f"剩余 {remaining/60:.1f} min")
+            print(
+                f"  [进度] {i}/{len(universe)} | ok={done_count} empty={empty_count} "
+                f"fail={fail_count} | 速率 {rate:.2f} 只/s | "
+                f"剩余 {remaining / 60:.1f} min"
+            )
 
     # 最终 flush + checkpoint
     if buf:
@@ -508,54 +542,77 @@ def run_hk_val_pct(*, symbols: list[str] | None = None,
         _save_checkpoint("hk_val_pct", cp)
 
     total_t = time.time() - start_t
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("[完成] hk_val_pct 全量建库")
     print(f"  成功 {done_count} | 空 {empty_count} | 失败 {fail_count}")
     print(f"  总行数 {total_rows:,}")
-    print(f"  耗时 {total_t/60:.1f} min")
-    print(f"  速率 {len(universe)/total_t:.2f} 只/s")
-    print(f"{'='*60}")
+    print(f"  耗时 {total_t / 60:.1f} min")
+    print(f"  速率 {len(universe) / total_t:.2f} 只/s")
+    print(f"{'=' * 60}")
 
-    return {"ok": done_count, "empty": empty_count, "fail": fail_count,
-            "rows": total_rows, "elapsed_sec": total_t}
+    return {
+        "ok": done_count,
+        "empty": empty_count,
+        "fail": fail_count,
+        "rows": total_rows,
+        "elapsed_sec": total_t,
+    }
 
 
 # ============================================================
 # 六、CLI 入口
 # ============================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="外盘扩容取数引擎（OS-R1~R5）")
-    parser.add_argument("--table", required=True,
-                        choices=["hk_val_pct", "us_qfq_factor", "us_daily_raw",
-                                 "hk_fina_snap", "us_fina_ind",
-                                 "hk_fina_ind", "hk_report"],
-                        help="目标表")
-    parser.add_argument("--symbols", default=None,
-                        help="指定标的列表（逗号分隔，如 '00700,00981'）")
-    parser.add_argument("--no-checkpoint", action="store_true",
-                        help="禁用断点续拉（从头开始）")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="预演（不拉数据、不写库）")
-    parser.add_argument("--no-s1", action="store_true",
-                        help="跳过 S1 基准集验证")
-    parser.add_argument("--max-syms", type=int, default=None,
-                        help="最多处理多少只（用于限制执行时间）")
+    parser.add_argument(
+        "--table",
+        required=True,
+        choices=[
+            "hk_val_pct",
+            "us_qfq_factor",
+            "us_daily_raw",
+            "hk_fina_snap",
+            "us_fina_ind",
+            "hk_fina_ind",
+            "hk_report",
+        ],
+        help="目标表",
+    )
+    parser.add_argument(
+        "--symbols", default=None, help="指定标的列表（逗号分隔，如 '00700,00981'）"
+    )
+    parser.add_argument("--no-checkpoint", action="store_true", help="禁用断点续拉（从头开始）")
+    parser.add_argument("--dry-run", action="store_true", help="预演（不拉数据、不写库）")
+    parser.add_argument("--no-s1", action="store_true", help="跳过 S1 基准集验证")
+    parser.add_argument(
+        "--max-syms", type=int, default=None, help="最多处理多少只（用于限制执行时间）"
+    )
     # §128 T1-2 / T2：list 表的轮次预算与分段停机点（原样转发给 list_backfill.run）
-    parser.add_argument("--budget-syms", type=int, default=None, dest="budget",
-                        help="list 表：本轮最多拉 N 只（首建传清单总数，如 18052）")
-    parser.add_argument("--until", default=None,
-                        help="分段停机点 HH:MM（到点不再发起新批次，在途批次完成并落盘后退出 0）")
+    parser.add_argument(
+        "--budget-syms",
+        type=int,
+        default=None,
+        dest="budget",
+        help="list 表：本轮最多拉 N 只（首建传清单总数，如 18052）",
+    )
+    parser.add_argument(
+        "--until",
+        default=None,
+        help="分段停机点 HH:MM（到点不再发起新批次，在途批次完成并落盘后退出 0）",
+    )
     # §130 RE3-5：主入口必须能显式跳过交互确认（原 list_backfill 有、本入口未透传）
     parser.add_argument("--yes", action="store_true", help="跳过交互确认（无人值守必带）")
     args = parser.parse_args()
 
     if args.table == "hk_val_pct":
         if args.budget or args.until:
-            print("[提示] hk_val_pct 走独立引擎（oversize_fetch.run_hk_val_pct），"
-                  f"不支持 --budget-syms/--until（已忽略: budget={args.budget}, until={args.until}）")
-        syms = ([s.strip() for s in args.symbols.split(",") if s.strip()]
-                if args.symbols else None)
+            print(
+                "[提示] hk_val_pct 走独立引擎（oversize_fetch.run_hk_val_pct），"
+                f"不支持 --budget-syms/--until（已忽略: budget={args.budget}, until={args.until}）"
+            )
+        syms = [s.strip() for s in args.symbols.split(",") if s.strip()] if args.symbols else None
         run_hk_val_pct(
             symbols=syms,
             checkpoint=not args.no_checkpoint,
@@ -566,6 +623,7 @@ def main():
     else:
         # 其余表走 list_backfill 引擎（list 模式表，1 标的 = 1 请求）
         from alt.list_backfill import run as list_run
+
         sym_str = args.symbols  # 已是 "AAPL,MSFT" 格式
         list_run(
             args.table,

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """§163 K-1 反向测试：P15 零成交 fail-loud／P17 feed 路由／C-3 判据一致性。"""
+
 from __future__ import annotations
 
 import logging
@@ -21,9 +22,16 @@ from tests.fixtures.scenarios import t_plus1_scenario
 pytestmark = [pytest.mark.l2]
 
 RELATIVE_KEYS = (
-    "benchmark_total_return", "excess_return", "annualized_excess",
-    "tracking_error", "information_ratio", "beta", "alpha_annualized",
-    "up_capture", "down_capture", "strategy_volatility_annualized",
+    "benchmark_total_return",
+    "excess_return",
+    "annualized_excess",
+    "tracking_error",
+    "information_ratio",
+    "beta",
+    "alpha_annualized",
+    "up_capture",
+    "down_capture",
+    "strategy_volatility_annualized",
 )
 
 P15_FEED = "k1_p15_feed"
@@ -43,9 +51,11 @@ def _register(name: str, feed) -> None:
 def _feeds():
     _register(P15_FEED, t_plus1_scenario().feed)
     empty = MemoryFeed(
-        [], {}, {"000001.SZ": Instrument(
-            "000001.SZ", AssetClass.STOCK, board="main", lot_size=100)},
-        dates=[])
+        [],
+        {},
+        {"000001.SZ": Instrument("000001.SZ", AssetClass.STOCK, board="main", lot_size=100)},
+        dates=[],
+    )
     _register(EMPTY_FEED, empty)
 
 
@@ -80,19 +90,15 @@ class TestP15EmptyRun:
         from btf.cli.main import main
 
         path = tmp_path / "empty.yaml"
-        path.write_text(yaml.safe_dump(_p15_cfg(100.0), allow_unicode=True),
-                        encoding="utf-8")
-        assert main(["run", "--config", str(path),
-                     "--out", str(tmp_path / "runs")]) == 0
+        path.write_text(yaml.safe_dump(_p15_cfg(100.0), allow_unicode=True), encoding="utf-8")
+        assert main(["run", "--config", str(path), "--out", str(tmp_path / "runs")]) == 0
         out = capsys.readouterr().out
         assert "本次运行零成交" in out and "n_fills=0" in out
 
     def test_filled_run_keeps_relative_metrics_and_digest(self, tmp_path):
         store = LocalRunStore(tmp_path)
-        r1 = BTFRuntime().load_config(_p15_cfg(1_000_000.0)).build().run(
-            store=store)
-        r2 = BTFRuntime().load_config(_p15_cfg(1_000_000.0)).build().run(
-            store=store)
+        r1 = BTFRuntime().load_config(_p15_cfg(1_000_000.0)).build().run(store=store)
+        r2 = BTFRuntime().load_config(_p15_cfg(1_000_000.0)).build().run(store=store)
         assert len(r1.fills) > 0
         assert all(k in r1.metrics for k in RELATIVE_KEYS)
         assert metrics_digest_of(r1.metrics) == metrics_digest_of(r2.metrics)
@@ -128,8 +134,7 @@ class TestC3ZeroDayWarnings:
     def test_api_zero_day_warning(self, caplog):
         with caplog.at_level(logging.WARNING, logger="btf.runtime"):
             BTFRuntime._warn_if_short_period(SimpleNamespace(n_days=0))
-        assert "未读到任何交易日" in " ".join(
-            r.getMessage() for r in caplog.records)
+        assert "未读到任何交易日" in " ".join(r.getMessage() for r in caplog.records)
 
     def test_cli_zero_day_warning(self, tmp_path, capsys):
         from btf.cli.main import main
@@ -148,7 +153,6 @@ class TestC3ZeroDayWarnings:
         }
         path = tmp_path / "zero_day.yaml"
         path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
-        assert main(["run", "--config", str(path),
-                     "--out", str(tmp_path / "runs")]) == 0
+        assert main(["run", "--config", str(path), "--out", str(tmp_path / "runs")]) == 0
         out = capsys.readouterr().out
         assert "未读到任何交易日" in out

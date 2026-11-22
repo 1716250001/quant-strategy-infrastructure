@@ -4,6 +4,7 @@
 验收锚点：3 个手写场景数据集（T+1 冻结/涨跌停/停牌各一）；
 截面迭代日期升序、停牌股当日缺席 map（协议语义）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -35,7 +36,7 @@ class TestSimClock:
         c = SimClock()
         c.advance(ALL_DATES[1])
         with pytest.raises(RuntimeError, match="时序违例"):
-            c.advance(D1)          # 回跳
+            c.advance(D1)  # 回跳
         with pytest.raises(RuntimeError, match="时序违例"):
             c.advance(ALL_DATES[1])  # 重复
 
@@ -53,7 +54,7 @@ class TestMemoryFeed:
         for d, section in sc.feed.bars(None, D1, ALL_DATES[-1]):
             dates.append(d)
             if d == D3:
-                assert "000002.SZ" not in section   # 停牌日缺席
+                assert "000002.SZ" not in section  # 停牌日缺席
             else:
                 assert "000002.SZ" in section
         assert dates == ALL_DATES
@@ -96,8 +97,8 @@ class TestScenarios:
     def test_limit_scenario(self):
         sc = limit_scenario()
         bars = {b.date.to_ymd(): b for b in sc.feed.bars_of("600000.SH", D1, ALL_DATES[-1])}
-        assert bars["20150106"].open == 11.0    # D2 涨停开盘（买入拒锚点）
-        assert bars["20150107"].open == 9.9     # D3 跌停开盘（卖出拒锚点）
+        assert bars["20150106"].open == 11.0  # D2 涨停开盘（买入拒锚点）
+        assert bars["20150107"].open == 9.9  # D3 跌停开盘（卖出拒锚点）
         st = sc.feed.trading_states(ALL_DATES[1])
         assert st["600000.SH"].limit_up_price == 11.0
         assert st["600000.SH"].is_limit_up is True

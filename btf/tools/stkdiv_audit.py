@@ -20,6 +20,7 @@
     python stkdiv_audit.py --run <dir> --json
 退出码：0 = 无命中；1 = 有命中；2 = 环境错误
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,8 +54,10 @@ def build_events(force: bool = False) -> pd.DataFrame:
 
     if os.path.exists(CACHE) and not force:
         return pd.read_csv(CACHE, dtype={"code": str, "ex_date": str})
-    rows = [pq.read_table(f).to_pandas() for f in
-            sorted(glob.glob(os.path.join(MIRROR, "dividend", "*.parquet")))]
+    rows = [
+        pq.read_table(f).to_pandas()
+        for f in sorted(glob.glob(os.path.join(MIRROR, "dividend", "*.parquet")))
+    ]
     d = pd.concat(rows, ignore_index=True)
     ev = d[(d.div_proc == "实施") & (d.stk_div.fillna(0) > 0) & d.ex_date.notna()].copy()
     ev["ex_date"] = ev.ex_date.astype(str)
@@ -62,13 +65,16 @@ def build_events(force: bool = False) -> pd.DataFrame:
     ev = ev.drop_duplicates(["code", "ex_date"])
     codes = set(ev.code)
 
-    af = [pq.read_table(f).to_pandas() for f in
-          sorted(glob.glob(os.path.join(MIRROR, "adj_factor", "*.parquet")))]
+    af = [
+        pq.read_table(f).to_pandas()
+        for f in sorted(glob.glob(os.path.join(MIRROR, "adj_factor", "*.parquet")))
+    ]
     a = pd.concat(af, ignore_index=True)
     a["trade_date"] = a.trade_date.astype(str)
     a = a[a.ts_code.isin(codes)].sort_values(["ts_code", "trade_date"])
-    g = {c: (x.trade_date.to_numpy(), x.adj_factor.to_numpy(float))
-         for c, x in a.groupby("ts_code")}
+    g = {
+        c: (x.trade_date.to_numpy(), x.adj_factor.to_numpy(float)) for c, x in a.groupby("ts_code")
+    }
 
     keep = []
     for r in ev.itertuples(index=False):
@@ -78,7 +84,7 @@ def build_events(force: bool = False) -> pd.DataFrame:
         i = int(np.searchsorted(dt, r.ex_date))
         if i == 0 or i >= len(dt):
             continue
-        if abs(ft[i] / ft[i - 1] - 1.0) < 1e-12:        # 因子完全未变 ⇒ MISMATCH
+        if abs(ft[i] / ft[i - 1] - 1.0) < 1e-12:  # 因子完全未变 ⇒ MISMATCH
             keep.append((r.code, r.ex_date, float(r.stk_div)))
     out = pd.DataFrame(keep, columns=["code", "ex_date", "stk_div"])
     out.to_csv(CACHE, index=False, encoding="utf-8-sig")
@@ -136,7 +142,7 @@ def quantify(rd: str, hits: list[dict]) -> dict:
         qa = float((snaps[i - 1].get("positions_qty") or {}).get(h["code"]) or 0.0)
         qb = float((snaps[i].get("positions_qty") or {}).get(h["code"]) or 0.0)
         dq = qb - qa
-        if dq <= 0:                                  # 未加股（已卖出/无持仓）⇒ 不构成凭空增益
+        if dq <= 0:  # 未加股（已卖出/无持仓）⇒ 不构成凭空增益
             continue
         w = float((snaps[i].get("weights") or {}).get(h["code"]) or 0.0)
         px = (w * float(snaps[i].get("total_value") or 0.0) / qb) if qb else 0.0
@@ -158,7 +164,7 @@ def quantify(rd: str, hits: list[dict]) -> dict:
                 px_last = wt * tv / qt
             elif qt > 0:
                 px_last = px_last
-            if qt < q_prev and dq_left > 0:          # 当日有卖出：虚增股数优先被卖掉
+            if qt < q_prev and dq_left > 0:  # 当日有卖出：虚增股数优先被卖掉
                 sold = q_prev - qt
                 take = min(sold, dq_left)
                 phantom_cash += take * px_last
@@ -167,13 +173,23 @@ def quantify(rd: str, hits: list[dict]) -> dict:
             if dq_left > 0:
                 cut[t] += dq_left * px_last
             cut[t] += phantom_cash
-        recs.append({"code": h["code"], "ex_date": h["ex_date"], "stk_div": h["stk_div"],
-                     "qty_before": qa, "qty_after": qb, "dq": dq,
-                     "px": round(px, 4), "gain": round(gain, 2),
-                     "nav_before": round(float(nav[i - 1]), 2),
-                     "gain_pct_of_nav": round(gain / float(nav[i - 1]) if nav[i - 1] else 0.0, 6),
-                     "held_at_end": bool(float((snaps[-1].get("positions_qty") or {})
-                                               .get(h["code"]) or 0.0) > 0)})
+        recs.append(
+            {
+                "code": h["code"],
+                "ex_date": h["ex_date"],
+                "stk_div": h["stk_div"],
+                "qty_before": qa,
+                "qty_after": qb,
+                "dq": dq,
+                "px": round(px, 4),
+                "gain": round(gain, 2),
+                "nav_before": round(float(nav[i - 1]), 2),
+                "gain_pct_of_nav": round(gain / float(nav[i - 1]) if nav[i - 1] else 0.0, 6),
+                "held_at_end": bool(
+                    float((snaps[-1].get("positions_qty") or {}).get(h["code"]) or 0.0) > 0
+                ),
+            }
+        )
     if not recs:
         return {"events": [], "has_hit": False}
     adj = np.maximum(nav - cut, 0.0)
@@ -185,8 +201,8 @@ def quantify(rd: str, hits: list[dict]) -> dict:
     return {
         "events": recs,
         "has_hit": True,
-        "total_gain": round(float(sum(x["gain"] for x in recs)), 2),   # 除权日当天的账面增益
-        "cum_cut_end": round(float(cut[-1]), 2),                       # 末日仍在扣的金额（逐日口径）
+        "total_gain": round(float(sum(x["gain"] for x in recs)), 2),  # 除权日当天的账面增益
+        "cum_cut_end": round(float(cut[-1]), 2),  # 末日仍在扣的金额（逐日口径）
         "final_before": round(float(nav[-1]), 2),
         "final_after": round(float(adj[-1]), 2),
         "ann_before": float((nav[-1] / nav[0]) ** (1 / yrs) - 1),
@@ -205,19 +221,20 @@ def main() -> int:
     ap.add_argument("--events", action="store_true")
     ap.add_argument("--rebuild", action="store_true")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--out", metavar="DIR",
-                    help="输出目录（默认 代码/_scratch；§176）")
+    ap.add_argument("--out", metavar="DIR", help="输出目录（默认 代码/_scratch；§176）")
     a = ap.parse_args()
 
     global CACHE
-    out_dir = (Path(a.out).resolve() if a.out else SCRATCH_ROOT)
+    out_dir = Path(a.out).resolve() if a.out else SCRATCH_ROOT
     out_dir.mkdir(parents=True, exist_ok=True)
     CACHE = str(out_dir / "stkdiv_mismatch_20261021.csv")
 
     ev = build_events(force=a.rebuild)
     risk = {(r.code, r.ex_date): float(r.stk_div) for r in ev.itertuples(index=False)}
-    print(f"[风险集] 送转>0 且 adj_factor 未变：{len(risk)} 个 (code, ex_date) / "
-          f"{ev.code.nunique()} 只（cache={CACHE}）")
+    print(
+        f"[风险集] 送转>0 且 adj_factor 未变：{len(risk)} 个 (code, ex_date) / "
+        f"{ev.code.nunique()} 只（cache={CACHE}）"
+    )
     if a.events:
         print(ev.to_string(index=False))
         return 0
@@ -230,16 +247,22 @@ def main() -> int:
             print("  结论：无凭空增益（未持有相关标的 / 未加股）")
             return 0
         for x in res["events"]:
-            print(f"  {x['code']} ex={x['ex_date']} 送转/股={x['stk_div']} "
-                  f"{'持有到末日' if x['held_at_end'] else '中途已卖出'} "
-                  f"qty {x['qty_before']:,.0f}→{x['qty_after']:,.0f} ×{x['px']} "
-                  f"= **{x['gain']:,.2f}** 元（占前一日净值 {x['gain_pct_of_nav']*100:.2f}%）")
-        print(f"  除权日账面增益合计 {res['total_gain']:,.2f} 元｜末日仍在扣 {res['cum_cut_end']:,.2f} 元"
-              f"｜终值 {res['final_before']:,.2f} → {res['final_after']:,.2f}")
-        print(f"  年化 {res['ann_before']:+.2%} → **{res['ann_after']:+.2%}**"
-              f"（Δ{(res['ann_after']-res['ann_before'])*100:+.2f}pp）｜"
-              f"MDD {res['mdd_before']:.2%} → {res['mdd_after']:.2%}｜"
-              f"波动 {res['vol_before']:.2%} → {res['vol_after']:.2%}")
+            print(
+                f"  {x['code']} ex={x['ex_date']} 送转/股={x['stk_div']} "
+                f"{'持有到末日' if x['held_at_end'] else '中途已卖出'} "
+                f"qty {x['qty_before']:,.0f}→{x['qty_after']:,.0f} ×{x['px']} "
+                f"= **{x['gain']:,.2f}** 元（占前一日净值 {x['gain_pct_of_nav'] * 100:.2f}%）"
+            )
+        print(
+            f"  除权日账面增益合计 {res['total_gain']:,.2f} 元｜末日仍在扣 {res['cum_cut_end']:,.2f} 元"
+            f"｜终值 {res['final_before']:,.2f} → {res['final_after']:,.2f}"
+        )
+        print(
+            f"  年化 {res['ann_before']:+.2%} → **{res['ann_after']:+.2%}**"
+            f"（Δ{(res['ann_after'] - res['ann_before']) * 100:+.2f}pp）｜"
+            f"MDD {res['mdd_before']:.2%} → {res['mdd_after']:.2%}｜"
+            f"波动 {res['vol_before']:.2%} → {res['vol_after']:.2%}"
+        )
         if a.json:
             print(json.dumps(res, ensure_ascii=False, indent=1))
         return 1
@@ -254,10 +277,18 @@ def main() -> int:
                 res = quantify(rd, hits)
                 if not res.get("has_hit"):
                     continue
-                rows.append(dict(run=os.path.basename(rd), run_dir=rd, n_events=len(res["events"]),
-                                 total_gain=res["total_gain"],
-                                 ann_before=res["ann_before"], ann_after=res["ann_after"],
-                                 mdd_before=res["mdd_before"], mdd_after=res["mdd_after"]))
+                rows.append(
+                    dict(
+                        run=os.path.basename(rd),
+                        run_dir=rd,
+                        n_events=len(res["events"]),
+                        total_gain=res["total_gain"],
+                        ann_before=res["ann_before"],
+                        ann_after=res["ann_after"],
+                        mdd_before=res["mdd_before"],
+                        mdd_after=res["mdd_after"],
+                    )
+                )
             except Exception as e:
                 print(f"  [跳过] {os.path.basename(rd)}: {type(e).__name__}: {e}")
             if k % 100 == 0:
@@ -268,9 +299,11 @@ def main() -> int:
         df = pd.DataFrame(rows).sort_values("total_gain", ascending=False)
         print(f"\n=== 命中 {len(df)} 个 run ===")
         for r in df.itertuples(index=False):
-            print(f"  {r.run:<30}事件{r.n_events:>3}  凭空增益 {r.total_gain:>14,.0f}  "
-                  f"年化 {r.ann_before:+.2%} → {r.ann_after:+.2%}"
-                  f"（Δ{(r.ann_after-r.ann_before)*100:+.2f}pp）  MDD {r.mdd_before:.2%} → {r.mdd_after:.2%}")
+            print(
+                f"  {r.run:<30}事件{r.n_events:>3}  凭空增益 {r.total_gain:>14,.0f}  "
+                f"年化 {r.ann_before:+.2%} → {r.ann_after:+.2%}"
+                f"（Δ{(r.ann_after - r.ann_before) * 100:+.2f}pp）  MDD {r.mdd_before:.2%} → {r.mdd_after:.2%}"
+            )
         out = str(out_dir / "stkdiv_hits_20261021.csv")
         df.to_csv(out, index=False, encoding="utf-8-sig")
         print(f"\n[csv] {out}")

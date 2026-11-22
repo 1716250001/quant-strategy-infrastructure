@@ -16,6 +16,7 @@
     - exclude_bj：代码后缀 `.BJ` 排除（与 md_core 一致）；
     - 无 ST/停牌/上市天数过滤（与 md_core 一致）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +24,7 @@ from typing import TYPE_CHECKING
 
 from btf.config.paths import MARKET_DATA_DIR
 
-if TYPE_CHECKING:                     # 仅类型注解（运行期惰性 import，无环）
+if TYPE_CHECKING:  # 仅类型注解（运行期惰性 import，无环）
     from btf.data.core import YearTableStore
 
 
@@ -41,14 +42,14 @@ def _is_annual(end_date: str) -> bool:
 
 #: R-2（19 号 §224-C/§226 S-2）：`daily_basic` **年表 + 日边界索引**缓存。
 #: 键 `(root, year, columns)`；每 root 只留最近 `_DB_YEAR_CACHE` 年（≈182 MB）。
-_DB_CACHE: dict[
-    tuple[str, int, tuple[str, ...]], tuple[object, dict[str, tuple[int, int]]]
-] = {}
+_DB_CACHE: dict[tuple[str, int, tuple[str, ...]], tuple[object, dict[str, tuple[int, int]]]] = {}
 _DB_YEAR_CACHE = 2
 
 
 def _db_year_slice(
-    root: Path, date_ymd: str, columns: tuple[str, ...],
+    root: Path,
+    date_ymd: str,
+    columns: tuple[str, ...],
 ) -> dict[str, dict]:
     """年表排序一次 + `{ymd: (lo, hi)}` 索引 → 只物化当日 ~5,000 行。"""
     year = int(date_ymd[:4])
@@ -56,8 +57,7 @@ def _db_year_slice(
     key = (resolved, year, tuple(columns))
     cached = _DB_CACHE.get(key)
     if cached is None:
-        table = _store(root).read_file(
-            "daily_basic", year=year, columns=list(columns))
+        table = _store(root).read_file("daily_basic", year=year, columns=list(columns))
         index: dict[str, tuple[int, int]] = {}
         if table is not None and table.num_rows:
             from btf.data.core import sort_by_date_int32  # 唯一实现（§181 D-3）
@@ -66,9 +66,11 @@ def _db_year_slice(
             grouped = table.group_by("trade_date").aggregate([("ts_code", "count")])
             ordered = grouped.sort_by("trade_date")
             start = 0
-            for day, count in zip(ordered.column("trade_date").to_pylist(),
-                                  ordered.column("ts_code_count").to_pylist(),
-                                  strict=True):
+            for day, count in zip(
+                ordered.column("trade_date").to_pylist(),
+                ordered.column("ts_code_count").to_pylist(),
+                strict=True,
+            ):
                 index[day] = (start, start + count)
                 start += count
         cached = (table, index)
@@ -85,17 +87,25 @@ def _db_year_slice(
     lo, hi = span
     out: dict[str, dict] = {}
     for row in table.slice(lo, hi - lo).to_pylist():
-        if str(row.get("trade_date")) != date_ymd:       # 切片等价性自检
+        if str(row.get("trade_date")) != date_ymd:  # 切片等价性自检
             continue
-        out[row["ts_code"]] = {k: row.get(k) for k in columns
-                               if k not in ("ts_code", "trade_date")}
+        out[row["ts_code"]] = {k: row.get(k) for k in columns if k not in ("ts_code", "trade_date")}
     return out
 
 
-def daily_basic_of(date_ymd: str, root: Path | None = None,
-                   columns: tuple[str, ...] = ("ts_code", "trade_date", "close",
-                                               "pe_ttm", "pb", "dv_ttm",
-                                               "total_mv")) -> dict[str, dict]:
+def daily_basic_of(
+    date_ymd: str,
+    root: Path | None = None,
+    columns: tuple[str, ...] = (
+        "ts_code",
+        "trade_date",
+        "close",
+        "pe_ttm",
+        "pb",
+        "dv_ttm",
+        "total_mv",
+    ),
+) -> dict[str, dict]:
     """某交易日全市场估值 → {ts_code: {field: value}}（NaN/None 保留为 None）。
 
     **S-2（19 号 §226）**：原实现 `read_range(date, date)` 每次读**整年文件**
@@ -107,8 +117,9 @@ def daily_basic_of(date_ymd: str, root: Path | None = None,
     return _db_year_slice(root, date_ymd, tuple(columns))
 
 
-def roe_pit_of(date_ymd: str, root: Path | None = None, *,
-               lookback_years: int = 3) -> dict[str, tuple[float, str]]:
+def roe_pit_of(
+    date_ymd: str, root: Path | None = None, *, lookback_years: int = 3
+) -> dict[str, tuple[float, str]]:
     """PIT 年报 ROE：{ts_code: (roe_waa, end_date)}（ann_date ≤ date 的最新年报）。
 
     fina_indicator 按 end_date 分年存储；PIT 需按 **ann_date** 过滤，故读取
@@ -131,8 +142,8 @@ def roe_pit_of(date_ymd: str, root: Path | None = None, *,
     day = dt.date(int(date_ymd[:4]), int(date_ymd[4:6]), int(date_ymd[6:8]))
     start = f"{day.year - lookback_years}0101"
     table = _store(root).read_range(
-        "fina_indicator", start, date_ymd,
-        columns=["ts_code", "ann_date", "end_date", "roe_waa"])
+        "fina_indicator", start, date_ymd, columns=["ts_code", "ann_date", "end_date", "roe_waa"]
+    )
     if table.num_rows == 0:
         return {}
     ts = pc.cast(table.column("ts_code"), pa.string())
@@ -141,10 +152,17 @@ def roe_pit_of(date_ymd: str, root: Path | None = None, *,
     # 语义与逐行版一致：null 一律跳过（原 `str(row.get(...) or "")` → 空串跳过）
     cond = pc.and_(
         pc.and_(pc.is_valid(ts), pc.is_valid(ann)),
-        pc.and_(pc.is_valid(end), pc.and_(
-            pc.is_valid(table.column("roe_waa")),
-            pc.and_(pc.less_equal(ann, pa.scalar(date_ymd, pa.string())),
-                    pc.ends_with(end, pattern="1231")))))   # 年报识别（_is_annual）
+        pc.and_(
+            pc.is_valid(end),
+            pc.and_(
+                pc.is_valid(table.column("roe_waa")),
+                pc.and_(
+                    pc.less_equal(ann, pa.scalar(date_ymd, pa.string())),
+                    pc.ends_with(end, pattern="1231"),
+                ),
+            ),
+        ),
+    )  # 年报识别（_is_annual）
     f = table.filter(cond)
     if f.num_rows == 0:
         return {}
@@ -154,22 +172,29 @@ def roe_pit_of(date_ymd: str, root: Path | None = None, *,
     latest = f.group_by("ts_code").aggregate([("end_date", "max")])
     latest_keys = pc.binary_join_element_wise(
         pc.cast(latest.column("ts_code"), pa.string()),
-        pc.cast(latest.column("end_date_max"), pa.string()), "|")
+        pc.cast(latest.column("end_date_max"), pa.string()),
+        "|",
+    )
     hit = f.filter(pc.is_in(keys, value_set=latest_keys))
     best: dict[str, tuple[float, str]] = {}
-    for row in hit.to_pylist():              # 只物化「每 code 最新年报」行
+    for row in hit.to_pylist():  # 只物化「每 code 最新年报」行
         code, roe = row.get("ts_code"), row.get("roe_waa")
         end_s = str(row.get("end_date") or "")
         if code is None or roe is None or not end_s:
             continue
-        if code not in best:                 # 同 (code, end) 重复行：原实现保留首行
+        if code not in best:  # 同 (code, end) 重复行：原实现保留首行
             best[code] = (float(roe), end_s)
     return best
 
 
-def screen_l2(date_ymd: str, params: dict, *, root: Path | None = None,
-              exclude_bj: bool = True,
-              universe: set[str] | None = None) -> list[str]:
+def screen_l2(
+    date_ymd: str,
+    params: dict,
+    *,
+    root: Path | None = None,
+    exclude_bj: bool = True,
+    universe: set[str] | None = None,
+) -> list[str]:
     """v7.7 L2 硬筛子 → 合格标的代码列表（升序，确定性）。
 
     params：镜像 JSON 的 `L2_filter`（pe_max/pb_max/roe_min/dv_min，

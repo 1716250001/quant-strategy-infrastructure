@@ -13,6 +13,7 @@
 约束（04 §8.3.2 ctx API 边界）：只读 ctx 暴露的行情/持仓/宇宙，**无 I/O**
 （不 open 文件、不访问网络）——策略层可测性的前提。
 """
+
 from __future__ import annotations
 
 from btf.domain.contracts import CONTRACT_VERSION
@@ -33,8 +34,7 @@ class MonthlyMomentumRotation(StrategyBase):
     #: S1 契约声明（runtime 装配期版本协商必需）
     contract_version = CONTRACT_VERSION
 
-    def __init__(self, top_k: int = 10, lookback: int = 20,
-                 weight: float | None = None):
+    def __init__(self, top_k: int = 10, lookback: int = 20, weight: float | None = None):
         """
         top_k     持有数量（动量排名前 K）
         lookback  动量回看窗口（交易日）
@@ -47,7 +47,7 @@ class MonthlyMomentumRotation(StrategyBase):
 
     def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
         month = date.to_ymd()[:6]
-        if month == self._last_month:          # 每月首个交易日调仓
+        if month == self._last_month:  # 每月首个交易日调仓
             return
         self._last_month = month
 
@@ -61,7 +61,7 @@ class MonthlyMomentumRotation(StrategyBase):
                 scores[inst.symbol] = last / first - 1.0
         if not scores:
             return
-        ranked = sorted(scores, key=lambda s: -scores[s])[:self.top_k]
+        ranked = sorted(scores, key=lambda s: -scores[s])[: self.top_k]
         weight = self.weight if self.weight is not None else 1.0 / len(ranked)
         ctx.submit_target(TargetPortfolio(date, {s: weight for s in ranked}))
 

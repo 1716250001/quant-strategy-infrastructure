@@ -14,6 +14,7 @@
     - 语义与原 dict 一致（`get`/`[]`/`in`/`len`/`clear`/`pop`），仅多"淘汰"；
     - `stats()` 供性能断言与披露使用（不得恒空——铁律新 16）。
 """
+
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -53,7 +54,7 @@ class BoundedDict[K, V](MutableMapping[K, V]):
         self._data.move_to_end(key)
         return value
 
-    def get(self, key: K, default: Any = None) -> Any:     # type: ignore[override]
+    def get(self, key: K, default: Any = None) -> Any:  # type: ignore[override]
         if key in self._data:
             return self[key]
         self.misses += 1
@@ -88,10 +89,17 @@ class BoundedDict[K, V](MutableMapping[K, V]):
     # ── 观测（铁律新 16：不得恒空）──
     def stats(self) -> dict[str, Any]:
         """缓存统计（容量/条目/命中/未命中/淘汰）。"""
-        return {"name": self.name, "maxsize": self.maxsize,
-                "entries": len(self._data), "hits": self.hits,
-                "misses": self.misses, "evictions": self.evictions}
+        return {
+            "name": self.name,
+            "maxsize": self.maxsize,
+            "entries": len(self._data),
+            "hits": self.hits,
+            "misses": self.misses,
+            "evictions": self.evictions,
+        }
 
-    def __repr__(self) -> str:                              # pragma: no cover
-        return (f"BoundedDict({self.name!r}, maxsize={self.maxsize}, "
-                f"entries={len(self._data)}, evictions={self.evictions})")
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"BoundedDict({self.name!r}, maxsize={self.maxsize}, "
+            f"entries={len(self._data)}, evictions={self.evictions})"
+        )

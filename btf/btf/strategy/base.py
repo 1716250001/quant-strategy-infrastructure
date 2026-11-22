@@ -6,6 +6,7 @@
     - 只产出 TargetPortfolio（submit_target）或显式订单（submit_order）；
     - init（循环前一次）→ on_open（T 开盘后）→ on_close（T 收盘后）。
 """
+
 from __future__ import annotations
 
 from abc import ABC

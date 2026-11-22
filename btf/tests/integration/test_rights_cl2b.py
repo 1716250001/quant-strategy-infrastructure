@@ -8,6 +8,7 @@
   ③ 反向探针：无事件的 run ⇒ **不得**出现「配股行权披露」（防恒现），
      但仍给清单状态行（禁静默）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -30,8 +31,7 @@ SYM = "600030.SH"
 #: 前置一日（DPRE）用于建仓：引擎 T+1 next_open ⇒ DPRE 收盘信号在 D0 开盘成交
 #: ⇒ **D0 收盘在册**（登记日持仓）；D1 为除权日（步骤① 时持仓已在）。
 DPRE = TradingDate.from_iso(2015, 1, 2)
-D0, D1, D2, D3, D4 = (TradingDate.from_iso(2015, 1, d)
-                      for d in (5, 6, 7, 8, 9))
+D0, D1, D2, D3, D4 = (TradingDate.from_iso(2015, 1, d) for d in (5, 6, 7, 8, 9))
 PX = {DPRE: 25.60, D0: 25.70, D1: 24.15, D2: 24.20, D3: 24.30, D4: 24.40}
 
 
@@ -59,23 +59,34 @@ def _make_feed(*, with_rights: bool, listing: TradingDate | None) -> MemoryFeed:
     for d in (DPRE, D0, D1, D2, D3, D4):
         bars.append(make_bar(SYM, d, PX[d], PX[d], PX[d], PX[d], PX[d]))
         states[(d.to_ymd(), SYM)] = make_state(SYM, d, pre=PX[d])
-    instruments = {SYM: Instrument(SYM, AssetClass.STOCK, board="main",
-                                   lot_size=100)}
+    instruments = {SYM: Instrument(SYM, AssetClass.STOCK, board="main", lot_size=100)}
     actions = []
     if with_rights:
-        actions.append(CorporateAction(
-            symbol=SYM, ex_date=D1, pay_date=None, record_date=D0,
-            cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
-            rights_ratio=0.15, rights_price=14.43, rights_ex_date=D1,
-            rights_listing_date=listing))
-    return MemoryFeed(bars, states, instruments,
-                      dates=[DPRE, D0, D1, D2, D3, D4], actions=actions)
+        actions.append(
+            CorporateAction(
+                symbol=SYM,
+                ex_date=D1,
+                pay_date=None,
+                record_date=D0,
+                cash_div_per_share=0.0,
+                stk_div_per_share=0.0,
+                ann_date=None,
+                rights_ratio=0.15,
+                rights_price=14.43,
+                rights_ex_date=D1,
+                rights_listing_date=listing,
+            )
+        )
+    return MemoryFeed(bars, states, instruments, dates=[DPRE, D0, D1, D2, D3, D4], actions=actions)
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _register_feeds():
-    for name, feed in ((FEED_RIGHTS, _make_feed(with_rights=True, listing=D4)),
-                       (FEED_PLAIN, _make_feed(with_rights=False, listing=None))):
+    for name, feed in (
+        (FEED_RIGHTS, _make_feed(with_rights=True, listing=D4)),
+        (FEED_PLAIN, _make_feed(with_rights=False, listing=None)),
+    ):
+
         def factory(_feed=feed, **_params):
             return _feed
 
@@ -109,7 +120,7 @@ class TestRightsEndToEnd:
         ev = result.rights_events[0]
         # 建仓：DPRE 收盘按 25.60 定价 ⇒ 351 手 = 35100 股（D0 开盘成交）
         assert ev["qty_at_ex"] == 35100
-        assert ev["rights_qty"] == int(35100 * 0.15)     # floor（§79.3 #1）
+        assert ev["rights_qty"] == int(35100 * 0.15)  # floor（§79.3 #1）
         assert ev["cost"] == pytest.approx(ev["rights_qty"] * 14.43, rel=1e-12)
         assert ev["listing_date"] == D4.to_ymd()
         assert ev["cash_shortfall"] == 0.0
@@ -117,12 +128,11 @@ class TestRightsEndToEnd:
         joined = " | ".join(rt.assembly_notes)
         assert "配股行权披露" in joined and SYM in joined
         assert str(ev["rights_qty"]) in joined and "上市日" in joined
-        assert "配股/缩股清单" in joined                # 状态行（不恒空）
+        assert "配股/缩股清单" in joined  # 状态行（不恒空）
 
     def test_lockup_sell_warns_not_silent(self):
         """② 获配上市日前卖出 ⇒ 警告（不阻断、不静默）。"""
-        rt = BTFRuntime().load_config(
-            _cfg(FEED_RIGHTS, sell_day=D2.to_ymd())).build()
+        rt = BTFRuntime().load_config(_cfg(FEED_RIGHTS, sell_day=D2.to_ymd())).build()
         result = rt.run(persist=False)
         assert result.lockup_sell_warnings, "锁定期内卖出未产生警告"
         assert any(D3.to_ymd() in w for w in result.lockup_sell_warnings)
@@ -153,7 +163,7 @@ class TestEventDayDecompositionG7:
         nav_on, res_on = self._navs(FEED_RIGHTS)
         nav_off, _ = self._navs(FEED_PLAIN)
         ev = res_on.rights_events[0]
-        m, pr = ev["rights_qty"], 14.43          # floor(35100×0.15)=5265
+        m, pr = ev["rights_qty"], 14.43  # floor(35100×0.15)=5265
         d1 = D1.to_ymd()
         delta = nav_on[d1] - nav_off[d1]
         # P ＝ D1 **真实收盘** 24.15（引擎 mark-to-market 用 bar 覆盖 pex）

@@ -24,6 +24,7 @@ domains_of(library, authority)  该库该等级的域 id 列表
 本模块**没有写方法**（没有 set/mark/patch）。P3-2 只做门面，不改变任何写入路径；
 写侧仍由各 owner 模块负责（见声明里的 owner 字段）。
 """
+
 from __future__ import annotations
 
 import difflib
@@ -60,11 +61,8 @@ def get(domain_id):
     try:
         return _cfg.domain(domain_id)
     except KeyError:
-        near = difflib.get_close_matches(
-            str(domain_id), [d.id for d in _cfg.all_domains()], n=3)
-        raise KeyError(
-            f"未登记的断点域: {domain_id!r}；最接近: {near or '无'}"
-        ) from None
+        near = difflib.get_close_matches(str(domain_id), [d.id for d in _cfg.all_domains()], n=3)
+        raise KeyError(f"未登记的断点域: {domain_id!r}；最接近: {near or '无'}") from None
 
 
 def domains_of(library, authority="PRIMARY"):

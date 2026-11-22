@@ -13,6 +13,7 @@ index_code；未登记别名**显式报错**，不做模糊匹配）。
 成分的**并集**（静态超集——引擎宇宙为静态身份，逐月切换由策略消费
 `rt.index_universe` 月度映射）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,11 +24,11 @@ from btf.config.paths import MARKET_DATA_DIR
 
 #: 常见指数别名（登记制——未列出的指数直接写 index_code）
 INDEX_ALIASES: dict[str, str] = {
-    "hs300": "000300.SH",     # 沪深300
-    "zz500": "000905.SH",     # 中证500
-    "sz50": "000016.SH",      # 上证50
-    "zz1000": "000852.SH",    # 中证1000
-    "cyb": "399006.SZ",       # 创业板指
+    "hs300": "000300.SH",  # 沪深300
+    "zz500": "000905.SH",  # 中证500
+    "sz50": "000016.SH",  # 上证50
+    "zz1000": "000852.SH",  # 中证1000
+    "cyb": "399006.SZ",  # 创业板指
 }
 
 
@@ -45,7 +46,7 @@ class IndexUniverseProvider:
         from btf.data.core import YearTableStore
 
         self._store = YearTableStore(self.root)
-        self._snapshots: dict[str, list[str]] = {}      # index_code → 升序快照日
+        self._snapshots: dict[str, list[str]] = {}  # index_code → 升序快照日
         self._rows: dict[str, dict[str, list[str]]] = {}  # code → {日: [con]}
 
     # ── 载入（每指数一次）──
@@ -53,18 +54,22 @@ class IndexUniverseProvider:
         if index_code in self._rows:
             return
         table = self._store.read_file(
-            "index_weight", columns=["index_code", "con_code", "trade_date"])
+            "index_weight", columns=["index_code", "con_code", "trade_date"]
+        )
         if table is None:
             raise FileNotFoundError(
-                f"index_weight 表缺失: {self.root / 'index_weight'}（指数成分宇宙 "
-                f"V5-4 的数据前提）")
+                f"index_weight 表缺失: {self.root / 'index_weight'}（指数成分宇宙 V5-4 的数据前提）"
+            )
         table = table.filter(pc.equal(table.column("index_code"), index_code))
         rows: dict[str, list[str]] = {}
-        for con, ymd in zip(table.column("con_code").to_pylist(),
-                            table.column("trade_date").to_pylist(), strict=True):
+        for con, ymd in zip(
+            table.column("con_code").to_pylist(),
+            table.column("trade_date").to_pylist(),
+            strict=True,
+        ):
             rows.setdefault(ymd, []).append(con)
         for day in rows:
-            rows[day].sort()              # 确定性：成分列表升序
+            rows[day].sort()  # 确定性：成分列表升序
         self._rows[index_code] = rows
         self._snapshots[index_code] = sorted(rows)
 
@@ -85,8 +90,7 @@ class IndexUniverseProvider:
                 break
         return list(self._rows[index_code][chosen]) if chosen else []
 
-    def monthly_codes(self, index_code: str, start_ymd: str,
-                      end_ymd: str) -> dict[str, list[str]]:
+    def monthly_codes(self, index_code: str, start_ymd: str, end_ymd: str) -> dict[str, list[str]]:
         """逐月宇宙：{YYYYMM: 成分列表}——月宇宙 = 该月首日**之前**的最新快照。
 
         PIT：月首日前已发布的最后月末快照（即上月末或更早）；无快照的月
@@ -103,8 +107,7 @@ class IndexUniverseProvider:
                 year, month = year + 1, 1
         return out
 
-    def union_codes(self, index_code: str, start_ymd: str,
-                    end_ymd: str) -> list[str]:
+    def union_codes(self, index_code: str, start_ymd: str, end_ymd: str) -> list[str]:
         """期间各月成分并集（引擎静态宇宙超集，升序）。"""
         monthly = self.monthly_codes(index_code, start_ymd, end_ymd)
         return sorted({code for codes in monthly.values() for code in codes})

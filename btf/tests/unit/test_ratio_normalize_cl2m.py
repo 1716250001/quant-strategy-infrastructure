@@ -11,6 +11,7 @@ helper 本体 ／ `corp_action_probe` 装载（**含开关打开**的 `consolida
 默认 off 会掩盖）／ `events_log._dec_action` 回读 ／ `portfolio` 消费端（禁清零）／
 `action_order_key`（ETF 分支，禁崩）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,7 @@ pytestmark = [pytest.mark.l1]
 
 D0 = TradingDate.from_ymd("20240102")
 D1 = TradingDate.from_ymd("20241231")
-NORMAL = 0.32665                       # 真实清单唯一值（000887.SZ）
+NORMAL = 0.32665  # 真实清单唯一值（000887.SZ）
 DIRTY = [None, "", "abc", 0.0, -1]
 
 
@@ -32,11 +33,23 @@ def _expected(value) -> float:
 
 
 class TestHelperThreeStates:
-    @pytest.mark.parametrize("value,expected", [
-        (None, 1.0), ("", 1.0), ("abc", 1.0), (0.0, 1.0), (-1, 1.0),
-        (-0.5, 1.0), (NORMAL, NORMAL), ("0.5", 0.5), (2.0, 2.0),
-        (float("nan"), 1.0), (float("inf"), 1.0), (False, 1.0),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (None, 1.0),
+            ("", 1.0),
+            ("abc", 1.0),
+            (0.0, 1.0),
+            (-1, 1.0),
+            (-0.5, 1.0),
+            (NORMAL, NORMAL),
+            ("0.5", 0.5),
+            (2.0, 2.0),
+            (float("nan"), 1.0),
+            (float("inf"), 1.0),
+            (False, 1.0),
+        ],
+    )
     def test_values(self, value, expected):
         assert ratio_or_default(value) == pytest.approx(expected)
 
@@ -47,9 +60,9 @@ class TestHelperThreeStates:
         assert ratio_or_default(0.0, context="t2", warn=seen.append) == 1.0
         assert ratio_or_default(float("nan"), warn=seen.append) == 1.0
         text = "\n".join(seen)
-        assert "不可转换为数值" in text          # N58：禁崩
+        assert "不可转换为数值" in text  # N58：禁崩
         assert "非有限值" in text
-        assert "不建模" in text                  # N59 裁决 (a)：禁清零
+        assert "不建模" in text  # N59 裁决 (a)：禁清零
 
     def test_none_is_silent(self):
         seen: list[str] = []
@@ -69,11 +82,11 @@ class TestProbeLoadPaths:
     def _data(ratio):
         return {
             "consolidations_confirmed": [
-                {"symbol": "000887.SZ", "ex_date": "20240103",
-                 "consolidation_ratio": ratio}],
+                {"symbol": "000887.SZ", "ex_date": "20240103", "consolidation_ratio": ratio}
+            ],
             "consolidations": [
-                {"symbol": "000887.SZ", "ex_date": "20240103",
-                 "consolidation_ratio": ratio}],
+                {"symbol": "000887.SZ", "ex_date": "20240103", "consolidation_ratio": ratio}
+            ],
         }
 
     @pytest.mark.parametrize("ratio", [*DIRTY, NORMAL])
@@ -91,15 +104,14 @@ class TestProbeLoadPaths:
         monkeypatch.setenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS", "on")
         acts = to_corporate_actions(self._data(ratio), D0, D1)
         proxy = [a for a in acts if a.consolidation_source == "proxy"]
-        assert len(proxy) == 1                    # 开关打开 ⇒ 代理路径已走到
+        assert len(proxy) == 1  # 开关打开 ⇒ 代理路径已走到
         assert proxy[0].consolidation_ratio == pytest.approx(1.0)
 
     @pytest.mark.parametrize("ratio", DIRTY)
     def test_proxy_switch_off_skips(self, ratio, monkeypatch):
         from btf.data.corp_action_probe import to_corporate_actions
 
-        monkeypatch.delenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS",
-                           raising=False)
+        monkeypatch.delenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS", raising=False)
         acts = to_corporate_actions(self._data(ratio), D0, D1)
         assert not [a for a in acts if a.consolidation_source == "proxy"]
 
@@ -112,12 +124,18 @@ class TestEventLogReadback:
         from btf.engine.events_log import _dec_action
 
         with caplog.at_level(logging.WARNING, logger="btf.engine.events_log"):
-            act = _dec_action({
-                "symbol": "000887.SZ", "ex_date": "20240103",
-                "pay_date": None, "record_date": None, "ann_date": None,
-                "cash_div_per_share": 0.0, "stk_div_per_share": 0.0,
-                "consolidation_ratio": ratio,
-            })
+            act = _dec_action(
+                {
+                    "symbol": "000887.SZ",
+                    "ex_date": "20240103",
+                    "pay_date": None,
+                    "record_date": None,
+                    "ann_date": None,
+                    "cash_div_per_share": 0.0,
+                    "stk_div_per_share": 0.0,
+                    "consolidation_ratio": ratio,
+                }
+            )
         assert act.consolidation_ratio == pytest.approx(_expected(ratio))
         # `None` 属「无值」⇒ 静默（不告警）；其余脏值必须 WARN（禁静默）
         if ratio in DIRTY and ratio is not None:
@@ -130,30 +148,39 @@ class TestPortfolioConsumer:
     @staticmethod
     def _act(ratio):
         return CorporateAction(
-            symbol="000887.SZ", ex_date=D0, pay_date=None, record_date=None,
-            cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
-            consolidation_ratio=ratio, consolidation_source="confirmed")
+            symbol="000887.SZ",
+            ex_date=D0,
+            pay_date=None,
+            record_date=None,
+            cash_div_per_share=0.0,
+            stk_div_per_share=0.0,
+            ann_date=None,
+            consolidation_ratio=ratio,
+            consolidation_source="confirmed",
+        )
 
     @pytest.mark.parametrize("ratio", DIRTY)
     def test_invalid_ratio_no_consolidation_no_wipeout(self, ratio):
         from btf.portfolio.portfolio import Portfolio, Position
 
         p = Portfolio(cash=0.0)
-        p.positions["000887.SZ"] = Position(symbol="000887.SZ", qty=100,
-                                            available_qty=100, avg_cost=10.0)
+        p.positions["000887.SZ"] = Position(
+            symbol="000887.SZ", qty=100, available_qty=100, avg_cost=10.0
+        )
         p._last_close["000887.SZ"] = 10.0
         p.apply_ex_date(self._act(ratio))
-        assert p.consolidations == []             # 不建模
+        assert p.consolidations == []  # 不建模
         pos = p.positions["000887.SZ"]
-        assert pos.qty == 100                     # 份额不变（非 1 股清零）
+        assert pos.qty == 100  # 份额不变（非 1 股清零）
         assert pos.avg_cost == pytest.approx(10.0)
 
     def test_normal_ratio_still_modeled(self):
         from btf.portfolio.portfolio import Portfolio, Position
 
         p = Portfolio(cash=0.0)
-        p.positions["000887.SZ"] = Position(symbol="000887.SZ", qty=100,
-                                            available_qty=100, avg_cost=10.0)
+        p.positions["000887.SZ"] = Position(
+            symbol="000887.SZ", qty=100, available_qty=100, avg_cost=10.0
+        )
         p._last_close["000887.SZ"] = 10.0
         p.apply_ex_date(self._act(NORMAL))
         ev = p.consolidations[0]
@@ -164,8 +191,9 @@ class TestPortfolioConsumer:
         from btf.portfolio.portfolio import Portfolio, Position
 
         p = Portfolio(cash=0.0)
-        p.positions["000887.SZ"] = Position(symbol="000887.SZ", qty=100,
-                                            available_qty=100, avg_cost=10.0)
+        p.positions["000887.SZ"] = Position(
+            symbol="000887.SZ", qty=100, available_qty=100, avg_cost=10.0
+        )
         p._last_close["000887.SZ"] = 10.0
         p.apply_ex_date(self._act(0.005))
         assert p.consolidations[0]["forced_min_qty"] is True
@@ -177,9 +205,16 @@ class TestOrderKeyDirty:
     @staticmethod
     def _act(ratio):
         return CorporateAction(
-            symbol="510310.SH", ex_date=D0, pay_date=None, record_date=None,
-            cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
-            consolidation_ratio=ratio, consolidation_source="fund_conv")
+            symbol="510310.SH",
+            ex_date=D0,
+            pay_date=None,
+            record_date=None,
+            cash_div_per_share=0.0,
+            stk_div_per_share=0.0,
+            ann_date=None,
+            consolidation_ratio=ratio,
+            consolidation_source="fund_conv",
+        )
 
     @pytest.mark.parametrize("ratio", DIRTY)
     def test_dirty_ratio_key_is_one(self, ratio):

@@ -24,6 +24,7 @@ tools/db_clean.py — 存量数据清理（版本冗余压缩）
   哪个版本是"当前服务端口径"必须实测，不能假设"后写入=新版"。
   fina_indicator 实测 40/40 冲突组匹配"先写入"那版 → keep_first_nonnull。
 """
+
 import os
 import shutil
 import time
@@ -89,11 +90,11 @@ def backup_dir(dir_path, name, verbose=True):
             size += os.path.getsize(p)
     free = shutil.disk_usage(os.path.dirname(dir_path)).free
     if free < size * 1.5:
-        print(f"  [备份] ⛔ 空间不足(需{size/1024**2:.0f}MB, 剩{free/1024**3:.1f}GB), 中止")
+        print(f"  [备份] ⛔ 空间不足(需{size / 1024**2:.0f}MB, 剩{free / 1024**3:.1f}GB), 中止")
         return None
     ensure_dir(BACKUP_ROOT)
     if verbose:
-        print(f"  [备份] {len(os.listdir(dir_path))} 文件 / {size/1024**2:.1f} MB → {dst}")
+        print(f"  [备份] {len(os.listdir(dir_path))} 文件 / {size / 1024**2:.1f} MB → {dst}")
     shutil.copytree(dir_path, dst)
     return dst
 
@@ -119,7 +120,7 @@ def clean_target(name, conf, apply=False, backup=True, verbose=True):
 
     mode = "执行" if apply else "干跑"
     print("\n" + "=" * 74)
-    print(f"  [{name}] {conf.get('desc','')} — {mode}")
+    print(f"  [{name}] {conf.get('desc', '')} — {mode}")
     print("=" * 74)
     print(f"  文件数: {len(files)} | 主键: {key} | 策略: {strategy}")
     if conf.get("note"):
@@ -199,15 +200,17 @@ def clean_target(name, conf, apply=False, backup=True, verbose=True):
                 continue
 
         if verbose and (i % 1000 == 0 or i == len(files)):
-            print(f"    {i:6d}/{len(files):<6d} 原={tot_before:>10,d} 后={tot_after:>10,d} "
-                  f"省={tot_before-tot_after:>9,d} | {time.time()-t0:.0f}s")
+            print(
+                f"    {i:6d}/{len(files):<6d} 原={tot_before:>10,d} 后={tot_after:>10,d} "
+                f"省={tot_before - tot_after:>9,d} | {time.time() - t0:.0f}s"
+            )
 
     el = time.time() - t0
     red = tot_before - tot_after
     print(f"\n  原行数:     {tot_before:,}")
     print(f"  清理后:     {tot_after:,}")
-    print(f"  减少:       {red:,} ({red/tot_before*100 if tot_before else 0:.1f}%)")
-    print(f"  整行相同:   {dup_full:,} ({dup_full/tot_before*100 if tot_before else 0:.1f}%)")
+    print(f"  减少:       {red:,} ({red / tot_before * 100 if tot_before else 0:.1f}%)")
+    print(f"  整行相同:   {dup_full:,} ({dup_full / tot_before * 100 if tot_before else 0:.1f}%)")
     print(f"  受影响文件: {changed}/{len(files)} | 耗时: {el:.1f}s")
 
     ok = True
@@ -231,7 +234,9 @@ def clean_target(name, conf, apply=False, backup=True, verbose=True):
     if conflict_groups:
         print(f"\n  ⚠ 冲突组(两行都有值且不等): {conflict_groups:,}")
         print(f"    涉及字段: { {k: v for k, v in conflict.items() if v} }")
-        print(f"    当前策略「{strategy}」保留的版本 = {conf.get('version_note','见 config 注释')}")
+        print(
+            f"    当前策略「{strategy}」保留的版本 = {conf.get('version_note', '见 config 注释')}"
+        )
         print("    提示: 若未用现拉数据验证过版本归属, 请先核实再执行")
 
     if bad:
@@ -242,8 +247,15 @@ def clean_target(name, conf, apply=False, backup=True, verbose=True):
         print(f"\n  备份: {bk}")
     print(f"  判定: {'✓ 通过' if ok else '⚠ 需人工确认'}")
 
-    return {"name": name, "before": tot_before, "after": tot_after,
-            "reduced": red, "ok": ok, "backup": bk, "bad": len(bad)}
+    return {
+        "name": name,
+        "before": tot_before,
+        "after": tot_after,
+        "reduced": red,
+        "ok": ok,
+        "backup": bk,
+        "bad": len(bad),
+    }
 
 
 # ============================================================
@@ -261,8 +273,7 @@ def run_clean(targets=None, apply=False, backup=True, verbose=True):
         print("  提示: 当前为干跑, 不改动任何文件; 加 --apply 才写入")
     print("=" * 74)
 
-    sel = [(n, c) for n, c in DB_CLEAN_TARGETS.items()
-           if targets is None or n in targets]
+    sel = [(n, c) for n, c in DB_CLEAN_TARGETS.items() if targets is None or n in targets]
     if not sel:
         print("\n  没有匹配的清理目标")
         return []
@@ -284,6 +295,8 @@ def run_clean(targets=None, apply=False, backup=True, verbose=True):
         print("  汇总")
         print("=" * 74)
         for r in results:
-            print(f"  {r['name']:20s} {r['before']:>10,d} → {r['after']:>10,d} "
-                  f"(省 {r['reduced']:,})  {'✓' if r['ok'] else '⚠'}")
+            print(
+                f"  {r['name']:20s} {r['before']:>10,d} → {r['after']:>10,d} "
+                f"(省 {r['reduced']:,})  {'✓' if r['ok'] else '⚠'}"
+            )
     return results

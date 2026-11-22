@@ -31,14 +31,14 @@ alt/urls.py — 上游域名判定【唯一真源】
 # ============================================================
 # 一、通用兜底域名（未登记接口的默认归属）
 # ============================================================
-URL_DATACENTER_WEB = "https://datacenter-web.eastmoney.com"   # 东财数据中台
-URL_DATACENTER_API = "https://datacenter-api.jin10.com"       # 金十数据 API
-URL_PUSH2EX = "https://push2ex.eastmoney.com"                 # 东财涨停池/异动
-URL_PUSH2HIS = "https://push2his.eastmoney.com"               # 东财行情端点
-URL_LEGULEGU = "https://legulegu.com"                         # 乐咕乐股
-URL_OPTBBS = "https://1.optbbs.com"                           # QVIX 波指 CSV 源
-URL_SINA = "https://finance.sina.com.cn"                      # 新浪财经（v1.2：港股/中行牌价）
-URL_BAIDU = "https://finance.baidu.com"                       # 百度股市通（外盘扩容：港股估值分位）
+URL_DATACENTER_WEB = "https://datacenter-web.eastmoney.com"  # 东财数据中台
+URL_DATACENTER_API = "https://datacenter-api.jin10.com"  # 金十数据 API
+URL_PUSH2EX = "https://push2ex.eastmoney.com"  # 东财涨停池/异动
+URL_PUSH2HIS = "https://push2his.eastmoney.com"  # 东财行情端点
+URL_LEGULEGU = "https://legulegu.com"  # 乐咕乐股
+URL_OPTBBS = "https://1.optbbs.com"  # QVIX 波指 CSV 源
+URL_SINA = "https://finance.sina.com.cn"  # 新浪财经（v1.2：港股/中行牌价）
+URL_BAIDU = "https://finance.baidu.com"  # 百度股市通（外盘扩容：港股估值分位）
 
 # ============================================================
 # 二、显式登记：函数名 → 真实域名（实测得出，优先于规则）
@@ -47,15 +47,23 @@ URL_BAIDU = "https://finance.baidu.com"                       # 百度股市通�
 #    注意：macro_usa_cpi_yoy 虽同属 macro_usa_ 前缀，但走的是**东财**，
 #    故不能用前缀一刀切，必须逐函数登记。
 _JIN10_FUNCS = {
-    "macro_usa_cpi_monthly", "macro_usa_core_cpi_monthly",
-    "macro_usa_gdp_monthly", "macro_usa_unemployment_rate",
-    "macro_usa_non_farm", "macro_usa_ppi", "macro_usa_adp_employment",
-    "macro_bank_usa_interest_rate", "macro_bank_euro_interest_rate",
-    "macro_bank_english_interest_rate", "macro_bank_japan_interest_rate",
+    "macro_usa_cpi_monthly",
+    "macro_usa_core_cpi_monthly",
+    "macro_usa_gdp_monthly",
+    "macro_usa_unemployment_rate",
+    "macro_usa_non_farm",
+    "macro_usa_ppi",
+    "macro_usa_adp_employment",
+    "macro_bank_usa_interest_rate",
+    "macro_bank_euro_interest_rate",
+    "macro_bank_english_interest_rate",
+    "macro_bank_japan_interest_rate",
     "macro_bank_australia_interest_rate",
-    "macro_bank_switzerland_interest_rate", "macro_euro_cpi_yoy",
+    "macro_bank_switzerland_interest_rate",
+    "macro_euro_cpi_yoy",
     # v1.2 外盘接入（2026-10-11 源码核对：走 datacenter-api.jin10.com/reports/list_v2）
-    "macro_bank_brazil_interest_rate", "macro_bank_india_interest_rate",
+    "macro_bank_brazil_interest_rate",
+    "macro_bank_india_interest_rate",
 }
 
 # —— 单一接口但命名不具有识别特征，需点名登记 ——
@@ -119,8 +127,7 @@ def describe(func_name: str) -> dict:
     from alt.config import host_tier, rate_for_url
 
     u = guess_url(func_name)
-    return {"func": func_name, "url": u,
-            "tier": host_tier(u), "rate": rate_for_url(u)}
+    return {"func": func_name, "url": u, "tier": host_tier(u), "rate": rate_for_url(u)}
 
 
 def registry_report():
@@ -143,8 +150,9 @@ def _main(argv=None):
     import re
 
     p = argparse.ArgumentParser(description="alt 上游域名判定核对（零请求）")
-    p.add_argument("--check", action="store_true",
-                   help="逐表比对 akshare 源码中的真实 URL 与登记值")
+    p.add_argument(
+        "--check", action="store_true", help="逐表比对 akshare 源码中的真实 URL 与登记值"
+    )
     a = p.parse_args(argv)
 
     try:
@@ -183,16 +191,18 @@ def _main(argv=None):
             src = inspect.getsource(fn)
             whole = open(inspect.getsourcefile(fn), encoding="utf-8").read()
         except Exception as exc:
-            print(f"[alt.urls] 读取函数源码失败 {sp.name}（跳过 URL 校验）: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[alt.urls] 读取函数源码失败 {sp.name}（跳过 URL 校验）: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             continue
         urls = set(url_pat.findall(src)) or set(url_pat.findall(whole))
         hosts = sorted({re.sub(r"^https?://", "", u).split("/")[0] for u in urls})
         if not hosts:
             continue
         reg_host = re.sub(r"^https?://", "", guess_url(sp.func)).split("/")[0]
-        hit = any(reg_host == h or h.endswith(reg_host) or reg_host.endswith(h)
-                  for h in hosts)
+        hit = any(reg_host == h or h.endswith(reg_host) or reg_host.endswith(h) for h in hosts)
         mark = "OK " if hit else "!! "
         if not hit:
             bad += 1
@@ -203,4 +213,5 @@ def _main(argv=None):
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(_main())

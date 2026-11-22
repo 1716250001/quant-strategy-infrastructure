@@ -9,6 +9,7 @@
 - **全窗扫描**：2016-2026 同签名重复组 = 0（修复前 32 组）。
 - 披露：`feed.dividend_dedup_note` 记合并条数（无合并 ⇒ 空）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -19,8 +20,8 @@ from btf.domain.types import TradingDate
 pytestmark = [pytest.mark.l2]
 
 requires_mainlib = pytest.mark.skipif(
-    not (MARKET_DATA_DIR / "dividend").is_dir(),
-    reason=f"主库不可用: {MARKET_DATA_DIR}")
+    not (MARKET_DATA_DIR / "dividend").is_dir(), reason=f"主库不可用: {MARKET_DATA_DIR}"
+)
 
 START = "20160630"
 END = "20260918"
@@ -29,15 +30,19 @@ END = "20260918"
 @pytest.fixture(scope="module")
 def acts():
     feed = TushareParquetFeed(MARKET_DATA_DIR)
-    got = feed.corporate_actions(TradingDate.from_ymd(START),
-                                 TradingDate.from_ymd(END))
+    got = feed.corporate_actions(TradingDate.from_ymd(START), TradingDate.from_ymd(END))
     return feed, got
 
 
 def _on(acts, sym: str, day: str):
-    return [a for a in acts
-            if a.symbol == sym and a.ex_date.to_ymd() == day
-            and a.rights_ratio == 0.0 and a.consolidation_ratio == 1.0]
+    return [
+        a
+        for a in acts
+        if a.symbol == sym
+        and a.ex_date.to_ymd() == day
+        and a.rights_ratio == 0.0
+        and a.consolidation_ratio == 1.0
+    ]
 
 
 @requires_mainlib
@@ -64,11 +69,14 @@ class TestDuplicateMerged:
         for a in got:
             if a.rights_ratio != 0.0 or a.consolidation_ratio != 1.0:
                 continue
-            k = (a.symbol, a.ex_date.to_ymd(),
-                 a.pay_date.to_ymd() if a.pay_date else None,
-                 a.record_date.to_ymd() if a.record_date else None,
-                 round(a.cash_div_per_share, 8),
-                 round(a.stk_div_per_share, 8))
+            k = (
+                a.symbol,
+                a.ex_date.to_ymd(),
+                a.pay_date.to_ymd() if a.pay_date else None,
+                a.record_date.to_ymd() if a.record_date else None,
+                round(a.cash_div_per_share, 8),
+                round(a.stk_div_per_share, 8),
+            )
             if k in sig:
                 dups.append(k)
             sig.add(k)
@@ -103,14 +111,16 @@ class TestRealMultiPayKept:
         rows = _on(got, "300760.SZ", "20250529")
         assert len(rows) == 2, rows
         assert sorted(a.cash_div_per_share for a in rows) == [
-            pytest.approx(0.56), pytest.approx(1.41)]
+            pytest.approx(0.56),
+            pytest.approx(1.41),
+        ]
 
 
 @requires_mainlib
 def test_note_empty_when_no_merge():
     """披露不得恒现：区间内无重复公告 ⇒ note 为空串（取无数据的未来区间）。"""
     feed = TushareParquetFeed(MARKET_DATA_DIR)
-    feed.corporate_actions(TradingDate.from_ymd("20300101"),
-                           TradingDate.from_ymd("20300105"),
-                           symbols=["000001.SZ"])
+    feed.corporate_actions(
+        TradingDate.from_ymd("20300101"), TradingDate.from_ymd("20300105"), symbols=["000001.SZ"]
+    )
     assert feed.dividend_dedup_note == ""

@@ -13,6 +13,7 @@ alt/io.py — alt 库落盘层（日期归一化 + 复用主库存储设施）
   common.parquet_store.merge_append   —— 单文件"读→concat→去重→写回"
   common.parquet_store.upsert_by_year —— 按年分区批量落盘
 """
+
 import os
 from datetime import datetime
 
@@ -45,14 +46,13 @@ def resolve_subset(df: pd.DataFrame, spec: TableSpec):
     cols = spec.subset if isinstance(spec.subset, list) else [spec.subset]
     missing = [c for c in cols if c not in df.columns]
     if missing:
-        return "*", (f"去重键列缺失 {missing} → 回退全列判重（实际列: "
-                     f"{list(df.columns)[:12]}）")
+        return "*", (f"去重键列缺失 {missing} → 回退全列判重（实际列: {list(df.columns)[:12]}）")
     return list(cols), None
 
 
-def normalize(df: pd.DataFrame, spec: TableSpec,
-              req_date: str | None = None,
-              enum_value: str | None = None):
+def normalize(
+    df: pd.DataFrame, spec: TableSpec, req_date: str | None = None, enum_value: str | None = None
+):
     """把原始返回归一化为落盘形态。
 
     返回: (df_normalized, warnings: list[str])
@@ -82,8 +82,9 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
     else:
         src = spec.src_date_col or spec.date_col
         if src not in out.columns:
-            warns.append(f"源日期列 '{src}' 不存在（实际列: {list(out.columns)[:12]}）"
-                         f" → 跳过日期归一化")
+            warns.append(
+                f"源日期列 '{src}' 不存在（实际列: {list(out.columns)[:12]}） → 跳过日期归一化"
+            )
         else:
             norm = normalize_date_series(out[src])
             bad = norm.isna().sum()
@@ -112,7 +113,7 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
     # 3b) 强制字符串列（处理语义混杂列，避免落盘时类型推断冲突）
     #     实测：market_activity 的 value 列含 3937.0 / '75.41%' / 时间戳，
     #     首次落盘定型为 double 后，再追加含 '%' 的行会转换失败 → 分区写入失败。
-    for c in (spec.force_str_cols or []):
+    for c in spec.force_str_cols or []:
         if c in out.columns:
             out[c] = out[c].astype(str)
 
@@ -155,8 +156,7 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
             if len(cols) == len(sub):
                 out = out.drop_duplicates(subset=cols, keep="last")
         if len(out) < before:
-            warns.append(f"本批数据去重：{before} → {len(out)} 行"
-                         f"（源端重复行，已按 {sub} 去重）")
+            warns.append(f"本批数据去重：{before} → {len(out)} 行（源端重复行，已按 {sub} 去重）")
 
     # 6) 哨兵行剔除 + 升序归一化（spec 级开关，严禁按表名模糊匹配）
     #    源为日期降序 + 哨兵行（港股 1900-01-01 / 美股 1970-01-01）在尾。
@@ -179,7 +179,9 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
         before_qfq = len(out)
         out = out[out[spec.date_col] >= "19900101"].copy()  # 剔除哨兵（str 比较）
         if len(out) < before_qfq:
-            warns.append(f"[strip_sentinel] {spec.name} 哨兵行剔除：{before_qfq} → {len(out)} 行（⚠ 确认非真实公司行动）")
+            warns.append(
+                f"[strip_sentinel] {spec.name} 哨兵行剔除：{before_qfq} → {len(out)} 行（⚠ 确认非真实公司行动）"
+            )
 
     # (b) 升序排序（与 strip_sentinel 解耦，凡 date_col 存在即执行）
     #
@@ -212,8 +214,12 @@ def normalize(df: pd.DataFrame, spec: TableSpec,
 # ============================================================
 # 二、落盘
 # ============================================================
-def table_path(spec: TableSpec, req_date: str | None = None,
-               year: str | None = None, dest_dir: str | None = None):
+def table_path(
+    spec: TableSpec,
+    req_date: str | None = None,
+    year: str | None = None,
+    dest_dir: str | None = None,
+):
     """目标文件路径（single → {table}/{table}.parquet；by_year → {table}/{YYYY}.parquet）。
 
     dest_dir（v1.2 新增）：目标根目录覆盖——供 list 引擎 `--rebuild`
@@ -255,8 +261,8 @@ def qc_price_warnings(df: pd.DataFrame, spec) -> list:
             warns.append(f"[QC] {spec.name}.{c} 负值 {n_neg} 行（价格不应为负）")
         if zero_ratio > 0.05:
             warns.append(
-                f"[QC] {spec.name}.{c} 零值占比 {zero_ratio:.1%} > 5%"
-                f"（停牌占位或源端异常）")
+                f"[QC] {spec.name}.{c} 零值占比 {zero_ratio:.1%} > 5%（停牌占位或源端异常）"
+            )
     return warns
 
 
@@ -265,14 +271,21 @@ def qc_added_warning(result: dict, spec) -> None:
     if result.get("dry_run"):
         return
     if result.get("added", 0) <= 0:
-        msg = (f"[QC] {spec.name} added={result.get('added', 0)} "
-               f"（本批无新增/无变更；若持续为 0 该表可能已静默冻结）")
+        msg = (
+            f"[QC] {spec.name} added={result.get('added', 0)} "
+            f"（本批无新增/无变更；若持续为 0 该表可能已静默冻结）"
+        )
         result.setdefault("warnings", []).append(msg)
         print(msg)
 
 
-def save(df: pd.DataFrame, spec: TableSpec, req_date: str | None = None,
-         dry_run: bool = False, dest_dir: str | None = None):
+def save(
+    df: pd.DataFrame,
+    spec: TableSpec,
+    req_date: str | None = None,
+    dry_run: bool = False,
+    dest_dir: str | None = None,
+):
     """按 spec 落盘。dry_run=True 时只做校验与预演，不写任何文件。
 
     返回: dict(ok, rows, added, path, errors, warnings, dry_run)
@@ -287,8 +300,16 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: str | None = None,
        因此这里必须**报错而非告警**（实测踩坑：曾出现"文件写成了但
        日期列名是『时间』不是『date』"的静默故障）。
     """
-    result = {"table": spec.name, "ok": False, "rows": 0, "added": 0,
-              "path": "", "errors": [], "warnings": [], "dry_run": dry_run}
+    result = {
+        "table": spec.name,
+        "ok": False,
+        "rows": 0,
+        "added": 0,
+        "path": "",
+        "errors": [],
+        "warnings": [],
+        "dry_run": dry_run,
+    }
 
     if df is None or len(df) == 0:
         result["warnings"].append("空数据，跳过")
@@ -339,23 +360,22 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: str | None = None,
         result["path"] = target_dir + os.sep + "{YYYY}.parquet"
         if dry_run:
             result["ok"] = True
-            result["warnings"].append(
-                f"[dry-run] 将写入 {len(years)} 个年度分区: {sorted(years)}")
+            result["warnings"].append(f"[dry-run] 将写入 {len(years)} 个年度分区: {sorted(years)}")
             return result
         # 路径硬保护
         assert_writable(target)
         ensure_dir(target_dir)
         sort_by = subset[0] if isinstance(subset, list) else spec.date_col
-        st = upsert_by_year(df, target_dir, date_col=spec.date_col,
-                            subset=subset, sort_by=sort_by)
+        st = upsert_by_year(df, target_dir, date_col=spec.date_col, subset=subset, sort_by=sort_by)
         # ⚠ 必须检查 fail：upsert_by_year 遇到分区写入异常会**捕获并计数**，
         #   若此处只看 added 就会"写入失败但报 OK"（实测：market_activity 的
         #   value 列混有 '75.41%' 字符串导致分区转换失败，却仍返回 OK）。
         n_fail = st.get("fail", 0)
         if n_fail:
             result["errors"].append(
-                f"按年分区写入失败 {n_fail} 个（共 {st.get('partitions',0)} 成功）"
-                f" → 数据未完整落盘，请检查列类型是否一致")
+                f"按年分区写入失败 {n_fail} 个（共 {st.get('partitions', 0)} 成功）"
+                f" → 数据未完整落盘，请检查列类型是否一致"
+            )
             return result
         result.update(ok=True, added=st.get("added", 0))
         qc_added_warning(result, spec)
@@ -366,8 +386,7 @@ def save(df: pd.DataFrame, spec: TableSpec, req_date: str | None = None,
     result["path"] = target
     if dry_run:
         if spec.date_col not in df.columns:
-            result["errors"].append(
-                f"[dry-run] 日期列 '{spec.date_col}' 不存在 → 实跑时会被拒绝")
+            result["errors"].append(f"[dry-run] 日期列 '{spec.date_col}' 不存在 → 实跑时会被拒绝")
             return result
         result["ok"] = True
         result["warnings"].append(f"[dry-run] 将写入单文件 {os.path.basename(target)}")
@@ -392,6 +411,7 @@ def read_alt(*args, **kwargs):
     保留它是为了不破坏可能存在的旧调用方。
     """
     from alt.reader import read_alt as _read
+
     return _read(*args, **kwargs)
 
 

@@ -4,6 +4,7 @@
 TradingState 是现有数据资产未提供、回测工具必须补上的关键聚合层
 （评审 H1 立项的"交易日状态面板"）：per (symbol, date) 的可交易性合成事实。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,9 +29,9 @@ class Bar:
     high: float
     low: float
     close: float
-    volume: float        # 股
-    amount: float        # 元
-    pre_close: float     # 前收盘（不复权）
+    volume: float  # 股
+    amount: float  # 元
+    pre_close: float  # 前收盘（不复权）
 
 
 @dataclass(frozen=True)
@@ -43,12 +44,12 @@ class TradingState:
 
     symbol: str
     date: TradingDate
-    limit_up_price: float | None    # 涨停价（None=无涨跌幅制度或数据缺失→降级）
+    limit_up_price: float | None  # 涨停价（None=无涨跌幅制度或数据缺失→降级）
     limit_down_price: float | None
     is_suspended: bool
     is_st: bool
     is_delisted: bool
-    is_limit_up: bool               # 收盘触及涨停（容差 1e-4 相对比较）
+    is_limit_up: bool  # 收盘触及涨停（容差 1e-4 相对比较）
     is_limit_down: bool
 
     @property

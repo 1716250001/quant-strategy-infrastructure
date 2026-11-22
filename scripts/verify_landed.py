@@ -17,6 +17,7 @@
 
 退出码：0=全部落盘 / 1=有码未落盘 / 2=参数或环境错误
 """
+
 import argparse
 import json
 import os
@@ -38,8 +39,7 @@ def main():
     if not os.path.isfile(a.codes_file):
         print(f"[FATAL] 清单不存在: {a.codes_file}", file=sys.stderr)
         return 2
-    codes = [ln.split("#", 1)[0].strip()
-             for ln in open(a.codes_file, encoding="utf-8")]
+    codes = [ln.split("#", 1)[0].strip() for ln in open(a.codes_file, encoding="utf-8")]
     codes = [c for c in codes if c]
     if not codes:
         print("[FATAL] 清单为空", file=sys.stderr)
@@ -59,11 +59,14 @@ def main():
     ok = len(codes) - len(missing)
 
     if a.json:
-        print(json.dumps({"table": a.table, "total": len(codes), "landed": ok,
-                          "missing": missing}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"table": a.table, "total": len(codes), "landed": ok, "missing": missing},
+                ensure_ascii=False,
+            )
+        )
     else:
-        print(f"[落盘校验] {a.table}: 清单 {len(codes)} 只，"
-              f"已落盘 {ok}，未落盘 {len(missing)}")
+        print(f"[落盘校验] {a.table}: 清单 {len(codes)} 只，已落盘 {ok}，未落盘 {len(missing)}")
         if missing:
             print(f"  未落盘样例（前 20）: {missing[:20]}")
             print("  ⛔ 报成功但库里没有 —— 查引擎落盘路径（空日期？去重吞行？）")

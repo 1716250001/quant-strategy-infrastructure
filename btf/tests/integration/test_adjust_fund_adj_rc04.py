@@ -12,6 +12,7 @@
 「`adj_factor` 表逐位取值一致」守住该边界（完整 hfq 恒等式由
 `tests/integration/test_action_equivalence.py` 守护）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,7 +28,7 @@ pytestmark = [pytest.mark.l2]
 
 ROOT = Path(MARKET_DATA_DIR)
 D = TradingDate.from_ymd
-ETF_SPLIT = "510230.SH"          # 2020 年份额折算（因子 1.2217 → 6.0059）
+ETF_SPLIT = "510230.SH"  # 2020 年份额折算（因子 1.2217 → 6.0059）
 STOCK = "600519.SH"
 
 
@@ -54,8 +55,7 @@ def _max_abs_ret(closes: list[float]) -> float:
 
 class TestEtfShareSplitErased:
     def test_split_jump_erased_by_fund_adj(self, feed, adjust):
-        bars = list(feed.bars_of(ETF_SPLIT, D("20200101"), D("20201231"),
-                                 daily_table="fund_daily"))
+        bars = list(feed.bars_of(ETF_SPLIT, D("20200101"), D("20201231"), daily_table="fund_daily"))
         assert len(bars) > 200, "窗口须覆盖 2020 全年（实测 242 交易日）"
         hfq = adjust.hfq(bars)
         raw_max = _max_abs_ret([b.close for b in bars])
@@ -77,8 +77,7 @@ class TestStockPathUnchanged:
 
         want = adjust.adj_factor(STOCK, D("20200102"))
         store = YearTableStore(ROOT, max_entries=4)
-        t = store.symbol_range("adj_factor", STOCK, "20200102", "20200102",
-                               ["adj_factor"])
+        t = store.symbol_range("adj_factor", STOCK, "20200102", "20200102", ["adj_factor"])
         assert t.num_rows == 1
         assert want == pytest.approx(t.column("adj_factor").to_pylist()[0])
 
@@ -90,13 +89,14 @@ class TestMissingFactorWarnsAndDiscloses:
     """
 
     def test_missing_etf_warns_and_discloses(self, tmp_path, caplog):
-        svc = TushareAdjustService(tmp_path)         # 空目录 root
+        svc = TushareAdjustService(tmp_path)  # 空目录 root
         with caplog.at_level(logging.WARNING, logger="btf.data.adjust"):
             factor = svc.adj_factor("510300.SH", D("20201231"))
-        assert factor == 1.0                         # 回落值（口径不变）
+        assert factor == 1.0  # 回落值（口径不变）
         assert "510300.SH" in svc.missing_factor_symbols
-        assert any("复权因子缺失" in r.getMessage() for r in caplog.records), \
+        assert any("复权因子缺失" in r.getMessage() for r in caplog.records), (
             "缺覆盖必须 warn（不得静默回落）"
+        )
         notes = svc.degraded_notes()
         assert notes and "510300.SH" in notes[0] and "fund_adj" in notes[0]
 

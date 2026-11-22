@@ -23,6 +23,7 @@
 退出码：0 = 无 EMPTY/SUSPECT｜1 = 有命中｜2 = 环境错误
 （对齐 AGENTS「校验三原则」：exit 语义化、内置负向测试、未命中项显式列出）
 """
+
 from __future__ import annotations
 
 import argparse
@@ -85,8 +86,10 @@ def selftest() -> bool:
         ({"n_fills": 5, "total_return": 0.12}, "OK"),
         ({"total_return": 0.0}, "UNKNOWN"),
         # 嵌套结构（引擎真实形态）必须同样识别
-        ({"contract_version": "runresult.v1",
-          "metrics": {"n_fills": 0.0, "total_return": 0.0}}, "EMPTY"),
+        (
+            {"contract_version": "runresult.v1", "metrics": {"n_fills": 0.0, "total_return": 0.0}},
+            "EMPTY",
+        ),
     ]
     ok = True
     for m, want in cases:

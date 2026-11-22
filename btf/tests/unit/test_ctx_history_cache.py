@@ -4,6 +4,7 @@
 覆盖：跨 bar 命中（T-1）、bisect 三边界（T-2~T-4）、`n_bars<=0`（T-5）。
 两侧语义等价已由 §192 Z-3 逐位比对（a1 六文件 SHA256 全同）保证。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -33,11 +34,14 @@ class _Bar:
 def _ctx(loader, *, cache=None, start=D1, end=D3, now=None):
     return StrategyContext(
         now=(lambda: now) if now is not None else (lambda: None),
-        portfolio=None, data={}, states={},
+        portfolio=None,
+        data={},
+        states={},
         history_loader=loader,
         on_submit_target=lambda t: None,
         on_submit_order=lambda o: None,
-        start=start, end=end,
+        start=start,
+        end=end,
         history_cache=cache,
     )
 

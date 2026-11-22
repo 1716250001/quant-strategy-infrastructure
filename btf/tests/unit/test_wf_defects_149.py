@@ -9,6 +9,7 @@ D-2：`declared_lookback` 导入前先按 `run.strategy_paths` 注入 `sys.path`
 （与 `Runtime._load_strategy` 共用 `inject_strategy_paths`），否则仓外策略
 必 `ImportError` ⇒ `--warmup auto` 静默回落 252。
 """
+
 from __future__ import annotations
 
 import sys
@@ -20,15 +21,15 @@ from btf.domain.types import TradingDate
 from btf.optimize import walkforward as wf
 from btf.runtime import component_assembler as ca
 
-DEMO_OK = '''\
+DEMO_OK = """\
 class ProbeStrategy:
     lookback_bars = 2
-'''
+"""
 
-DEMO_NO_ATTR = '''\
+DEMO_NO_ATTR = """\
 class NoAttrStrategy:
     pass
-'''
+"""
 
 
 def _days(n: int = 30) -> list[TradingDate]:
@@ -55,8 +56,7 @@ class _AsmStub:
         self._detail = {"daily": {"date_max": date_max}}
 
     def compute_data_version(self, period):
-        return {"mode": "fast", "content_hash": "sha256:actual",
-                "tables_detail": self._detail}
+        return {"mode": "fast", "content_hash": "sha256:actual", "tables_detail": self._detail}
 
 
 class TestD1VersionGateSkip:
@@ -118,24 +118,28 @@ class TestD1VersionGateSkip:
         monkeypatch.setattr(wf, "_metrics_of", lambda *a, **k: {})
 
         report = wf.run_walk_forward(
-            {"run": {"strategy": "x:Y"}}, _days(), train=5, test=5, step=5,
-            persist=False, include_is=False, warmup=0)
+            {"run": {"strategy": "x:Y"}},
+            _days(),
+            train=5,
+            test=5,
+            step=5,
+            persist=False,
+            include_is=False,
+            warmup=0,
+        )
 
         assert report["version_gate"] == "skipped_walk_forward"
         assert report["version_gate_note"]
         assert report["n_folds"] >= 2
-        assert all(f["version_gate"] == "skipped_walk_forward"
-                   for f in report["folds"])
-        assert all(rt.version_gate_skip_reason == "skipped_walk_forward"
-                   for rt in built)
+        assert all(f["version_gate"] == "skipped_walk_forward" for f in report["folds"])
+        assert all(rt.version_gate_skip_reason == "skipped_walk_forward" for rt in built)
 
 
 class TestD2LookbackInjection:
     def test_out_of_tree_strategy_declaration_resolved(self, tmp_path):
         """仓外策略（strategy_paths）⇒ `declared_lookback` 读到声明值 2（非 None）。"""
         (tmp_path / "probe_strat.py").write_text(DEMO_OK, encoding="utf-8")
-        cfg = {"run": {"strategy": "probe_strat:ProbeStrategy",
-                       "strategy_paths": [str(tmp_path)]}}
+        cfg = {"run": {"strategy": "probe_strat:ProbeStrategy", "strategy_paths": [str(tmp_path)]}}
         try:
             assert wf.declared_lookback(cfg) == 2
             assert wf._lookback_probe(cfg) == (2, "strategy")
@@ -146,8 +150,7 @@ class TestD2LookbackInjection:
     def test_import_failure_reason_is_distinguishable(self, tmp_path):
         """导入失败与"类无该属性"两种降级原因**文案可区分**（禁静默同因）。"""
         (tmp_path / "no_attr.py").write_text(DEMO_NO_ATTR, encoding="utf-8")
-        cfg = {"run": {"strategy": "no_attr:NoAttrStrategy",
-                       "strategy_paths": [str(tmp_path)]}}
+        cfg = {"run": {"strategy": "no_attr:NoAttrStrategy", "strategy_paths": [str(tmp_path)]}}
         try:
             assert wf.declared_lookback(cfg) is None
             assert wf._lookback_probe(cfg)[1] == "类无该属性"
@@ -155,7 +158,8 @@ class TestD2LookbackInjection:
             sys.modules.pop("no_attr", None)
             sys.path[:] = [p for p in sys.path if p != str(tmp_path.resolve())]
 
-        missing = {"run": {"strategy": "definitely_absent_mod:X",
-                           "strategy_paths": [str(tmp_path)]}}
+        missing = {
+            "run": {"strategy": "definitely_absent_mod:X", "strategy_paths": [str(tmp_path)]}
+        }
         assert wf.declared_lookback(missing) is None
         assert wf._lookback_probe(missing)[1].startswith("导入失败")

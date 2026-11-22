@@ -10,6 +10,7 @@ A2 各报 extra 1。
 ⛔ **只删严格等于 `'once'` 的键**，其他键一个都不动。
 ⛔ 真跑归赤潮（§454 施工面切分）；本脚本只提供能力。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,17 +29,14 @@ from config.checkpoint_registry import DOMAINS
 CKPT = os.path.join(MARKET_DATA_DIR, ".backfill_checkpoint.json")
 BAD_KEY = "once"
 # 只处理 registry 明确声明为 page 域的表：合法键是页码，`once` 必为死键。
-PAGE_TABLES = sorted({
-    t for d in DOMAINS
-    if d.library == "market_data" and d.key_space == "page"
-    for t in d.tables
-})
+PAGE_TABLES = sorted(
+    {t for d in DOMAINS if d.library == "market_data" and d.key_space == "page" for t in d.tables}
+)
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="清理 page 域的 'once' 死键（默认干跑）")
-    ap.add_argument("--apply", action="store_true",
-                    help="真删（写前自动备份 .bak-once-<时间戳>）")
+    ap.add_argument("--apply", action="store_true", help="真删（写前自动备份 .bak-once-<时间戳>）")
     ap.add_argument("--ckpt", default=CKPT, help="断点文件路径（默认主库）")
     args = ap.parse_args(argv)
 

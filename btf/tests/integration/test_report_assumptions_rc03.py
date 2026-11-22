@@ -8,6 +8,7 @@
 
 断言级别：**渲染级**（对生成的 HTML 断言；不只看 Python 对象）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -69,16 +70,16 @@ class TestAssumptionsReadEffectiveConfig:
 
     def test_pct_shown_not_none(self, feed_registered, tmp_path):
         store, bundle = _run(
-            feed_registered, tmp_path,
-            execution={"slippage": {"model": "pct", "params": {"pct": 0.002}}})
+            feed_registered,
+            tmp_path,
+            execution={"slippage": {"model": "pct", "params": {"pct": 0.002}}},
+        )
         html = _html(store, bundle)
         assert "pct 0.002（单边 20bp）" in html
-        assert "none（回测基线）" not in html          # 硬编码残留不得出现
+        assert "none（回测基线）" not in html  # 硬编码残留不得出现
 
     def test_explicit_none_shown(self, feed_registered, tmp_path):
-        store, bundle = _run(
-            feed_registered, tmp_path,
-            execution={"slippage": {"model": "none"}})
+        store, bundle = _run(feed_registered, tmp_path, execution={"slippage": {"model": "none"}})
         html = _html(store, bundle)
         assert "none（显式声明，零摩擦基线）" in html
 
@@ -90,16 +91,17 @@ class TestAssumptionsReadEffectiveConfig:
 
     def test_fixed_model_readable(self, feed_registered, tmp_path):
         store, bundle = _run(
-            feed_registered, tmp_path,
-            execution={"slippage": {"model": "fixed",
-                                    "params": {"amount": 0.02}}})
+            feed_registered,
+            tmp_path,
+            execution={"slippage": {"model": "fixed", "params": {"amount": 0.02}}},
+        )
         html = _html(store, bundle)
         assert "fixed 0.02 元" in html
 
     def test_matching_rendered_from_config(self, feed_registered, tmp_path):
         store, bundle = _run(feed_registered, tmp_path)
         cfg = bundle.manifest.config_effective
-        assert cfg["execution"]["handler"] == "next_open"      # 生效配置真值
+        assert cfg["execution"]["handler"] == "next_open"  # 生效配置真值
         assert format_matching("next_open") in _html(store, bundle)
 
 
@@ -126,40 +128,53 @@ class TestSlippageCostDisclosureF9:
         return impact, fees
 
     def test_pct_run_discloses_impact_cost(self, feed_registered, tmp_path):
-        store, bundle = _run(feed_registered, tmp_path, execution={
-            "handler": "next_open", "cost_model": "flat_rate",
-            "rebalancer": "full",
-            "slippage": {"model": "pct", "params": {"pct": 0.002}}})
+        store, bundle = _run(
+            feed_registered,
+            tmp_path,
+            execution={
+                "handler": "next_open",
+                "cost_model": "flat_rate",
+                "rebalancer": "full",
+                "slippage": {"model": "pct", "params": {"pct": 0.002}},
+            },
+        )
         html = _html(store, bundle)
         assert "滑点成本（价内）" in html
         impact, fees = self._impact(bundle.fills)
         assert impact > 0 and fees > 0
-        assert f"≈ {impact:,.2f} 元" in html                       # 金额逐位可核
+        assert f"≈ {impact:,.2f} 元" in html  # 金额逐位可核
         assert f"显性费用 {fees:,.2f} 元的 {impact / fees:.2f} 倍" in html
 
     def test_none_run_discloses_zero_friction(self, feed_registered, tmp_path):
-        store, bundle = _run(feed_registered, tmp_path, execution={
-            "handler": "next_open", "cost_model": "flat_rate",
-            "rebalancer": "full",
-            "slippage": {"model": "none"},
-            "handler_params": {"volume_participation": None}})
+        store, bundle = _run(
+            feed_registered,
+            tmp_path,
+            execution={
+                "handler": "next_open",
+                "cost_model": "flat_rate",
+                "rebalancer": "full",
+                "slippage": {"model": "none"},
+                "handler_params": {"volume_participation": None},
+            },
+        )
         html = _html(store, bundle)
         assert "滑点成本（价内）" in html
         assert "零摩擦（滑点模型 none，显式声明）" in html
         impact, _ = self._impact(bundle.fills)
         assert impact == 0.0
 
-    def test_old_artifacts_without_ref_price_report_unavailable(
-            self, feed_registered, tmp_path):
+    def test_old_artifacts_without_ref_price_report_unavailable(self, feed_registered, tmp_path):
         """**诚实边界**：旧产物（无 `ref_price`）⇒ 明示「不可得」，**不得静默算 0**。"""
         from dataclasses import replace
 
-        store, bundle = _run(feed_registered, tmp_path, execution={
-            "slippage": {"model": "pct", "params": {"pct": 0.002}}})
-        legacy = [{k: v for k, v in f.items() if k != "ref_price"}
-                  for f in bundle.fills]
+        store, bundle = _run(
+            feed_registered,
+            tmp_path,
+            execution={"slippage": {"model": "pct", "params": {"pct": 0.002}}},
+        )
+        legacy = [{k: v for k, v in f.items() if k != "ref_price"} for f in bundle.fills]
         assert legacy and all("ref_price" not in f for f in legacy)
-        old = replace(bundle, fills=legacy)          # 模拟 RC 之前的产物
+        old = replace(bundle, fills=legacy)  # 模拟 RC 之前的产物
         assert "不可得（产物未记录 ref_price——重跑后可披露）" in _html(store, old)
 
 
@@ -205,14 +220,13 @@ class TestBenchmarkSoftMandateRc09:
         from btf.viz.report import _assembly_disclosures
 
         manifest = SimpleNamespace(
-            config_effective={"report": {"benchmark": "000300.SH"}},
-            assembly_notes=())
+            config_effective={"report": {"benchmark": "000300.SH"}}, assembly_notes=()
+        )
         text = " ".join(_assembly_disclosures(manifest))
         assert "000300.SH" in text
         assert "无基准对照" not in text
 
-    def test_cli_run_warns_without_benchmark(self, feed_registered, tmp_path,
-                                             capsys):
+    def test_cli_run_warns_without_benchmark(self, feed_registered, tmp_path, capsys):
         """真入口：不配 benchmark 跑一次 ⇒ 终端 warn 出现，且**不阻断**（exit 0）。"""
         import yaml
         from btf.cli.main import main
@@ -230,10 +244,8 @@ class TestBenchmarkSoftMandateRc09:
             "risk": {"rules": [{"name": "cash_check"}]},
         }
         path = tmp_path / "bt.yaml"
-        path.write_text(yaml.safe_dump(cfg, allow_unicode=True),
-                        encoding="utf-8")
-        assert main(["run", "--config", str(path),
-                     "--out", str(tmp_path / "runs")]) == 0
+        path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
+        assert main(["run", "--config", str(path), "--out", str(tmp_path / "runs")]) == 0
         out = capsys.readouterr().out
         assert "无基准对照" in out and "report.benchmark" in out
 
@@ -245,7 +257,7 @@ class TestFormatHelpers:
         assert format_slippage("none") == "none（显式声明，零摩擦基线）"
         assert format_slippage("pct", {"pct": 0.001}) == "pct 0.001（单边 10bp）"
         assert format_slippage("pct", {"pct": 0.0015}) == "pct 0.0015（单边 15bp）"
-        assert format_slippage("pct", {}) == "pct 0.001（单边 10bp）"   # 模型自身默认
+        assert format_slippage("pct", {}) == "pct 0.001（单边 10bp）"  # 模型自身默认
         assert format_slippage("fixed", {"amount": 0.02}) == "fixed 0.02 元"
         assert format_slippage("fixed") == "fixed 0.01 元"
         assert format_slippage("weird", {"k": 1}) == 'weird {"k": 1}'

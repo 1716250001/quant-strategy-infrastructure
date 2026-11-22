@@ -7,6 +7,7 @@
   D 铁律：不动 `adj_factor` 消费逻辑、不把复权价引入引擎（本文件不断言复权）；
   E 清单方向：向上＝除权类 / 向下＝缩股候选（`corp_action_probe` 断言）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -17,23 +18,38 @@ from btf.portfolio.portfolio import Portfolio, Position
 pytestmark = [pytest.mark.l1]
 
 D1 = TradingDate.from_iso(2022, 1, 18)
-D2 = TradingDate.from_iso(2022, 1, 27)      # 除权日（本地 adj_factor 跳变真值）
-D3 = TradingDate.from_iso(2022, 2, 15)      # 获配上市日
+D2 = TradingDate.from_iso(2022, 1, 27)  # 除权日（本地 adj_factor 跳变真值）
+D3 = TradingDate.from_iso(2022, 2, 15)  # 获配上市日
 
 
 def _rights_action(**kw) -> CorporateAction:
-    base = dict(symbol="600030.SH", ex_date=D2, pay_date=None, record_date=D1,
-                cash_div_per_share=0.0, stk_div_per_share=0.0, ann_date=None,
-                rights_ratio=0.15, rights_price=14.43, rights_ex_date=D2,
-                rights_listing_date=D3)
+    base = dict(
+        symbol="600030.SH",
+        ex_date=D2,
+        pay_date=None,
+        record_date=D1,
+        cash_div_per_share=0.0,
+        stk_div_per_share=0.0,
+        ann_date=None,
+        rights_ratio=0.15,
+        rights_price=14.43,
+        rights_ex_date=D2,
+        rights_listing_date=D3,
+    )
     base.update(kw)
     return CorporateAction(**base)
 
 
 def _legacy_action() -> CorporateAction:
-    return CorporateAction(symbol="000001.SZ", ex_date=D2, pay_date=D3,
-                           record_date=D1, cash_div_per_share=0.5,
-                           stk_div_per_share=0.2, ann_date=None)
+    return CorporateAction(
+        symbol="000001.SZ",
+        ex_date=D2,
+        pay_date=D3,
+        record_date=D1,
+        cash_div_per_share=0.5,
+        stk_div_per_share=0.2,
+        ann_date=None,
+    )
 
 
 class TestCorporateActionExt:
@@ -50,18 +66,29 @@ class TestCorporateActionExt:
 
         a = _rights_action()
         assert _dec_action(_enc_action(a)) == a
-        cons = CorporateAction(symbol="000887.SZ", ex_date=D2, pay_date=None,
-                            record_date=None, cash_div_per_share=0.0,
-                            stk_div_per_share=0.0, ann_date=None,
-                            consolidation_ratio=0.5, pex_override=12.65,
-                            consolidation_source="confirmed")
+        cons = CorporateAction(
+            symbol="000887.SZ",
+            ex_date=D2,
+            pay_date=None,
+            record_date=None,
+            cash_div_per_share=0.0,
+            stk_div_per_share=0.0,
+            ann_date=None,
+            consolidation_ratio=0.5,
+            pex_override=12.65,
+            consolidation_source="confirmed",
+        )
         assert _dec_action(_enc_action(cons)) == cons
         # 旧日志（无新键）⇒ 解码默认（pex_override=None / source="proxy"）
         # 旧日志（无新键）⇒ 解码为默认值（行为与改动前一致）
         legacy_payload = {
-            "symbol": "000001.SZ", "ex_date": D2.to_ymd(), "pay_date": None,
-            "record_date": None, "cash_div_per_share": 0.5,
-            "stk_div_per_share": 0.2, "ann_date": None,
+            "symbol": "000001.SZ",
+            "ex_date": D2.to_ymd(),
+            "pay_date": None,
+            "record_date": None,
+            "cash_div_per_share": 0.5,
+            "stk_div_per_share": 0.2,
+            "ann_date": None,
         }
         back = _dec_action(legacy_payload)
         assert back.rights_ratio == 0.0 and back.consolidation_ratio == 1.0
@@ -71,7 +98,8 @@ class TestRightsBookingCl2b:
     def _portfolio(self) -> Portfolio:
         p = Portfolio(cash=1_000_000.0)
         p.positions["600030.SH"] = Position(
-            symbol="600030.SH", qty=1000, available_qty=1000, avg_cost=25.0)
+            symbol="600030.SH", qty=1000, available_qty=1000, avg_cost=25.0
+        )
         p._last_close["600030.SH"] = 25.70
         return p
 
@@ -86,10 +114,8 @@ class TestRightsBookingCl2b:
         pos = p.positions["600030.SH"]
         assert pos.qty == 1150 and pos.available_qty == 1150
         assert p.cash == pytest.approx(1_000_000.0 - 2164.5, rel=1e-12)
-        assert pos.avg_cost == pytest.approx(
-            (1000 * 25.0 + 2164.5) / 1150, rel=1e-12)
-        assert p._last_close["600030.SH"] == pytest.approx(
-            (25.70 + 0.15 * 14.43) / 1.15, rel=1e-12)
+        assert pos.avg_cost == pytest.approx((1000 * 25.0 + 2164.5) / 1150, rel=1e-12)
+        assert p._last_close["600030.SH"] == pytest.approx((25.70 + 0.15 * 14.43) / 1.15, rel=1e-12)
         assert p.total_value() == pytest.approx(nav_before, rel=1e-12)
         ev = p.rights_events[0]
         assert ev["rights_qty"] == 150 and ev["cost"] == pytest.approx(2164.5)
@@ -99,8 +125,9 @@ class TestRightsBookingCl2b:
     def test_cash_shortfall_recorded_not_silent(self):
         """§79.3 #2：现金不足 ⇒ 默认外部增资补足，但**必须可观测**。"""
         p = Portfolio(cash=100.0)
-        p.positions["600030.SH"] = Position(symbol="600030.SH", qty=1000,
-                                            available_qty=1000, avg_cost=25.0)
+        p.positions["600030.SH"] = Position(
+            symbol="600030.SH", qty=1000, available_qty=1000, avg_cost=25.0
+        )
         p._last_close["600030.SH"] = 25.70
         p.apply_ex_date(_rights_action())
         ev = p.rights_events[0]
@@ -110,11 +137,9 @@ class TestRightsBookingCl2b:
     def test_no_rights_bitwise_zero_regression(self):
         """判据 B″：无配股字段 ⇒ 除权路径与改动前**逐位一致**。"""
         p = self._portfolio()
-        before = (dict(p.positions["600030.SH"].__dict__), p.cash,
-                  dict(p._last_close))
+        before = (dict(p.positions["600030.SH"].__dict__), p.cash, dict(p._last_close))
         p.apply_ex_date(_rights_action(rights_ratio=0.0, rights_price=0.0))
-        after = (dict(p.positions["600030.SH"].__dict__), p.cash,
-                  dict(p._last_close))
+        after = (dict(p.positions["600030.SH"].__dict__), p.cash, dict(p._last_close))
         assert before == after
         assert p.rights_events == []
 
@@ -130,16 +155,23 @@ class TestConsolidationCl2b:
     def test_consolidation_qty_down_cost_up_no_cash(self):
         """R6′：qty 按比例减少（无现金流）；成本总额守恒、每股价放大。"""
         p = Portfolio(cash=1_000.0)
-        p.positions["000887.SZ"] = Position(symbol="000887.SZ", qty=1000,
-                                            available_qty=1000, avg_cost=2.0)
+        p.positions["000887.SZ"] = Position(
+            symbol="000887.SZ", qty=1000, available_qty=1000, avg_cost=2.0
+        )
         p._last_close["000887.SZ"] = 3.0
-        a = CorporateAction(symbol="000887.SZ", ex_date=D2, pay_date=None,
-                            record_date=None, cash_div_per_share=0.0,
-                            stk_div_per_share=0.0, ann_date=None,
-                            consolidation_ratio=0.5)
+        a = CorporateAction(
+            symbol="000887.SZ",
+            ex_date=D2,
+            pay_date=None,
+            record_date=None,
+            cash_div_per_share=0.0,
+            stk_div_per_share=0.0,
+            ann_date=None,
+            consolidation_ratio=0.5,
+        )
         p.apply_ex_date(a)
         pos = p.positions["000887.SZ"]
-        assert p.cash == 1_000.0                     # 无现金流
+        assert p.cash == 1_000.0  # 无现金流
         assert pos.qty == 500 and pos.available_qty == 500
         assert pos.avg_cost == pytest.approx(4.0)
         assert p._last_close["000887.SZ"] == pytest.approx(6.0)
@@ -153,21 +185,31 @@ class TestProbeArtifactCl2b:
 
         monkeypatch.setenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS", "on")
         data = {
-            "rights": [{"symbol": "600030.SH", "ex_date": "20220127",
-                        "ratio": 0.15, "price": 14.43,
-                        "record_date": "20220118", "listing_date": "20220215"}],
-            "consolidations": [{"symbol": "000887.SZ", "ex_date": "20070330",
-                                "consolidation_ratio": 0.5}],
+            "rights": [
+                {
+                    "symbol": "600030.SH",
+                    "ex_date": "20220127",
+                    "ratio": 0.15,
+                    "price": 14.43,
+                    "record_date": "20220118",
+                    "listing_date": "20220215",
+                }
+            ],
+            "consolidations": [
+                {"symbol": "000887.SZ", "ex_date": "20070330", "consolidation_ratio": 0.5}
+            ],
         }
-        acts = to_corporate_actions(data, TradingDate.from_ymd("20220101"),
-                                    TradingDate.from_ymd("20220201"))
+        acts = to_corporate_actions(
+            data, TradingDate.from_ymd("20220101"), TradingDate.from_ymd("20220201")
+        )
         assert len(acts) == 1
         a = acts[0]
         assert a.rights_ratio == 0.15 and a.rights_price == 14.43
         assert a.ex_date == D2 and a.rights_listing_date == D3
         assert a.cash_div_per_share == 0.0 and a.stk_div_per_share == 0.0
-        both = to_corporate_actions(data, TradingDate.from_ymd("19910101"),
-                                    TradingDate.from_ymd("20261231"))
+        both = to_corporate_actions(
+            data, TradingDate.from_ymd("19910101"), TradingDate.from_ymd("20261231")
+        )
         assert len(both) == 2
         cons = next(x for x in both if x.symbol == "000887.SZ")
         assert cons.consolidation_ratio == 0.5
@@ -181,20 +223,35 @@ class TestProbeArtifactCl2b:
         )
 
         data = {
-            "rights": [{"symbol": "600030.SH", "ex_date": "20220127",
-                        "ratio": 0.15, "price": 14.43,
-                        "record_date": "20220118", "listing_date": "20220215"}],
-            "consolidations": [{"symbol": "000887.SZ", "ex_date": "20070330",
-                                "consolidation_ratio": 0.5}],
+            "rights": [
+                {
+                    "symbol": "600030.SH",
+                    "ex_date": "20220127",
+                    "ratio": 0.15,
+                    "price": 14.43,
+                    "record_date": "20220118",
+                    "listing_date": "20220215",
+                }
+            ],
+            "consolidations": [
+                {"symbol": "000887.SZ", "ex_date": "20070330", "consolidation_ratio": 0.5}
+            ],
         }
         monkeypatch.delenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS", raising=False)
         assert consolidations_modeled() is False
-        assert len(to_corporate_actions(data, TradingDate.from_ymd("19910101"),
-                                        TradingDate.from_ymd("20261231"))) == 1
+        assert (
+            len(
+                to_corporate_actions(
+                    data, TradingDate.from_ymd("19910101"), TradingDate.from_ymd("20261231")
+                )
+            )
+            == 1
+        )
         monkeypatch.setenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS", "on")
         assert consolidations_modeled() is True
-        acts = to_corporate_actions(data, TradingDate.from_ymd("19910101"),
-                                    TradingDate.from_ymd("20261231"))
+        acts = to_corporate_actions(
+            data, TradingDate.from_ymd("19910101"), TradingDate.from_ymd("20261231")
+        )
         assert len(acts) == 2
         assert any(x.consolidation_ratio == 0.5 for x in acts)
 
@@ -205,17 +262,24 @@ class TestConsolidationFloorR21c:
 
     def _p(self, qty: int = 100, cost: float = 10.0) -> Portfolio:
         p = Portfolio(cash=0.0)
-        p.positions["000887.SZ"] = Position(symbol="000887.SZ", qty=qty,
-                                            available_qty=qty, avg_cost=cost)
+        p.positions["000887.SZ"] = Position(
+            symbol="000887.SZ", qty=qty, available_qty=qty, avg_cost=cost
+        )
         p._last_close["000887.SZ"] = cost
         return p
 
     def _act(self, cons: float, source: str = "proxy") -> CorporateAction:
-        return CorporateAction(symbol="000887.SZ", ex_date=D2, pay_date=None,
-                               record_date=None, cash_div_per_share=0.0,
-                               stk_div_per_share=0.0, ann_date=None,
-                               consolidation_ratio=cons,
-                               consolidation_source=source)
+        return CorporateAction(
+            symbol="000887.SZ",
+            ex_date=D2,
+            pay_date=None,
+            record_date=None,
+            cash_div_per_share=0.0,
+            stk_div_per_share=0.0,
+            ann_date=None,
+            consolidation_ratio=cons,
+            consolidation_source=source,
+        )
 
     def test_c1_normal_path_bitwise_unchanged(self):
         """G11/C1：qty=100/cost=10/cons=0.3266 ⇒ 32 股、avg_cost 31.25、总额 1000.00。"""
@@ -236,11 +300,11 @@ class TestConsolidationFloorR21c:
         p.apply_ex_date(self._act(0.005))
         pos = p.positions["000887.SZ"]
         assert pos.qty == 1
-        assert pos.avg_cost == pytest.approx(10.0)          # R21′①（非 1000）
+        assert pos.avg_cost == pytest.approx(10.0)  # R21′①（非 1000）
         assert pos.qty * pos.avg_cost == pytest.approx(10.0)
         ev = p.consolidations[0]
-        assert ev["qty_after"] == 1                         # R21′②（非 0）
-        assert ev["forced_min_qty"] is True                 # R21′③
+        assert ev["qty_after"] == 1  # R21′②（非 0）
+        assert ev["forced_min_qty"] is True  # R21′③
 
     def test_c2b_extreme_ratio_no_exception_no_negative(self):
         """档二：cons=0.001 ⇒ 同上；不得抛异常、不得负 qty。"""
@@ -269,13 +333,31 @@ class TestConsolidationSourceWordingR22c:
         rights_events: ClassVar[list] = []
         lockup_sell_warnings: ClassVar[list] = []
         consolidations: ClassVar[list] = [
-            {"symbol": "000887.SZ", "ex_date": "20070330", "ratio": 0.3266,
-             "qty_before": 100, "qty_after": 32, "source": "confirmed"},
-            {"symbol": "000011.SZ", "ex_date": "20230601", "ratio": 0.997971,
-             "qty_before": 5400, "qty_after": 5389, "source": "proxy"},
-            {"symbol": "920375.BJ", "ex_date": "20150630", "ratio": 0.997606,
-             "qty_before": 2, "qty_after": 1, "source": "proxy",
-             "forced_min_qty": True},
+            {
+                "symbol": "000887.SZ",
+                "ex_date": "20070330",
+                "ratio": 0.3266,
+                "qty_before": 100,
+                "qty_after": 32,
+                "source": "confirmed",
+            },
+            {
+                "symbol": "000011.SZ",
+                "ex_date": "20230601",
+                "ratio": 0.997971,
+                "qty_before": 5400,
+                "qty_after": 5389,
+                "source": "proxy",
+            },
+            {
+                "symbol": "920375.BJ",
+                "ex_date": "20150630",
+                "ratio": 0.997606,
+                "qty_before": 2,
+                "qty_after": 1,
+                "source": "proxy",
+                "forced_min_qty": True,
+            },
         ]
 
     def test_wording_by_source_and_floor_warn(self):
@@ -303,14 +385,17 @@ class TestConfirmedConsolidationR18:
     def test_confirmed_modeled_regardless_of_switch(self, monkeypatch):
         from btf.data.corp_action_probe import to_corporate_actions
 
-        monkeypatch.delenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS",
-                           raising=False)
-        data = {"rights": [], "consolidations": [],
-                "consolidations_confirmed": [
-                    {"symbol": "000887.SZ", "ex_date": "20070330",
-                     "consolidation_ratio": 0.326653}]}
-        acts = to_corporate_actions(data, TradingDate.from_ymd("19910101"),
-                                    TradingDate.from_ymd("20261231"))
+        monkeypatch.delenv("BTFTOOL_CORP_ACTIONS_CONSOLIDATIONS", raising=False)
+        data = {
+            "rights": [],
+            "consolidations": [],
+            "consolidations_confirmed": [
+                {"symbol": "000887.SZ", "ex_date": "20070330", "consolidation_ratio": 0.326653}
+            ],
+        }
+        acts = to_corporate_actions(
+            data, TradingDate.from_ymd("19910101"), TradingDate.from_ymd("20261231")
+        )
         assert len(acts) == 1
         assert acts[0].consolidation_ratio == pytest.approx(0.326653)
         assert acts[0].symbol == "000887.SZ"
@@ -322,10 +407,9 @@ class TestPexSelectionR19:
     def test_l1_exchange_preclose(self):
         from btf.data.corp_action_probe import _choose_pex
 
-        pex, src, guard = _choose_pex(
-            17.75, 0.25, 7.55, 0.23, ("20200728", 12.76, 12.65))
+        pex, src, guard = _choose_pex(17.75, 0.25, 7.55, 0.23, ("20200728", 12.76, 12.65))
         assert src == "exchange_preclose" and guard is None
-        assert pex == 12.65                      # 交易所公布值（零推断）
+        assert pex == 12.65  # 交易所公布值（零推断）
 
     def test_l2_effective_ratio_when_no_bar(self):
         from btf.data.corp_action_probe import _choose_pex
@@ -356,8 +440,8 @@ class TestForwardValidationR8c:
         # 600030.SH 形态：x_act=25.70、r=0.15、Pr=14.43 ⇒ chg_pred≈1.06068
         m = _validate_right_math(0.15, 14.43, 1.06068, 25.70)
         assert m["forward_err"] is not None
-        assert m["forward_err"] <= VALIDATION_TOL          # 正推通过
-        assert m["amp_factor"] > AMP_GUARD                 # 13.7x ⇒ 反推禁用
+        assert m["forward_err"] <= VALIDATION_TOL  # 正推通过
+        assert m["amp_factor"] > AMP_GUARD  # 13.7x ⇒ 反推禁用
         assert m["x_pred"] is None and m["rel_err"] is None
 
     def test_amp_guard_at_39_5_no_reverse_conclusion(self):
@@ -367,8 +451,8 @@ class TestForwardValidationR8c:
         # 解 chg 使 amp = chg(1+r)/|1+r−chg| ≈ 39.5（r=0.3, Pr=3.8, x_act=5.77）
         m = _validate_right_math(0.3, 3.8, 1.25858, 5.77)
         assert m["amp_factor"] == pytest.approx(39.5, abs=0.1)
-        assert m["x_pred"] is None and m["rel_err"] is None   # 反推禁用
-        assert m["forward_err"] > 0.005                       # 正推不通过 ⇒ 挂起
+        assert m["x_pred"] is None and m["rel_err"] is None  # 反推禁用
+        assert m["forward_err"] > 0.005  # 正推不通过 ⇒ 挂起
 
     def test_forward_rescues_reverse_ill_conditioned_case(self):
         """§80.3 铁证（600079.SH 20060807）：旧反推误杀（rel 0.52%）；
@@ -395,23 +479,39 @@ class TestForwardValidationR8c:
         assert data["stats"]["rights_validated"] == 175
         assert data["stats"]["rights_suspended"] == 1
         for x in data["rights"]:
-            assert {"symbol", "ex_date", "ratio", "price",
-                    "chg_pred", "forward_err", "amp_factor",
-                    "validation_basis"} <= set(x)
-            assert x["ratio"] > 0 and x["chg"] > 1.0      # 向上＝除权类
-            assert x["validation_basis"] in ("nominal", "effective_ratio",
-                                             "nominal_fallback")
-        for x in data["rights_suspended"]:                # 挂起带两列（G1）
+            assert {
+                "symbol",
+                "ex_date",
+                "ratio",
+                "price",
+                "chg_pred",
+                "forward_err",
+                "amp_factor",
+                "validation_basis",
+            } <= set(x)
+            assert x["ratio"] > 0 and x["chg"] > 1.0  # 向上＝除权类
+            assert x["validation_basis"] in ("nominal", "effective_ratio", "nominal_fallback")
+        for x in data["rights_suspended"]:  # 挂起带两列（G1）
             assert {"amp_factor", "forward_err"} <= set(x)
             assert x["forward_err"] > 0.005
-        known = {("600030.SH", "20220127"), ("002948.SZ", "20220113"),
-                 ("000970.SZ", "20220224"), ("601108.SH", "20220412"),
-                 ("000065.SZ", "20220414"), ("600958.SH", "20220429"),
-                 ("601377.SH", "20220825"), ("300772.SZ", "20221118"),
-                 ("601016.SH", "20221128"), ("600459.SH", "20221222"),
-                 ("600888.SH", "20210421"), ("600909.SH", "20210610"),
-                 ("601015.SH", "20210708"), ("601236.SH", "20210804"),
-                 ("002142.SZ", "20211202"), ("601555.SH", "20211223")}
+        known = {
+            ("600030.SH", "20220127"),
+            ("002948.SZ", "20220113"),
+            ("000970.SZ", "20220224"),
+            ("601108.SH", "20220412"),
+            ("000065.SZ", "20220414"),
+            ("600958.SH", "20220429"),
+            ("601377.SH", "20220825"),
+            ("300772.SZ", "20221118"),
+            ("601016.SH", "20221128"),
+            ("600459.SH", "20221222"),
+            ("600888.SH", "20210421"),
+            ("600909.SH", "20210610"),
+            ("601015.SH", "20210708"),
+            ("601236.SH", "20210804"),
+            ("002142.SZ", "20211202"),
+            ("601555.SH", "20211223"),
+        }
         in_rights = {(x["symbol"], x["ex_date"]) for x in data["rights"]}
         missing = known - in_rights
         assert not missing, f"known-16 未全部进入 rights：{missing}"
@@ -419,9 +519,9 @@ class TestForwardValidationR8c:
         # 000516 以 r_eff 救回（名义 0.983% 挂起 → 股本级 0.0507% 通过——§88.5.1）
         assert ("000816.SZ", "20110209") in in_rights
         assert ("002232.SZ", "20100322") in in_rights
-        v516 = next(x for x in data["rights"]
-                    if x["symbol"] == "000516.SZ"
-                    and x["ex_date"] == "20091020")
+        v516 = next(
+            x for x in data["rights"] if x["symbol"] == "000516.SZ" and x["ex_date"] == "20091020"
+        )
         assert v516["validation_basis"] == "effective_ratio"
         assert v516["r_effective"] == pytest.approx(0.267196, abs=1e-5)
         assert v516["subscription_ratio"] == pytest.approx(0.890652, abs=1e-5)
@@ -429,17 +529,29 @@ class TestForwardValidationR8c:
         # 名义字段语义保留（两列并存：forward_err＝名义、forward_err_eff＝股本级）
         assert v516["forward_err"] == pytest.approx(0.009831, abs=1e-5)
         # R12′ 十条救回表（§88.5.1 逐位）：全部 basis=effective_ratio、err_eff ≤0.0739%
-        r10 = {"000507.SZ", "000516.SZ", "000589.SZ", "000758.SZ",
-               "002017.SZ", "002130.SZ", "002500.SZ", "002634.SZ",
-               "002682.SZ", "300374.SZ"}
+        r10 = {
+            "000507.SZ",
+            "000516.SZ",
+            "000589.SZ",
+            "000758.SZ",
+            "002017.SZ",
+            "002130.SZ",
+            "002500.SZ",
+            "002634.SZ",
+            "002682.SZ",
+            "300374.SZ",
+        }
         for sym in r10:
-            x10 = next(x for x in data["rights"]
-                       if x["symbol"] == sym
-                       and x["validation_basis"] == "effective_ratio")
+            x10 = next(
+                x
+                for x in data["rights"]
+                if x["symbol"] == sym and x["validation_basis"] == "effective_ratio"
+            )
             assert x10["forward_err_eff"] <= 0.000739
         # **D5 守卫可见**：A+H 形态（002948）降级回名义并标注（禁静默采用）
-        v948 = next(x for x in data["rights"]
-                    if x["symbol"] == "002948.SZ" and x["ex_date"] == "20220113")
+        v948 = next(
+            x for x in data["rights"] if x["symbol"] == "002948.SZ" and x["ex_date"] == "20220113"
+        )
         assert v948["validation_basis"] == "nominal_fallback"
         assert "denominator_guard" in v948
         # 300176.SZ：真噪声（err_eff 3.09% 反而变大）⇒ **保持挂起**（禁强建模）
@@ -455,8 +567,7 @@ class TestForwardValidationR8c:
         # R13′/R12′：股本级三字段在**全部 176 条**上齐备（救回 10 条入 rights 后
         # 仍保留披露；挂起仅 1 条＝300176）。
         for x in (*data["rights"], *data["rights_suspended"]):
-            assert {"r_effective", "subscription_ratio",
-                    "forward_err_eff"} <= set(x)
+            assert {"r_effective", "subscription_ratio", "forward_err_eff"} <= set(x)
         # R18′（B⁽⁴⁾-1/2）：`consolidations_confirmed` ＝ **1 条**（000887.SZ
         # 2007-03-30、比例 0.326653）；511+1 条未佐证**条数不变**且 000887 标注
         # `proxy_captured`（价格代理已捕获但无法佐证——§85.2）。
@@ -468,19 +579,22 @@ class TestForwardValidationR8c:
         # ⚠ 本地 daily_basic 实算 31,462.928/96,320.000 = 0.3266502；审查方文本
         # 0.326653 系舍入差 3e-6（回执 §九·AB 已注明），以数据实算为准。
         assert len(data["consolidations_uncorroborated"]) == 512
-        v887 = [x for x in data["consolidations_uncorroborated"]
-                if x["symbol"] == "000887.SZ" and x["ex_date"] == "20070330"]
+        v887 = [
+            x
+            for x in data["consolidations_uncorroborated"]
+            if x["symbol"] == "000887.SZ" and x["ex_date"] == "20070330"
+        ]
         assert v887 and v887[0].get("proxy_captured") is True
         # R19′（B⁽⁴⁾-5）：`pex_source` 175 条 `exchange_preclose` ＋ 1 条回退
-        #（600256.SH 20180328 无 bar）；A+H 守卫不触发的条目无 `pex_guard`。
+        # （600256.SH 20180328 无 bar）；A+H 守卫不触发的条目无 `pex_guard`。
         allr = (*data["rights"], *data["rights_suspended"])
         srcs = [x.get("pex_source") for x in allr]
         assert srcs.count("exchange_preclose") == 175
-        assert srcs.count("effective_ratio") == 1      # 唯一无 bar：600256.SH
+        assert srcs.count("effective_ratio") == 1  # 唯一无 bar：600256.SH
         assert srcs.count("nominal_fallback") == 0
         v600 = next(x for x in allr if x["symbol"] == "600256.SH")
         assert v600["pex_source"] == "effective_ratio"
         assert v600["pex"] is not None
-        assert not any(x.get("pex_guard") for x in allr
-                       if x.get("pex_source") == "exchange_preclose")
-
+        assert not any(
+            x.get("pex_guard") for x in allr if x.get("pex_source") == "exchange_preclose"
+        )

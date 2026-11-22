@@ -26,6 +26,7 @@ alt/reader.py — alt 库读取与【与主库联查】
     ④ value_on 的\"向前回退\"分支曾因取错日期列（df.columns[0]）而**恒失效**
        → 现取 spec 登记的日期列
 """
+
 import os
 import warnings
 
@@ -51,27 +52,46 @@ def _date_col_of(table: str, fallback: str = "date") -> str:
     return sp_mod.BY_NAME[table].date_col if table in sp_mod.BY_NAME else fallback
 
 
-def read_alt(table: str, columns=None, start_date=None, end_date=None,
-             date_col: str | None = None):
+def read_alt(table: str, columns=None, start_date=None, end_date=None, date_col: str | None = None):
     """读 alt 库某表（布局无关）。
 
     日期列默认取 spec 中的定义；未登记的表按 'date' 处理。
     """
     dc = date_col or _date_col_of(table)
-    return read_range(table, columns=columns, start_date=start_date,
-                      end_date=end_date, date_col=dc, root=ALT_DATA_DIR)
+    return read_range(
+        table,
+        columns=columns,
+        start_date=start_date,
+        end_date=end_date,
+        date_col=dc,
+        root=ALT_DATA_DIR,
+    )
 
 
-def read_alt_by_code(table: str, code: str, columns=None,
-                     start_date=None, end_date=None, date_col=None,
-                     code_col="ts_code", root=None):
+def read_alt_by_code(
+    table: str,
+    code: str,
+    columns=None,
+    start_date=None,
+    end_date=None,
+    date_col=None,
+    code_col="ts_code",
+    root=None,
+):
     """读 alt 库中某标的的数据（by_year / by_code 布局均支持）"""
     dc = date_col or _date_col_of(table)
     if root is None:
         root = ALT_DATA_DIR
-    return read_code(table, code, columns=columns, start_date=start_date,
-                     end_date=end_date, date_col=dc, code_col=code_col,
-                     root=root)
+    return read_code(
+        table,
+        code,
+        columns=columns,
+        start_date=start_date,
+        end_date=end_date,
+        date_col=dc,
+        code_col=code_col,
+        root=root,
+    )
 
 
 # ============================================================
@@ -95,11 +115,16 @@ def _median_gap_days(df: pd.DataFrame, col: str):
     return float(d.diff().dt.days.median())
 
 
-def join_main(left: pd.DataFrame, right: pd.DataFrame,
-              on: str | None = None, how: str = "left",
-              left_date: str | None = None, right_date: str | None = None,
-              tolerance_days: int | None = None,
-              warn_min_match: float = 0.5):
+def join_main(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    on: str | None = None,
+    how: str = "left",
+    left_date: str | None = None,
+    right_date: str | None = None,
+    tolerance_days: int | None = None,
+    warn_min_match: float = 0.5,
+):
     """把 alt 库数据与主库数据按日期联查。
 
     两侧日期列名可能不同（alt 用 'date'，主库用 'trade_date'），
@@ -162,15 +187,16 @@ def join_main(left: pd.DataFrame, right: pd.DataFrame,
             rate = matched / len(left_df)
             if rate < warn_min_match:
                 warnings.warn(
-                    f"联查匹配率偏低：{matched}/{len(left_df)} = {rate*100:.1f}% "
-                    f"（阈值 {warn_min_match*100:.0f}%）。\n"
-                    f"    结果有 {len(left_df)-matched} 行右侧全为 NaN —— "
+                    f"联查匹配率偏低：{matched}/{len(left_df)} = {rate * 100:.1f}% "
+                    f"（阈值 {warn_min_match * 100:.0f}%）。\n"
+                    f"    结果有 {len(left_df) - matched} 行右侧全为 NaN —— "
                     f"两层数据的日期范围可能不重叠。\n"
                     f"    检查：左侧 {lc} 范围 "
                     f"{left_df[lc].min()}~{left_df[lc].max()} vs "
                     f"右侧 {rc} 范围 {right[rc].min()}~{right[rc].max()}；\n"
                     f"    若确实只要重叠部分，用 how='inner'（本次将返回 {matched} 行）。",
-                    stacklevel=2)
+                    stacklevel=2,
+                )
         return out
 
     # ---------- 容差匹配（把低频数据填到高频上）----------
@@ -184,7 +210,8 @@ def join_main(left: pd.DataFrame, right: pd.DataFrame,
             f"    已交换两侧，使**高频序列**作为结果主体"
             f"（预期行数 {len(right_df)}，日期列名保留 '{rc}'）。\n"
             f"    若不希望自动校正，请显式调换传参顺序。",
-            stacklevel=2)
+            stacklevel=2,
+        )
         left_df, right_df = right_df, left_df
         lc, rc = rc, lc
 
@@ -192,17 +219,21 @@ def join_main(left: pd.DataFrame, right: pd.DataFrame,
     right_df["_dt"] = _to_dt(right_df[rc])
     left_df = left_df.dropna(subset=["_dt"]).sort_values("_dt")
     right_df = right_df.dropna(subset=["_dt"]).sort_values("_dt")
-    out = pd.merge_asof(left_df, right_df, on="_dt", direction="backward",
-                        tolerance=pd.Timedelta(days=tolerance_days),
-                        suffixes=("", "_m"))
+    out = pd.merge_asof(
+        left_df,
+        right_df,
+        on="_dt",
+        direction="backward",
+        tolerance=pd.Timedelta(days=tolerance_days),
+        suffixes=("", "_m"),
+    )
     return out.drop(columns=["_dt"])
 
 
 # ============================================================
 # 二b、港股复权：事件级因子 → 逐日乘数（**唯一入口**，v1.2 外盘接入 2026-10-11）
 # ============================================================
-def _expand_qfq_frames(px: pd.DataFrame, fac: pd.DataFrame,
-                       asof: bool = True) -> pd.DataFrame:
+def _expand_qfq_frames(px: pd.DataFrame, fac: pd.DataFrame, asof: bool = True) -> pd.DataFrame:
     """纯函数：把价格帧与**事件级**因子帧对齐为逐日复权帧。
 
     ⚠ 骨架必须 = **价格交易日 ∪ 因子事件日**（P-A 正解，18-审查记录 §2.1/§4.1）：
@@ -225,8 +256,7 @@ def _expand_qfq_frames(px: pd.DataFrame, fac: pd.DataFrame,
     return pd.merge_asof(px, fac, on="_dt", direction="backward")
 
 
-def expand_qfq_factor(symbol: str, *, with_price: bool = True,
-                      asof: bool = True) -> pd.DataFrame:
+def expand_qfq_factor(symbol: str, *, with_price: bool = True, asof: bool = True) -> pd.DataFrame:
     """`hk_qfq_factor`（事件级）→ 逐日乘数序列；**港股复权的唯一入口**。
 
     ⚠ 为什么必须经本函数（18-审查记录 §2.1 实证）：
@@ -253,13 +283,18 @@ def expand_qfq_factor(symbol: str, *, with_price: bool = True,
     if fac is None or len(fac) == 0:
         raise ValueError(
             f"hk_qfq_factor 无 '{symbol}' 数据（未建库？先跑 "
-            f"python -m alt.list_backfill --table hk_qfq_factor）")
+            f"python -m alt.list_backfill --table hk_qfq_factor）"
+        )
     fac = fac.copy()
     fac["qfq_factor"] = pd.to_numeric(fac["qfq_factor"], errors="coerce")
     fac["_dt"] = _to_dt(fac["date"])
-    fac = (fac[["_dt", "qfq_factor"]].dropna()
-           .sort_values("_dt").drop_duplicates("_dt", keep="last")
-           .reset_index(drop=True))
+    fac = (
+        fac[["_dt", "qfq_factor"]]
+        .dropna()
+        .sort_values("_dt")
+        .drop_duplicates("_dt", keep="last")
+        .reset_index(drop=True)
+    )
     if len(fac) == 0:
         raise ValueError(f"hk_qfq_factor '{symbol}' 因子列全为空或日期不可解析")
 
@@ -272,19 +307,20 @@ def expand_qfq_factor(symbol: str, *, with_price: bool = True,
     if px is None or len(px) == 0:
         raise ValueError(
             f"hk_daily 无 '{symbol}' 数据（未建库？先跑 "
-            f"python -m alt.list_backfill --table hk_daily）")
+            f"python -m alt.list_backfill --table hk_daily）"
+        )
     px = px.copy()
     px["_dt"] = _to_dt(px["date"])
-    px = (px.dropna(subset=["_dt"]).sort_values("_dt")
-          .reset_index(drop=True))
+    px = px.dropna(subset=["_dt"]).sort_values("_dt").reset_index(drop=True)
 
     out = _expand_qfq_frames(px, fac, asof=asof)
     out["close_qfq"] = out["close"] * out["qfq_factor"]
     return out.drop(columns=["_dt"]).reset_index(drop=True)
 
 
-def expand_us_qfq_factor(symbol: str, *, with_price: bool = True,
-                          asof: bool = True, root: str | None = None) -> pd.DataFrame:
+def expand_us_qfq_factor(
+    symbol: str, *, with_price: bool = True, asof: bool = True, root: str | None = None
+) -> pd.DataFrame:
     """`us_qfq_factor`（事件级）→ 逐日乘数序列；**美股复权的唯一入口**。
 
     与港股 `expand_qfq_factor` 同构：骨架∪ + ffill ≡ asof backward。
@@ -305,13 +341,18 @@ def expand_us_qfq_factor(symbol: str, *, with_price: bool = True,
     if fac is None or len(fac) == 0:
         raise ValueError(
             f"us_qfq_factor 无 '{symbol}' 数据（未建库？先跑 "
-            f"python -m alt.list_backfill --table us_qfq_factor --symbols {symbol}）")
+            f"python -m alt.list_backfill --table us_qfq_factor --symbols {symbol}）"
+        )
     fac = fac.copy()
     fac["qfq_factor"] = pd.to_numeric(fac["qfq_factor"], errors="coerce")
     fac["_dt"] = _to_dt(fac["date"])
-    fac = (fac[["_dt", "qfq_factor"]].dropna()
-           .sort_values("_dt").drop_duplicates("_dt", keep="last")
-           .reset_index(drop=True))
+    fac = (
+        fac[["_dt", "qfq_factor"]]
+        .dropna()
+        .sort_values("_dt")
+        .drop_duplicates("_dt", keep="last")
+        .reset_index(drop=True)
+    )
     # ⚠ §98 E-R3：**不再**合成 1.0 假哨兵。
     # 源端 us_qfq_factor 自带 1970-01-01 哨兵行（如 AAPL qfq_factor=0.004464285714）——
     # 这是真实最早基准（< 首个公司行动 1987-05-11 factor=0.004464285714）。
@@ -339,11 +380,11 @@ def expand_us_qfq_factor(symbol: str, *, with_price: bool = True,
     if px is None or len(px) == 0:
         raise ValueError(
             f"us_daily_raw 无 '{symbol}' 数据（未建库？先跑 "
-            f"python -m alt.list_backfill --table us_daily_raw --symbols {symbol}）")
+            f"python -m alt.list_backfill --table us_daily_raw --symbols {symbol}）"
+        )
     px = px.copy()
     px["_dt"] = _to_dt(px["date"])
-    px = (px.dropna(subset=["_dt"]).sort_values("_dt")
-          .reset_index(drop=True))
+    px = px.dropna(subset=["_dt"]).sort_values("_dt").reset_index(drop=True)
 
     out = _expand_qfq_frames(px, fac, asof=asof)
     out["close_qfq"] = out["close"] * out["qfq_factor"]
@@ -373,24 +414,21 @@ def value_on(table: str, date: str, column: str, tolerance_days: int = 400):
     df = read_alt(table, start_date=date, end_date=date)
     if len(df):
         if column not in df.columns:
-            raise KeyError(
-                f"列 '{column}' 不存在于表 '{table}'"
-                f"（实际列: {list(df.columns)}）")
+            raise KeyError(f"列 '{column}' 不存在于表 '{table}'（实际列: {list(df.columns)}）")
         return df[column].iloc[-1]
 
     # ② 向前回退
     df = read_alt(table, end_date=date)
     if len(df) == 0:
-        return None                      # 表为空：业务情况
+        return None  # 表为空：业务情况
     if column not in df.columns:
-        raise KeyError(
-            f"列 '{column}' 不存在于表 '{table}'"
-            f"（实际列: {list(df.columns)}）")
+        raise KeyError(f"列 '{column}' 不存在于表 '{table}'（实际列: {list(df.columns)}）")
 
-    dcol = dc if dc in df.columns else next(
-        (c for c in df.columns if "date" in str(c).lower()), None)
+    dcol = (
+        dc if dc in df.columns else next((c for c in df.columns if "date" in str(c).lower()), None)
+    )
     if dcol is None:
-        return None                      # 找不到日期列，无法回退
+        return None  # 找不到日期列，无法回退
     df = df.assign(_dt=_to_dt(df[dcol]))
     cutoff = pd.to_datetime(str(date), format="%Y%m%d") - pd.Timedelta(days=tolerance_days)
     sub = df[df["_dt"] >= cutoff].sort_values("_dt")
@@ -430,8 +468,7 @@ def status(verbose=True):
                 dr = f"{s.min()} ~ {s.max()}"
         except Exception as e:
             rows, dr = -1, f"读取失败: {type(e).__name__}"
-        rec = {"table": name, "files": len(files), "rows": rows,
-               "date_range": dr, "date_col": dc}
+        rec = {"table": name, "files": len(files), "rows": rows, "date_range": dr, "date_col": dc}
         out.append(rec)
         if verbose:
             print(f"  {name:<22} {len(files):>3} 文件  {rows:>8,} 行  {dr}")
@@ -444,8 +481,7 @@ def status(verbose=True):
     return out
 
 
-def compare_with_main(table: str, main_table: str | None = None,
-                      date_col: str | None = None):
+def compare_with_main(table: str, main_table: str | None = None, date_col: str | None = None):
     """对比 alt 表与主库同名/对应表的最新日期（用于判断谁更新）。
 
     仅做日期维度对比，不读取全量数据。
@@ -454,13 +490,13 @@ def compare_with_main(table: str, main_table: str | None = None,
     mt = main_table or table
     alt_d = latest_date(table, date_col=dc, root=ALT_DATA_DIR)
     main_d = latest_date(mt, date_col="trade_date", root=TS_DATA_DIR)
-    return {"table": table, "alt_latest": alt_d, "main_latest": main_d,
-            "main_table": mt}
+    return {"table": table, "alt_latest": alt_d, "main_latest": main_d, "main_table": mt}
 
 
 def main():
     """CLI: python -m alt.reader"""
     import sys
+
     k = sys.argv[1] if len(sys.argv) > 1 else "status"
     if k == "status":
         print("=" * 74)

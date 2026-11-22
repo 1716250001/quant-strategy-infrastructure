@@ -13,6 +13,7 @@
        `path.is_file()` 守卫逐位一致；
     ③ **元数据档**：`file_metas`/`file_stems` 与 reader 同源（指纹输入不漂移）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,9 +29,17 @@ SYM = "600000.SH"
 
 
 def _rows(day: str, close: float = 10.0) -> dict:
-    return {"ts_code": SYM, "trade_date": day, "open": close, "high": close,
-            "low": close, "close": close, "pre_close": close,
-            "vol": 1000.0, "amount": close * 1000.0}
+    return {
+        "ts_code": SYM,
+        "trade_date": day,
+        "open": close,
+        "high": close,
+        "low": close,
+        "close": close,
+        "pre_close": close,
+        "vol": 1000.0,
+        "amount": close * 1000.0,
+    }
 
 
 @pytest.fixture()
@@ -39,11 +48,13 @@ def root(tmp_path: Path) -> Path:
     r = tmp_path / "market"
     (r / "daily").mkdir(parents=True)
     (r / "metadata").mkdir(parents=True)
-    pq.write_table(pa.Table.from_pylist([_rows(d) for d in DAYS]),
-                   r / "daily" / "2024.parquet")
-    pq.write_table(pa.Table.from_pylist([
-        {"ts_code": SYM, "name": "浦发银行", "list_date": "19991110",
-         "delist_date": None}]), r / "metadata" / "stock_basic.parquet")
+    pq.write_table(pa.Table.from_pylist([_rows(d) for d in DAYS]), r / "daily" / "2024.parquet")
+    pq.write_table(
+        pa.Table.from_pylist(
+            [{"ts_code": SYM, "name": "浦发银行", "list_date": "19991110", "delist_date": None}]
+        ),
+        r / "metadata" / "stock_basic.parquet",
+    )
     return r
 
 
@@ -67,18 +78,22 @@ class TestSemanticEquivalence:
         store = YearTableStore(root)
         cols = ["ts_code", "trade_date", "close"]
         a = store.read_codes("daily", [SYM], "20240102", "20240104", columns=cols)
-        b = pr.read_codes("daily", root, [SYM], "20240102", "20240104",
-                          columns=cols)
+        b = pr.read_codes("daily", root, [SYM], "20240102", "20240104", columns=cols)
         assert a.to_pylist() == b.to_pylist()
 
     def test_iter_day_slices_matches_reader(self, root: Path):
         store = YearTableStore(root)
         cols = ["ts_code", "trade_date", "close"]
-        a = [(y, dict(c), lo, hi) for y, c, lo, hi in
-             store.iter_day_slices("daily", "20240102", "20240104", columns=cols)]
-        b = [(y, dict(c), lo, hi) for y, c, lo, hi in
-             pr.iter_day_slices("daily", root, "20240102", "20240104",
-                                columns=cols)]
+        a = [
+            (y, dict(c), lo, hi)
+            for y, c, lo, hi in store.iter_day_slices("daily", "20240102", "20240104", columns=cols)
+        ]
+        b = [
+            (y, dict(c), lo, hi)
+            for y, c, lo, hi in pr.iter_day_slices(
+                "daily", root, "20240102", "20240104", columns=cols
+            )
+        ]
         assert a == b
         assert [d for d, *_ in a] == DAYS
 
@@ -92,8 +107,8 @@ class TestMissingSemantics:
 
     def test_read_file_missing_returns_none(self, root: Path):
         store = YearTableStore(root)
-        assert store.read_file("suspend_d", year=2024) is None      # 目录缺失
-        assert store.read_file("daily", year=1999) is None          # 年文件缺失
+        assert store.read_file("suspend_d", year=2024) is None  # 目录缺失
+        assert store.read_file("daily", year=1999) is None  # 年文件缺失
 
     def test_schema_names_missing_returns_empty(self, root: Path):
         store = YearTableStore(root)
@@ -101,7 +116,7 @@ class TestMissingSemantics:
 
     def test_read_file_metadata_layout(self, root: Path):
         store = YearTableStore(root)
-        t = store.read_file("stock_basic")           # metadata 布局（year 忽略）
+        t = store.read_file("stock_basic")  # metadata 布局（year 忽略）
         assert t is not None and t.num_rows == 1
 
 
@@ -126,5 +141,4 @@ class TestMetaSurface:
         """读路径严格性未被列表语义削弱（目录缺失 → ReaderError 防静默漏读）。"""
         store = YearTableStore(root)
         with pytest.raises(pr.ReaderError, match="表目录缺失"):
-            list(store.iter_day_slices("suspend_d", "20240102", "20240104",
-                                       columns=["ts_code"]))
+            list(store.iter_day_slices("suspend_d", "20240102", "20240104", columns=["ts_code"]))

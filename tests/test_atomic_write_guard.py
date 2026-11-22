@@ -18,6 +18,7 @@
 
 纪律：本文件只断言，不改生产代码；红了直接指向「文件:行 + 原始语句」。
 """
+
 import ast
 import pathlib
 
@@ -25,22 +26,24 @@ CODE_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 # 派单 §3.2 指定排除 + 非源码目录 + 独立子仓
 SKIP_PARTS = {
-    "_venv", "_scratch", "_archive", "tests",     # 派单原文
-    ".git", "__pycache__", ".pytest_cache",       # 非源码
-    "btf",                                        # 独立子仓（19 号 §263）
+    "_venv",
+    "_scratch",
+    "_archive",
+    "tests",  # 派单原文
+    ".git",
+    "__pycache__",
+    ".pytest_cache",  # 非源码
+    "btf",  # 独立子仓（19 号 §263）
 }
 
 # 白名单：仅这三个文件允许出现裸 `.to_parquet(`，逐条理由见下。
 ALLOWLIST = {
-    "common/parquet_store.py":
-        "原子写封装本体（_atomic_write_parquet 自身必须以 to_parquet 落 tmp）",
-    "tools/db/clean.py":
-        "已是原子写：tmp → to_parquet → 回读校验 len(chk)==n1 → os.replace",
-    "alt/us_backfill.py":
-        "已是原子写：tmp → to_parquet → os.replace",
+    "common/parquet_store.py": "原子写封装本体（_atomic_write_parquet 自身必须以 to_parquet 落 tmp）",
+    "tools/db/clean.py": "已是原子写：tmp → to_parquet → 回读校验 len(chk)==n1 → os.replace",
+    "alt/us_backfill.py": "已是原子写：tmp → to_parquet → os.replace",
 }
 
-WINDOW = 3          # 同函数内、写入行前后 3 行内有 os.replace 即视为原子
+WINDOW = 3  # 同函数内、写入行前后 3 行内有 os.replace 即视为原子
 
 
 def _iter_py_files():
@@ -89,14 +92,14 @@ def _write_points():
 
 
 def _is_atomic(rel, lineno, spans, lines):
-    if rel in ALLOWLIST:                                  # ③ 白名单
+    if rel in ALLOWLIST:  # ③ 白名单
         return True
     fn = _enclosing(spans, lineno)
     if fn is None:
         return False
     start, end, name = fn
     if rel == "common/parquet_store.py" and name == "_atomic_write_parquet":
-        return True                                       # ① 封装本体
+        return True  # ① 封装本体
     lo, hi = max(start, lineno - WINDOW), min(end, lineno + WINDOW)
     return any("os.replace(" in lines[j - 1] for j in range(lo, hi + 1))  # ② 近邻 replace
 

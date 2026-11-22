@@ -16,6 +16,7 @@
 `20-回测平台使用指引.md` §0 **纪律三**（基准跑前定死 / 危机区间不得事后剔除；
 另见该文 §7 `analysis.crisis_windows` 配置说明）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -50,8 +51,7 @@ CRISIS_WINDOWS: tuple[CrisisWindow, ...] = (
 
 
 def _is_ymd(text: str) -> bool:
-    return (len(text) == 10 and text[4] == "-" and text[7] == "-"
-            and text.replace("-", "").isdigit())
+    return len(text) == 10 and text[4] == "-" and text[7] == "-" and text.replace("-", "").isdigit()
 
 
 def from_config(
@@ -81,15 +81,20 @@ def from_config(
         if not name or not _is_ymd(start) or not _is_ymd(end) or start > end:
             raise ValueError(
                 f"analysis.crisis_windows[{i}] 非法：{dict(row or {})!r}"
-                f"（须 name 非空 + start/end=YYYY-MM-DD 且 start ≤ end）")
+                f"（须 name 非空 + start/end=YYYY-MM-DD 且 start ≤ end）"
+            )
         out.append(CrisisWindow(name, start, end))
     return tuple(out)
 
 
 def intersect(
-    start_ymd: str, end_ymd: str,
+    start_ymd: str,
+    end_ymd: str,
     windows: Sequence[CrisisWindow] | None = None,
 ) -> tuple[CrisisWindow, ...]:
     """与 [start_ymd, end_ymd] 重叠的危机窗（缺省用内置常量表）。"""
-    return tuple(w for w in (windows if windows is not None else CRISIS_WINDOWS)
-                 if w.overlaps(start_ymd, end_ymd))
+    return tuple(
+        w
+        for w in (windows if windows is not None else CRISIS_WINDOWS)
+        if w.overlaps(start_ymd, end_ymd)
+    )

@@ -20,6 +20,7 @@ CLI：
     python -m alt.backfill --tier P0               # 实跑 P0
     python -m alt.backfill --only ebs_lg           # 单表
 """
+
 import argparse
 import json
 import os
@@ -44,6 +45,7 @@ from alt.spec import ALL_SPECS, TIERS
 def _specs():
     """延迟导入 spec 模块（便于 --list 与测试）"""
     from alt import spec as _sp
+
     return _sp
 
 
@@ -61,8 +63,11 @@ class AltCheckpoint:
             try:
                 self.data = json.load(open(path, encoding="utf-8"))
             except Exception as exc:
-                print(f"[alt.backfill] 断点文件加载失败（按空处理）{path}: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                print(
+                    f"[alt.backfill] 断点文件加载失败（按空处理）{path}: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 self.data = {}
 
     def is_done(self, table, key="__all__"):
@@ -87,11 +92,11 @@ class AltCheckpoint:
         done.extend(added)
         rec["updated"] = datetime.now().isoformat(timespec="seconds")
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        assert_writable(self.path)          # M1：落盘前过写入守卫
+        assert_writable(self.path)  # M1：落盘前过写入守卫
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, self.path)          # 原子写
+        os.replace(tmp, self.path)  # 原子写
 
     def mark_attempt(self, table):
         """记录该表最近一次**尝试**时间（被跳过、空返回也记）。
@@ -130,6 +135,7 @@ def guess_url(func_name):
       本包装保留是为了不破坏既有调用方与外部引用。
     """
     from alt.urls import guess_url as _guess
+
     return _guess(func_name)
 
 
@@ -168,21 +174,40 @@ def _range_windows(sp):
     return [(f"{y}0101", f"{y}1231") for y in range(y0, y1 + 1)]
 
 
-def run_range_spec(sp, fn, url, limiter: AltRateLimiter, ckpt: AltCheckpoint,
-                   dry_run=False, force=False, verbose=True, window=None):
+def run_range_spec(
+    sp,
+    fn,
+    url,
+    limiter: AltRateLimiter,
+    ckpt: AltCheckpoint,
+    dry_run=False,
+    force=False,
+    verbose=True,
+    window=None,
+):
     """区间参数表（currency 类）的取数：按段拉取并合并落盘（v1.2）。
 
     · 建库（window=None）：按 `_range_windows` 年段枚举，断点键 `range:{起始日}`；
     · 日更（window=(start, end)）：单窗口，重叠幂等（靠 subset 去重）。
     ⚠ 单段失败即停（避免在风控下持续轰击）；断点**落盘成功后才记**。
     """
-    res = {"table": sp.name, "tier": sp.tier, "mode": sp.mode,
-           "requests": 0, "rows": 0, "added": 0, "ok": True,
-           "skipped": False, "window_out": False, "errors": [], "warnings": []}
+    res = {
+        "table": sp.name,
+        "tier": sp.tier,
+        "mode": sp.mode,
+        "requests": 0,
+        "rows": 0,
+        "added": 0,
+        "ok": True,
+        "skipped": False,
+        "window_out": False,
+        "errors": [],
+        "warnings": [],
+    }
 
     windows = [window] if window else _range_windows(sp)
     frames, done_keys = [], []
-    for (s0, s1) in windows:
+    for s0, s1 in windows:
         key = f"range:{s0}"
         if ckpt.is_done(sp.name, key) and not force:
             continue
@@ -191,12 +216,12 @@ def run_range_spec(sp, fn, url, limiter: AltRateLimiter, ckpt: AltCheckpoint,
             res["requests"] += len(sp.enum_values or [None])
             continue
         seg_err = False
-        seg_any = False                     # 本段是否有非空数据
+        seg_any = False  # 本段是否有非空数据
         # DB-R11b：`enum_values` 为空表示「只有区间、无枚举」（如 bond_yield_cn），
         #   此时内层应**恰好迭代一次**且 val=None；原实现直接 0 次 ⇒ 0 请求 0 行，
         #   且外层记 OK（§224 实证）。**不许**改成 `if not sp.enum_values: skip`，
         #   那会让这类表永远拿不到数据。
-        for val in (sp.enum_values or [None]):
+        for val in sp.enum_values or [None]:
             kw = dict(sp.params)
             if sp.enum_param:
                 kw[sp.enum_param] = val
@@ -223,8 +248,7 @@ def run_range_spec(sp, fn, url, limiter: AltRateLimiter, ckpt: AltCheckpoint,
         if not seg_any:
             # 整段（全部币种）返空：**不记断点**（更可能是参数/窗口问题而非源端
             # 事实空——如格式错误致静默空；下次重试，避免永久跳过）
-            res["warnings"].append(
-                f"{s0}~{s1}: 整段（{len(sp.enum_values)} 币种）返空 → 不记断点")
+            res["warnings"].append(f"{s0}~{s1}: 整段（{len(sp.enum_values)} 币种）返空 → 不记断点")
             continue
         done_keys.append(key)
     if dry_run:
@@ -232,10 +256,13 @@ def run_range_spec(sp, fn, url, limiter: AltRateLimiter, ckpt: AltCheckpoint,
     if frames:
         merged = pd.concat(frames, ignore_index=True)
         st = save(merged, sp)
-        res.update(rows=st["rows"], added=st["added"],
-                   ok=bool(st["ok"]) and not res["errors"],
-                   warnings=res["warnings"] + st["warnings"],
-                   errors=res["errors"] + st.get("errors", []))
+        res.update(
+            rows=st["rows"],
+            added=st["added"],
+            ok=bool(st["ok"]) and not res["errors"],
+            warnings=res["warnings"] + st["warnings"],
+            errors=res["errors"] + st.get("errors", []),
+        )
     elif res["errors"]:
         res["ok"] = False
         res["errors"].append(f"区间取数未成功（{len(windows)} 段中 0 段落盘）")
@@ -257,13 +284,21 @@ def _date_param_value(sp, target_date):
     if lag <= 0 or not dt:
         return dt
     from common.calendar import prev_trade_dates
-    prev = prev_trade_dates(dt, n=lag)          # 倒序，最近在前
-    return prev[-1] if prev else dt             # 取最老的一只 = target − lag 交易日
+
+    prev = prev_trade_dates(dt, n=lag)  # 倒序，最近在前
+    return prev[-1] if prev else dt  # 取最老的一只 = target − lag 交易日
 
 
-def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
-             dry_run=False, force=False, verbose=True, target_date=None,
-             range_window=None):
+def run_spec(
+    sp,
+    limiter: AltRateLimiter,
+    ckpt: AltCheckpoint,
+    dry_run=False,
+    force=False,
+    verbose=True,
+    target_date=None,
+    range_window=None,
+):
     """执行一张表（含 enum 展开）。返回结果 dict。
 
     target_date:  按日型表的目标日期（YYYYMMDD）。对 inject_date 的表必填。
@@ -271,9 +306,19 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
     """
     import akshare as ak
 
-    res = {"table": sp.name, "tier": sp.tier, "mode": sp.mode,
-           "requests": 0, "rows": 0, "added": 0, "ok": False,
-           "skipped": False, "window_out": False, "errors": [], "warnings": []}
+    res = {
+        "table": sp.name,
+        "tier": sp.tier,
+        "mode": sp.mode,
+        "requests": 0,
+        "rows": 0,
+        "added": 0,
+        "ok": False,
+        "skipped": False,
+        "window_out": False,
+        "errors": [],
+        "warnings": [],
+    }
 
     # —— mode="list"（按标的列表逐只拉）不属于本引擎 ——
     # 2026-09-21: 该模式需要"先读清单、再逐只带参数调用"，本引擎的 once/enum
@@ -284,7 +329,8 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
         res["skipped"] = True
         res["warnings"].append(
             'mode="list" 表由 alt/us_backfill.py 处理，本引擎跳过'
-            '（命令: python -m alt.us_backfill）')
+            "（命令: python -m alt.us_backfill）"
+        )
         return res
 
     fn = getattr(ak, sp.func, None)
@@ -296,13 +342,22 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
 
     # —— 区间参数表（v1.2：currency 类；R-19 隐式分页 ⇒ 分段 ≤1 年）——
     if sp.range_params:
-        return run_range_spec(sp, fn, url, limiter, ckpt, dry_run=dry_run,
-                              force=force, verbose=verbose, window=range_window)
+        return run_range_spec(
+            sp,
+            fn,
+            url,
+            limiter,
+            ckpt,
+            dry_run=dry_run,
+            force=force,
+            verbose=verbose,
+            window=range_window,
+        )
 
     # —— enum 型：逐枚举值取数并合并 ——
     if sp.mode == "enum":
         frames = []
-        done_keys = []                     # 暂存，落盘成功后才记断点
+        done_keys = []  # 暂存，落盘成功后才记断点
         for val in sp.enum_values:
             key = f"enum:{val}"
             if ckpt.is_done(sp.name, key) and not force:
@@ -317,7 +372,8 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
             if dry_run:
                 res["requests"] += 1
                 res["warnings"].append(
-                    f"[dry-run] 将调用 {sp.func}({sp.params}, {sp.enum_param}={val!r})")
+                    f"[dry-run] 将调用 {sp.func}({sp.params}, {sp.enum_param}={val!r})"
+                )
                 continue
             # ⚠ 必须用**默认参数绑定**（k=kw），不能写 `lambda: fn(**kw)`：
             #   limiter.call 内部可能重试（延迟执行），裸闭包捕获的是 kw 变量本身，
@@ -331,16 +387,19 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
             res["warnings"].extend(warns)
             if len(norm):
                 frames.append(norm)
-            done_keys.append(key)           # 成功（含空数据）→ 暂存，不立即记
+            done_keys.append(key)  # 成功（含空数据）→ 暂存，不立即记
         if dry_run:
             res["ok"] = True
             return res
         if frames:
             merged = pd.concat(frames, ignore_index=True)
             st = save(merged, sp)
-            res.update(rows=st["rows"], added=st["added"],
-                       warnings=res["warnings"] + st["warnings"],
-                       errors=res["errors"] + st.get("errors", []))
+            res.update(
+                rows=st["rows"],
+                added=st["added"],
+                warnings=res["warnings"] + st["warnings"],
+                errors=res["errors"] + st.get("errors", []),
+            )
             # ⚠ R4（2026-09-19 修复）：成功与否必须**同时**看落盘结果与枚举失败。
             #   原实现只取 st["ok"]（落盘结果），于是【部分枚举值失败】时仍报成功——
             #   这比"全部失败"更常见（坏一个枚举值就中招），后果是：
@@ -353,8 +412,7 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
             if res["errors"]:
                 # 调用失败（网络/风控/接口变更）→ 判失败，不记断点，留待续跑
                 res["ok"] = False
-                res["errors"].append(
-                    f"全部 {n_val} 个枚举值均未成功取数，本表本轮无数据落盘")
+                res["errors"].append(f"全部 {n_val} 个枚举值均未成功取数，本表本轮无数据落盘")
             else:
                 # 全部成功但都返回空 → 判成功（避免每次重拉空表）
                 res["ok"] = True
@@ -399,8 +457,7 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
         if warn:
             res["warnings"].append(warn)
         if not safe:
-            msg = (f"纯快照表拒绝采集：{why}。"
-                   f"该表历史不可回补，但也不能用残缺数据充数")
+            msg = f"纯快照表拒绝采集：{why}。该表历史不可回补，但也不能用残缺数据充数"
             if dry_run:
                 res["warnings"].append(f"[dry-run] 实跑时会被拒绝：{why}")
             else:
@@ -408,13 +465,16 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
                 return res
         live = latest_trade_date()
         if str(target_date) != str(live):
-            msg = (f"纯快照表拒绝写入：注入日期 {target_date} ≠ 当前可采集日期 {live}。"
-                   f"该接口无日期维度，只能采集「此刻」的快照；"
-                   f"指定历史日期会把当前数据错标为历史（静默污染）")
+            msg = (
+                f"纯快照表拒绝写入：注入日期 {target_date} ≠ 当前可采集日期 {live}。"
+                f"该接口无日期维度，只能采集「此刻」的快照；"
+                f"指定历史日期会把当前数据错标为历史（静默污染）"
+            )
             if dry_run:
                 res["warnings"].append(
                     f"[dry-run] 实跑时会被拒绝：注入日期 {target_date} "
-                    f"≠ 当前可采集日期 {live}（纯快照表只能采当日）")
+                    f"≠ 当前可采集日期 {live}（纯快照表只能采当日）"
+                )
             else:
                 res["errors"].append(msg)
                 return res
@@ -443,8 +503,7 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
             # 后续更老日期（更老的必然同样越界）。
             res["window_out"] = True
             res["ok"] = True
-            res["warnings"].append(
-                f"已超出源端保留窗口，该日期永久不可补：{str(err)[:90]}")
+            res["warnings"].append(f"已超出源端保留窗口，该日期永久不可补：{str(err)[:90]}")
             ckpt.mark_done(sp.name, key)
             return res
         res["errors"].append(err)
@@ -458,9 +517,13 @@ def run_spec(sp, limiter: AltRateLimiter, ckpt: AltCheckpoint,
         return res
 
     st = save(norm, sp, req_date=target_date)
-    res.update(rows=st["rows"], added=st["added"], ok=st["ok"],
-               warnings=res["warnings"] + st["warnings"],
-               errors=res["errors"] + st.get("errors", []))
+    res.update(
+        rows=st["rows"],
+        added=st["added"],
+        ok=st["ok"],
+        warnings=res["warnings"] + st["warnings"],
+        errors=res["errors"] + st.get("errors", []),
+    )
     if st["ok"]:
         ckpt.mark_done(sp.name, key)
     return res
@@ -502,8 +565,10 @@ def latest_trade_date(market_close_hour=15, verbose=False):
             if len(cand):
                 d = str(cand["cal_date"].max())
                 if verbose:
-                    print(f"  [日期] {now:%H:%M:%S} "
-                          f"{'盘后' if after_close else '盘前/盘中'} → 目标交易日 {d}")
+                    print(
+                        f"  [日期] {now:%H:%M:%S} "
+                        f"{'盘后' if after_close else '盘前/盘中'} → 目标交易日 {d}"
+                    )
                 return d
         except Exception:
             pass
@@ -527,8 +592,7 @@ def _trade_cal_frame():
         cal["cal_date"] = cal["cal_date"].astype(str)
         return cal
     except Exception as exc:
-        print(f"[alt.backfill] 交易日历读取失败 {p}: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(f"[alt.backfill] 交易日历读取失败 {p}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
@@ -537,11 +601,15 @@ def is_trade_day(d):
     cal = _trade_cal_frame()
     if cal is None:
         import pandas as pd
+
         try:
             return pd.Timestamp(str(d)).weekday() < 5
         except Exception as exc:
-            print(f"[alt.backfill] 工作日回退判断失败 {d!r}（按交易日处理）: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            print(
+                f"[alt.backfill] 工作日回退判断失败 {d!r}（按交易日处理）: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             return True
     return bool((cal["cal_date"] == str(d)).any())
 
@@ -596,14 +664,26 @@ def is_snapshot_safe_now(open_hour=9, close_hour=15, buffer_minutes=30):
     if h >= close_hour:
         # 收盘缓冲内 → 采集，但提示可能不完整（N3：只告警不拒绝）
         if (h * 60 + m) < (close_hour * 60 + buffer_minutes):
-            return True, "", (f"当前 {now:%H:%M} 刚过收盘（不足 {buffer_minutes} "
-                              f"分钟），源端分时可能尚未写完 → 建议稍后重跑一次"
-                              f"以覆盖修正（当天重跑会自动 force 刷新当日）")
+            return (
+                True,
+                "",
+                (
+                    f"当前 {now:%H:%M} 刚过收盘（不足 {buffer_minutes} "
+                    f"分钟），源端分时可能尚未写完 → 建议稍后重跑一次"
+                    f"以覆盖修正（当天重跑会自动 force 刷新当日）"
+                ),
+            )
         return True, "", ""
 
     # 盘中：源端正在写入当日"未完成"分时，无论注入哪天都是错的
-    return False, (f"当前 {now:%H:%M} 处于交易时段，源端分时快照尚未走完，"
-                   f"采集会得到残缺数据（应等收盘后运行）"), ""
+    return (
+        False,
+        (
+            f"当前 {now:%H:%M} 处于交易时段，源端分时快照尚未走完，"
+            f"采集会得到残缺数据（应等收盘后运行）"
+        ),
+        "",
+    )
 
 
 def _backfill_dates(sp, tdate):
@@ -636,10 +716,13 @@ def _backfill_dates(sp, tdate):
 
     try:
         from common.calendar import recent_trade_dates
+
         ds = recent_trade_dates(sp.max_backfill_days, end_date=tdate)
     except Exception as exc:
-        print(f"[alt.backfill] 取最近交易日失败（仅用当日）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[alt.backfill] 取最近交易日失败（仅用当日）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         ds = []
     out = sorted({str(d) for d in ds}, reverse=True)
     return out or [tdate]
@@ -647,10 +730,21 @@ def _backfill_dates(sp, tdate):
 
 def _merge_daily_results(sp, pairs):
     """把同一张表多个日期的执行结果聚合成一条记录（供汇总/打印）"""
-    agg = {"table": sp.name, "tier": sp.tier, "mode": sp.mode,
-           "requests": 0, "rows": 0, "added": 0, "ok": True, "skipped": False,
-           "errors": [], "warnings": [], "days": [], "failed_at": None,
-           "window_skip": 0}
+    agg = {
+        "table": sp.name,
+        "tier": sp.tier,
+        "mode": sp.mode,
+        "requests": 0,
+        "rows": 0,
+        "added": 0,
+        "ok": True,
+        "skipped": False,
+        "errors": [],
+        "warnings": [],
+        "days": [],
+        "failed_at": None,
+        "window_skip": 0,
+    }
     for d, r in pairs:
         agg["requests"] += r.get("requests", 0)
         agg["rows"] += r.get("rows", 0)
@@ -670,12 +764,13 @@ def _merge_daily_results(sp, pairs):
             break
         agg["days"].append(d)
     if not agg["days"] and not agg["failed_at"] and not agg["window_skip"]:
-        agg["skipped"] = True     # 全部日期都已 done
+        agg["skipped"] = True  # 全部日期都已 done
     return agg
 
 
-def run(tier=None, only=None, dry_run=False, force=False, limit=None,
-        target_date=None, verbose=True):
+def run(
+    tier=None, only=None, dry_run=False, force=False, limit=None, target_date=None, verbose=True
+):
     """执行回补。dry_run=True 时全程预演（不发请求、不写库）。"""
     sp_mod = _specs()
 
@@ -717,11 +812,13 @@ def run(tier=None, only=None, dry_run=False, force=False, limit=None,
         _est = 0
         for sp in specs:
             if not sp.inject_date or sp.is_snapshot:
-                _est += 1                      # 无日期维度 / 快照表：只 1 次
+                _est += 1  # 无日期维度 / 快照表：只 1 次
             else:
                 _est += len(_backfill_dates(sp, tdate))
-        print(f"  ⚠ --force：忽略断点强制重跑，预计约 {_est} 次请求"
-              f"（按各表窗口展开估算；实际会因'越界即停'减少）")
+        print(
+            f"  ⚠ --force：忽略断点强制重跑，预计约 {_est} 次请求"
+            f"（按各表窗口展开估算；实际会因'越界即停'减少）"
+        )
         print("    费率参考：push2ex 15/分、legulegu 10/分 → 数分钟到十余分钟不等")
     print("=" * 78)
 
@@ -735,29 +832,39 @@ def run(tier=None, only=None, dry_run=False, force=False, limit=None,
 
     from alt.audit import isolation_guard
 
-    guard = (nullcontext() if dry_run
-             else isolation_guard(verbose=verbose, label="alt.backfill"))
+    guard = nullcontext() if dry_run else isolation_guard(verbose=verbose, label="alt.backfill")
 
     with guard:
         for i, sp in enumerate(specs, 1):
-            ckpt.mark_attempt(sp.name)      # F3/R10：跳过/空返回也记"最近尝试"
+            ckpt.mark_attempt(sp.name)  # F3/R10：跳过/空返回也记"最近尝试"
             dates = _backfill_dates(sp, tdate)
-            print(f"\n[{i}/{len(specs)}] {sp.name}  (tier={sp.tier}, layout={sp.layout}, "
-                  f"mode={sp.mode}) — {sp.note}")
+            print(
+                f"\n[{i}/{len(specs)}] {sp.name}  (tier={sp.tier}, layout={sp.layout}, "
+                f"mode={sp.mode}) — {sp.note}"
+            )
             if len(dates) > 1:
-                print(f"    - 按 max_backfill_days={sp.max_backfill_days} 逐日回补 "
-                      f"{len(dates)} 天：{dates[-1]} ~ {dates[0]}（新→旧，"
-                      f"越界即停）")
+                print(
+                    f"    - 按 max_backfill_days={sp.max_backfill_days} 逐日回补 "
+                    f"{len(dates)} 天：{dates[-1]} ~ {dates[0]}（新→旧，"
+                    f"越界即停）"
+                )
             try:
                 pairs = []
                 for j, d in enumerate(dates):
-                    rr = run_spec(sp, limiter, ckpt, dry_run=dry_run, force=force,
-                                  verbose=verbose, target_date=d)
+                    rr = run_spec(
+                        sp,
+                        limiter,
+                        ckpt,
+                        dry_run=dry_run,
+                        force=force,
+                        verbose=verbose,
+                        target_date=d,
+                    )
                     pairs.append((d, rr))
                     if rr.get("window_out"):
                         # 撞到源端保留窗口边界：更老的日期必然同样越界 →
                         # 一次性全部标记为"不可补"，避免以后每天逐日试探
-                        for older in dates[j + 1:]:
+                        for older in dates[j + 1 :]:
                             ckpt.mark_done(sp.name, f"date:{older}")
                         break
                     # 单日失败即停：避免在风控下持续轰击
@@ -765,10 +872,18 @@ def run(tier=None, only=None, dry_run=False, force=False, limit=None,
                         break
                 r = _merge_daily_results(sp, pairs)
             except Exception as e:
-                r = {"table": sp.name, "tier": sp.tier, "mode": sp.mode, "requests": 0,
-                     "rows": 0, "added": 0, "ok": False, "skipped": False,
-                     "errors": [f"{type(e).__name__}: {e}"],
-                     "warnings": [traceback.format_exc()[-300:]]}
+                r = {
+                    "table": sp.name,
+                    "tier": sp.tier,
+                    "mode": sp.mode,
+                    "requests": 0,
+                    "rows": 0,
+                    "added": 0,
+                    "ok": False,
+                    "skipped": False,
+                    "errors": [f"{type(e).__name__}: {e}"],
+                    "warnings": [traceback.format_exc()[-300:]],
+                }
             results.append(r)
 
             if r.get("skipped"):
@@ -776,16 +891,15 @@ def run(tier=None, only=None, dry_run=False, force=False, limit=None,
             else:
                 extra = ""
                 if len(r.get("days") or []) > 1:
-                    extra = (f" | 覆盖 {len(r['days'])} 天 "
-                             f"({r['days'][-1]}~{r['days'][0]})")
-                print(f"    - 请求 {r['requests']} | 落盘 {r['rows']} 行"
-                      f"（新增 {r['added']}） | {'OK' if r['ok'] else 'FAIL'}{extra}")
+                    extra = f" | 覆盖 {len(r['days'])} 天 ({r['days'][-1]}~{r['days'][0]})"
+                print(
+                    f"    - 请求 {r['requests']} | 落盘 {r['rows']} 行"
+                    f"（新增 {r['added']}） | {'OK' if r['ok'] else 'FAIL'}{extra}"
+                )
                 if r.get("failed_at"):
-                    print(f"    - 回补中止于 {r['failed_at']}"
-                          f"（该日失败，其后日期未尝试）")
+                    print(f"    - 回补中止于 {r['failed_at']}（该日失败，其后日期未尝试）")
                 if r.get("window_skip"):
-                    print(f"    - 窗口外不可补 {r['window_skip']} 天"
-                          f"（已记断点，后续不再重试）")
+                    print(f"    - 窗口外不可补 {r['window_skip']} 天（已记断点，后续不再重试）")
             for w in r.get("warnings", [])[:3]:
                 print(f"      [warn] {w[:130]}")
             for e in r.get("errors", [])[:3]:
@@ -841,12 +955,17 @@ def main(argv=None):
             print(f"\n[{s['tier']}] {s['tables']} 张表 / 首次约 {s['requests']} 次请求")
             for n in s["names"]:
                 spec = sp_mod.get(n)
-                print(f"    {n:<22} {spec.func:<38} {spec.layout:<8} "
-                      f"{spec.mode:<5} {spec.note}")
+                print(f"    {n:<22} {spec.func:<38} {spec.layout:<8} {spec.mode:<5} {spec.note}")
         return 0
 
-    run(tier=args.tier, only=args.only, dry_run=args.dry_run,
-        force=args.force, limit=args.limit, target_date=args.date)
+    run(
+        tier=args.tier,
+        only=args.only,
+        dry_run=args.dry_run,
+        force=args.force,
+        limit=args.limit,
+        target_date=args.date,
+    )
     return 0
 
 

@@ -30,6 +30,7 @@
     python delist_audit.py --all-runs <runs_root> [--top 15]
     python delist_audit.py --run <run_dir> --json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -61,12 +62,16 @@ def load_run(run_dir: str) -> dict:
     with open(os.path.join(run_dir, "snapshots.jsonl"), encoding="utf-8") as fh:
         for line in fh:
             r = json.loads(line)
-            snap.append({"date": int(str(r["date"]).replace("-", "")),
-                         "total_value": r["total_value"],
-                         "cash": r["cash"],
-                         "market_value": r["market_value"],
-                         "qty": r.get("positions_qty") or {},
-                         "weights": r.get("weights") or {}})
+            snap.append(
+                {
+                    "date": int(str(r["date"]).replace("-", "")),
+                    "total_value": r["total_value"],
+                    "cash": r["cash"],
+                    "market_value": r["market_value"],
+                    "qty": r.get("positions_qty") or {},
+                    "weights": r.get("weights") or {},
+                }
+            )
     out["snap"] = pd.DataFrame(snap).sort_values("date").reset_index(drop=True)
     rej = []
     p = os.path.join(run_dir, "rejections.jsonl")
@@ -99,18 +104,38 @@ def audit(run: dict, dmap: dict[str, int], sb_path: str) -> dict:
                 # 引擎计入该仓的市值：weights × total_value（@CASH 除外）
                 w = (rec.weights or {}).get(code)
                 mv = float(w) * rec.total_value if w is not None else np.nan
-                rows.append({"date": rec.date, "code": code, "qty": q,
-                             "mv": mv, "total_value": rec.total_value})
+                rows.append(
+                    {
+                        "date": rec.date,
+                        "code": code,
+                        "qty": q,
+                        "mv": mv,
+                        "total_value": rec.total_value,
+                    }
+                )
     zdf = pd.DataFrame(rows)
-    res = {"run_dir": run["run_dir"],
-           "metrics": {k: run["metrics"].get(k) for k in
-                       ("total_return", "annualized_return", "annualized_volatility",
-                        "sharpe_ratio", "max_drawdown", "n_fills", "total_fees",
-                        "turnover_annualized")},
-           "n_snapshots": len(df),
-           "period": [int(df["date"].iloc[0]), int(df["date"].iloc[-1])] if len(df) else [],
-           "exposure_mean": float((df["market_value"] / df["total_value"]).mean()) if len(df) else None,
-           "has_zombie": bool(len(zdf))}
+    res = {
+        "run_dir": run["run_dir"],
+        "metrics": {
+            k: run["metrics"].get(k)
+            for k in (
+                "total_return",
+                "annualized_return",
+                "annualized_volatility",
+                "sharpe_ratio",
+                "max_drawdown",
+                "n_fills",
+                "total_fees",
+                "turnover_annualized",
+            )
+        },
+        "n_snapshots": len(df),
+        "period": [int(df["date"].iloc[0]), int(df["date"].iloc[-1])] if len(df) else [],
+        "exposure_mean": float((df["market_value"] / df["total_value"]).mean())
+        if len(df)
+        else None,
+        "has_zombie": bool(len(zdf)),
+    }
 
     # 拒单
     dl = [r for r in run["rej"] if "delisted" in str(r.get("message", ""))]
@@ -126,16 +151,22 @@ def audit(run: dict, dmap: dict[str, int], sb_path: str) -> dict:
 
     # 汇总每个僵尸仓
     zdf["year"] = zdf["date"] // 10000
-    g = zdf.groupby("code").agg(first=("date", "min"), last=("date", "max"),
-                                qty_max=("qty", "max"), mv=("mv", "max"))
+    g = zdf.groupby("code").agg(
+        first=("date", "min"), last=("date", "max"), qty_max=("qty", "max"), mv=("mv", "max")
+    )
     g["delist_date"] = [dmap.get(c) for c in g.index]
     res["zombies"] = g.reset_index().to_dict("records")
 
     # zombie_weight 时间序列（占净值）
     w_ts = zdf.groupby("date").apply(
-        lambda x: x["mv"].sum() / x["total_value"].iloc[0], include_groups=False)
-    res["zombie_weight"] = {"mean": float(w_ts.mean()), "max": float(w_ts.max()),
-                            "end": float(w_ts.iloc[-1]), "n_days": len(w_ts)}
+        lambda x: x["mv"].sum() / x["total_value"].iloc[0], include_groups=False
+    )
+    res["zombie_weight"] = {
+        "mean": float(w_ts.mean()),
+        "max": float(w_ts.max()),
+        "end": float(w_ts.iloc[-1]),
+        "n_days": len(w_ts),
+    }
 
     # 末日残值
     last = df.iloc[-1]
@@ -146,7 +177,9 @@ def audit(run: dict, dmap: dict[str, int], sb_path: str) -> dict:
             if w is not None:
                 end_mv += float(w) * last["total_value"]
     res["end_zombie_value"] = end_mv
-    res["end_zombie_weight"] = float(end_mv / last["total_value"]) if last["total_value"] else np.nan
+    res["end_zombie_weight"] = (
+        float(end_mv / last["total_value"]) if last["total_value"] else np.nan
+    )
 
     # ---- 修正口径：按退市日写零 ----
     # 用**逐日**僵尸残值（来自该日 weights×total_value），而不是常数：
@@ -159,9 +192,14 @@ def audit(run: dict, dmap: dict[str, int], sb_path: str) -> dict:
         dd = dmap.get(code)
         if dd is None:
             continue
-        detail.append({"code": code, "delist_date": dd,
-                       "value_at_close": float(rec["mv"]) if np.isfinite(rec["mv"]) else 0.0,
-                       "days_carried": int(zdf[zdf["code"] == code]["date"].nunique())})
+        detail.append(
+            {
+                "code": code,
+                "delist_date": dd,
+                "value_at_close": float(rec["mv"]) if np.isfinite(rec["mv"]) else 0.0,
+                "days_carried": int(zdf[zdf["code"] == code]["date"].nunique()),
+            }
+        )
     corr["nav"] = corr["total_value"] - corr["zv"]
     nav = corr["nav"].to_numpy(float)
     nav = np.maximum(nav, 0.0)
@@ -198,36 +236,59 @@ def fmt_one(r: dict) -> str:
     L = []
     m, p = r["metrics"], r["period"]
     L.append(f"## {os.path.basename(r['run_dir'])}")
-    L.append(f"- 区间 {p[0]}~{p[1]}（{r['n_snapshots']} 个交易日）｜平均仓位 {r['exposure_mean']*100:.1f}%")
-    L.append(f"- 平台 metrics：年化 {m['annualized_return']*100:+.2f}%｜"
-             f"波动 {m['annualized_volatility']*100:.2f}%｜MDD {m['max_drawdown']*100:+.2f}%｜"
-             f"total {m['total_return']*100:+.2f}%")
-    L.append(f"- `risk:delisted` 拒单 **{r['delisted_rejections']}** 条"
-             + (f"（{len(r['delisted_reject_symbols'])} 个标的：{r['delisted_reject_symbols']}，"
-                f"{r['delisted_reject_range'][0]}~{r['delisted_reject_range'][1]}）"
-                if r["delisted_rejections"] else ""))
+    L.append(
+        f"- 区间 {p[0]}~{p[1]}（{r['n_snapshots']} 个交易日）｜平均仓位 {r['exposure_mean'] * 100:.1f}%"
+    )
+    L.append(
+        f"- 平台 metrics：年化 {m['annualized_return'] * 100:+.2f}%｜"
+        f"波动 {m['annualized_volatility'] * 100:.2f}%｜MDD {m['max_drawdown'] * 100:+.2f}%｜"
+        f"total {m['total_return'] * 100:+.2f}%"
+    )
+    L.append(
+        f"- `risk:delisted` 拒单 **{r['delisted_rejections']}** 条"
+        + (
+            f"（{len(r['delisted_reject_symbols'])} 个标的：{r['delisted_reject_symbols']}，"
+            f"{r['delisted_reject_range'][0]}~{r['delisted_reject_range'][1]}）"
+            if r["delisted_rejections"]
+            else ""
+        )
+    )
     if not r["has_zombie"]:
         L.append("- 结论：**无退市残仓**，平台 metrics 可直接引用")
         return "\n".join(L)
-    L.append(f"- ⚠️ 僵尸仓 **{len(r['zombies'])}** 只；`zombie_weight` 均值 "
-             f"{r['zombie_weight']['mean']*100:.1f}%／最大 {r['zombie_weight']['max']*100:.1f}%／"
-             f"末日 {r['zombie_weight']['end']*100:.1f}%，末日残值 **{r['end_zombie_value']:,.0f}** 元")
+    L.append(
+        f"- ⚠️ 僵尸仓 **{len(r['zombies'])}** 只；`zombie_weight` 均值 "
+        f"{r['zombie_weight']['mean'] * 100:.1f}%／最大 {r['zombie_weight']['max'] * 100:.1f}%／"
+        f"末日 {r['zombie_weight']['end'] * 100:.1f}%，末日残值 **{r['end_zombie_value']:,.0f}** 元"
+    )
     L.append("\n| 标的 | 退市日 | 末次在持 | 最大股数 | 计入残值(元) |")
     L.append("|:--|--:|--:|--:|--:|")
     for z in r["zombies"]:
-        L.append(f"| {z['code']} | {z['delist_date']} | {z['last']} | {int(z['qty_max']):,} | "
-                 f"{(z['mv'] if z['mv'] == z['mv'] else 0):,.0f} |")
+        L.append(
+            f"| {z['code']} | {z['delist_date']} | {z['last']} | {int(z['qty_max']):,} | "
+            f"{(z['mv'] if z['mv'] == z['mv'] else 0):,.0f} |"
+        )
     c = r["corrected"]
-    L.append(f"\n**修正口径（按退市日写零）**：终值 **{c['final_value']:,.0f}** 元｜"
-             f"total {c['total_return']*100:+.2f}%｜年化 **{c['annualized_return']*100:+.2f}%**｜"
-             f"波动 {c['annualized_volatility']*100:.2f}%｜MDD **{c['max_drawdown']*100:+.2f}%**")
-    L.append(f"- 平台原路径 MDD = {r['platform_path_mdd']*100:+.2f}%")
+    L.append(
+        f"\n**修正口径（按退市日写零）**：终值 **{c['final_value']:,.0f}** 元｜"
+        f"total {c['total_return'] * 100:+.2f}%｜年化 **{c['annualized_return'] * 100:+.2f}%**｜"
+        f"波动 {c['annualized_volatility'] * 100:.2f}%｜MDD **{c['max_drawdown'] * 100:+.2f}%**"
+    )
+    L.append(f"- 平台原路径 MDD = {r['platform_path_mdd'] * 100:+.2f}%")
     wd = r.get("worst_day")
     if wd:
-        L.append(f"- 原路径单日最大跌幅 {wd['ret']*100:+.2f}% 发生在 {wd['date']}"
-                 + ("（**正是区间末日 ⇒ 核销时点错位**）" if r.get("worst_day_is_last") else "（不在末日）"))
-    L.append(f"- 与平台年化之差 = {(c['annualized_return'] - m['annualized_return'])*100:+.2f}pp；"
-             f"与平台 MDD 之差 = {(c['max_drawdown'] - m['max_drawdown'])*100:+.2f}pp")
+        L.append(
+            f"- 原路径单日最大跌幅 {wd['ret'] * 100:+.2f}% 发生在 {wd['date']}"
+            + (
+                "（**正是区间末日 ⇒ 核销时点错位**）"
+                if r.get("worst_day_is_last")
+                else "（不在末日）"
+            )
+        )
+    L.append(
+        f"- 与平台年化之差 = {(c['annualized_return'] - m['annualized_return']) * 100:+.2f}pp；"
+        f"与平台 MDD 之差 = {(c['max_drawdown'] - m['max_drawdown']) * 100:+.2f}pp"
+    )
     L.append("- 结论：**该 run 的指标须以修正口径为主，平台口径只作对照**")
     return "\n".join(L)
 
@@ -250,17 +311,27 @@ def main() -> int:
             if not os.path.isdir(rd) or not os.path.exists(os.path.join(rd, "metrics.json")):
                 continue
             r = audit(load_run(rd), dmap, a.stock_basic)
-            rows.append({"run": name,
-                         "区间": f"{r['period'][0]}" if r["period"] else "",
-                         "年化%": round((r["metrics"]["annualized_return"] or 0) * 100, 2),
-                         "MDD%": round((r["metrics"]["max_drawdown"] or 0) * 100, 2),
-                         "僵尸仓": len(r.get("zombies") or []),
-                         "zombie末日权重%": round((r.get("end_zombie_weight") or 0) * 100, 1),
-                         "delisted拒单": r["delisted_rejections"],
-                         "修正年化%": (round(r["corrected"]["annualized_return"] * 100, 2)
-                                      if r.get("corrected") else None),
-                         "修正MDD%": (round(r["corrected"]["max_drawdown"] * 100, 2)
-                                     if r.get("corrected") else None)})
+            rows.append(
+                {
+                    "run": name,
+                    "区间": f"{r['period'][0]}" if r["period"] else "",
+                    "年化%": round((r["metrics"]["annualized_return"] or 0) * 100, 2),
+                    "MDD%": round((r["metrics"]["max_drawdown"] or 0) * 100, 2),
+                    "僵尸仓": len(r.get("zombies") or []),
+                    "zombie末日权重%": round((r.get("end_zombie_weight") or 0) * 100, 1),
+                    "delisted拒单": r["delisted_rejections"],
+                    "修正年化%": (
+                        round(r["corrected"]["annualized_return"] * 100, 2)
+                        if r.get("corrected")
+                        else None
+                    ),
+                    "修正MDD%": (
+                        round(r["corrected"]["max_drawdown"] * 100, 2)
+                        if r.get("corrected")
+                        else None
+                    ),
+                }
+            )
         t = pd.DataFrame(rows)
         pd.set_option("display.width", 240)
         print(t.to_string(index=False))

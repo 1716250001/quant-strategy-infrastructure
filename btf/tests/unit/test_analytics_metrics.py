@@ -9,6 +9,7 @@
        总收益一律 NAV 口径，指标不消费 realized_pnl；
     5. registry ANALYZER 扩展点：15 名可解析 + 版本协商 + 未知名报错。
 """
+
 from __future__ import annotations
 
 import math
@@ -63,20 +64,25 @@ EFF = (0.2, -0.25, 1.0 / 9.0)
 FACTOR = 3
 
 
-def mk_fill(side: OrderSide, qty: int, price: float, fee_total: float,
-            fid: str = "F1") -> Fill:
-    return Fill(fill_id=fid, order_id="O1", symbol=SYM, side=side, qty=qty,
-                price=price,
-                fee=Fee(commission=fee_total, stamp_duty=0.0,
-                        transfer_fee=0.0, total=fee_total),
-                fill_date=D("20150106"), fill_timing="open")
+def mk_fill(side: OrderSide, qty: int, price: float, fee_total: float, fid: str = "F1") -> Fill:
+    return Fill(
+        fill_id=fid,
+        order_id="O1",
+        symbol=SYM,
+        side=side,
+        qty=qty,
+        price=price,
+        fee=Fee(commission=fee_total, stamp_duty=0.0, transfer_fee=0.0, total=fee_total),
+        fill_date=D("20150106"),
+        fill_timing="open",
+    )
 
 
 def _snapshots(prices: list[float] | None = None) -> list[PortfolioSnapshot]:
     """Portfolio 真实路径产出快照（引擎同款 NAV 四式；对账的另一轨）。"""
     prices = PRICES if prices is None else prices
     pf = Portfolio(cash=10_000.0)
-    pf.apply_fill(mk_fill(OrderSide.BUY, 1_000, prices[0], 0.0))   # 建仓 1000 股
+    pf.apply_fill(mk_fill(OrderSide.BUY, 1_000, prices[0], 0.0))  # 建仓 1000 股
     out = []
     for i, price in enumerate(prices):
         pf.mark_all({SYM: price})
@@ -86,8 +92,10 @@ def _snapshots(prices: list[float] | None = None) -> list[PortfolioSnapshot]:
 
 def _trades() -> list[Fill]:
     """两笔成交：买 1000@10 费 5；卖 1000@10 费 6（与快照解耦，仅成交口径）。"""
-    return [mk_fill(OrderSide.BUY, 1_000, 10.0, 5.0, "F1"),
-            mk_fill(OrderSide.SELL, 1_000, 10.0, 6.0, "F2")]
+    return [
+        mk_fill(OrderSide.BUY, 1_000, 10.0, 5.0, "F1"),
+        mk_fill(OrderSide.SELL, 1_000, 10.0, 6.0, "F2"),
+    ]
 
 
 def _cfg(**kw) -> dict:
@@ -136,8 +144,7 @@ class TestNavFour:
 
     def test_third_form_cumulative(self):
         """第三式：R_t = tv_t/tv_0 − 1。"""
-        assert nav_cumulative_returns(NAV) == pytest.approx(
-            [0.0, 0.2, -0.1, 0.0])
+        assert nav_cumulative_returns(NAV) == pytest.approx([0.0, 0.2, -0.1, 0.0])
 
     def test_fourth_form_drawdown(self):
         """第四式：dd_t = tv_t/max(tv_0..t) − 1（峰值单调，≤0）。"""
@@ -158,8 +165,10 @@ class TestNavFour:
     def test_audit_detects_field_drift(self):
         """反例：篡改快照 daily_return → 对账报漂移（机检有效）。"""
         snaps = _snapshots()
-        tampered = [PortfolioSnapshot(**{**vars(s), "daily_return": 0.99})
-                    if i == 2 else s for i, s in enumerate(snaps)]
+        tampered = [
+            PortfolioSnapshot(**{**vars(s), "daily_return": 0.99}) if i == 2 else s
+            for i, s in enumerate(snaps)
+        ]
         drifts = audit_nav_four(tampered)
         assert [d.field for d in drifts] == ["daily_return"]
         assert drifts[0].recomputed == pytest.approx(-0.25)
@@ -183,9 +192,9 @@ class TestNavSeries:
         assert s.n_days == 4
         assert s.initial_nav == pytest.approx(10_000.0)
         assert s.final_nav == pytest.approx(10_000.0)
-        assert s.mean_nav() == pytest.approx(10_250.0)      # (10+12+9+10)k/4
+        assert s.mean_nav() == pytest.approx(10_250.0)  # (10+12+9+10)k/4
         assert s.fees == pytest.approx(11.0)
-        assert s.turnover == pytest.approx(20_000.0)        # 双边：10000+10000
+        assert s.turnover == pytest.approx(20_000.0)  # 双边：10000+10000
         assert s.n_fills == 2
 
     def test_effective_returns_excludes_first_day(self):
@@ -210,10 +219,9 @@ class TestNavSeries:
             daily_return: float
             cumulative_return: float
             drawdown: float
-            realized_pnl: float = 999.0      # 干扰字段（禁区：不被消费）
+            realized_pnl: float = 999.0  # 干扰字段（禁区：不被消费）
 
-        fake = [FakeSnap(f"d{i}", 0.0, tv, tv, 0.0, 0.0, 0.0)
-                for i, tv in enumerate(NAV)]
+        fake = [FakeSnap(f"d{i}", 0.0, tv, tv, 0.0, 0.0, 0.0) for i, tv in enumerate(NAV)]
         assert nav_total_values(fake) == pytest.approx(NAV)
         real = build_nav_series(_snapshots())
         duck = build_nav_series(fake)
@@ -235,14 +243,14 @@ class TestNavMetrics:
 
     def test_annualized_return(self):
         """(1+0)^(3/3) − 1 = 0（因子 3 / 收益日 3）。"""
-        assert AnnualizedReturn().compute(
-            _snapshots(), (), _cfg()) == pytest.approx(0.0)
+        assert AnnualizedReturn().compute(_snapshots(), (), _cfg()) == pytest.approx(0.0)
 
     def test_annualized_return_compounds(self):
         """NAV 翻倍（4 收益日，因子 4）→ 年化 = 2^1 − 1 = 1.0。"""
         snaps = _snapshots([10.0, 11.0, 12.0, 13.0, 20.0])
-        assert AnnualizedReturn().compute(
-            snaps, (), {"annualization_factor": 4}) == pytest.approx(1.0)
+        assert AnnualizedReturn().compute(snaps, (), {"annualization_factor": 4}) == pytest.approx(
+            1.0
+        )
 
     def test_annualized_volatility(self):
         got = AnnualizedVolatility().compute(_snapshots(), (), _cfg())
@@ -280,8 +288,7 @@ class TestNavMetrics:
         assert got == pytest.approx(exp)
 
     def test_max_drawdown(self):
-        assert MaxDrawdown().compute(
-            _snapshots(), (), {}) == pytest.approx(-0.25)
+        assert MaxDrawdown().compute(_snapshots(), (), {}) == pytest.approx(-0.25)
 
     def test_calmar_ratio(self):
         """年化 0 / |−0.25| = 0。"""
@@ -307,8 +314,7 @@ class TestNavMetrics:
     def test_profit_loss_ratio(self):
         """mean(0.2, 1/9) / |mean(−0.25)|。"""
         expect = ((0.2 + 1 / 9) / 2) / 0.25
-        assert ProfitLossRatio().compute(
-            _snapshots(), (), {}) == pytest.approx(expect)
+        assert ProfitLossRatio().compute(_snapshots(), (), {}) == pytest.approx(expect)
 
 
 class TestTradeMetrics:
@@ -325,26 +331,25 @@ class TestTradeMetrics:
 
     def test_total_turnover(self):
         """双边：1000×10 + 1000×10 = 20000。"""
-        assert TotalTurnover().compute(
-            _snapshots(), _trades(), {}) == pytest.approx(20_000.0)
+        assert TotalTurnover().compute(_snapshots(), _trades(), {}) == pytest.approx(20_000.0)
 
     def test_turnover_annualized(self):
         """20000 / 平均NAV 10250 × (3/3) = 1.9512…"""
         expect = 20_000.0 / 10_250.0
-        assert TurnoverAnnualized().compute(
-            _snapshots(), _trades(), _cfg()) == pytest.approx(expect)
+        assert TurnoverAnnualized().compute(_snapshots(), _trades(), _cfg()) == pytest.approx(
+            expect
+        )
 
     def test_turnover_annualized_scales_with_factor(self):
         """因子 252 / 收益日 3 → 84 倍放大。"""
         expect = 20_000.0 / 10_250.0 * (252 / 3)
         assert TurnoverAnnualized().compute(
-            _snapshots(), _trades(),
-            {"annualization_factor": 252}) == pytest.approx(expect)
+            _snapshots(), _trades(), {"annualization_factor": 252}
+        ) == pytest.approx(expect)
 
     def test_fee_ratio(self):
         """11 / 10250。"""
-        assert FeeRatio().compute(
-            _snapshots(), _trades(), {}) == pytest.approx(11.0 / 10_250.0)
+        assert FeeRatio().compute(_snapshots(), _trades(), {}) == pytest.approx(11.0 / 10_250.0)
 
     def test_n_trading_days(self):
         assert NTradingDays().compute(_snapshots(), (), {}) == 4.0
@@ -357,10 +362,19 @@ class TestDegradation:
     """样本不足/除零 → 该指标 NaN，不抛异常。"""
 
     def test_empty_snapshots_all_nan_but_counts(self):
-        for cls in (FinalNav, TotalReturn, AnnualizedReturn,
-                    AnnualizedVolatility, SharpeRatio, MaxDrawdown,
-                    CalmarRatio, WinRate, ProfitLossRatio, TurnoverAnnualized,
-                    FeeRatio):
+        for cls in (
+            FinalNav,
+            TotalReturn,
+            AnnualizedReturn,
+            AnnualizedVolatility,
+            SharpeRatio,
+            MaxDrawdown,
+            CalmarRatio,
+            WinRate,
+            ProfitLossRatio,
+            TurnoverAnnualized,
+            FeeRatio,
+        ):
             assert math.isnan(cls().compute([], (), {})), cls.name
         assert NFills().compute([], (), {}) == 0.0
         assert TotalFees().compute([], (), {}) == 0.0
@@ -394,8 +408,8 @@ class TestDegradation:
     def test_bad_config_factor(self):
         """annualization_factor ≤ 0 → NaN（不崩溃）。"""
         assert math.isnan(
-            AnnualizedVolatility().compute(_snapshots(), (),
-                                           {"annualization_factor": 0}))
+            AnnualizedVolatility().compute(_snapshots(), (), {"annualization_factor": 0})
+        )
 
     def test_compute_all_isolates_failures(self):
         """compute_all：单指标失败只该项 NaN，其余照算（不中断）。"""
@@ -432,19 +446,24 @@ class TestAdditionForbidden:
         pf = Portfolio(cash=2_000.0)
         pf.apply_fill(mk_fill(OrderSide.BUY, 200, 10.0, 0.0))
         pf.mark_all({SYM: 10.0})
-        snaps = [pf.snapshot(D("20150105"))]                    # tv=2000
+        snaps = [pf.snapshot(D("20150105"))]  # tv=2000
         # 派息：ex 摊薄成本 10→9（不入现金）；pay 按登记 200 股到账 200 元
-        action = CorporateAction(symbol=SYM, ex_date=D("20150106"),
-                                 pay_date=D("20150106"), record_date=None,
-                                 cash_div_per_share=1.0, stk_div_per_share=0.0,
-                                 ann_date=None)
+        action = CorporateAction(
+            symbol=SYM,
+            ex_date=D("20150106"),
+            pay_date=D("20150106"),
+            record_date=None,
+            cash_div_per_share=1.0,
+            stk_div_per_share=0.0,
+            ann_date=None,
+        )
         qty_at_ex = pf.apply_ex_date(action)
         dividend_cash = pf.apply_pay_date(SYM, qty_at_ex, action.cash_div_per_share)
-        pf.mark_all({SYM: 9.0})                                 # 除息后平价
-        snaps.append(pf.snapshot(D("20150106")))                # tv=2000（未变）
-        pf.advance_day()                                        # T+1 解冻可卖
-        pf.apply_fill(mk_fill(OrderSide.SELL, 100, 9.0, 0.0))   # 平价卖出
-        snaps.append(pf.snapshot(D("20150107")))                # tv=2000（未变）
+        pf.mark_all({SYM: 9.0})  # 除息后平价
+        snaps.append(pf.snapshot(D("20150106")))  # tv=2000（未变）
+        pf.advance_day()  # T+1 解冻可卖
+        pf.apply_fill(mk_fill(OrderSide.SELL, 100, 9.0, 0.0))  # 平价卖出
+        snaps.append(pf.snapshot(D("20150107")))  # tv=2000（未变）
         pos = pf.position(SYM)
         return snaps, pos.realized_pnl, dividend_cash
 
@@ -472,12 +491,14 @@ class TestAdditionForbidden:
             daily_return: float
             cumulative_return: float
             drawdown: float
-            realized_pnl: float = 200.0        # 干扰：诱使相加
-            dividend_cash: float = 200.0       # 干扰
+            realized_pnl: float = 200.0  # 干扰：诱使相加
+            dividend_cash: float = 200.0  # 干扰
 
-        tainted = [TaintedSnap(D("20150105"), 0.0, 2000.0, 2000.0, 0.0, 0.0, 0.0),
-                   TaintedSnap(D("20150106"), 200.0, 1800.0, 2000.0, 0.0, 0.0, 0.0),
-                   TaintedSnap(D("20150107"), 1100.0, 900.0, 2000.0, 0.0, 0.0, 0.0)]
+        tainted = [
+            TaintedSnap(D("20150105"), 0.0, 2000.0, 2000.0, 0.0, 0.0, 0.0),
+            TaintedSnap(D("20150106"), 200.0, 1800.0, 2000.0, 0.0, 0.0, 0.0),
+            TaintedSnap(D("20150107"), 1100.0, 900.0, 2000.0, 0.0, 0.0, 0.0),
+        ]
         assert TotalReturn().compute(tainted, (), {}) == pytest.approx(0.0)
         assert FinalNav().compute(tainted, (), {}) == pytest.approx(2000.0)
 
@@ -514,12 +535,26 @@ class TestRegistry:
 
     def test_metric_bases_are_subclasses(self):
         assert issubclass(SharpeRatio, MetricBase)
-        assert all(issubclass(c, MetricBase) and c.contract_version == CONTRACT_VERSION
-                   for c in (FinalNav, TotalReturn, AnnualizedReturn,
-                             AnnualizedVolatility, SharpeRatio, MaxDrawdown,
-                             CalmarRatio, WinRate, ProfitLossRatio, NFills,
-                             TotalFees, TotalTurnover, TurnoverAnnualized,
-                             FeeRatio, NTradingDays))
+        assert all(
+            issubclass(c, MetricBase) and c.contract_version == CONTRACT_VERSION
+            for c in (
+                FinalNav,
+                TotalReturn,
+                AnnualizedReturn,
+                AnnualizedVolatility,
+                SharpeRatio,
+                MaxDrawdown,
+                CalmarRatio,
+                WinRate,
+                ProfitLossRatio,
+                NFills,
+                TotalFees,
+                TotalTurnover,
+                TurnoverAnnualized,
+                FeeRatio,
+                NTradingDays,
+            )
+        )
 
     def test_nav_series_is_frozen(self):
         """基座不可变（纯函数产物，可安全共享/缓存）。"""

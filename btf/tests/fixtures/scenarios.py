@@ -8,6 +8,7 @@
     - 每场景返回 (MemoryFeed, instruments)；instrument 供 ExecutionHandler
       查 lot_size / t_plus（04 §8.2.2 BoardRule）。
 """
+
 from __future__ import annotations
 
 from typing import NamedTuple
@@ -35,34 +36,63 @@ class Scenario(NamedTuple):
     instruments: dict[str, Instrument]
 
 
-def make_bar(symbol: str, day: TradingDate, o: float, h: float, lo: float,
-             c: float, pre: float, vol: float = 1_000_000.0) -> Bar:
-    return Bar(symbol=symbol, date=day, open=o, high=h, low=lo, close=c,
-               volume=vol, amount=c * vol, pre_close=pre)
+def make_bar(
+    symbol: str,
+    day: TradingDate,
+    o: float,
+    h: float,
+    lo: float,
+    c: float,
+    pre: float,
+    vol: float = 1_000_000.0,
+) -> Bar:
+    return Bar(
+        symbol=symbol,
+        date=day,
+        open=o,
+        high=h,
+        low=lo,
+        close=c,
+        volume=vol,
+        amount=c * vol,
+        pre_close=pre,
+    )
 
 
-def make_state(symbol: str, day: TradingDate, *, pre: float,
-               limit_pct: float = 0.10, suspended: bool = False,
-               st: bool = False, delisted: bool = False,
-               limit_up: bool = False, limit_down: bool = False) -> TradingState:
+def make_state(
+    symbol: str,
+    day: TradingDate,
+    *,
+    pre: float,
+    limit_pct: float = 0.10,
+    suspended: bool = False,
+    st: bool = False,
+    delisted: bool = False,
+    limit_up: bool = False,
+    limit_down: bool = False,
+) -> TradingState:
     """按主板口径合成状态行（涨停价 = pre×(1+pct)，取整值场景下精确）。"""
     return TradingState(
-        symbol=symbol, date=day,
+        symbol=symbol,
+        date=day,
         limit_up_price=round(pre * (1 + limit_pct), 2),
         limit_down_price=round(pre * (1 - limit_pct), 2),
-        is_suspended=suspended, is_st=st, is_delisted=delisted,
-        is_limit_up=limit_up, is_limit_down=limit_down,
+        is_suspended=suspended,
+        is_st=st,
+        is_delisted=delisted,
+        is_limit_up=limit_up,
+        is_limit_down=limit_down,
     )
 
 
 def _stock(symbol: str, board: str = "main") -> Instrument:
-    return Instrument(symbol=symbol, asset_class=AssetClass.STOCK, board=board,
-                      lot_size=100)
+    return Instrument(symbol=symbol, asset_class=AssetClass.STOCK, board=board, lot_size=100)
 
 
 def _etf(symbol: str, sub: EtfSubclass) -> Instrument:
-    return Instrument(symbol=symbol, asset_class=AssetClass.ETF, board="etf",
-                      etf_subclass=sub, lot_size=100)
+    return Instrument(
+        symbol=symbol, asset_class=AssetClass.ETF, board="etf", etf_subclass=sub, lot_size=100
+    )
 
 
 # ─────────────────────────────────────────────
@@ -75,21 +105,20 @@ def t_plus1_scenario() -> Scenario:
     etf_px = [100.0, 100.0, 100.1, 100.0, 100.2]
     for i, d in enumerate(ALL_DATES):
         pre_s = stock_px[i - 1] if i else 10.0
-        bars.append(make_bar("000001.SZ", d, stock_px[i], stock_px[i],
-                             stock_px[i], stock_px[i], pre_s))
+        bars.append(
+            make_bar("000001.SZ", d, stock_px[i], stock_px[i], stock_px[i], stock_px[i], pre_s)
+        )
         states[(d.to_ymd(), "000001.SZ")] = make_state(
-            "000001.SZ", d, pre=pre_s if i else 10.0 - 0.0,
-            suspended=False)
+            "000001.SZ", d, pre=pre_s if i else 10.0 - 0.0, suspended=False
+        )
         pre_e = etf_px[i - 1] if i else 100.0
-        bars.append(make_bar("511380.SH", d, etf_px[i], etf_px[i],
-                             etf_px[i], etf_px[i], pre_e))
+        bars.append(make_bar("511380.SH", d, etf_px[i], etf_px[i], etf_px[i], etf_px[i], pre_e))
         states[(d.to_ymd(), "511380.SH")] = make_state("511380.SH", d, pre=pre_e)
     instruments = {
         "000001.SZ": _stock("000001.SZ"),
         "511380.SH": _etf("511380.SH", EtfSubclass.MONEY),  # 货币 ETF：T+0（E2）
     }
-    return Scenario(
-        MemoryFeed(bars, states, instruments, dates=ALL_DATES), instruments)
+    return Scenario(MemoryFeed(bars, states, instruments, dates=ALL_DATES), instruments)
 
 
 # ─────────────────────────────────────────────
@@ -99,8 +128,8 @@ def t_plus1_scenario() -> Scenario:
 def limit_scenario() -> Scenario:
     bars = [
         make_bar("600000.SH", D1, o=10.0, h=10.2, lo=9.9, c=10.0, pre=10.0),
-        make_bar("600000.SH", D2, o=11.0, h=11.0, lo=10.8, c=11.0, pre=10.0),   # 涨停
-        make_bar("600000.SH", D3, o=9.9, h=10.0, lo=9.9, c=9.9, pre=11.0),      # 跌停
+        make_bar("600000.SH", D2, o=11.0, h=11.0, lo=10.8, c=11.0, pre=10.0),  # 涨停
+        make_bar("600000.SH", D3, o=9.9, h=10.0, lo=9.9, c=9.9, pre=11.0),  # 跌停
         make_bar("600000.SH", D4, o=10.2, h=10.4, lo=10.1, c=10.3, pre=9.9),
         make_bar("600000.SH", D5, o=10.5, h=10.6, lo=10.4, c=10.5, pre=10.3),
     ]
@@ -112,8 +141,7 @@ def limit_scenario() -> Scenario:
         (D5.to_ymd(), "600000.SH"): make_state("600000.SH", D5, pre=10.3),
     }
     instruments = {"600000.SH": _stock("600000.SH")}
-    return Scenario(
-        MemoryFeed(bars, states, instruments, dates=ALL_DATES), instruments)
+    return Scenario(MemoryFeed(bars, states, instruments, dates=ALL_DATES), instruments)
 
 
 # ─────────────────────────────────────────────
@@ -135,8 +163,7 @@ def suspend_scenario() -> Scenario:
         (D5.to_ymd(), "000002.SZ"): make_state("000002.SZ", D5, pre=8.2),
     }
     instruments = {"000002.SZ": _stock("000002.SZ")}
-    return Scenario(
-        MemoryFeed(bars, states, instruments, dates=ALL_DATES), instruments)
+    return Scenario(MemoryFeed(bars, states, instruments, dates=ALL_DATES), instruments)
 
 
 # ─────────────────────────────────────────────
@@ -149,8 +176,7 @@ def combined_scenario() -> Scenario:
     bars = [*a.feed.bars_all, *b.feed.bars_all, *c.feed.bars_all]
     states = {**a.feed.states_all, **b.feed.states_all, **c.feed.states_all}
     instruments = {**a.instruments, **b.instruments, **c.instruments}
-    return Scenario(
-        MemoryFeed(bars, states, instruments, dates=ALL_DATES), instruments)
+    return Scenario(MemoryFeed(bars, states, instruments, dates=ALL_DATES), instruments)
 
 
 __all__ = [

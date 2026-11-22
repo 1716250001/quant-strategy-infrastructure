@@ -6,6 +6,7 @@
     - ADR-4：路径经环境变量派生，禁止硬编码盘符
     - 08 §13.2（E2）：环境指纹运行时实采，不抄录文档
 """
+
 from __future__ import annotations
 
 import os
@@ -34,9 +35,19 @@ class TestPackageSkeleton:
     def test_all_modules_importable(self):
         """13 个架构模块全部可导入（03 §7.2 分层表）。"""
         for mod in (
-            "btf.domain", "btf.data", "btf.engine", "btf.execution",
-            "btf.risk", "btf.portfolio", "btf.strategy", "btf.analytics",
-            "btf.experiment", "btf.config", "btf.registry", "btf.viz", "btf.cli",
+            "btf.domain",
+            "btf.data",
+            "btf.engine",
+            "btf.execution",
+            "btf.risk",
+            "btf.portfolio",
+            "btf.strategy",
+            "btf.analytics",
+            "btf.experiment",
+            "btf.config",
+            "btf.registry",
+            "btf.viz",
+            "btf.cli",
         ):
             __import__(mod)
 
@@ -70,21 +81,25 @@ _GUARD_SELF = {_BTF_ROOT / "tests" / "test_smoke.py"}
 #: 文档性 docstring 开引号：认 `r"""`／`f"""`／`rb'''` 等前缀（§161 D-3-1）。
 _DOC_OPEN = re.compile(r"^[rRbBuUfF]{0,2}(\"\"\"|''')")
 #: 盘符 token：反斜杠四式 ＋ 正斜杠四式（§161 L-4；宁窄不宽，不泛化全盘符）。
-_DRIVE_TOKENS = ("D:\\", "C:\\", "d:\\", "c:\\",
-                 "D:/", "C:/", "d:/", "c:/")
+_DRIVE_TOKENS = ("D:\\", "C:\\", "d:\\", "c:\\", "D:/", "C:/", "d:/", "c:/")
 
 
 def _scan_files() -> list[Path]:
     # 返回扫描文件清单（按路径排序；排除 __pycache__ 与守卫自身）。
     root = _BTF_ROOT
     files: list[Path] = []
-    files.extend(p for p in (root / "btf").rglob("*.py")
-                 if "__pycache__" not in p.parts)
-    files.extend(p for p in (root / "examples").rglob("*")
-                 if p.suffix in {".py", ".yaml"} and "__pycache__" not in p.parts)
+    files.extend(p for p in (root / "btf").rglob("*.py") if "__pycache__" not in p.parts)
+    files.extend(
+        p
+        for p in (root / "examples").rglob("*")
+        if p.suffix in {".py", ".yaml"} and "__pycache__" not in p.parts
+    )
     files.extend((root / "tools").glob("*.py"))
-    files.extend(p for p in (root / "tests").rglob("*.py")
-                 if "__pycache__" not in p.parts and p not in _GUARD_SELF)
+    files.extend(
+        p
+        for p in (root / "tests").rglob("*.py")
+        if "__pycache__" not in p.parts and p not in _GUARD_SELF
+    )
     return sorted(set(files))
 
 
@@ -104,7 +119,7 @@ def _hardcoded_drive_violations(files: list[Path]) -> list[str]:
                 m = _DOC_OPEN.match(line)
                 if m:
                     quote = m.group(1)
-                    rest = line[m.end(1):]
+                    rest = line[m.end(1) :]
                     if rest and rest.endswith(quote):
                         continue  # 单行 docstring（含前缀）
                     in_doc = not in_doc
@@ -131,6 +146,7 @@ class TestPathsDiscipline:
         import importlib
 
         from btf.config import paths as p2
+
         importlib.reload(p2)
         try:
             assert p2.OUTPUT_DIR == target.resolve()
@@ -152,9 +168,9 @@ class TestPathsDiscipline:
         print(f"\n[drive-guard] 扫描 {len(files)} 文件 ⇒ {len(problems)} 违例")
         assert not problems, "硬编码盘符违例：\n" + "\n".join(problems)
 
-
     def test_runs_dir_under_output(self):
         assert paths.RUNS_DIR.parent == paths.OUTPUT_DIR
+
 
 @pytest.mark.smoke
 def test_guard_catches_hardcoded_drive(tmp_path):
@@ -162,30 +178,32 @@ def test_guard_catches_hardcoded_drive(tmp_path):
     bad = tmp_path / "bad_drive.py"
     bad.write_text('X = r"D:\\foo"\n', encoding="utf-8")
     problems = _hardcoded_drive_violations([bad])
-    print("\n[reverse] 注入 D:\\ 违例 ⇒ "
-          + ("\n".join(problems) if problems else "未检出"))
+    print("\n[reverse] 注入 D:\\ 违例 ⇒ " + ("\n".join(problems) if problems else "未检出"))
     assert problems, "守卫未检出硬编码盘符（失效）"
     assert "bad_drive.py" in problems[0]
 
     forward = tmp_path / "bad_forward.py"
     forward.write_text('X = "D:/foo"\n', encoding="utf-8")
     f_problems = _hardcoded_drive_violations([forward])
-    print("[reverse] 注入 D:/ 违例 ⇒ "
-          + ("\n".join(f_problems) if f_problems else "未检出"))
+    print("[reverse] 注入 D:/ 违例 ⇒ " + ("\n".join(f_problems) if f_problems else "未检出"))
     assert f_problems, "守卫未检出正斜杠盘符（失效）"
 
     raw_doc = tmp_path / "raw_doc.py"
     raw_doc.write_text('r"""\nX = r"D:\\foo"\n"""\n', encoding="utf-8")
     doc_problems = _hardcoded_drive_violations([raw_doc])
-    print("[reverse] r\"\"\" docstring 内含 D:\\ ⇒ "
-          + ("\n".join(doc_problems) if doc_problems else "未报（正确）"))
+    print(
+        '[reverse] r""" docstring 内含 D:\\ ⇒ '
+        + ("\n".join(doc_problems) if doc_problems else "未报（正确）")
+    )
     assert not doc_problems, "守卫误报 docstring 内的盘符（raw 前缀漏判）"
 
     code_file = tmp_path / "raw_code.py"
     code_file.write_text('X = r"D:\\foo"\n', encoding="utf-8")
     code_problems = _hardcoded_drive_violations([code_file])
-    print("[reverse] 同类路径写在代码行 ⇒ "
-          + ("\n".join(code_problems) if code_problems else "未检出"))
+    print(
+        "[reverse] 同类路径写在代码行 ⇒ "
+        + ("\n".join(code_problems) if code_problems else "未检出")
+    )
     assert code_problems, "守卫未检出代码行盘符"
 
     current = _hardcoded_drive_violations(_scan_files())

@@ -10,6 +10,7 @@
   B（端到端）**8 进程池**内抛 `ConfigError` ⇒ 主进程消息完整可读、计数＝实际问题数；
   C（零回归）构造签名 / `problems` 属性 / `__str__` 格式不变；内联路径行为不变。
 """
+
 from __future__ import annotations
 
 import pickle
@@ -62,17 +63,17 @@ class TestWorkerPoolConfigErrorN11:
                 "period": {"start": "2015-01-05", "end": "2015-01-09"},
                 "initial_cash": 1_000_000,
             },
-            "data": {"feed": "rc11a_normal_feed"},   # 校验先失败 ⇒ feed 不会真取
+            "data": {"feed": "rc11a_normal_feed"},  # 校验先失败 ⇒ feed 不会真取
             "risk": {"rules": [], "allow_empty_chain": True},
         }
         with pytest.raises(ConfigError) as ei:
             GridSearchOptimizer(workers=8).run(
-                cfg, {"run.initial_cash": [0]}, objective="final_nav")
+                cfg, {"run.initial_cash": [0]}, objective="final_nav"
+            )
         msg = str(ei.value)
         n_listed = len(msg.splitlines()) - 1
         assert n_listed >= 1
         assert f"（{n_listed} 处）" in msg, f"header 计数与列出条数不符：{msg!r}"
         assert "initial_cash" in msg
         # 逐字符爆炸的指纹：单字符问题行（如「  [1] 配」）不得出现
-        assert not any(len(ln.strip()) <= len("  [9] 配") + 1
-                       for ln in msg.splitlines()[1:])
+        assert not any(len(ln.strip()) <= len("  [9] 配") + 1 for ln in msg.splitlines()[1:])

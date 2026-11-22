@@ -35,6 +35,7 @@ strategy 的组合根；三者互不依赖（各自以 Protocol 声明依赖面�
 ctx states 惰性装载（LazyStates：不查不触发），实际查询限定（持仓∪订单）
 标的子集且 with_touch_flags=False。
 """
+
 from __future__ import annotations
 
 import inspect
@@ -81,10 +82,10 @@ class RunResult:
     snapshots: list[PortfolioSnapshot] = field(default_factory=list)
     fills: list[Fill] = field(default_factory=list)
     rejections: list[tuple[Order, Rejection]] = field(default_factory=list)
-    orders: list[Order] = field(default_factory=list)     # 全部已提交订单（含被拒）
+    orders: list[Order] = field(default_factory=list)  # 全部已提交订单（含被拒）
     n_days: int = 0
     events_path: Path | None = None
-    events_sampled: bool = False                          # 事件日志采样降级标志
+    events_sampled: bool = False  # 事件日志采样降级标志
     #: RC-11-A（2026-10-05）：**退市持仓残值披露**——区间末仍持仓且已退市的
     #: 标的：`[{symbol, last_trade_date}]`。退市后无 bar ⇒ 市值沿用末次收盘价
     #: （`portfolio.py` 残值携带语义，**数值零改动**，黄金集断言不受影响）；
@@ -169,8 +170,7 @@ def _writeoff_settlement(portfolio: Portfolio, result: RunResult) -> float:
         market_value=last.market_value - residual,
         total_value=new_tv,
         weights={k: v * scale for k, v in last.weights.items() if k not in drop},
-        positions_qty={k: v for k, v in last.positions_qty.items()
-                       if k not in drop},
+        positions_qty={k: v for k, v in last.positions_qty.items() if k not in drop},
         daily_return=(0.0 if not prev_tv else new_tv / prev_tv - 1.0),
         cumulative_return=(0.0 if not base else new_tv / base - 1.0),
         drawdown=(0.0 if not peak else new_tv / peak - 1.0),
@@ -214,7 +214,7 @@ def _writeoff_at_delist_settlement(
     starts: dict[str, str] = {}
 
     for i, snap in enumerate(snapshots):
-        day = snap.date.to_ymd()          # 坑①：TradingDate → 8 位 str
+        day = snap.date.to_ymd()  # 坑①：TradingDate → 8 位 str
         active = [(s, r) for s, last, r in entries if day > last]
         for s, last, _r in entries:
             if day > last and s not in starts:
@@ -234,10 +234,8 @@ def _writeoff_at_delist_settlement(
             snap,
             market_value=snap.market_value - day_residual,
             total_value=new_tv,
-            weights={k: v * scale for k, v in snap.weights.items()
-                     if k not in drop},
-            positions_qty={k: v for k, v in snap.positions_qty.items()
-                           if k not in drop},
+            weights={k: v * scale for k, v in snap.weights.items() if k not in drop},
+            positions_qty={k: v for k, v in snap.positions_qty.items() if k not in drop},
             daily_return=(0.0 if not prev_tv else new_tv / prev_tv - 1.0),
             cumulative_return=(0.0 if not base else new_tv / base - 1.0),
             drawdown=(0.0 if not new_peak else new_tv / new_peak - 1.0),
@@ -254,12 +252,14 @@ def _writeoff_at_delist_settlement(
                 f"**逐日核销**（`writeoff_at_delist`；自末次交易日 {last} 的"
                 f"次一交易日 {start} 起逐日扣减残值 {residual:.2f} 元；"
                 f"核销基准 = 区间内**末次可用收盘价**（**未取区间外价**——防前视）；"
-                f"口径出处：19 号 §163 K-2）")
+                f"口径出处：19 号 §163 K-2）"
+            )
         else:
             notes.append(
                 f"退市持仓残值披露：{sym} 于区间末仍持仓且已退市——残值口径 = "
                 f"**逐日核销**（`writeoff_at_delist`），但末次交易日 {last} 后"
-                f"区间内无次一交易日，残值 {residual:.2f} 元未扣减（区间边界）")
+                f"区间内无次一交易日，残值 {residual:.2f} 元未扣减（区间边界）"
+            )
     return total, notes
 
 
@@ -320,13 +320,11 @@ def _ctx_cache_maxsize() -> int:
         try:
             v = int(raw)
         except ValueError:
-            logger.warning("CTX_CACHE_MAX=%r 非整数，回缺省 %d",
-                           raw, _CTX_CACHE_MAX_DEFAULT)
+            logger.warning("CTX_CACHE_MAX=%r 非整数，回缺省 %d", raw, _CTX_CACHE_MAX_DEFAULT)
             return _CTX_CACHE_MAX_DEFAULT
         if v > 0:
             return v
-        logger.warning("CTX_CACHE_MAX=%r 须为正整数，回缺省 %d",
-                       raw, _CTX_CACHE_MAX_DEFAULT)
+        logger.warning("CTX_CACHE_MAX=%r 须为正整数，回缺省 %d", raw, _CTX_CACHE_MAX_DEFAULT)
     return _CTX_CACHE_MAX_DEFAULT
 
 
@@ -352,16 +350,16 @@ class Engine:
         price_view: str = "adjusted",
         adjust_service: Any | None = None,
     ):
-        if delisted_settlement not in ("carry", "writeoff",
-                                        "writeoff_at_delist"):
+        if delisted_settlement not in ("carry", "writeoff", "writeoff_at_delist"):
             raise ValueError(
                 f"delisted_settlement 须为 carry|writeoff|"
                 f"writeoff_at_delist，得 {delisted_settlement!r}"
-                f"（CL-3 / K-2；19 号 §72.4/§163）")
+                f"（CL-3 / K-2；19 号 §72.4/§163）"
+            )
         if price_view not in ("nominal", "adjusted"):
             raise ValueError(
-                f"price_view 须为 nominal|adjusted，得 {price_view!r}"
-                f"（R62′/N64；19 号 §118）")
+                f"price_view 须为 nominal|adjusted，得 {price_view!r}（R62′/N64；19 号 §118）"
+            )
         self._delisted_settlement = delisted_settlement
         #: **R62′（N64，2026-10-10；19 号 §118）——消费侧价格视图**：
         #: `adjusted`（默认）＝喂给策略的 bar（`ctx.bar()` / `ctx.history()`）走
@@ -396,7 +394,8 @@ class Engine:
         #: `BTF_*` 注入配置顶层，触发 schema `additionalProperties` 拒收——实测）。
         self._ctx_cache_max = _ctx_cache_maxsize()
         self._ctx_history_cache: BoundedDict[str, Any] = BoundedDict(
-            maxsize=self._ctx_cache_max, name="ctx.history")
+            maxsize=self._ctx_cache_max, name="ctx.history"
+        )
         self._ctx_cache_warned = False
 
     # ── 消费侧价格视图（R62′/N64）──
@@ -427,7 +426,7 @@ class Engine:
             if not bars:
                 return list(bars)
             if daily_table_of(bars[0].symbol) == "index_daily":
-                return list(bars)          # 指数：无复权因子（btf 内不复权指数）
+                return list(bars)  # 指数：无复权因子（btf 内不复权指数）
             return list(svc.qfq(bars, ref))
 
         return _adjust
@@ -451,12 +450,15 @@ class Engine:
 
     # ── 主循环 ──
     def run(self) -> RunResult:
-        price_adjust = self._build_price_adjuster()   # R62′：None ⇒ nominal（旧行为）
+        price_adjust = self._build_price_adjuster()  # R62′：None ⇒ nominal（旧行为）
         clock = SimClock()
         portfolio = Portfolio(cash=self._initial_cash)
         result = RunResult()
-        writer = (EventLogWriter(self._event_log_path, max_records=self._event_log_max)
-                  if self._event_log_path else None)
+        writer = (
+            EventLogWriter(self._event_log_path, max_records=self._event_log_max)
+            if self._event_log_path
+            else None
+        )
         pending: list[Order] = []
         order_seq = 0
         #: RC-11-A：持仓标的的末次有 bar 日（退市持仓披露用）
@@ -464,12 +466,12 @@ class Engine:
         # PF-9/P2-5：原无界 dict（键=策略查询过的标的；全市场口径可累积到
         # 全部标的 × 十年 Bar → 内存无上限）；今 LRU 有界（容量 ≫ 典型宇宙）。
         history_cache: BoundedDict[str, Sequence[Bar]] = BoundedDict(
-            maxsize=8_000, name="engine.history")
+            maxsize=8_000, name="engine.history"
+        )
         # **Z 转正（19 号 §194）**：共享 ctx.history 缓存——**每 run 重建**
         #   （同一 Engine 多次 run 不重置 ⇒ 上轮 bar 序列被下轮读走 = 脏读）；
         #   容量护栏在 `__init__`（1,500 ≈580 MB）；80% 触顶告警只打一次。
-        self._ctx_history_cache = BoundedDict(maxsize=self._ctx_cache_max,
-                                             name="ctx.history")
+        self._ctx_history_cache = BoundedDict(maxsize=self._ctx_cache_max, name="ctx.history")
         self._ctx_cache_warned = False
         proto_kw = {"history_cache": self._ctx_history_cache}
         target: TargetPortfolio | None = None
@@ -504,65 +506,77 @@ class Engine:
                 writer.write(event)
 
         # 循环前 init（空数据 ctx——预计算/缓存装载语义）
-        ctx = self._make_ctx(clock, portfolio, {}, {}, _history_loader,
-                             _on_submit_target, _on_submit_order, **proto_kw)
+        ctx = self._make_ctx(
+            clock,
+            portfolio,
+            {},
+            {},
+            _history_loader,
+            _on_submit_target,
+            _on_submit_order,
+            **proto_kw,
+        )
         self._strategy.init(ctx)
 
-        for date, data in self._feed.bars(self._cross_section,
-                                          self._start, self._end):
+        for date, data in self._feed.bars(self._cross_section, self._start, self._end):
             clock.advance(date)
-            portfolio.advance_day()        # T+1 解冻（撮合前——昨日买入今日可卖）
+            portfolio.advance_day()  # T+1 解冻（撮合前——昨日买入今日可卖）
             # Z-3-b（§194）：缓存达 80% 容量时**只打一次** warning（不刷屏）
-            if (not self._ctx_cache_warned
-                    and len(self._ctx_history_cache) >= int(
-                        self._ctx_cache_max * 0.8)):
+            if not self._ctx_cache_warned and len(self._ctx_history_cache) >= int(
+                self._ctx_cache_max * 0.8
+            ):
                 self._ctx_cache_warned = True
                 logger.warning(
                     "ctx.history 缓存达 %.0f%% 容量（%d/%d 标的，估算 %.0f MB）"
                     "——超限将按 LRU 淘汰；大宇宙可用 CTX_CACHE_MAX 调优",
                     100.0 * len(self._ctx_history_cache) / self._ctx_cache_max,
-                    len(self._ctx_history_cache), self._ctx_cache_max,
-                    len(self._ctx_history_cache) * _CTX_BYTES_PER_SYMBOL / 1e6)
+                    len(self._ctx_history_cache),
+                    self._ctx_cache_max,
+                    len(self._ctx_history_cache) * _CTX_BYTES_PER_SYMBOL / 1e6,
+                )
 
             # ① 公司行动（两时点；advance_day 解冻后——送转扩张发生在
             #    available_qty=qty 基础上，除权次日可卖不被低估，实现注意①）
             ymd = date.to_ymd()
             for idx, act in actions_by_ex.get(ymd, ()):
                 if act.symbol not in portfolio.positions:
-                    continue           # 无持仓 no-op（不入事件日志）
+                    continue  # 无持仓 no-op（不入事件日志）
                 qty_at_ex = portfolio.apply_ex_date(act)
-                _emit(CorporateActionEvent(action=act))        # ex 时点
+                _emit(CorporateActionEvent(action=act))  # ex 时点
                 if act.cash_div_per_share > 0:
-                    eff_pay = act.pay_date or act.ex_date      # E5 回退
-                    if eff_pay == date:                        # 两日重合/回退
+                    eff_pay = act.pay_date or act.ex_date  # E5 回退
+                    if eff_pay == date:  # 两日重合/回退
                         if qty_at_ex:
-                            portfolio.apply_pay_date(
-                                act.symbol, qty_at_ex, act.cash_div_per_share)
-                            portfolio.dividend_events.append({
-                                "symbol": act.symbol,
-                                "ex_date": act.ex_date.to_ymd(),
-                                "pay_date": ymd,
-                                "qty_at_ex": int(qty_at_ex),
-                                "cash_div": act.cash_div_per_share,
-                                "amount": qty_at_ex * act.cash_div_per_share,
-                            })
+                            portfolio.apply_pay_date(act.symbol, qty_at_ex, act.cash_div_per_share)
+                            portfolio.dividend_events.append(
+                                {
+                                    "symbol": act.symbol,
+                                    "ex_date": act.ex_date.to_ymd(),
+                                    "pay_date": ymd,
+                                    "qty_at_ex": int(qty_at_ex),
+                                    "cash_div": act.cash_div_per_share,
+                                    "amount": qty_at_ex * act.cash_div_per_share,
+                                }
+                            )
                             _emit(CorporateActionEvent(action=act))  # pay 时点
                     else:
                         pending_divs[idx] = (qty_at_ex, act.cash_div_per_share)
-            for idx, act in actions_by_pay.get(ymd, ()):       # 跨日 pay 到期
+            for idx, act in actions_by_pay.get(ymd, ()):  # 跨日 pay 到期
                 reg = pending_divs.pop(idx, None)
                 if reg is not None:
                     qty_at_ex, cash_div = reg
                     portfolio.apply_pay_date(act.symbol, qty_at_ex, cash_div)
-                    portfolio.dividend_events.append({
-                        "symbol": act.symbol,
-                        "ex_date": act.ex_date.to_ymd(),
-                        "pay_date": ymd,
-                        "qty_at_ex": int(qty_at_ex),
-                        "cash_div": cash_div,
-                        "amount": qty_at_ex * cash_div,
-                    })
-                    _emit(CorporateActionEvent(action=act))    # pay 时点
+                    portfolio.dividend_events.append(
+                        {
+                            "symbol": act.symbol,
+                            "ex_date": act.ex_date.to_ymd(),
+                            "pay_date": ymd,
+                            "qty_at_ex": int(qty_at_ex),
+                            "cash_div": cash_div,
+                            "amount": qty_at_ex * cash_div,
+                        }
+                    )
+                    _emit(CorporateActionEvent(action=act))  # pay 时点
 
             # ② 撮合 T-1 队列（③ 入账在 execute 内逐单）
             _emit(MarketOpenEvent(date=date, data=data))
@@ -578,12 +592,11 @@ class Engine:
                             f"双时间戳断言失败：{_o.order_id} signal_time="
                             f"{_o.created_at.to_ymd()} ≥ execution_time="
                             f"{date.to_ymd()}——信号不得当日成交（RC-10，"
-                            f"撮合仅 next_open：T 决策 → T+1 开盘执行）")
+                            f"撮合仅 next_open：T 决策 → T+1 开盘执行）"
+                        )
                 involved = sorted({o.symbol for o in pending})
-                states = self._feed.trading_states(
-                    date, involved, with_touch_flags=False)
-                fills, rejections = self._handler.execute(
-                    pending, date, data, states, portfolio)
+                states = self._feed.trading_states(date, involved, with_touch_flags=False)
+                fills, rejections = self._handler.execute(pending, date, data, states, portfolio)
                 for f in fills:
                     result.fills.append(f)
                     _emit(FillEvent(fill=f))
@@ -605,13 +618,21 @@ class Engine:
             _date, _symbols = date, sorted(portfolio.positions)
             # **R62′（N64）**：ctx 的当日截面走消费侧复权视图（`nominal` ⇒ 原样）；
             # 循环内其余用途（撮合/重估/再平衡）**仍用原始 `data`**（ADR-6）。
-            ctx_data = (data if price_adjust is None
-                        else _AdjustedDataSource(data, price_adjust))
+            ctx_data = data if price_adjust is None else _AdjustedDataSource(data, price_adjust)
             ctx = self._make_ctx(
-                clock, portfolio, ctx_data,
-                LazyStates(lambda d=_date, s=_symbols: self._feed.trading_states(
-                    d, s, with_touch_flags=False)),
-                _history_loader, _on_submit_target, _on_submit_order, **proto_kw)
+                clock,
+                portfolio,
+                ctx_data,
+                LazyStates(
+                    lambda d=_date, s=_symbols: self._feed.trading_states(
+                        d, s, with_touch_flags=False
+                    )
+                ),
+                _history_loader,
+                _on_submit_target,
+                _on_submit_order,
+                **proto_kw,
+            )
             # RC-10：on_open 阶段——当日 bar 未收盘，ctx.bar() 拒访、
             # history(end ≥ 当日) 拒（前视封堵；状态面板/持仓仍可读）
             ctx._set_phase("open")
@@ -649,18 +670,25 @@ class Engine:
             # ⑦ 目标 → 订单（草稿）
             drafts: list[Order] = list(explicit_orders)
             if target is not None:
-                drafts.extend(self._rebalancer.generate_orders(
-                    target, portfolio,
-                    self._feed.trading_states(
-                        date, sorted(set(target.targets) | set(portfolio.positions)),
-                        with_touch_flags=False),
-                    data))
+                drafts.extend(
+                    self._rebalancer.generate_orders(
+                        target,
+                        portfolio,
+                        self._feed.trading_states(
+                            date,
+                            sorted(set(target.targets) | set(portfolio.positions)),
+                            with_touch_flags=False,
+                        ),
+                        data,
+                    )
+                )
 
             # ⑧ 风控预检（M2 5.2：规则链逐单裁决——首 REDUCE/REJECT 生效）
             #    **D-02**：细节下沉 `_risk_precheck()`（含 states/盯市/空链降级
             #    三处口径注释），此处只保留步骤时点位次。
             drafts, warned_risk_chain = self._risk_precheck(
-                drafts, portfolio, data, date, result, warned_risk_chain, _emit)
+                drafts, portfolio, data, date, result, warned_risk_chain, _emit
+            )
 
             # ⑨ 确定性赋号 + 入队
             for draft in drafts:
@@ -681,10 +709,15 @@ class Engine:
         cache = self._ctx_history_cache
         total = cache.hits + cache.misses
         rate = (cache.hits / total * 100.0) if total else 0.0
-        logger.warning("[ctx.history] 命中率 %.1f%%（hits=%d / misses=%d / "
-                       "evictions=%d / 条目=%d/%d）", rate, cache.hits,
-                       cache.misses, cache.evictions, len(cache),
-                       self._ctx_cache_max)
+        logger.warning(
+            "[ctx.history] 命中率 %.1f%%（hits=%d / misses=%d / evictions=%d / 条目=%d/%d）",
+            rate,
+            cache.hits,
+            cache.misses,
+            cache.evictions,
+            len(cache),
+            self._ctx_cache_max,
+        )
         return result
 
     # ── 循环后处理（**D-02** 从 run() 抽出；行为零变更）──
@@ -706,29 +739,36 @@ class Engine:
             held = [s for s, pos in portfolio.positions.items() if pos.qty]
             cands = sorted(s for s in held if last_seen.get(s) != end_day)
             if cands:
-                end_states = self._feed.trading_states(
-                    end_day, cands, with_touch_flags=False)
+                end_states = self._feed.trading_states(end_day, cands, with_touch_flags=False)
                 for _sym in cands:
                     _st = end_states.get(_sym)
                     if _st is not None and _st.is_delisted:
-                        result.delisted_holdings.append({
-                            "symbol": _sym,
-                            "last_trade_date": (last_seen[_sym].to_ymd()
-                                                if _sym in last_seen else ""),
-                        })
+                        result.delisted_holdings.append(
+                            {
+                                "symbol": _sym,
+                                "last_trade_date": (
+                                    last_seen[_sym].to_ymd() if _sym in last_seen else ""
+                                ),
+                            }
+                        )
         # CL-3（19 号 §72.4；Q-2(b) 已裁）：清算口径登记 + writeoff 核销。
         # carry（默认）＝ 现状（RC-11-A 只披露不改数）；writeoff ＝ 压力档：
         # 区间末按 0 核销（末日快照清零、NAV 下调核销额；四式重算保一致）。
         result.delisted_settlement = self._delisted_settlement
-        if (self._delisted_settlement == "writeoff"
-                and result.delisted_holdings and result.snapshots):
-            result.delisted_writeoff_amount = _writeoff_settlement(
-                portfolio, result)
-        elif (self._delisted_settlement == "writeoff_at_delist"
-                and result.delisted_holdings and result.snapshots):
-            (result.delisted_writeoff_amount,
-             result.delisted_settlement_notes) = \
+        if (
+            self._delisted_settlement == "writeoff"
+            and result.delisted_holdings
+            and result.snapshots
+        ):
+            result.delisted_writeoff_amount = _writeoff_settlement(portfolio, result)
+        elif (
+            self._delisted_settlement == "writeoff_at_delist"
+            and result.delisted_holdings
+            and result.snapshots
+        ):
+            (result.delisted_writeoff_amount, result.delisted_settlement_notes) = (
                 _writeoff_at_delist_settlement(portfolio, result)
+            )
         # CL-2 第二段（R5′，19 号 §79.4）：审计转出 ＋ 锁定期卖出警告。
         # 披露纪律：现金缺口 / 锁定期内卖出**必须可观测**（§79.3 #2/#3），
         # 故 logger.warning（非静默）＋ 转 run 元数据（runtime 侧装配说明）。
@@ -740,22 +780,28 @@ class Engine:
             if _ev.get("cash_shortfall"):
                 logger.warning(
                     "配股缴款现金缺口 %.2f 元（%s 除权 %s）——默认外部增资补足"
-                    "（CL-2 / §79.3 #2；非静默）", _ev["cash_shortfall"],
-                    _ev["symbol"], _ev["ex_date"])
+                    "（CL-2 / §79.3 #2；非静默）",
+                    _ev["cash_shortfall"],
+                    _ev["symbol"],
+                    _ev["ex_date"],
+                )
         if result.rights_events and result.fills:
             for _ev in result.rights_events:
                 _listing = _ev.get("listing_date")
                 if not _listing:
                     continue
                 for _f in result.fills:
-                    if (_f.symbol == _ev["symbol"]
-                            and _f.side is OrderSide.SELL
-                            and _ev["ex_date"] < _f.fill_date.to_ymd()
-                            < _listing):
-                        _msg = (f"配股锁定期内卖出：{_ev['symbol']} 于 "
-                                f"{_f.fill_date.to_ymd()}（除权 "
-                                f"{_ev['ex_date']} → 获配上市 {_listing}；"
-                                f"默认**不建模锁定期**——CL-2 / §79.3 #3）")
+                    if (
+                        _f.symbol == _ev["symbol"]
+                        and _f.side is OrderSide.SELL
+                        and _ev["ex_date"] < _f.fill_date.to_ymd() < _listing
+                    ):
+                        _msg = (
+                            f"配股锁定期内卖出：{_ev['symbol']} 于 "
+                            f"{_f.fill_date.to_ymd()}（除权 "
+                            f"{_ev['ex_date']} → 获配上市 {_listing}；"
+                            f"默认**不建模锁定期**——CL-2 / §79.3 #3）"
+                        )
                         if _msg not in result.lockup_sell_warnings:
                             result.lockup_sell_warnings.append(_msg)
                             logger.warning(_msg)
@@ -774,8 +820,9 @@ class Engine:
     # ── 步骤①：公司行动装载（**D-02** 从 run() 抽出；行为零变更）──
     def _load_actions(
         self,
-    ) -> tuple[dict[str, list[tuple[int, CorporateAction]]],
-               dict[str, list[tuple[int, CorporateAction]]]]:
+    ) -> tuple[
+        dict[str, list[tuple[int, CorporateAction]]], dict[str, list[tuple[int, CorporateAction]]]
+    ]:
         """区间实施态行动一次性装载 → (actions_by_ex, actions_by_pay)。
 
         升序 (ex_date, symbol) ＝确定性；dividend 表小 ~0.2s/10 年，B2 预算内。
@@ -814,19 +861,18 @@ class Engine:
         `emit` ＝ run() 内的事件写出闭包（注入以保持"事件日志只在 run 内直写"）。
         """
         if drafts and self._risk is not None:
-            mark = {o.symbol: data[o.symbol].close
-                    for o in drafts if o.symbol in data}
+            mark = {o.symbol: data[o.symbol].close for o in drafts if o.symbol in data}
             if mark:
                 portfolio.mark_all(mark)
             syms = sorted({o.symbol for o in drafts})
             risk_states = LazyStates(
-                lambda d=date, s=syms:
-                    self._feed.trading_states(d, s, with_touch_flags=True))
+                lambda d=date, s=syms: self._feed.trading_states(d, s, with_touch_flags=True)
+            )
             drafts = self._risk.pre_check(drafts, portfolio, risk_states)
             for order, reason in self._risk.batch_rejections:
                 rej = Rejection(RejectCode.RISK_REJECTED, f"{reason}（风控预检）")
                 result.rejections.append((order, rej))
-                result.orders.append(order)   # 被拒也计入已提交（审计）
+                result.orders.append(order)  # 被拒也计入已提交（审计）
                 emit(OrderRejectedEvent(order=order, reason=rej))
         elif drafts and not warned:
             logger.warning("风控链为空：订单直接入队（04 §8.5 扩展点 6 降级）")
@@ -834,8 +880,18 @@ class Engine:
         return drafts, warned
 
     # ── ctx 工厂 ──
-    def _make_ctx(self, clock, portfolio, data, states, loader, on_target, on_order,
-                  *, history_cache: Any = None):
+    def _make_ctx(
+        self,
+        clock,
+        portfolio,
+        data,
+        states,
+        loader,
+        on_target,
+        on_order,
+        *,
+        history_cache: Any = None,
+    ):
         return StrategyContext(
             now=lambda: clock.current,
             portfolio=portfolio,

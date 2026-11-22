@@ -5,6 +5,7 @@
 逐行逐列相等（`trade_date` + `ts_code`）。移植自诊断脚本
 `赤潮/_scratch/perf-20261029/test_perf_gate.py::test_sort_semantics_equivalent`。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -14,8 +15,7 @@ from btf.data.core import YearTableStore, sort_by_date_int32
 pytestmark = [pytest.mark.l2]
 
 ROOT = MARKET_DATA_DIR
-requires_mainlib = pytest.mark.skipif(
-    not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
+requires_mainlib = pytest.mark.skipif(not (ROOT / "daily").is_dir(), reason=f"主库不可用: {ROOT}")
 
 YEARS = list(range(2016, 2026))
 
@@ -36,4 +36,5 @@ def test_int32_sort_bitwise_equal_per_year(store: YearTableStore, year: int):
     assert orig.num_rows == new.num_rows
     for col in ("trade_date", "ts_code"):
         assert orig.column(col).equals(new.column(col)), (
-            f"{year} 年 {col} 排序结果不一致——稳定性假设被打破")
+            f"{year} 年 {col} 排序结果不一致——稳定性假设被打破"
+        )

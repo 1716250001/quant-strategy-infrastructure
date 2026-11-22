@@ -5,6 +5,7 @@
 同日行保持原相对顺序（= ts_code 升序），结果与双键排序逐行相等。
 等价 → iter_day_slices 可用单键排序回收 ~1.5s。
 """
+
 import sys
 import time
 from pathlib import Path
@@ -38,5 +39,7 @@ for table in ("daily", "fund_daily"):
         t_sort += time.perf_counter() - t0
         if not s1.equals(s2):
             mismatch.append(p.name)
-    print(f"{table}: {len(files)} 文件 | ts_code 非升序 {len(bad_ts)} {bad_ts[:3]} | "
-          f"单双键不等价 {len(mismatch)} {mismatch[:3]} | 升序检查 {t_check:.2f}s 双键比对 {t_sort:.2f}s")
+    print(
+        f"{table}: {len(files)} 文件 | ts_code 非升序 {len(bad_ts)} {bad_ts[:3]} | "
+        f"单双键不等价 {len(mismatch)} {mismatch[:3]} | 升序检查 {t_check:.2f}s 双键比对 {t_sort:.2f}s"
+    )

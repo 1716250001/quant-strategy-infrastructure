@@ -9,6 +9,7 @@
 证明力：把改动回退到 `3fbc034`（`>= today` 无差别豁免 + 周月星期判据），
 ① 仍绿但 ③ 必红；再回退到 `b99c26a`（无结构性空分支）本文件全部 ImportError 红。
 """
+
 from datetime import datetime, timedelta
 
 import fetch.backfill as bf
@@ -41,8 +42,9 @@ def test_t1_whitelist_today_empty_marked_done(monkeypatch):
     assert tag == "structural"
     assert cp.done == [("margin", dt)], "白名单表当日空必须记 done（次日由日更补回）"
     assert ct["n"] == 1, "结构性空必须计入计数器，否则该分支无观测手段"
-    assert bf._table_source_empty_dates_registry("margin") is None, \
+    assert bf._table_source_empty_dates_registry("margin") is None, (
         "结构性空不得写入 source_empty_dates（设计如此，只有核验过的空日才登记）"
+    )
 
 
 def test_non_whitelist_today_empty_stays_pending(monkeypatch):

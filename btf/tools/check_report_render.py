@@ -30,6 +30,7 @@
     python tools/check_report_render.py --self-test  # **变异性检查**（铁律新 15）：
                                                      两处故意破坏 → 断言必须变红
 """
+
 import sys
 from pathlib import Path
 
@@ -53,24 +54,49 @@ def _bundle():
     days = ["20240102", "20240103", "20240104"]
     navs = [1_000_000.0, 1_010_000.0, 1_005_000.0]
     snapshots = [
-        SnapshotRecord(date=d, cash=100_000.0, market_value=v - 100_000.0,
-                       total_value=v, daily_return=v / navs[0] - 1.0,
-                       cumulative_return=v / navs[0] - 1.0, drawdown=0.0,
-                       weights={"000001.SZ": 0.9}, positions_qty={"000001.SZ": 100})
+        SnapshotRecord(
+            date=d,
+            cash=100_000.0,
+            market_value=v - 100_000.0,
+            total_value=v,
+            daily_return=v / navs[0] - 1.0,
+            cumulative_return=v / navs[0] - 1.0,
+            drawdown=0.0,
+            weights={"000001.SZ": 0.9},
+            positions_qty={"000001.SZ": 100},
+        )
         for d, v in zip(days, navs, strict=True)
     ]
     # trades/fills/rejections 在产物中是**行 dict**（报告与图表按 dict 消费）
-    trades = [{"trade_id": "T1", "symbol": "000001.SZ", "qty": 100,
-               "pnl": 1.0, "open_date": days[0], "close_date": days[1]}]
-    manifest = RunManifest(run_id="check_render", status="COMPLETED",
-                           config_hash="sha256:check",
-                           config_effective={"run": {"universe": {"source": "explicit"}}})
-    return type("Bundle", (), {
-        "manifest": manifest, "metrics": {"total_return": 0.005,
-                                          "final_nav": navs[-1]},
-        "snapshots": snapshots, "trades": trades, "fills": [], "rejections": [],
-        "run_id": manifest.run_id,
-    })()
+    trades = [
+        {
+            "trade_id": "T1",
+            "symbol": "000001.SZ",
+            "qty": 100,
+            "pnl": 1.0,
+            "open_date": days[0],
+            "close_date": days[1],
+        }
+    ]
+    manifest = RunManifest(
+        run_id="check_render",
+        status="COMPLETED",
+        config_hash="sha256:check",
+        config_effective={"run": {"universe": {"source": "explicit"}}},
+    )
+    return type(
+        "Bundle",
+        (),
+        {
+            "manifest": manifest,
+            "metrics": {"total_return": 0.005, "final_nav": navs[-1]},
+            "snapshots": snapshots,
+            "trades": trades,
+            "fills": [],
+            "rejections": [],
+            "run_id": manifest.run_id,
+        },
+    )()
 
 
 def _run_checks() -> tuple[bool, list[tuple[str, bool]]]:
@@ -85,14 +111,18 @@ def _run_checks() -> tuple[bool, list[tuple[str, bool]]]:
         ("表格成形 <table><thead>", "<table><thead>" in html),
         ("图表脚本存在 <script ≥1", html.count("<script") >= 1),
         ("无整体转义残留（&lt;div class=）", "&lt;div class=" not in html),
-        ("纯文本字段仍转义（注入探针被转义且裸串不存在）",
-         PROBE not in html and ESCAPED_PROBE in html),
+        (
+            "纯文本字段仍转义（注入探针被转义且裸串不存在）",
+            PROBE not in html and ESCAPED_PROBE in html,
+        ),
     ]
     ok = all(p for _n, p in checks)
-    print(f"  渲染级结构：{'通过' if ok else '失败'}"
-          f"（<div={html.count('<div')} <script={html.count('<script')} "
-          f"转义&lt;div={html.count('&lt;div')}"
-          f" 探针裸奔={PROBE in html} 探针转义={ESCAPED_PROBE in html}）")
+    print(
+        f"  渲染级结构：{'通过' if ok else '失败'}"
+        f"（<div={html.count('<div')} <script={html.count('<script')} "
+        f"转义&lt;div={html.count('&lt;div')}"
+        f" 探针裸奔={PROBE in html} 探针转义={ESCAPED_PROBE in html}）"
+    )
     return ok, checks
 
 
@@ -110,10 +140,13 @@ def _self_test() -> int:
 
     fixed = report._TEMPLATE
     cases = [
-        ("A 整体转义（section.html 去 safe）",
-         "{{ section.html | safe }}", "{{ section.html }}", 0),
-        ("B 纯文本误加 safe（title）",
-         "{{ title }}", "{{ title | safe }}", 5),
+        (
+            "A 整体转义（section.html 去 safe）",
+            "{{ section.html | safe }}",
+            "{{ section.html }}",
+            0,
+        ),
+        ("B 纯文本误加 safe（title）", "{{ title }}", "{{ title | safe }}", 5),
     ]
     ok = True
     for name, old, new, probe_index in cases:
@@ -124,9 +157,11 @@ def _self_test() -> int:
         finally:
             report._TEMPLATE = fixed
         red = not passed and not checks[probe_index][1]
-        print(f"  变异性检查 {name}："
-              f"{'PASS（断言已变红）' if red else 'FAIL（仍恒绿＝伪防线）'}"
-              f" → 目标项 [{probe_index}] = {checks[probe_index][1]}")
+        print(
+            f"  变异性检查 {name}："
+            f"{'PASS（断言已变红）' if red else 'FAIL（仍恒绿＝伪防线）'}"
+            f" → 目标项 [{probe_index}] = {checks[probe_index][1]}"
+        )
         ok = ok and red
     # 还原后必须回到通过（防"自检把模板改坏"的次生风险）
     restored, _checks = _run_checks()

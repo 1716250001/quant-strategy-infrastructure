@@ -12,6 +12,7 @@ ex_date 可晚于文件年——按 ex_date 年裁剪会**静默漏行动**（Po
     ② `test_padded_read_equals_full_read`——**超集等价性**：区间化读出的行动
        与"全 37 年文件读"逐条一致（这是"没有漏行"的直接证据）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,9 +24,10 @@ from btf.domain.types import TradingDate
 
 ROOT = Path(MARKET_DATA_DIR)
 requires_mainlib = pytest.mark.skipif(
-    not (ROOT / "dividend").is_dir(), reason=f"主库不可用: {ROOT}")
+    not (ROOT / "dividend").is_dir(), reason=f"主库不可用: {ROOT}"
+)
 
-START, END = "20160101", "20251231"      # 十年区间（引擎 B2/B3 场景口径）
+START, END = "20160101", "20251231"  # 十年区间（引擎 B2/B3 场景口径）
 
 
 def _max_lag() -> tuple[int, list[str]]:
@@ -36,8 +38,9 @@ def _max_lag() -> tuple[int, list[str]]:
     for path in sorted((ROOT / "dividend").glob("*.parquet")):
         year = int(path.stem)
         t = pq.read_table(path, columns=["ts_code", "ex_date"])
-        for code, ex in zip(t.column("ts_code").to_pylist(),
-                            t.column("ex_date").to_pylist(), strict=True):
+        for code, ex in zip(
+            t.column("ts_code").to_pylist(), t.column("ex_date").to_pylist(), strict=True
+        ):
             if not ex:
                 continue
             lag = int(ex[:4]) - year
@@ -55,7 +58,8 @@ def test_lag_within_corridor():
     print(f"\ndividend 最长滞后 {worst} 年（窗口 {_DIV_MAX_LAG_YEARS} 年）")
     assert not over, (
         f"出现 > {_DIV_MAX_LAG_YEARS} 年的 ex_date 滞后 {over[:3]}——"
-        f"回看窗口已不足，区间化读会**静默漏行**，须提高 _DIV_MAX_LAG_YEARS")
+        f"回看窗口已不足，区间化读会**静默漏行**，须提高 _DIV_MAX_LAG_YEARS"
+    )
     assert worst <= _DIV_MAX_LAG_YEARS
 
 
@@ -64,23 +68,47 @@ def _reference_actions(start: str, end: str) -> set[tuple]:
     import pyarrow.compute as pc
     from btf.data.parquet_reader import read_full
 
-    t = read_full("dividend", ROOT, columns=[
-        "ts_code", "ex_date", "pay_date", "record_date", "ann_date",
-        "div_proc", "stk_bo_rate", "stk_co_rate", "cash_div", "end_date"])
-    t = t.filter(pc.and_(
-        pc.and_(pc.equal(t.column("div_proc"), "实施"),
-                pc.greater_equal(t.column("ex_date"), start)),
-        pc.less_equal(t.column("ex_date"), end)))
+    t = read_full(
+        "dividend",
+        ROOT,
+        columns=[
+            "ts_code",
+            "ex_date",
+            "pay_date",
+            "record_date",
+            "ann_date",
+            "div_proc",
+            "stk_bo_rate",
+            "stk_co_rate",
+            "cash_div",
+            "end_date",
+        ],
+    )
+    t = t.filter(
+        pc.and_(
+            pc.and_(
+                pc.equal(t.column("div_proc"), "实施"), pc.greater_equal(t.column("ex_date"), start)
+            ),
+            pc.less_equal(t.column("ex_date"), end),
+        )
+    )
     seen: set[tuple] = set()
     for r in t.to_pylist():
         if not r["ex_date"]:
             continue
         # P18（19 号 §165）：去重键与 feed 同步**不含 `end_date`**
         # （同日业务参数全同即重复公告；金额/送转不同仍各自成键）。
-        seen.add((r["ts_code"], r["ex_date"], r["pay_date"], r["record_date"],
-                  float(r["stk_bo_rate"] or 0.0),
-                  float(r["stk_co_rate"] or 0.0),
-                  float(r["cash_div"] or 0.0)))
+        seen.add(
+            (
+                r["ts_code"],
+                r["ex_date"],
+                r["pay_date"],
+                r["record_date"],
+                float(r["stk_bo_rate"] or 0.0),
+                float(r["stk_co_rate"] or 0.0),
+                float(r["cash_div"] or 0.0),
+            )
+        )
     return seen
 
 
@@ -93,19 +121,22 @@ def test_padded_read_equals_full_read():
     且 `consolidation_ratio == 1.0`）；配股/缩股侧另有两项断言（区间性与字段）。
     """
     feed = TushareParquetFeed(ROOT)
-    got_all = feed.corporate_actions(TradingDate.from_ymd(START),
-                                     TradingDate.from_ymd(END))
-    got = [a for a in got_all
-           if a.rights_ratio == 0.0 and a.consolidation_ratio == 1.0]
+    got_all = feed.corporate_actions(TradingDate.from_ymd(START), TradingDate.from_ymd(END))
+    got = [a for a in got_all if a.rights_ratio == 0.0 and a.consolidation_ratio == 1.0]
     # 规范键：(symbol, ex_date, pay, record, stk 合计, cash)——两侧同口径
-    got_keys = {(a.symbol, a.ex_date.to_ymd(),
-                 a.pay_date.to_ymd() if a.pay_date else None,
-                 a.record_date.to_ymd() if a.record_date else None,
-                 round(a.stk_div_per_share, 6),
-                 round(a.cash_div_per_share, 6)) for a in got}
+    got_keys = {
+        (
+            a.symbol,
+            a.ex_date.to_ymd(),
+            a.pay_date.to_ymd() if a.pay_date else None,
+            a.record_date.to_ymd() if a.record_date else None,
+            round(a.stk_div_per_share, 6),
+            round(a.cash_div_per_share, 6),
+        )
+        for a in got
+    }
     ref = _reference_actions(START, END)
-    ref_keys = {(k[0], k[1], k[2], k[3],
-                 round(k[4] + k[5], 6), round(k[6], 6)) for k in ref}
+    ref_keys = {(k[0], k[1], k[2], k[3], round(k[4] + k[5], 6), round(k[6], 6)) for k in ref}
     missing = ref_keys - got_keys
     extra = got_keys - ref_keys
     print(f"\n区间化 {len(got_keys)} 条 vs 全量参照 {len(ref_keys)} 条")
@@ -113,13 +144,13 @@ def test_padded_read_equals_full_read():
     assert not extra, f"区间化多出 {len(extra)} 条（样例 {sorted(extra)[:3]}）"
 
     # CL-2 第二段：配股/缩股侧两项断言（区间性 + 字段自洽）
-    extra_src = [a for a in got_all
-                 if a.rights_ratio > 0.0 or a.consolidation_ratio != 1.0]
+    extra_src = [a for a in got_all if a.rights_ratio > 0.0 or a.consolidation_ratio != 1.0]
     for a in extra_src:
         ymd = a.ex_date.to_ymd()
         assert START <= ymd <= END, f"配股/缩股事件越界：{a.symbol} {ymd}"
         assert (a.rights_ratio > 0.0) != (a.consolidation_ratio != 1.0), (
-            f"事件既非纯配股亦非纯缩股（口径混淆）：{a.symbol} {ymd}")
+            f"事件既非纯配股亦非纯缩股（口径混淆）：{a.symbol} {ymd}"
+        )
     print(f"配股/缩股事件 {len(extra_src)} 条（区间内；与 dividend 侧互斥）")
 
 

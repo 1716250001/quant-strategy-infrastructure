@@ -3,6 +3,7 @@
 
 目的：确定余量回收路径（跳过排序不可行——年文件非日期有序，探明真实排序键）。
 """
+
 import sys
 import time
 from pathlib import Path
@@ -40,7 +41,9 @@ for y, t in zip(YEARS, tables):
     if not joint:
         print(f"   {y}: ts_code升序={ok_ts}, (ts_code,date)联合有序={joint}")
 t_check = time.perf_counter() - t0
-print(f"2) 有序性检查: ts_code 全升序={all_ts_sorted}, (ts_code,date) 联合有序={all_joint}（{t_check:.2f}s）")
+print(
+    f"2) 有序性检查: ts_code 全升序={all_ts_sorted}, (ts_code,date) 联合有序={all_joint}（{t_check:.2f}s）"
+)
 
 # 3) 双键排序（现行实现）
 t0 = time.perf_counter()

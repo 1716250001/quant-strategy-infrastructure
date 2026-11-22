@@ -7,6 +7,7 @@ PoC-2 仅冻结值对象（事件类型引用它）；引擎接入（ex_date/pay
 
 零第三方依赖（03 §7.3 铁律 3）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -58,16 +59,20 @@ def ratio_or_default(
     try:
         num = float(value)
     except (TypeError, ValueError):
-        _emit(f"公司行动 {tag} 不可转换为数值（{value!r}）⇒ 取默认 {default}"
-              f"（R54′/N58：禁崩、禁静默）")
+        _emit(
+            f"公司行动 {tag} 不可转换为数值（{value!r}）⇒ 取默认 {default}"
+            f"（R54′/N58：禁崩、禁静默）"
+        )
         return float(default)
     # NaN／±∞（不依赖 math：NaN 自比不相等；±inf 显式比较）
     if num != num or num in (float("inf"), float("-inf")):
         _emit(f"公司行动 {tag} 非有限值（{value!r}）⇒ 取默认 {default}（R54′）")
         return float(default)
     if num <= 0:
-        _emit(f"公司行动 {tag} ≤0（{value!r}）⇒ 视为**无效值、不建模**"
-              f"（份额不变）＋WARN（R54′/N59 裁决 (a)：禁走保底清零）")
+        _emit(
+            f"公司行动 {tag} ≤0（{value!r}）⇒ 视为**无效值、不建模**"
+            f"（份额不变）＋WARN（R54′/N59 裁决 (a)：禁走保底清零）"
+        )
         return float(default)
     return num
 
@@ -89,16 +94,16 @@ class CorporateAction:
     """
 
     symbol: str
-    ex_date: TradingDate          # 除权除息日（调价格/份额/成本）
+    ex_date: TradingDate  # 除权除息日（调价格/份额/成本）
     pay_date: TradingDate | None  # 派息日（现金到账；缺失~0.1%→回退 ex_date，E5）
     record_date: TradingDate | None
-    cash_div_per_share: float     # 每股派息（税前，元）
-    stk_div_per_share: float      # 每股送转（送股+转增合计，股/股）
+    cash_div_per_share: float  # 每股派息（税前，元）
+    stk_div_per_share: float  # 每股送转（送股+转增合计，股/股）
     ann_date: TradingDate | None  # 公告日（PIT 对齐：策略只能用 ann_date<=当前日的行动）
     # ── CL-2 第二段（默认值 = 无配股/无缩股 ⇒ 旧路径逐位不变）──
-    rights_ratio: float = 0.0     # 配股比例（股/股；「10配X」⇒ X/10）
-    rights_price: float = 0.0     # 配股价（元/股）
-    rights_ex_date: TradingDate | None = None      # 配股除权日（= 跳变真值）
+    rights_ratio: float = 0.0  # 配股比例（股/股；「10配X」⇒ X/10）
+    rights_price: float = 0.0  # 配股价（元/股）
+    rights_ex_date: TradingDate | None = None  # 配股除权日（= 跳变真值）
     rights_listing_date: TradingDate | None = None  # 获配股份上市日（缺 ⇒ None）
     consolidation_ratio: float = 1.0  # 缩股比例（qty 乘数；1.0 = 无）
     #: **R22′（§87.8.2）**：缩股来源——`confirmed`（股本级三重证据，R18′，

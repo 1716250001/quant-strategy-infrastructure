@@ -5,6 +5,7 @@
 名字解析与契约版本协商（未知名显式报错；主版本不符拒载——04 §8.7）。
 本包属外层（cli | viz | registry，03 §7.2），可 import 全部内层。
 """
+
 from btf.registry.catalog import (
     ANALYZER,
     COST_MODEL,
@@ -25,8 +26,20 @@ from btf.registry.catalog import (
 )
 
 __all__ = [
-    "ANALYZER", "COST_MODEL", "DATA_FEED", "EXECUTION_HANDLER",
-    "OPTIMIZER", "REBALANCER", "RISK_RULE", "RULES_PROVIDER",
-    "RUN_STORE", "SLIPPAGE_MODEL",
-    "RegistryError", "available", "create", "points", "register", "resolve",
+    "ANALYZER",
+    "COST_MODEL",
+    "DATA_FEED",
+    "EXECUTION_HANDLER",
+    "OPTIMIZER",
+    "REBALANCER",
+    "RISK_RULE",
+    "RULES_PROVIDER",
+    "RUN_STORE",
+    "SLIPPAGE_MODEL",
+    "RegistryError",
+    "available",
+    "create",
+    "points",
+    "register",
+    "resolve",
 ]

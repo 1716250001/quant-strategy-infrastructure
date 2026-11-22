@@ -23,6 +23,7 @@ tools/consumer_coverage.py — 决策侧消费标的覆盖体检（2026-09-25 �
 用法:
   python main.py check-consumer              # 体检（退出码 0=全过 / 2=有 WARN）
 """
+
 import os
 import re
 import sys
@@ -45,14 +46,16 @@ _UNREADABLE: list[str] = []
 
 def _note_unreadable(fn, exc):
     _UNREADABLE.append(str(fn))
-    print(f"[consumer_coverage] 分片读取失败 {fn}: {type(exc).__name__}: {exc}",
-          file=sys.stderr)
+    print(f"[consumer_coverage] 分片读取失败 {fn}: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 def _report_unreadable():
     if _UNREADABLE:
-        print(f"[consumer_coverage] ⚠ {len(_UNREADABLE)} 个分片读取失败"
-              f"（行数偏少，WARN/PASS 结论需复核）", file=sys.stderr)
+        print(
+            f"[consumer_coverage] ⚠ {len(_UNREADABLE)} 个分片读取失败"
+            f"（行数偏少，WARN/PASS 结论需复核）",
+            file=sys.stderr,
+        )
 
 
 def _rows(table, code):
@@ -64,9 +67,9 @@ def _rows(table, code):
         if not fn.endswith(".parquet"):
             continue
         try:
-            tbl = pq.read_table(os.path.join(d, fn),
-                                filters=[("ts_code", "=", code)],
-                                columns=["trade_date"])
+            tbl = pq.read_table(
+                os.path.join(d, fn), filters=[("ts_code", "=", code)], columns=["trade_date"]
+            )
         except Exception as exc:
             _note_unreadable(fn, exc)
             continue
@@ -85,17 +88,30 @@ def _today():
 def _classify(table, code, name, min_rows, kind="normal"):
     n, dmin, dmax = _rows(table, code)
     if kind == "wind":
-        return {"table": table, "code": code, "name": name, "rows": n,
-                "range": f"{dmin}~{dmax}", "status": "INFO",
-                "note": "wind_index 已迁入 wind_data 第三库(WIND-LIB W-2a，预算管控)"}
+        return {
+            "table": table,
+            "code": code,
+            "name": name,
+            "rows": n,
+            "range": f"{dmin}~{dmax}",
+            "status": "INFO",
+            "note": "wind_index 已迁入 wind_data 第三库(WIND-LIB W-2a，预算管控)",
+        }
     if n >= min_rows:
         status, note = "PASS", ""
     elif dmin and (pd.Timestamp(_today()) - pd.Timestamp(dmin)).days <= RECENT_DAYS:
         status, note = "PASS", f"次新（起始 {dmin}≈上市日，{n} 行为上市以来全量）"
     else:
         status, note = "WARN", f"仅 {n} 行（阈值 {min_rows}）——需人工核对真缺口/上市晚"
-    return {"table": table, "code": code, "name": name, "rows": n,
-            "range": f"{dmin}~{dmax}", "status": status, "note": note}
+    return {
+        "table": table,
+        "code": code,
+        "name": name,
+        "rows": n,
+        "range": f"{dmin}~{dmax}",
+        "status": status,
+        "note": note,
+    }
 
 
 def load_consumers():
@@ -124,6 +140,7 @@ def load_consumers():
     # 3) 转债温度计（wind，INFO 口径）
     try:
         from tools.consumer_pool import WIND_CB_THERMOMETER
+
         for c, info in WIND_CB_THERMOMETER.items():
             items.append(("wind_index", c, info["name"], 0, "wind"))
     except Exception:
@@ -135,12 +152,16 @@ def load_consumers():
         codes = sorted(set(re.findall(r"\b(\d{6}\.(?:SH|SZ))\b", text)))
         for c in codes:
             head = c[:6]
-            if re.match(r"(51|56|58)\d{4}", head) or head.startswith("159") or head.startswith("501"):
-                table = "fund_daily"        # 场内基金段：51x/56x/58x/159xxx/501xxx
+            if (
+                re.match(r"(51|56|58)\d{4}", head)
+                or head.startswith("159")
+                or head.startswith("501")
+            ):
+                table = "fund_daily"  # 场内基金段：51x/56x/58x/159xxx/501xxx
             elif head.startswith("399") or head.startswith("880"):
-                table = "index_daily"       # 深证指数段 399xxx（如中证银行 399986.SZ 触发位监控）
+                table = "index_daily"  # 深证指数段 399xxx（如中证银行 399986.SZ 触发位监控）
             else:
-                table = "daily"             # 股票（60x/00x/30x/68x/8xx 北交所）
+                table = "daily"  # 股票（60x/00x/30x/68x/8xx 北交所）
             items.append((table, c, "持仓", MIN_ROWS))
     return items
 

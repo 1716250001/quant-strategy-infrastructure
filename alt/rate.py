@@ -14,6 +14,7 @@ alt/rate.py — akshare 专用限流与风控退避
                  其他错误 → 短退避重试
   4. **被拦后全局静默**：一旦触发，整个进程暂停请求，避免越探越糟
 """
+
 import threading
 import time
 
@@ -43,9 +44,18 @@ _BLOCK_SIGNS = (
     "Max retries exceeded",
     "SSLError",
     # HTTP 层限流（实测乐咕在约 20 次/分时返回 429）——必须带上下文
-    "HTTP 429", "429 Too Many Requests", "status code 429", "status_code=429",
-    "HTTP 503", "Service Unavailable", "status code 503", "status_code=503",
-    "HTTP 504", "Gateway Time-out", "status code 504", "status_code=504",
+    "HTTP 429",
+    "429 Too Many Requests",
+    "status code 429",
+    "status_code=429",
+    "HTTP 503",
+    "Service Unavailable",
+    "status code 503",
+    "status_code=503",
+    "HTTP 504",
+    "Gateway Time-out",
+    "status code 504",
+    "status_code=504",
     "Too Many Requests",
     # 被拦后站点返回 HTML 错误页 → JSON 解析失败（**空响应**特征）
     "Expecting value: line 1 column 1",
@@ -100,8 +110,8 @@ class AltRateLimiter:
         self.dry_run = dry_run
         self.verbose = verbose
         self._lock = threading.RLock()
-        self._next_at = {}          # tier -> 下次可发请求的时刻
-        self._blocked_until = 0.0   # 全局静默截止（被拦后设置）
+        self._next_at = {}  # tier -> 下次可发请求的时刻
+        self._blocked_until = 0.0  # 全局静默截止（被拦后设置）
         self.stats = {
             "requests": 0,
             "success": 0,
@@ -128,8 +138,9 @@ class AltRateLimiter:
             self.stats["blocked"] += 1
             self.stats["silence_seconds"] += sec
         if self.verbose:
-            print(f"    [静默] 触发风控保护，暂停 {sec:.0f}s"
-                  f"{'（' + reason + '）' if reason else ''}")
+            print(
+                f"    [静默] 触发风控保护，暂停 {sec:.0f}s{'（' + reason + '）' if reason else ''}"
+            )
 
     # ---------- 预约式限流 ----------
     def wait(self, url):
@@ -173,7 +184,7 @@ class AltRateLimiter:
         self.stats["requests"] += 1
 
         for attempt in range(1, ALT_MAX_RETRY + 1):
-            self.wait(url)   # 限流等待（原赋值 wait_s 未被使用，保留调用本身）
+            self.wait(url)  # 限流等待（原赋值 wait_s 未被使用，保留调用本身）
             try:
                 result = fn()
                 self.stats["success"] += 1
@@ -195,7 +206,7 @@ class AltRateLimiter:
                 # §113 RE1-1b：瞬态（JSON 截断类）→ 短退避重试，**不进长静默**
                 if transient and attempt < ALT_MAX_RETRY:
                     self.stats["retries"] += 1
-                    time.sleep(TRANSIENT_BACKOFF_SEC * attempt)   # 2s / 4s
+                    time.sleep(TRANSIENT_BACKOFF_SEC * attempt)  # 2s / 4s
                     continue
 
                 # 非风控、非瞬态（解析/参数问题）→ 立即失败
@@ -208,6 +219,8 @@ class AltRateLimiter:
     def status_str(self) -> str:
         s = self.stats
         tiers = " ".join(f"{k}:{v['requests']}" for k, v in s["by_tier"].items())
-        return (f"请求 {s['requests']} | 成功 {s['success']} | 失败 {s['fail']} | "
-                f"被拦 {s['blocked']} | 重试 {s['retries']} | "
-                f"静默 {s['silence_seconds']:.0f}s | 档位[{tiers}]")
+        return (
+            f"请求 {s['requests']} | 成功 {s['success']} | 失败 {s['fail']} | "
+            f"被拦 {s['blocked']} | 重试 {s['retries']} | "
+            f"静默 {s['silence_seconds']:.0f}s | 档位[{tiers}]"
+        )

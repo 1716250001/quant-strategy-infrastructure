@@ -12,6 +12,7 @@
     EX-1  三扩展点接线：自定义 Analyzer/RulesProvider 注册后零源码改动生效
     P2-9  缺口披露对称（股票限价缺失与 ETF 回退同通道）
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -77,8 +78,7 @@ class TestRiskFailClosed:
 
         cfg = _base_config()
         cfg["risk"] = {"rules": [], "allow_empty_chain": True}
-        cfg["execution"] = {"handler": "next_open", "cost_model": "zero",
-                            "rebalancer": "full"}
+        cfg["execution"] = {"handler": "next_open", "cost_model": "zero", "rebalancer": "full"}
         rt = BTFRuntime().load_config(cfg).build()
         assert rt.risk_allow_empty is True
         result = rt.run(persist=False)
@@ -89,7 +89,9 @@ class TestRiskFailClosed:
         class _M:
             config_effective: ClassVar[dict] = {
                 "risk": {"allow_empty_chain": True},
-                "execution": {"cost_model": "zero"}}
+                "execution": {"cost_model": "zero"},
+            }
+
         notes = _derived_disclosures(_M())
         assert any("风控链为空" in n for n in notes)
         assert any("零费用基线" in n for n in notes)
@@ -105,7 +107,7 @@ class TestRiskFailClosed:
         class _Portfolio:
             positions: ClassVar[dict] = {}
 
-            def close_of(self, symbol):      # 无价
+            def close_of(self, symbol):  # 无价
                 return None
 
             def total_value(self):
@@ -119,10 +121,10 @@ class TestRiskFailClosed:
 
         _Order.side = OrderSide.BUY
         strict_verdict = rule.check(_Order(), _Portfolio(), {})
-        lenient_verdict = MaxWeightRule(strict=False).check(
-            _Order(), _Portfolio(), {})
+        lenient_verdict = MaxWeightRule(strict=False).check(_Order(), _Portfolio(), {})
         assert repr(strict_verdict) != repr(lenient_verdict), (
-            "strict 与 lenient 裁决应不同（无价订单：拒单 vs 放行）")
+            "strict 与 lenient 裁决应不同（无价订单：拒单 vs 放行）"
+        )
         assert "strict" in repr(strict_verdict)
 
 
@@ -155,8 +157,7 @@ class TestDeadKeysRemoved:
         from btf.config.validation import validate
 
         cfg = _base_config()
-        cfg["data"] = {"feed": FEED_NAME,
-                       "completeness": {"missing_bars_action": "fail"}}
+        cfg["data"] = {"feed": FEED_NAME, "completeness": {"missing_bars_action": "fail"}}
         merged = load_config(cfg)
         with pytest.raises(ConfigError, match="completeness"):
             validate(merged)
@@ -179,14 +180,15 @@ class TestRiskFailClosedDefault:
         from btf.config.loader import DEFAULTS
 
         assert "allow_empty_chain" not in DEFAULTS["risk"], (
-            "默认层不得声明逃生开关（否则空链默认放行 = fail-open）")
+            "默认层不得声明逃生开关（否则空链默认放行 = fail-open）"
+        )
 
     def test_empty_chain_rejected_by_default(self):
         from btf.config.validation import ConfigError
         from btf.runtime import BTFRuntime
 
         cfg = _base_config()
-        cfg.pop("risk", None)                 # 不声明 → 默认拒绝
+        cfg.pop("risk", None)  # 不声明 → 默认拒绝
         rt = BTFRuntime().load_config(cfg)
         with pytest.raises(ConfigError, match=r"fail-closed|风控"):
             rt.build()
@@ -256,12 +258,18 @@ class TestBenchmarkLayer:
 
         strategy = [1.0, 1.02, 1.01, 1.05, 1.08]
         bench = [1.0, 1.01, 1.00, 1.02, 1.03]
-        metrics = relative_metrics(strategy, bench, symbol="000300.SH",
-                                   risk_free_rate=0.0)
-        required = ("benchmark_total_return", "excess_return",
-                    "annualized_excess", "tracking_error",
-                    "information_ratio", "beta", "alpha_annualized",
-                    "up_capture", "down_capture")
+        metrics = relative_metrics(strategy, bench, symbol="000300.SH", risk_free_rate=0.0)
+        required = (
+            "benchmark_total_return",
+            "excess_return",
+            "annualized_excess",
+            "tracking_error",
+            "information_ratio",
+            "beta",
+            "alpha_annualized",
+            "up_capture",
+            "down_capture",
+        )
         for key in required:
             assert key in metrics, key
         assert metrics["excess_return"] == pytest.approx(1.08 - 1.03)
@@ -285,29 +293,30 @@ class TestBenchmarkLayer:
         ann, rf = 252, 0.03
         strategy = [1.0, 1.02, 1.01, 1.05, 1.08, 1.06]
         bench = [1.0, 1.01, 1.00, 1.02, 1.03, 1.015]
-        got = relative_metrics(strategy, bench, symbol="X",
-                               risk_free_rate=rf, annualization_factor=ann)
+        got = relative_metrics(
+            strategy, bench, symbol="X", risk_free_rate=rf, annualization_factor=ann
+        )
 
         s_r = [strategy[i] / strategy[i - 1] - 1.0 for i in range(1, len(strategy))]
         b_r = [bench[i] / bench[i - 1] - 1.0 for i in range(1, len(bench))]
         ms, mb = sum(s_r) / len(s_r), sum(b_r) / len(b_r)
         var_b = sum((r - mb) ** 2 for r in b_r) / (len(b_r) - 1)
-        cov = sum((s - ms) * (b - mb)
-                  for s, b in zip(s_r, b_r, strict=True)) / (len(s_r) - 1)
+        cov = sum((s - ms) * (b - mb) for s, b in zip(s_r, b_r, strict=True)) / (len(s_r) - 1)
         beta = cov / var_b
         rf_geo = (1.0 + rf) ** (1.0 / ann) - 1.0
         rf_lin = rf / ann
         exp_geo = ((ms - rf_geo) - beta * (mb - rf_geo)) * ann
         exp_lin = ((ms - rf_lin) - beta * (mb - rf_lin)) * ann
         assert got["alpha_annualized"] == pytest.approx(exp_geo, rel=1e-12)
-        assert abs(exp_geo - exp_lin) > 1e-9          # 判别性（两口径可区分）
+        assert abs(exp_geo - exp_lin) > 1e-9  # 判别性（两口径可区分）
 
     def test_index_series_fail_closed_on_missing_day(self):
         from btf.data.index_series import IndexSeriesError, load_index_closes
 
         with pytest.raises(IndexSeriesError, match="无收盘价"):
-            load_index_closes("000300.SH", "20200101", "20200110",
-                              trading_days=["18000101"])     # 不可能交易日
+            load_index_closes(
+                "000300.SH", "20200101", "20200110", trading_days=["18000101"]
+            )  # 不可能交易日
 
 
 class TestExtensionPointsLive:
@@ -319,7 +328,7 @@ class TestExtensionPointsLive:
 
         name = "review19_custom_metric"
 
-        class _Custom(MetricBase):       # type: ignore[misc]
+        class _Custom(MetricBase):  # type: ignore[misc]
             name: ClassVar[str] = "review19_custom_metric"
 
             def _value(self, series, cfg):
@@ -338,9 +347,13 @@ class TestExtensionPointsLive:
         assert resolved is _Custom
         from btf.analytics.metrics import compute_all
 
-        values = compute_all([], [], {}, analyzer_names=["final_nav", name],
-                             resolver=lambda n: registry.resolve(
-                                 registry.ANALYZER, n))
+        values = compute_all(
+            [],
+            [],
+            {},
+            analyzer_names=["final_nav", name],
+            resolver=lambda n: registry.resolve(registry.ANALYZER, n),
+        )
         assert values[name] == pytest.approx(0.42)
         assert rt.strategy is not None and result is not None
 
@@ -364,7 +377,7 @@ class TestExtensionPointsLive:
         def factory(cfg=None, **_params):
             return StaticRulesProvider(params={}, version="review19")
 
-        factory.contract_version = CONTRACT_VERSION    # S1 协商（EX-1 要求）
+        factory.contract_version = CONTRACT_VERSION  # S1 协商（EX-1 要求）
 
         if "review19_custom" not in registry.available(registry.RULES_PROVIDER):
             registry.register(registry.RULES_PROVIDER, "review19_custom", factory)
@@ -383,8 +396,7 @@ class TestDisclosureSymmetry:
         from btf.domain.types import TradingDate
 
         synth = StateSynthesizer()
-        synth.states(TradingDate.from_ymd("20050601"), ["600000.SH"],
-                     with_touch_flags=False)
+        synth.states(TradingDate.from_ymd("20050601"), ["600000.SH"], with_touch_flags=False)
         notes = synth.degraded_notes()
         assert any("股票涨跌停缺失" in n for n in notes), notes
 
@@ -393,8 +405,7 @@ class TestDisclosureSymmetry:
         from btf.domain.types import TradingDate
 
         synth = StateSynthesizer()
-        synth.states(TradingDate.from_ymd("20250901"), ["600000.SH"],
-                     with_touch_flags=False)
+        synth.states(TradingDate.from_ymd("20250901"), ["600000.SH"], with_touch_flags=False)
         assert not any("股票涨跌停缺失" in n for n in synth.degraded_notes())
 
 
@@ -406,7 +417,7 @@ class TestPyprojectVersionSingleSource:
         text = (root / "pyproject.toml").read_text(encoding="utf-8")
         assert 'dynamic = ["version"]' in text
         assert 'version = {attr = "btf._version.__version__"}' in text
-        assert '\nversion = "0.2.0"' not in text      # 旧双源已除
+        assert '\nversion = "0.2.0"' not in text  # 旧双源已除
 
     def test_runtime_version_matches(self):
         """运行时版本 == 单一真源 `btf._version`（**不写死字面量**）。
@@ -422,15 +433,19 @@ class TestPyprojectVersionSingleSource:
 
         assert btf.__version__ == source
         assert re.fullmatch(r"\d+\.\d+\.\d+", source), (
-            f"版本号形制应为 语义化版本 x.y.z：{source!r}")
+            f"版本号形制应为 语义化版本 x.y.z：{source!r}"
+        )
 
 
 def test_yaml_roundtrip_of_new_sections(tmp_path):
     """新配置段（analysis/risk.allow_empty_chain）经 YAML 合法（schema 同步）。"""
     cfg = _base_config()
     cfg["risk"] = {"rules": [], "allow_empty_chain": True}
-    cfg["analysis"] = {"risk_free_rate": 0.02, "annualization_factor": 244,
-                       "metrics": ["final_nav"]}
+    cfg["analysis"] = {
+        "risk_free_rate": 0.02,
+        "annualization_factor": 244,
+        "metrics": ["final_nav"],
+    }
     path = tmp_path / "cfg.yaml"
     path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     from btf.config.loader import load_config

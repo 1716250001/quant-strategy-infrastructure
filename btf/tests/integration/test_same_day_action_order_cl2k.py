@@ -12,6 +12,7 @@
     ＝折算后份额；**反向对照**（输入 [分红, 折算]）⇒ 得折算前份额
     （证明用例可判别，非恒真）。
 """
+
 from __future__ import annotations
 
 import pathlib
@@ -30,30 +31,41 @@ from btf.strategy.rebalance import TargetPortfolio
 
 pytestmark = [pytest.mark.l2]
 
-SYM = "510310.SH"                      # 场内 ETF（is_fund_code）
+SYM = "510310.SH"  # 场内 ETF（is_fund_code）
 CASH = 100_000.0
-INSTRUMENTS = {SYM: Instrument(symbol=SYM, asset_class=AssetClass.ETF,
-                               board="main", lot_size=100)}
+INSTRUMENTS = {SYM: Instrument(symbol=SYM, asset_class=AssetClass.ETF, board="main", lot_size=100)}
 D1 = TradingDate.from_iso(2024, 9, 19)
 D2 = TradingDate.from_iso(2024, 9, 20)
-D3 = TradingDate.from_iso(2024, 9, 23)          # 除息/折算同日
+D3 = TradingDate.from_iso(2024, 9, 23)  # 除息/折算同日
 D4 = TradingDate.from_iso(2024, 9, 24)
 DATES = [D1, D2, D3, D4]
 EX = D3
 
 
 def _cons() -> CorporateAction:
-    return CorporateAction(symbol=SYM, ex_date=EX, pay_date=None,
-                           record_date=None, cash_div_per_share=0.0,
-                           stk_div_per_share=0.0, ann_date=None,
-                           consolidation_ratio=0.5,
-                           consolidation_source="fund_conv")
+    return CorporateAction(
+        symbol=SYM,
+        ex_date=EX,
+        pay_date=None,
+        record_date=None,
+        cash_div_per_share=0.0,
+        stk_div_per_share=0.0,
+        ann_date=None,
+        consolidation_ratio=0.5,
+        consolidation_source="fund_conv",
+    )
 
 
 def _div() -> CorporateAction:
-    return CorporateAction(symbol=SYM, ex_date=EX, pay_date=EX,
-                           record_date=None, cash_div_per_share=0.10,
-                           stk_div_per_share=0.0, ann_date=None)
+    return CorporateAction(
+        symbol=SYM,
+        ex_date=EX,
+        pay_date=EX,
+        record_date=None,
+        cash_div_per_share=0.10,
+        stk_div_per_share=0.0,
+        ann_date=None,
+    )
 
 
 class _BuyHold(StrategyBase):
@@ -62,34 +74,55 @@ class _BuyHold(StrategyBase):
 
     def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
         if not self._done and ctx.bar(SYM) is not None:
-            ctx.submit_target(TargetPortfolio(rebalance_date=date,
-                                              targets={SYM: 1.0}))
+            ctx.submit_target(TargetPortfolio(rebalance_date=date, targets={SYM: 1.0}))
             self._done = True
 
 
 def _bars() -> list[Bar]:
     out = []
     for d in DATES:
-        out.append(Bar(symbol=SYM, date=d, open=1.0, high=1.0, low=1.0,
-                       close=1.0, volume=10_000_000.0,
-                       amount=10_000_000.0, pre_close=1.0))
+        out.append(
+            Bar(
+                symbol=SYM,
+                date=d,
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=10_000_000.0,
+                amount=10_000_000.0,
+                pre_close=1.0,
+            )
+        )
     return out
 
 
 def _feed(actions: list[CorporateAction]) -> MemoryFeed:
-    states = {(d.to_ymd(), SYM): TradingState(
-        symbol=SYM, date=d, limit_up_price=1.1, limit_down_price=0.9,
-        is_suspended=False, is_st=False, is_delisted=False,
-        is_limit_up=False, is_limit_down=False) for d in DATES}
-    return MemoryFeed(_bars(), states, INSTRUMENTS, dates=DATES,
-                      actions=actions)
+    states = {
+        (d.to_ymd(), SYM): TradingState(
+            symbol=SYM,
+            date=d,
+            limit_up_price=1.1,
+            limit_down_price=0.9,
+            is_suspended=False,
+            is_st=False,
+            is_delisted=False,
+            is_limit_up=False,
+            is_limit_down=False,
+        )
+        for d in DATES
+    }
+    return MemoryFeed(_bars(), states, INSTRUMENTS, dates=DATES, actions=actions)
 
 
 def _run(actions: list[CorporateAction], tmp_path: pathlib.Path):
     return Engine(
-        _feed(actions), _BuyHold(), start=D1, end=D4, initial_cash=CASH,
-        handler=NextOpenHandler(cost_model=ZeroCostModel(),
-                                instruments=INSTRUMENTS),
+        _feed(actions),
+        _BuyHold(),
+        start=D1,
+        end=D4,
+        initial_cash=CASH,
+        handler=NextOpenHandler(cost_model=ZeroCostModel(), instruments=INSTRUMENTS),
         instruments=INSTRUMENTS,
         event_log_path=tmp_path / "events.jsonl",
     ).run()
@@ -102,10 +135,23 @@ def _empty_dividend_table(root: pathlib.Path) -> None:
     import pyarrow.parquet as pq
 
     (root / "dividend").mkdir(parents=True, exist_ok=True)
-    names = ["ts_code", "ex_date", "pay_date", "record_date", "ann_date",
-             "div_proc", "stk_bo_rate", "stk_co_rate", "cash_div", "end_date"]
-    cols = {n: pa.array([], type=pa.string()) for n in names
-            if n not in ("stk_bo_rate", "stk_co_rate", "cash_div")}
+    names = [
+        "ts_code",
+        "ex_date",
+        "pay_date",
+        "record_date",
+        "ann_date",
+        "div_proc",
+        "stk_bo_rate",
+        "stk_co_rate",
+        "cash_div",
+        "end_date",
+    ]
+    cols = {
+        n: pa.array([], type=pa.string())
+        for n in names
+        if n not in ("stk_bo_rate", "stk_co_rate", "cash_div")
+    }
     for n in ("stk_bo_rate", "stk_co_rate", "cash_div"):
         cols[n] = pa.array([], type=pa.float64())
     pq.write_table(pa.table(cols), root / "dividend" / "2024.parquet")
@@ -118,21 +164,25 @@ def test_feed_sort_explicit_third_key(tmp_path, monkeypatch):
     div, cons = _div(), _cons()
     _empty_dividend_table(tmp_path)
     monkeypatch.setattr(
-        eca, "to_etf_corporate_actions",
-        lambda root, syms, s, e: ([div, cons], [], {"n_symbols": 1,
-                                                    "n_div": 1, "n_conv": 1,
-                                                    "n_unmodeled": 0}))
+        eca,
+        "to_etf_corporate_actions",
+        lambda root, syms, s, e: (
+            [div, cons],
+            [],
+            {"n_symbols": 1, "n_div": 1, "n_conv": 1, "n_unmodeled": 0},
+        ),
+    )
     feed = MixedDailyFeed(root=tmp_path)
     acts = feed.corporate_actions(EX, EX, symbols=[SYM])
     mine = [a for a in acts if a.symbol == SYM]
     assert len(mine) == 2
-    assert mine[0].consolidation_ratio != 1.0      # 折算在前（显式键，非输入序）
-    assert mine[1].cash_div_per_share == 0.1       # 分红在后
+    assert mine[0].consolidation_ratio != 1.0  # 折算在前（显式键，非输入序）
+    assert mine[1].cash_div_per_share == 0.1  # 分红在后
 
 
 # ── B：引擎端到端（正向 + 反向对照） ──
 def test_engine_qty_at_ex_is_post_consolidation(tmp_path):
-    res = _run([_cons(), _div()], tmp_path)        # 数据层定义的顺序
+    res = _run([_cons(), _div()], tmp_path)  # 数据层定义的顺序
     cons_ev = next(e for e in res.consolidations if e["symbol"] == SYM)
     div_ev = next(e for e in res.dividend_events if e["symbol"] == SYM)
     assert cons_ev["ex_date"] == EX.to_ymd()
@@ -150,5 +200,5 @@ def test_engine_reversed_order_gives_pre_consolidation_qty(tmp_path):
     cons_ev = next(e for e in res.consolidations if e["symbol"] == SYM)
     div_ev = next(e for e in res.dividend_events if e["symbol"] == SYM)
     assert cons_ev["qty_after"] == 50_000
-    assert div_ev["qty_at_ex"] == 100_000          # 折算前（错误顺序的后果）
+    assert div_ev["qty_at_ex"] == 100_000  # 折算前（错误顺序的后果）
     assert div_ev["qty_at_ex"] != cons_ev["qty_after"]

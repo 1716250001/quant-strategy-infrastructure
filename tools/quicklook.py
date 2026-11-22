@@ -22,6 +22,7 @@ tools/quicklook.py — 数据速查（freshness / peek）
   python main.py peek margin --date 20260918
   python main.py peek fund_basic --rows 5
 """
+
 import argparse
 import os
 import sys
@@ -31,19 +32,41 @@ from config import MARKET_DATA_DIR
 
 # 核心表（日常最常看）
 CORE_TABLES = [
-    "daily", "daily_basic", "fund_daily", "cb_daily", "index_daily",
-    "adj_factor", "stk_limit", "moneyflow", "margin", "margin_detail",
-    "hk_hold", "fut_daily", "fut_mapping", "fut_settle",
-    "top_list", "top_inst", "block_trade", "suspend_d",
+    "daily",
+    "daily_basic",
+    "fund_daily",
+    "cb_daily",
+    "index_daily",
+    "adj_factor",
+    "stk_limit",
+    "moneyflow",
+    "margin",
+    "margin_detail",
+    "hk_hold",
+    "fut_daily",
+    "fut_mapping",
+    "fut_settle",
+    "top_list",
+    "top_inst",
+    "block_trade",
+    "suspend_d",
 ]
 
 # 各表日期列（优先取 config 权威定义，兜底用候选）
-_DATE_FALLBACK = ("trade_date", "cal_date", "ann_date", "date", "end_date",
-                  "nav_date", "start_date")
+_DATE_FALLBACK = (
+    "trade_date",
+    "cal_date",
+    "ann_date",
+    "date",
+    "end_date",
+    "nav_date",
+    "start_date",
+)
 
 
 def _date_col_for(table):
     from config import TABLE_DATE_COL
+
     return TABLE_DATE_COL.get(table)
 
 
@@ -80,24 +103,22 @@ def _latest(table):
     try:
         import pandas as pd
         import pyarrow.parquet as pq
+
         names = list(pq.ParquetFile(os.path.join(dd, files[-1])).schema_arrow.names)
-        col = next((c for c in ([dc] if dc else []) + list(_DATE_FALLBACK)
-                    if c in names), None)
+        col = next((c for c in ([dc] if dc else []) + list(_DATE_FALLBACK) if c in names), None)
         if not col:
             return None
         s = pd.read_parquet(os.path.join(dd, files[-1]), columns=[col])[col]
         return str(s.max()) if len(s) else None
     except Exception as exc:
-        print(f"[quicklook] 读最新日期失败 {dd}: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(f"[quicklook] 读最新日期失败 {dd}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
 # ============================================================
 # freshness
 # ============================================================
-def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
-                  as_json=False):
+def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True, as_json=False):
     """[DEPRECATED v4.10] 旧版单条件实现，已降级为 tools.db.freshness 的透传代理。
 
     ⚠ **同名不同义（必须读）**：
@@ -108,19 +129,20 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
     """
     from tools.db import freshness as _f
 
-    _f._UNREADABLE.clear()              # K′：按轮隔离，防跨调用累积
+    _f._UNREADABLE.clear()  # K′：按轮隔离，防跨调用累积
     only = set(tables) if tables else None
     rows = _f.build_rows(only)
     if stale_days is not None:
         # v4.10：ds（自然日）≥ N；ds 为 None（无日期）不满足「落后 N 天」⇒ 不显示
-        rows = [r for r in rows
-                if r["ds"] is not None and r["ds"] >= stale_days]
+        rows = [r for r in rows if r["ds"] is not None and r["ds"] >= stale_days]
     n_unread = len(_f._UNREADABLE)
     if as_json:
         from common.jsonio import print_json
+
         n_alert = sum(1 for r in rows if r["verdict"] in ("红", "黄"))
-        print_json({"ok": True, "rows": rows, "n_alert": n_alert,
-                    "n_unreadable": n_unread}, indent=1)
+        print_json(
+            {"ok": True, "rows": rows, "n_alert": n_alert, "n_unreadable": n_unread}, indent=1
+        )
     else:
         print(_f.render(rows))
     _f._report_unreadable()
@@ -130,8 +152,7 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True,
 # ============================================================
 # peek
 # ============================================================
-def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True,
-             as_json=False):
+def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True, as_json=False):
     """查看某张表的实际数据（默认尾部 N 行）。
 
     as_json: stdout 输出机器可读 JSON（CLI --json；2026-09-30 P3 统一）
@@ -139,8 +160,7 @@ def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True,
     from common.jsonio import print_json
 
     def _empty(error=None):
-        out = {"table": table, "code": code, "date": date,
-               "rows": 0, "columns": [], "data": []}
+        out = {"table": table, "code": code, "date": date, "rows": 0, "columns": [], "data": []}
         if error:
             out["error"] = error
         print_json(out, indent=1)
@@ -159,8 +179,9 @@ def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True,
         df = reader.read_code(table, code, root=MARKET_DATA_DIR)
     elif date:
         # 按日期取全市场（读年度文件 + 过滤）
-        df = reader.read_range(table, start_date=date, end_date=date,
-                               date_col=dc, root=MARKET_DATA_DIR)
+        df = reader.read_range(
+            table, start_date=date, end_date=date, date_col=dc, root=MARKET_DATA_DIR
+        )
     else:
         # 无筛选：只读最新一个年度文件（避免全量）
         files = sorted(f for f in os.listdir(d) if f.endswith(".parquet"))
@@ -168,6 +189,7 @@ def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True,
             print(f"  ✗ 表为空: {table}")
             return None
         import pandas as pd
+
         df = pd.read_parquet(os.path.join(d, files[-1]))
 
     if df is None or df.empty:
@@ -184,22 +206,30 @@ def run_peek(table, code=None, date=None, rows=10, cols=None, verbose=True,
 
     if as_json:
         n = min(int(rows or 10), len(df))
-        print_json({
-            "table": table, "code": code, "date": date,
-            "rows": len(df),
-            "columns": [str(c) for c in df.columns],
-            "data": df.tail(n).to_dict(orient="records"),
-            "date_col": dc,
-            "date_range": ([str(df[dc].min()), str(df[dc].max())]
-                           if dc in df.columns else None),
-        }, indent=1)
+        print_json(
+            {
+                "table": table,
+                "code": code,
+                "date": date,
+                "rows": len(df),
+                "columns": [str(c) for c in df.columns],
+                "data": df.tail(n).to_dict(orient="records"),
+                "date_col": dc,
+                "date_range": (
+                    [str(df[dc].min()), str(df[dc].max())] if dc in df.columns else None
+                ),
+            },
+            indent=1,
+        )
         return df
 
     if verbose:
         print("=" * 88)
-        print(f"  数据预览: {table}"
-              + (f" | code={code}" if code else "")
-              + (f" | date={date}" if date else ""))
+        print(
+            f"  数据预览: {table}"
+            + (f" | code={code}" if code else "")
+            + (f" | date={date}" if date else "")
+        )
         print("=" * 88)
         print(f"  行数={len(df):,}  列数={len(df.columns)}")
         print(f"  列: {list(df.columns)}")
@@ -220,11 +250,9 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("freshness", help="各表最新日期一览")
-    p.add_argument("tables", nargs="?", default=None,
-                   help="逗号分隔的表名（默认核心表）")
+    p.add_argument("tables", nargs="?", default=None, help="逗号分隔的表名（默认核心表）")
     p.add_argument("--all", action="store_true", help="显示全部表")
-    p.add_argument("--stale", type=int, default=None,
-                   help="只显示落后超过N个交易日的表")
+    p.add_argument("--stale", type=int, default=None, help="只显示落后超过N个交易日的表")
     p.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
 
     p = sub.add_parser("peek", help="查看表数据")
@@ -238,11 +266,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.cmd == "freshness":
         t = [x.strip() for x in a.tables.split(",")] if a.tables else None
-        run_freshness(tables=t, show_all=a.all, stale_days=a.stale,
-                      as_json=a.json)
+        run_freshness(tables=t, show_all=a.all, stale_days=a.stale, as_json=a.json)
     elif a.cmd == "peek":
-        run_peek(a.table, code=a.code, date=a.date, rows=a.rows, cols=a.cols,
-                 as_json=a.json)
+        run_peek(a.table, code=a.code, date=a.date, rows=a.rows, cols=a.cols, as_json=a.json)
     return 0
 
 

@@ -17,6 +17,7 @@ config_alt.py — akshare 备用数据源（alt 库）独立配置
 用法：
     from alt.config import ALT_DATA_DIR, ALT_CHECKPOINT_FILE, ...
 """
+
 import os
 
 # ── 依赖主 config 只为取工程路径，绝不反向修改 ──────────────
@@ -55,10 +56,10 @@ ROTATE_STATE_FILE = os.path.join(ALT_META_DIR, "rotate_state.json")
 
 # list 引擎**批量落盘**阈值（先到先触发；ADR-15 / 14 §22.7）：
 #   ⚠ 逐只 flush 的读放大 ≈ N/2（港股全量 ≈1,392×）——批量是**必需而非优化**。
-FLUSH_ROWS = 1_000_000              # ① 行数阈值（≈80 MB/批；含 concat 峰值 ≈200~300 MB）
-FLUSH_SYMS = 300                    # ② 只数阈值
-FLUSH_BYTES = 256 * 1024 * 1024     # ③ 字节上限（防宽表内存尖峰，第三保险）
-HK_BATCH_SIZE = FLUSH_SYMS          # hk_daily 批大小（只）；⚠ ≠ us_backfill.BATCH=3000
+FLUSH_ROWS = 1_000_000  # ① 行数阈值（≈80 MB/批；含 concat 峰值 ≈200~300 MB）
+FLUSH_SYMS = 300  # ② 只数阈值
+FLUSH_BYTES = 256 * 1024 * 1024  # ③ 字节上限（防宽表内存尖峰，第三保险）
+HK_BATCH_SIZE = FLUSH_SYMS  # hk_daily 批大小（只）；⚠ ≠ us_backfill.BATCH=3000
 
 
 def alt_table_dir(table):
@@ -116,12 +117,14 @@ def violation_records():
 
 
 def _record_violation(kind, path, forbidden):
-    _VIOLATION_LOG.append({
-        "at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
-        "kind": kind,              # forbidden=命中禁区；outside=不在授权区
-        "path": str(path),
-        "forbidden": str(forbidden) if forbidden else "",
-    })
+    _VIOLATION_LOG.append(
+        {
+            "at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+            "kind": kind,  # forbidden=命中禁区；outside=不在授权区
+            "path": str(path),
+            "forbidden": str(forbidden) if forbidden else "",
+        }
+    )
 
 
 def assert_writable(path):
@@ -138,12 +141,13 @@ def assert_writable(path):
             raise AltPathViolationError(
                 f"拒绝写入：目标位于受保护的主库区域\n  目标: {p}\n  禁区: {b}"
             )
-    if not any(p == os.path.abspath(r) or p.startswith(os.path.abspath(r) + os.sep)
-               for r in ALLOWED_WRITE_ROOTS):
+    if not any(
+        p == os.path.abspath(r) or p.startswith(os.path.abspath(r) + os.sep)
+        for r in ALLOWED_WRITE_ROOTS
+    ):
         _record_violation("outside", p, "")
         raise AltPathViolationError(
-            f"拒绝写入：目标不在 alt 授权区\n  目标: {p}\n"
-            f"  授权: {ALLOWED_WRITE_ROOTS}"
+            f"拒绝写入：目标不在 alt 授权区\n  目标: {p}\n  授权: {ALLOWED_WRITE_ROOTS}"
         )
     return p
 
@@ -162,30 +166,30 @@ def assert_writable(path):
 #         首次接入一律从低调起，确认稳定后再试提速。
 ALT_RATE_LIMITS = {
     # 稳定域名 —— 温和限速
-    "legulegu":   10,   # 乐咕乐股（实测 30 会 429 → 下调）
-    "10jqka":     12,   # 同花顺（板块清单/历史）
-    "sina":       20,   # 新浪
-    "sse":        20,   # 上交所
-    "szse":       20,   # 深交所
-    "cninfo":     20,   # 巨潮
-    "push2ex":    15,   # 东财 push2ex（实测稳定）
-    "datacenter": 15,   # 东财 datacenter-web（实测稳定）
-    "jin10":      15,   # 金十数据（海外宏观；实测稳定，速率与 datacenter 齐平）
-    "other":      15,
+    "legulegu": 10,  # 乐咕乐股（实测 30 会 429 → 下调）
+    "10jqka": 12,  # 同花顺（板块清单/历史）
+    "sina": 20,  # 新浪
+    "sse": 20,  # 上交所
+    "szse": 20,  # 深交所
+    "cninfo": 20,  # 巨潮
+    "push2ex": 15,  # 东财 push2ex（实测稳定）
+    "datacenter": 15,  # 东财 datacenter-web（实测稳定）
+    "jin10": 15,  # 金十数据（海外宏观；实测稳定，速率与 datacenter 齐平）
+    "other": 15,
     # 不稳定域名 —— 严厉限速
     # optbbs：QVIX 波指的真实上游（实测 akshare 走 1.optbbs.com/d/csv/... 直读 CSV）。
     #         原代码按函数名误判为 push2his，归类错了；此处按真实域名单列，
     #         速率沿用原保守值 6/分（不改行为，只让归类正确，便于后续调参）。
-    "optbbs":     6,
-    "push2his":   6,    # 东财行情端点（实测被拦截过）
-    "push2":      6,
+    "optbbs": 6,
+    "push2his": 6,  # 东财行情端点（实测被拦截过）
+    "push2": 6,
 }
-ALT_RATE_DEFAULT = 12   # 每分钟请求数（未知域名）
+ALT_RATE_DEFAULT = 12  # 每分钟请求数（未知域名）
 
 # 触发风控后的静默（秒）。实测封禁会衰减，静默后可恢复。
-ALT_BACKOFF_STEPS = [30, 60, 120, 300]     # 逐级静默
-ALT_MAX_RETRY = 3                          # 每请求最大重试
-ALT_SILENCE_ON_BLOCK = 180                 # 判定为"被拦"后的默认静默秒数
+ALT_BACKOFF_STEPS = [30, 60, 120, 300]  # 逐级静默
+ALT_MAX_RETRY = 3  # 每请求最大重试
+ALT_SILENCE_ON_BLOCK = 180  # 判定为"被拦"后的默认静默秒数
 
 # 单次运行的最大请求数（防止一把打爆，0=不限）
 ALT_MAX_REQUESTS_PER_RUN = 0

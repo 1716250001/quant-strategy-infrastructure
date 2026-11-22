@@ -9,6 +9,7 @@ tushare 对已退市股票用 `T` + 原 6 位代码（`T600018.SH` = 「上港�
 **连带语义（不隐去）**：`factor_table_of` 复用 `daily_table_of` ⇒ T 前缀标的
 复权因子由 `fund_adj` 转 `adj_factor`（它本就是股票，更正确）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -22,7 +23,7 @@ BEFORE = {
     "000001.SZ": "daily",
     "510300.SH": "fund_daily",
     "159915.SZ": "fund_daily",
-    "000300.SH": "index_daily",    # 沪市 000xxx 为指数段（上证指数）
+    "000300.SH": "index_daily",  # 沪市 000xxx 为指数段（上证指数）
     "399001.SZ": "index_daily",
 }
 

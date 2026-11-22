@@ -15,6 +15,7 @@ by_code → by_year 迁移）报告就整篇失真，且修补 600+ 行不现实
   python main.py db-report --out PATH      # 指定输出
   python -m tools.gen_db_report
 """
+
 import argparse
 import json
 import os
@@ -26,8 +27,7 @@ SCHEMA_PATH = os.path.join(DOC_DIR, "数据与工程", "db_schema.json")
 OUT_DIR = os.path.join(DOC_DIR, "数据与工程")
 
 # 类别展示顺序（需与 db_schema.py 里写入的 category 取值一致）
-CATEGORY_ORDER = ["元数据", "行情", "资金", "财务", "事件", "跨品种",
-                  "指数衍生", "宏观", "其他"]
+CATEGORY_ORDER = ["元数据", "行情", "资金", "财务", "事件", "跨品种", "指数衍生", "宏观", "其他"]
 
 
 def _fmt(n):
@@ -47,10 +47,12 @@ def _table_row(name, t):
     dr = ""
     if t.get("date_min") or t.get("date_max"):
         dr = f"{t.get('date_min') or '-'}~{t.get('date_max') or '-'}"
-    return (f"| `{name}` | {t.get('description','')} | {t.get('layout','')} | "
-            f"{_fmt(t.get('files',0))} | {_fmt(t.get('rows',0))} | "
-            f"{t.get('size_mb',0):.1f}MB | {t.get('n_columns',0)} | "
-            f"`{t.get('date_col','')}` | {dr} | {pk_s} |")
+    return (
+        f"| `{name}` | {t.get('description', '')} | {t.get('layout', '')} | "
+        f"{_fmt(t.get('files', 0))} | {_fmt(t.get('rows', 0))} | "
+        f"{t.get('size_mb', 0):.1f}MB | {t.get('n_columns', 0)} | "
+        f"`{t.get('date_col', '')}` | {dr} | {pk_s} |"
+    )
 
 
 def build_markdown(d):
@@ -93,13 +95,18 @@ def build_markdown(d):
         c["mb"] += t.get("size_mb", 0.0)
         c["files"] += t.get("files", 0)
 
-    lines += ["### 按类别分布", "",
-              "| 类别 | 表数 | 文件数 | 行数 | 体积 |",
-              "|------|------|--------|------|------|"]
+    lines += [
+        "### 按类别分布",
+        "",
+        "| 类别 | 表数 | 文件数 | 行数 | 体积 |",
+        "|------|------|--------|------|------|",
+    ]
     for cat in sorted(by_cat, key=_category_rank):
         c = by_cat[cat]
-        lines.append(f"| {cat} | {c['n']} | {_fmt(c['files'])} | "
-                     f"{_fmt(c['rows'])} | {c['mb']/1024:.2f} GB |")
+        lines.append(
+            f"| {cat} | {c['n']} | {_fmt(c['files'])} | "
+            f"{_fmt(c['rows'])} | {c['mb'] / 1024:.2f} GB |"
+        )
     lines.append("")
 
     # ── 快速上手 ──
@@ -113,18 +120,18 @@ def build_markdown(d):
         "```python",
         "from common import reader",
         "",
-        '# 读单只标的一段区间（自动适配按年分区）',
+        "# 读单只标的一段区间（自动适配按年分区）",
         'df = reader.read_code("daily", "600519.SH",',
         '                      start_date="20260101", end_date="20260917")',
         "",
-        '# 读区间全市场（截面扫描/回测；by_year 下顺序读年度文件，很快）',
+        "# 读区间全市场（截面扫描/回测；by_year 下顺序读年度文件，很快）",
         'df = reader.read_range("moneyflow", start_date="20260901")',
         "",
-        '# 代码清单',
+        "# 代码清单",
         'codes = reader.list_codes("daily")            # 元数据全集（含退市）',
         'codes = reader.codes_from_store("daily")      # 库里真有数据的',
         "",
-        '# 该表最新日期',
+        "# 该表最新日期",
         'latest = reader.latest_date("daily")',
         "```",
         "",
@@ -135,13 +142,15 @@ def build_markdown(d):
         "| 布局 | 路径模板 | 说明 |",
         "|------|----------|------|",
         "| `by_year` | `{ROOT}\\<表名>\\<YYYY>.parquet` | **默认布局**，"
-        + str(n_by_year) + " 张表 |",
+        + str(n_by_year)
+        + " 张表 |",
         "| `by_code` | `{ROOT}\\<表名>\\<ts_code>.parquet` | 仅 `stock_company` |",
         "| `single` | `{ROOT}\\<表名>\\<表名>.parquet` | 一次性全量的表，"
-        + str(n_single) + " 张 |",
+        + str(n_single)
+        + " 张 |",
         "",
         "> ⚠ **不要**按 `{表}\\{ts_code}.parquet` 硬编码拼路径：按年分区下文件名是"
-        "年份，`listdir` 会把 `\"2026\"` 当成证券代码。",
+        '年份，`listdir` 会把 `"2026"` 当成证券代码。',
         "",
         "### 2.3 跨表关联键",
         "",
@@ -166,8 +175,7 @@ def build_markdown(d):
         "",
         "### 为什么统一用 `by_year`",
         "",
-        "`by_code`（一标的一文件）下，每日增量要给数千个文件各做一次 "
-        "`read→concat→dedup→write`：",
+        "`by_code`（一标的一文件）下，每日增量要给数千个文件各做一次 `read→concat→dedup→write`：",
         "",
         "| 表 | 旧文件数 | 单日落盘成本 |",
         "|----|----------|--------------|",
@@ -198,13 +206,12 @@ def build_markdown(d):
     # ── 逐表明细 ──
     lines += ["---", "", "## 四、逐表结构明细", ""]
     for cat in sorted(by_cat, key=_category_rank):
-        members = [(n, t) for n, t in tables.items()
-                   if (t.get("category") or "其他") == cat]
+        members = [(n, t) for n, t in tables.items() if (t.get("category") or "其他") == cat]
         members.sort(key=lambda x: -x[1].get("rows", 0))
         c = by_cat[cat]
         lines += [
-            f"### 4.{_category_rank(cat)+1} {cat}"
-            f"（{len(members)} 表 / {_fmt(c['rows'])} 行 / {c['mb']/1024:.2f} GB）",
+            f"### 4.{_category_rank(cat) + 1} {cat}"
+            f"（{len(members)} 表 / {_fmt(c['rows'])} 行 / {c['mb'] / 1024:.2f} GB）",
             "",
             "| 表 | 说明 | 布局 | 文件 | 行数 | 大小 | 列数 | 日期列 | 范围 | 主键 |",
             "|----|------|------|------|------|------|------|--------|------|------|",
@@ -228,7 +235,9 @@ def build_markdown(d):
     ]
     for n in sorted(DB_AUDIT_PKEYS):
         pk = DB_AUDIT_PKEYS[n]
-        lines.append(f"| `{n}` | {'- (跳过重复检查)' if not pk else ' '.join(f'`{c}`' for c in pk)} |")
+        lines.append(
+            f"| `{n}` | {'- (跳过重复检查)' if not pk else ' '.join(f'`{c}`' for c in pk)} |"
+        )
     lines.append("")
 
     # ── 每日更新 ──
@@ -236,8 +245,9 @@ def build_markdown(d):
     #   原实现硬编码 extend 12 张，而 config 实为 32 张 → 漏 20 张；
     #   该报告自我定位"数据部分永远与库一致"，手写清单必然漂移
     #   （同族事故：定时任务 prompt 手写清单曾导致 us_daily 长期漏跑）。
-    grp_rows = [f"| {g}（{len(ts)} 张） | " + " / ".join(ts) + " |"
-                for g, ts in DAILY_UPDATE_GROUPS.items()]
+    grp_rows = [
+        f"| {g}（{len(ts)} 张） | " + " / ".join(ts) + " |" for g, ts in DAILY_UPDATE_GROUPS.items()
+    ]
     lines += [
         "---",
         "",
@@ -269,13 +279,14 @@ def run(out=None, verbose=True, as_json=False, refresh=False):
     """
     if refresh:
         from tools.db.schema import run_schema
+
         run_schema(verbose=False, quiet=True, announce=False)
 
     if not os.path.exists(SCHEMA_PATH):
         if as_json:
             from common.jsonio import print_json
-            print_json({"error": f"缺少 {SCHEMA_PATH}",
-                        "hint": "先运行 python main.py db schema"})
+
+            print_json({"error": f"缺少 {SCHEMA_PATH}", "hint": "先运行 python main.py db schema"})
         else:
             print(f"  [ERROR] 缺少 {SCHEMA_PATH}，请先运行 python main.py db-schema")
         return None
@@ -291,22 +302,36 @@ def run(out=None, verbose=True, as_json=False, refresh=False):
 
     if as_json:
         from common.jsonio import print_json
-        print_json({"out": path, "schema": SCHEMA_PATH,
-                    "tables": d["total_dirs"], "total_files": d["total_files"],
-                    "total_rows": d["total_rows"], "total_gb": d["total_gb"],
-                    "kb": round(len(md) / 1024), "lines": md.count(chr(10))})
+
+        print_json(
+            {
+                "out": path,
+                "schema": SCHEMA_PATH,
+                "tables": d["total_dirs"],
+                "total_files": d["total_files"],
+                "total_rows": d["total_rows"],
+                "total_gb": d["total_gb"],
+                "kb": round(len(md) / 1024),
+                "lines": md.count(chr(10)),
+            }
+        )
     elif verbose:
-        print(f"  表数={d['total_dirs']} 文件={d['total_files']:,} "
-              f"行={d['total_rows']:,} 体积={d['total_gb']}GB")
-        print(f"  已生成: {path}  ({len(md)/1024:.0f} KB / {md.count(chr(10))} 行)")
+        print(
+            f"  表数={d['total_dirs']} 文件={d['total_files']:,} "
+            f"行={d['total_rows']:,} 体积={d['total_gb']}GB"
+        )
+        print(f"  已生成: {path}  ({len(md) / 1024:.0f} KB / {md.count(chr(10))} 行)")
     return path
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="数据库结构报告生成器")
     ap.add_argument("--out", default=None, help="输出路径")
-    ap.add_argument("--refresh", action="store_true",
-                    help="先扫描刷新 schema 再生成报告（= db-schema + db-report 一步完成）")
+    ap.add_argument(
+        "--refresh",
+        action="store_true",
+        help="先扫描刷新 schema 再生成报告（= db-schema + db-report 一步完成）",
+    )
     ap.add_argument("--json", action="store_true", help="stdout 输出回执 JSON（文件照写）")
     a = ap.parse_args(argv)
     run(out=a.out, as_json=a.json, refresh=a.refresh)

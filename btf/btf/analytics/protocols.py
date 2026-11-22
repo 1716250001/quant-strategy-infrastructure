@@ -8,6 +8,7 @@ GridSearch → 优化器（进程池）**归 v0.5**（M1 只冻结签名）。
 以 Any 结构化声明（PortfolioSnapshot/Trade 由装配期注入，协议不
 import 外层模块）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
@@ -28,15 +29,17 @@ class Analyzer(Protocol):
 
     name: str
 
-    def compute(self, snapshots: Sequence[Any], trades: Sequence[Any],
-                config: Mapping[str, Any]) -> MetricValue: ...
+    def compute(
+        self, snapshots: Sequence[Any], trades: Sequence[Any], config: Mapping[str, Any]
+    ) -> MetricValue: ...
 
 
 class Optimizer(Protocol):
     """优化器插件：参数空间 × 引擎调用 → 结果矩阵（组合 api.run）。"""
 
-    def search(self, param_space: ParamSpace, runner: Runner,
-               budget: OptBudget) -> list[Mapping[str, Any]]: ...
+    def search(
+        self, param_space: ParamSpace, runner: Runner, budget: OptBudget
+    ) -> list[Mapping[str, Any]]: ...
 
 
 __all__ = ["Analyzer", "MetricValue", "OptBudget", "Optimizer", "ParamSpace", "Runner"]

@@ -13,6 +13,7 @@
     ④ 指标：final_nav / total_return / max_drawdown / n_fills / total_fees /
        total_turnover（由引擎产物经 analytics.metrics 计算）
 """
+
 from __future__ import annotations
 
 import pytest
@@ -55,10 +56,17 @@ class TestSnapshotReconciliation:
         exp_snaps = pkg["case"]["assertions"]["snapshots"]
         for got, want in zip(pkg["engine"].snapshots, exp_snaps, strict=True):
             assert got.date.to_ymd() == want["date"]
-            for field in ("cash", "market_value", "total_value",
-                          "daily_return", "cumulative_return", "drawdown"):
-                assert getattr(got, field) == pytest.approx(
-                    want[field], abs=TOL), f"{want['date']}.{field}"
+            for field in (
+                "cash",
+                "market_value",
+                "total_value",
+                "daily_return",
+                "cumulative_return",
+                "drawdown",
+            ):
+                assert getattr(got, field) == pytest.approx(want[field], abs=TOL), (
+                    f"{want['date']}.{field}"
+                )
 
 
 class TestPositionReconciliation:
@@ -67,9 +75,9 @@ class TestPositionReconciliation:
     @pytest.mark.parametrize("case_id", CASES)
     def test_positions_qty(self, reconciled, case_id):
         pkg = reconciled[case_id]
-        for got, want in zip(pkg["engine"].snapshots,
-                             pkg["case"]["assertions"]["snapshots"],
-                             strict=True):
+        for got, want in zip(
+            pkg["engine"].snapshots, pkg["case"]["assertions"]["snapshots"], strict=True
+        ):
             assert dict(got.positions_qty) == want["positions_qty"], want["date"]
 
     def test_stk_div_doubles_position(self, reconciled):
@@ -93,8 +101,7 @@ class TestFillReconciliation:
             assert got.qty == want["qty"]
             assert got.price == pytest.approx(want["price"], abs=TOL)
             for part in ("commission", "stamp_duty", "transfer_fee", "total"):
-                assert getattr(got.fee, part) == pytest.approx(
-                    want["fee"][part], abs=TOL), part
+                assert getattr(got.fee, part) == pytest.approx(want["fee"][part], abs=TOL), part
 
     @pytest.mark.parametrize("case_id", CASES)
     def test_no_rejections_in_golden_cases(self, reconciled, case_id):
@@ -122,12 +129,12 @@ class TestMetricsReconciliation:
         pkg = reconciled[case_id]
         result, want = pkg["engine"], pkg["case"]["assertions"]["metrics"]
         assert NFills().compute(result.snapshots, result.fills, {}) == want["n_fills"]
-        assert TotalFees().compute(
-            result.snapshots, result.fills, {}) == pytest.approx(
-                want["total_fees"], abs=TOL)
-        assert TotalTurnover().compute(
-            result.snapshots, result.fills, {}) == pytest.approx(
-                want["total_turnover"], abs=TOL)
+        assert TotalFees().compute(result.snapshots, result.fills, {}) == pytest.approx(
+            want["total_fees"], abs=TOL
+        )
+        assert TotalTurnover().compute(result.snapshots, result.fills, {}) == pytest.approx(
+            want["total_turnover"], abs=TOL
+        )
 
 
 class TestInvariants:
@@ -153,10 +160,12 @@ class TestInvariants:
             for fill in result.fills:
                 if fill.fill_date.to_ymd() != day:
                     continue
-                flow += (-(fill.price * fill.qty + fill.fee.total)
-                         if fill.side.value == "buy"
-                         else (fill.price * fill.qty - fill.fee.total))
-            flow += sum(e.get("cash_delta", 0.0) for e in events
-                        if e["type"] == "pay" and e["date"] == day)
-            assert snaps[i].cash - snaps[i - 1].cash == pytest.approx(
-                flow, abs=TOL), day
+                flow += (
+                    -(fill.price * fill.qty + fill.fee.total)
+                    if fill.side.value == "buy"
+                    else (fill.price * fill.qty - fill.fee.total)
+                )
+            flow += sum(
+                e.get("cash_delta", 0.0) for e in events if e["type"] == "pay" and e["date"] == day
+            )
+            assert snaps[i].cash - snaps[i - 1].cash == pytest.approx(flow, abs=TOL), day

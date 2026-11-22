@@ -30,6 +30,7 @@ tools/data_backup.py — 全量数据冷备清单与校验（DB3；对齐 btf co
     python tools/data_backup.py --verify <MANIFEST.json> --root "<镜像目录>"   # 校验镜像副本
 退出码：0=成功 / 1=失败
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,15 +48,15 @@ import config
 
 DEFAULT_ROOT = Path(config.DATA_ROOT)
 DEFAULT_OUT = Path(config.PROJECT_DIR) / "备份" / "data-backup"
-MIRROR_ROOT = DEFAULT_ROOT / "_backup"      # 方案 A：与源同盘（仅防误删/写坏，不防盘坏）
+MIRROR_ROOT = DEFAULT_ROOT / "_backup"  # 方案 A：与源同盘（仅防误删/写坏，不防盘坏）
 KEEP_DAILY, KEEP_WEEKLY = 7, 4
 
 # W-1（§458）：日备返回码三态化。此前 4 条路径全 return 1，消费方无法区分
 # 「今天已经备过」（正常）与「备份真的坏了」（失败）。
-RC_OK = 0          # 本次真生成了快照
-RC_EXISTS = 1      # 今日快照已存在（幂等跳过，非错误）
-RC_FAIL = 2        # 真失败（数据根不存在 / sha256 mismatch）
-RC_LOCKED = 3      # 已有备份在跑（并发跳过，非错误）
+RC_OK = 0  # 本次真生成了快照
+RC_EXISTS = 1  # 今日快照已存在（幂等跳过，非错误）
+RC_FAIL = 2  # 真失败（数据根不存在 / sha256 mismatch）
+RC_LOCKED = 3  # 已有备份在跑（并发跳过，非错误）
 
 
 def rc_desc(rc):
@@ -72,7 +73,8 @@ def cli_rc(rc):
     """命令行归一口径：1（已存在）/3（锁）都不是错误 ⇒ 0；2 保持非零。"""
     return 0 if rc in (RC_EXISTS, RC_LOCKED) else rc
 
-EXCLUDE_DIRS = {"__pycache__", ".git", "_backup"}   # _backup 自身不纳入备份（防递归）
+
+EXCLUDE_DIRS = {"__pycache__", ".git", "_backup"}  # _backup 自身不纳入备份（防递归）
 EXCLUDE_SUFFIX = {".tmp", ".pyc", ".lock"}
 
 
@@ -118,12 +120,14 @@ def make_manifest(root: Path, out_dir: Path, reason: str) -> int:
         except Exception as e:  # fail-closed
             print(f"[FAIL] 读取/哈希失败: {rel} :: {e}")
             return 1
-        entries.append({
-            "path": rel,
-            "size": st.st_size,
-            "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-            "sha256": sha,
-        })
+        entries.append(
+            {
+                "path": rel,
+                "size": st.st_size,
+                "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                "sha256": sha,
+            }
+        )
         total_bytes += st.st_size
         if i % 500 == 0 or i == total:
             gb = total_bytes / 1024**3
@@ -152,16 +156,16 @@ def make_manifest(root: Path, out_dir: Path, reason: str) -> int:
         f.write(
             f"# 全量数据冷备清单（{stamp}）\n\n"
             f"- 数据根：`{root}`\n"
-            f"- 文件数：{total} ｜ 总字节：{total_bytes:,}（{total_bytes/1024**3:.2f} GB）\n"
+            f"- 文件数：{total} ｜ 总字节：{total_bytes:,}（{total_bytes / 1024**3:.2f} GB）\n"
             f"- 依据：{reason}\n\n"
             "## 用法\n\n"
             "1) **镜像（手动，robocopy）**——示例（镜像到 E 盘 `E:\\全量数据-mirror`）：\n\n"
             "```bat\n"
-            "robocopy \"D:\\全量数据\" \"E:\\全量数据-mirror\" /MIR /R:1 /W:1 /NP /TEE /LOG:\"D:\\量化策略\\备份\\data-backup\\mirror.log\"\n"
+            'robocopy "D:\\全量数据" "E:\\全量数据-mirror" /MIR /R:1 /W:1 /NP /TEE /LOG:"D:\\量化策略\\备份\\data-backup\\mirror.log"\n'
             "```\n\n"
             "2) **校验镜像副本**（长期有效）：\n\n"
             "```bash\n"
-            "python tools/data_backup.py --verify <本目录 MANIFEST-*.json> --root \"E:\\全量数据-mirror\"\n"
+            'python tools/data_backup.py --verify <本目录 MANIFEST-*.json> --root "E:\\全量数据-mirror"\n'
             "```\n\n"
             "3) **对源即时自检**（同一批次时刻有效；隔日后对源会报「正常更新」，属预期）：\n\n"
             "```bash\n"
@@ -173,7 +177,7 @@ def make_manifest(root: Path, out_dir: Path, reason: str) -> int:
     print(f"[OK] MANIFEST: {mpath}")
     print(f"[OK] SHA256SUMS: {spath}")
     print(f"[OK] README: {rpath}")
-    print(f"[OK] 共 {total} 文件 / {total_bytes/1024**3:.2f} GB / 耗时 {time.time()-t0:.0f}s")
+    print(f"[OK] 共 {total} 文件 / {total_bytes / 1024**3:.2f} GB / 耗时 {time.time() - t0:.0f}s")
     return 0
 
 
@@ -205,7 +209,7 @@ def verify(manifest_path: Path, root_override: Path | None) -> int:
         except Exception as ex:
             changed.append(f"{e['path']} | 读取失败: {ex}")
         if i % 500 == 0 or i == len(manifest["files"]):
-            print(f"[i] {i}/{len(manifest['files'])} | ok={ok} | el={time.time()-t0:.0f}s")
+            print(f"[i] {i}/{len(manifest['files'])} | ok={ok} | el={time.time() - t0:.0f}s")
 
     print(f"[i] 结果: OK {ok} | 差异 {len(changed)} | 缺失 {len(missing)}")
     for x in changed[:50]:
@@ -253,24 +257,46 @@ def _snapshot(src: Path, dst: Path, prev: Path | None) -> tuple[list[dict], dict
         if prev and old and old["size"] == st.st_size and old["mtime"] == int(st.st_mtime):
             try:
                 os.link(prev / rel, out)
-                entries.append({"src": str(fp), "rel": rel, "backup": str(out),
-                                "sha256": old["sha256"], "size": st.st_size,
-                                "mtime": int(st.st_mtime), "link": True})
+                entries.append(
+                    {
+                        "src": str(fp),
+                        "rel": rel,
+                        "backup": str(out),
+                        "sha256": old["sha256"],
+                        "size": st.st_size,
+                        "mtime": int(st.st_mtime),
+                        "link": True,
+                    }
+                )
                 linked += 1
                 continue
             except OSError:
                 pass
         shutil.copy2(fp, out)
-        entries.append({"src": str(fp), "rel": rel, "backup": str(out), "sha256": _sha256(out),
-                        "size": st.st_size, "mtime": int(st.st_mtime), "link": False})
+        entries.append(
+            {
+                "src": str(fp),
+                "rel": rel,
+                "backup": str(out),
+                "sha256": _sha256(out),
+                "size": st.st_size,
+                "mtime": int(st.st_mtime),
+                "link": False,
+            }
+        )
         copied += 1
         if i % 2000 == 0 or i == len(files):
             print(f"[i] {i}/{len(files)} | 复制 {copied} 链接 {linked} | {time.time() - t0:.0f}s")
     with open(dst / "sha256.jsonl", "w", encoding="utf-8", newline="\n") as f:
         for e in entries:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
-    return entries, {"files": len(files), "copied": copied, "linked": linked,
-                     "bytes": sum(e["size"] for e in entries), "elapsed": time.time() - t0}
+    return entries, {
+        "files": len(files),
+        "copied": copied,
+        "linked": linked,
+        "bytes": sum(e["size"] for e in entries),
+        "elapsed": time.time() - t0,
+    }
 
 
 def _verify_snapshot(entries: list[dict], dst: Path) -> list[str]:
@@ -337,7 +363,8 @@ def _write_report(dst: Path, stats: dict, bad: list[str], extra: str = "") -> Pa
         f"| 本次复制／硬链 | {stats['copied']}／{stats['linked']} |\n"
         f"| sha256 mismatch | {len(bad)} |\n"
         f"| 耗时 | {stats['elapsed']:.0f}s |\n{extra}",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     return rp
 
 
@@ -362,8 +389,11 @@ def mirror(src: Path = DEFAULT_ROOT, weekly: bool = True) -> int:
         if dst.exists():
             print(f"[SKIP] 今日快照已存在：{dst}（幂等，非错误）")
             return RC_EXISTS
-        prevs = sorted([d for d in daily_root.iterdir()
-                        if d.is_dir() and not d.name.startswith(".")]) if daily_root.is_dir() else []
+        prevs = (
+            sorted([d for d in daily_root.iterdir() if d.is_dir() and not d.name.startswith(".")])
+            if daily_root.is_dir()
+            else []
+        )
         stage = daily_root / f".tmp-{stamp}"
         if stage.exists():
             shutil.rmtree(stage, ignore_errors=True)
@@ -415,8 +445,11 @@ def package(out: Path | None = None) -> int:
     out = out or (MIRROR_ROOT / "pkg")
     out.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d")
-    inv = {"generated_at": datetime.now().isoformat(timespec="seconds"),
-           "root": str(DEFAULT_ROOT), "tables": {}}
+    inv = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "root": str(DEFAULT_ROOT),
+        "tables": {},
+    }
     groups: dict[str, list[Path]] = {}
     for f in sorted(DEFAULT_ROOT.rglob("*.parquet")):
         rel = f.relative_to(DEFAULT_ROOT)
@@ -446,7 +479,9 @@ def package(out: Path | None = None) -> int:
     proj = Path(config.PROJECT_DIR)
     with tarfile.open(tar, "w:xz") as tf:
         tf.add(proj / "代码" / "config", arcname="config", filter=_keep)
-        tf.add(proj / "代码" / "tools" / "db" / "data" / "known_gaps.json", arcname="known_gaps.json")
+        tf.add(
+            proj / "代码" / "tools" / "db" / "data" / "known_gaps.json", arcname="known_gaps.json"
+        )
         tf.add(inv_path, arcname=inv_path.name)
         for f in small:
             tf.add(f, arcname="small/" + f.relative_to(DEFAULT_ROOT).as_posix())
@@ -458,11 +493,16 @@ def package(out: Path | None = None) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="全量数据冷备清单与校验（DB3＋R10-b）")
     parser.add_argument("--make-manifest", action="store_true", help="生成清单")
-    parser.add_argument("--mirror", action="store_true",
-                        help="日备（硬链增量→sha256.jsonl→7 版轮转＋周备 4 版）")
-    parser.add_argument("--package", action="store_true", help="方案 C：配置/schema 打包 tar.xz（本地上传前产物）")
+    parser.add_argument(
+        "--mirror", action="store_true", help="日备（硬链增量→sha256.jsonl→7 版轮转＋周备 4 版）"
+    )
+    parser.add_argument(
+        "--package", action="store_true", help="方案 C：配置/schema 打包 tar.xz（本地上传前产物）"
+    )
     parser.add_argument("--verify", metavar="MANIFEST", help="按清单校验")
-    parser.add_argument("--root", default=None, help=f"数据根（默认 {DEFAULT_ROOT}；verify 时可指向镜像目录）")
+    parser.add_argument(
+        "--root", default=None, help=f"数据根（默认 {DEFAULT_ROOT}；verify 时可指向镜像目录）"
+    )
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="清单输出目录")
     parser.add_argument("--reason", default="手动清单（DB3 轻量版）", help="清单依据")
     args = parser.parse_args(argv)

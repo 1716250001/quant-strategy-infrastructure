@@ -28,9 +28,9 @@ MONITOR_PERIODS = [
 EM_REQUEST_INTERVAL = 15
 
 # 东财限流后的指数退避参数
-EM_BACKOFF_BASE = 300       # 首次失败后等待300秒(5分钟)
-EM_BACKOFF_MAX = 1800       # 退避上限1800秒(30分钟)
-EM_BACKOFF_MULTIPLIER = 3   # 退避倍率: 300→900→1800(上限)
+EM_BACKOFF_BASE = 300  # 首次失败后等待300秒(5分钟)
+EM_BACKOFF_MAX = 1800  # 退避上限1800秒(30分钟)
+EM_BACKOFF_MULTIPLIER = 3  # 退避倍率: 300→900→1800(上限)
 EM_MAX_CONSECUTIVE_FAILURES = 3  # 连续失败3次后放弃本轮扫描，等下一轮定时触发
 
 # ============================================================
@@ -39,9 +39,9 @@ EM_MAX_CONSECUTIVE_FAILURES = 3  # 连续失败3次后放弃本轮扫描，等�
 # 东财push2his限流后自动切换到新浪API
 # 新浪API响应0.15秒/次(东财需15秒间隔)，无限流，但只返回最近约8交易日数据
 SINA_KLINE_URL = "https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData"
-SINA_REQUEST_INTERVAL = 2   # 新浪请求间隔2秒(实测0.15秒响应，2秒已非常保守)
+SINA_REQUEST_INTERVAL = 2  # 新浪请求间隔2秒(实测0.15秒响应，2秒已非常保守)
 # [ARCHIVED 2026-09-25 G1] 死配置：全库 grep（83 文件，含字符串/getattr 形态）+工作区/skills 交叉核实均无引用。原用途：旧新浪限频参数（现行走 fetch 层统一限流）。保留定义保行号稳定，勿新增引用。
-SINA_DAILY_LIMIT = 2000     # datalen最大值(实测300完全够用)
+SINA_DAILY_LIMIT = 2000  # datalen最大值(实测300完全够用)
 
 # klt→新浪scale映射 (1=1分,5=5分,15=15分,30=30分,60=60分,101=日线)
 KLT_TO_SINA_SCALE = {
@@ -62,9 +62,9 @@ KLT_TO_SINA_SCALE = {
 PAGED_APIS = {"index_daily"}  # 指数日线~10000+个, 需offset分页
 
 GAP_UPDATE_SAMPLE_CODES = {
-    "daily":         ["000001.SZ", "600519.SH"],           # 个股: 平安银行、贵州茅台
-    "daily_basic":   ["000001.SZ", "600519.SH"],           # 个股: 同上
-    "fund_daily":    ["510050.SH", "510300.SH", "159915.SZ"],  # ETF: 上证50、沪深300、创业板
-    "cb_daily":      ["113605.SH", "123269.SZ", "127080.SZ"],  # 可转债: 在市活跃券 (避免用已退市券)
-    "index_daily":   ["000300.SH", "000001.SH", "399006.SZ"],  # 指数: 沪深300、上证综指、创业板指
+    "daily": ["000001.SZ", "600519.SH"],  # 个股: 平安银行、贵州茅台
+    "daily_basic": ["000001.SZ", "600519.SH"],  # 个股: 同上
+    "fund_daily": ["510050.SH", "510300.SH", "159915.SZ"],  # ETF: 上证50、沪深300、创业板
+    "cb_daily": ["113605.SH", "123269.SZ", "127080.SZ"],  # 可转债: 在市活跃券 (避免用已退市券)
+    "index_daily": ["000300.SH", "000001.SH", "399006.SZ"],  # 指数: 沪深300、上证综指、创业板指
 }

@@ -5,6 +5,7 @@
     - 2.1 事件 JSONL 序列化往返单测；
     - 2.6 事件量级单测（50 万上限→采样降级+尾部全保+哨兵）；回放器骨架逐行读。
 """
+
 from __future__ import annotations
 
 import json
@@ -47,36 +48,69 @@ D2 = TradingDate.from_iso(2026, 9, 22)
 
 
 def _bar(symbol: str, day: TradingDate) -> Bar:
-    return Bar(symbol=symbol, date=day, open=10.0, high=11.0, low=9.5,
-               close=10.5, volume=1_000.0, amount=10_500.0, pre_close=10.0)
+    return Bar(
+        symbol=symbol,
+        date=day,
+        open=10.0,
+        high=11.0,
+        low=9.5,
+        close=10.5,
+        volume=1_000.0,
+        amount=10_500.0,
+        pre_close=10.0,
+    )
 
 
 def _order(order_id: str = "O00000001", side: OrderSide = OrderSide.BUY) -> Order:
-    return Order(order_id=order_id, symbol="000001.SZ", side=side,
-                 order_type=OrderType.MARKET, qty=100,
-                 limit_price=None if side is OrderSide.BUY else 10.5,
-                 created_at=D, tag="momentum")
+    return Order(
+        order_id=order_id,
+        symbol="000001.SZ",
+        side=side,
+        order_type=OrderType.MARKET,
+        qty=100,
+        limit_price=None if side is OrderSide.BUY else 10.5,
+        created_at=D,
+        tag="momentum",
+    )
 
 
 def _fill(fill_id: str = "F00000001") -> Fill:
-    return Fill(fill_id=fill_id, order_id="O00000001", symbol="000001.SZ",
-                side=OrderSide.BUY, qty=100, price=10.02,
-                fee=Fee(commission=5.0, stamp_duty=0.0, transfer_fee=0.1, total=5.1),
-                fill_date=D2, fill_timing="open")
+    return Fill(
+        fill_id=fill_id,
+        order_id="O00000001",
+        symbol="000001.SZ",
+        side=OrderSide.BUY,
+        qty=100,
+        price=10.02,
+        fee=Fee(commission=5.0, stamp_duty=0.0, transfer_fee=0.1, total=5.1),
+        fill_date=D2,
+        fill_timing="open",
+    )
 
 
 def _all_event_instances() -> list:
     return [
-        MarketOpenEvent(date=D, data={"000001.SZ": _bar("000001.SZ", D),
-                                      "600519.SH": _bar("600519.SH", D)}),
+        MarketOpenEvent(
+            date=D, data={"000001.SZ": _bar("000001.SZ", D), "600519.SH": _bar("600519.SH", D)}
+        ),
         MarketCloseEvent(date=D, data={}),
         OrderSubmittedEvent(order=_order()),
-        OrderRejectedEvent(order=_order("O00000002", OrderSide.SELL),
-                           reason=Rejection(RejectCode.LIMIT_UP, "开盘涨停买不进")),
+        OrderRejectedEvent(
+            order=_order("O00000002", OrderSide.SELL),
+            reason=Rejection(RejectCode.LIMIT_UP, "开盘涨停买不进"),
+        ),
         FillEvent(fill=_fill()),
-        CorporateActionEvent(action=CorporateAction(
-            symbol="000001.SZ", ex_date=D, pay_date=D2, record_date=D,
-            cash_div_per_share=0.15, stk_div_per_share=0.3, ann_date=D)),
+        CorporateActionEvent(
+            action=CorporateAction(
+                symbol="000001.SZ",
+                ex_date=D,
+                pay_date=D2,
+                record_date=D,
+                cash_div_per_share=0.15,
+                stk_div_per_share=0.3,
+                ann_date=D,
+            )
+        ),
         SessionEndEvent(date=D2),
     ]
 
@@ -96,8 +130,9 @@ class TestRoundTrip:
             assert decoded == event
 
     def test_market_event_symbol_summary_sorted(self):
-        e = MarketOpenEvent(date=D, data={"600519.SH": _bar("600519.SH", D),
-                                          "000001.SZ": _bar("000001.SZ", D)})
+        e = MarketOpenEvent(
+            date=D, data={"600519.SH": _bar("600519.SH", D), "000001.SZ": _bar("000001.SZ", D)}
+        )
         # B2 热点修正：摘要=计数（4000 symbol JSON 数组 ~7s/10 年）
         assert encode_event(e)["payload"]["n_symbols"] == 2
 
@@ -141,28 +176,27 @@ class TestWriterReader:
         """事件量级单测：超上限 → 采样降级 + 尾部全保 + 哨兵 + reader 标记。"""
         path = tmp_path / "events.jsonl"
         n, max_rec, stride, tail = 300, 100, 10, 50
-        with EventLogWriter(path, max_records=max_rec, sample_stride=stride,
-                            tail_keep=tail) as w:
+        with EventLogWriter(path, max_records=max_rec, sample_stride=stride, tail_keep=tail) as w:
             for i in range(n):
                 w.write(SessionEndEvent(date=TradingDate(date(2026, 1, 1 + i % 28))))
             assert w.sampled is True
 
         lines = [json.loads(x) for x in path.read_text(encoding="utf-8").strip().split("\n")]
         kinds = [x["kind"] for x in lines]
-        assert "_sampled" in kinds                       # 哨兵存在
+        assert "_sampled" in kinds  # 哨兵存在
         assert kinds.count("_sampled") == 1
         # 首段 1..100 全量 + 采样段 110,120,…,300（20 条）+ 尾部补写（51..300 未采样行）
         event_lines = [x for x in lines if x["kind"] != "_sampled"]
         seqs = [x["seq"] for x in event_lines]
-        assert len(set(seqs)) == len(seqs)               # 无重复（close 去重）
-        assert set(range(1, 101)) <= set(seqs)           # 首段全保
-        assert set(range(251, 301)) <= set(seqs)         # 尾部全保
+        assert len(set(seqs)) == len(seqs)  # 无重复（close 去重）
+        assert set(range(1, 101)) <= set(seqs)  # 首段全保
+        assert set(range(251, 301)) <= set(seqs)  # 尾部全保
         sampled_in_band = {s for s in seqs if s > 100 and s <= 250 and s % stride == 0}
         assert {110, 120, 130, 140, 150} <= sampled_in_band  # 采样带：stride 抽 1
 
         reader = EventLogReader(path)
         back = list(reader.events())
-        assert reader.sampled is True                    # replay 不完整提示依据
+        assert reader.sampled is True  # replay 不完整提示依据
         assert len(back) == len(event_lines)
 
     def test_no_sampling_below_budget(self, tmp_path: Path):

@@ -19,6 +19,7 @@ tools/manager_profile.py — 基金经理风格画像（唯一保留的分析能
     python -m tools.manager_profile --manager 缪玮彬
     python -m tools.manager_profile --code 004685 --json
 """
+
 import argparse
 import json
 import os
@@ -38,12 +39,24 @@ IDX = os.path.join(DATA, "index_daily")
 
 # ---------- 候选指数池（扩充版：含风格/行业/微盘） ----------
 CANDS = {
-    "沪深300R": "H00300.CSI", "中证500R": "H00905.CSI", "中证1000R": "H00852.CSI",
-    "中证2000R": "932000CNY010.CSI", "创业板R": "399606.SZ", "科创50": "000688.SH",
-    "中证红利R": "H00922.CSI", "300价值": "000919.CSI", "300成长": "000918.CSI",
-    "300波动": "000803.CSI", "CS质量成长": "930855.CSI", "300动量R": "H20260.CSI",
-    "800医药R": "H00841.CSI", "800消费R": "H00932.CSI", "800信息R": "H00935.CSI",
-    "800金融R": "H20086.CSI", "800能源R": "H00928.CSI", "800材料R": "H00929.CSI",
+    "沪深300R": "H00300.CSI",
+    "中证500R": "H00905.CSI",
+    "中证1000R": "H00852.CSI",
+    "中证2000R": "932000CNY010.CSI",
+    "创业板R": "399606.SZ",
+    "科创50": "000688.SH",
+    "中证红利R": "H00922.CSI",
+    "300价值": "000919.CSI",
+    "300成长": "000918.CSI",
+    "300波动": "000803.CSI",
+    "CS质量成长": "930855.CSI",
+    "300动量R": "H20260.CSI",
+    "800医药R": "H00841.CSI",
+    "800消费R": "H00932.CSI",
+    "800信息R": "H00935.CSI",
+    "800金融R": "H20086.CSI",
+    "800能源R": "H00928.CSI",
+    "800材料R": "H00929.CSI",
 }
 
 
@@ -53,8 +66,7 @@ def _load_index(code):
     index_daily 已迁移为按年分区，不能再按 {code}.parquet 定位文件
     （旧写法会静默返回 None，导致风格/β 全部算不出）。
     """
-    d = reader.read_code("index_daily", code,
-                         columns=["trade_date", "close"], root=DATA)
+    d = reader.read_code("index_daily", code, columns=["trade_date", "close"], root=DATA)
     if d is None or d.empty:
         return None
     d = d.dropna()
@@ -99,14 +111,17 @@ def load_nav(code):
         fb = pd.read_parquet(os.path.join(DATA, "metadata", "fund_basic.parquet"))
         m = fb[fb["ts_code"].astype(str).str.startswith(code)]["ts_code"]
     except Exception as exc:
-        print(f"[manager_profile] 读 fund_basic 失败（按无匹配处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[manager_profile] 读 fund_basic 失败（按无匹配处理）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         m = []
     if len(m) == 0:
         return None, code
     ts_code = str(m.iloc[0])
-    d = reader.read_code("fund_nav", ts_code,
-                         columns=["nav_date", "adj_nav", "unit_nav"], root=DATA)
+    d = reader.read_code(
+        "fund_nav", ts_code, columns=["nav_date", "adj_nav", "unit_nav"], root=DATA
+    )
     if d is None or d.empty:
         return None, code
     d = d.dropna(subset=["nav_date"])
@@ -137,14 +152,22 @@ def analyze(ret, factors):
     for k in fc:
         b = np.polyfit(j[k].values, j["f"].values, 1)
         pred = np.polyval(b, j[k].values)
-        single[k] = dict(beta=float(b[0]), r2=float(1 - np.var(j["f"].values - pred) / np.var(j["f"].values)))
+        single[k] = dict(
+            beta=float(b[0]), r2=float(1 - np.var(j["f"].values - pred) / np.var(j["f"].values))
+        )
     # 多因子（非正交，β 可解释）
     x = np.column_stack([np.ones(len(j))] + [j[k].values for k in fc])
     cf, *_ = np.linalg.lstsq(x, j["f"].values, rcond=None)
     r2m = 1 - np.var(j["f"].values - x @ cf) / np.var(j["f"].values)
-    return dict(n=len(j), cors=cors, single=single,
-                betas={k: float(cf[1+i]) for i, k in enumerate(fc)}, r2_multi=float(r2m),
-                begin=j.index[0], end=j.index[-1])
+    return dict(
+        n=len(j),
+        cors=cors,
+        single=single,
+        betas={k: float(cf[1 + i]) for i, k in enumerate(fc)},
+        r2_multi=float(r2m),
+        begin=j.index[0],
+        end=j.index[-1],
+    )
 
 
 def _finish_end(s):
@@ -167,25 +190,43 @@ def _merge_tenure(tenures):
         cur_joint = g.iloc[0]["joint"]
         for _, r in g.iloc[1:].iterrows():
             gap = (r["b"] - cur_e).days
-            if -1 <= gap <= 3:          # 连续（含相邻/微重叠）
+            if -1 <= gap <= 3:  # 连续（含相邻/微重叠）
                 cur_e = max(cur_e, r["e"])
-            else:                        # 有真实空档 → 结转
-                out.append(dict(fund_code=fc, manager=mgr, company=g.iloc[0]["company"],
-                                fund_name=g.iloc[0]["fund_name"], begin=cur_b,
-                                end="至今" if cur_e >= pd.Timestamp("2026-09-15") else cur_e.strftime("%Y-%m-%d"),
-                                ret=cur_ret, joint=cur_joint))
+            else:  # 有真实空档 → 结转
+                out.append(
+                    dict(
+                        fund_code=fc,
+                        manager=mgr,
+                        company=g.iloc[0]["company"],
+                        fund_name=g.iloc[0]["fund_name"],
+                        begin=cur_b,
+                        end="至今"
+                        if cur_e >= pd.Timestamp("2026-09-15")
+                        else cur_e.strftime("%Y-%m-%d"),
+                        ret=cur_ret,
+                        joint=cur_joint,
+                    )
+                )
                 cur_b, cur_e, cur_ret, cur_joint = r["b"], r["e"], r["ret"], r["joint"]
-        out.append(dict(fund_code=fc, manager=mgr, company=g.iloc[0]["company"],
-                        fund_name=g.iloc[0]["fund_name"], begin=cur_b,
-                        end="至今" if cur_e >= pd.Timestamp("2026-09-15") else cur_e.strftime("%Y-%m-%d"),
-                        ret=cur_ret, joint=cur_joint))
+        out.append(
+            dict(
+                fund_code=fc,
+                manager=mgr,
+                company=g.iloc[0]["company"],
+                fund_name=g.iloc[0]["fund_name"],
+                begin=cur_b,
+                end="至今" if cur_e >= pd.Timestamp("2026-09-15") else cur_e.strftime("%Y-%m-%d"),
+                ret=cur_ret,
+                joint=cur_joint,
+            )
+        )
     return pd.DataFrame(out)
 
 
 def profile(code=None, manager=None, topn=8, current_only=True, min_days=250):
     f, _meta = load_factor_panel()
     # 选目标基金（含任期区间，画像必须限定在任期内）
-    targets = []   # list of (code, begin, end, company)
+    targets = []  # list of (code, begin, end, company)
     bp = os.path.join(BRIDGE_DIR, "基金经理桥表_任期段.csv")
     if code:
         targets = [(str(code).split(".")[0][:6], None, None, "")]
@@ -197,17 +238,25 @@ def profile(code=None, manager=None, topn=8, current_only=True, min_days=250):
         if len(b) == 0:
             print(f"未找到经理: {manager}")
             return
-        bm_ = _merge_tenure(b)                 # ★ 合并连续任职段
+        bm_ = _merge_tenure(b)  # ★ 合并连续任职段
         if current_only:
             bc = bm_[bm_["end"] == "至今"]
             if len(bc):
                 bm_ = bc
-        bm_ = bm_.assign(_span=(pd.to_datetime(bm_["end"].map(_finish_end), errors="coerce")
-                              - pd.to_datetime(bm_["begin"], errors="coerce")).dt.days)
+        bm_ = bm_.assign(
+            _span=(
+                pd.to_datetime(bm_["end"].map(_finish_end), errors="coerce")
+                - pd.to_datetime(bm_["begin"], errors="coerce")
+            ).dt.days
+        )
         bm_ = bm_.sort_values("_span", ascending=False)
-        targets = list(zip(bm_["fund_code"], bm_["begin"], bm_["end"], bm_["company"], strict=False))
-        print(f"【{manager}】命中 {len(targets)} 只{'(仅当前在任)' if current_only else ''}"
-              f"，公司: {sorted(set(bm_['company']))}")
+        targets = list(
+            zip(bm_["fund_code"], bm_["begin"], bm_["end"], bm_["company"], strict=False)
+        )
+        print(
+            f"【{manager}】命中 {len(targets)} 只{'(仅当前在任)' if current_only else ''}"
+            f"，公司: {sorted(set(bm_['company']))}"
+        )
         print("  画像窗口严格裁剪至各自连续任期\n")
     else:
         raise ValueError("需提供 code 或 manager")
@@ -227,8 +276,17 @@ def profile(code=None, manager=None, topn=8, current_only=True, min_days=250):
             continue
         bm, name = declared_benchmark(code6)
         dom = max(a["cors"], key=lambda k: a["cors"][k])
-        results.append(dict(code=code6, name=name, bench=bm, company=company,
-                            tenure=f"{t_begin or '?'} ~ {t_end or '?'}", **a, dom=dom))
+        results.append(
+            dict(
+                code=code6,
+                name=name,
+                bench=bm,
+                company=company,
+                tenure=f"{t_begin or '?'} ~ {t_end or '?'}",
+                **a,
+                dom=dom,
+            )
+        )
 
     if not results:
         print("无可用数据")
@@ -255,6 +313,7 @@ def profile(code=None, manager=None, topn=8, current_only=True, min_days=250):
         print("\n" + "=" * 84)
         print(f"【{manager} 汇总】{len(results)} 只基金")
         from collections import Counter
+
         cnt = Counter(r["dom"] for r in results)
         print("  主导指数分布:")
         for k, v in cnt.most_common():
@@ -275,8 +334,7 @@ def main(argv=None):
 
     argv: 参数列表（None 则取 sys.argv[1:]），便于从统一入口 main.py 调用。
     """
-    ap = argparse.ArgumentParser(
-        description="基金经理风格画像（风格/跟踪指数/β；α 测量已冻结）")
+    ap = argparse.ArgumentParser(description="基金经理风格画像（风格/跟踪指数/β；α 测量已冻结）")
     ap.add_argument("--code", default=None, help="基金代码，如 004685")
     ap.add_argument("--manager", default=None, help="经理姓名，如 缪玮彬")
     ap.add_argument("--topn", type=int, default=8)
@@ -286,8 +344,17 @@ def main(argv=None):
     a = ap.parse_args(argv)
     res = profile(a.code, a.manager, a.topn, current_only=not a.all, min_days=a.min_days)
     if a.json and res:
-        print("\n" + json.dumps([{k: v for k, v in r.items() if k in ("code","name","n","dom","r2_multi")} for r in res],
-                                ensure_ascii=False, indent=2))
+        print(
+            "\n"
+            + json.dumps(
+                [
+                    {k: v for k, v in r.items() if k in ("code", "name", "n", "dom", "r2_multi")}
+                    for r in res
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     return res
 
 

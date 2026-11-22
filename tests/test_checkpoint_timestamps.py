@@ -4,6 +4,7 @@
 注意：AltCheckpoint 受 `alt.config.assert_writable` 守卫，只能写授权根
 （全量数据 alt_data、.temp/alt_run），故临时文件落在后者。
 """
+
 import json
 import shutil
 import uuid
@@ -20,6 +21,7 @@ ALT_TMP_ROOT = r"D:\量化策略\.temp\alt_run"
 def alt_dir():
     d = f"{ALT_TMP_ROOT}\\_ckpt_test_{uuid.uuid4().hex[:8]}"
     import os
+
     os.makedirs(d, exist_ok=True)
     yield d
     shutil.rmtree(d, ignore_errors=True)
@@ -38,7 +40,7 @@ def test_old_checkpoint_file_without_timestamps(tmp_path, alt_dir):
     with open(ap, "w", encoding="utf-8") as fh:
         json.dump({"ebs_lg": {"done": ["__all__"]}}, fh)
     ac = AltCheckpoint(path=ap)
-    assert ac.is_done("ebs_lg")           # done:["__all__"] 跳过语义不动
+    assert ac.is_done("ebs_lg")  # done:["__all__"] 跳过语义不动
     assert "last_attempt" not in ac.data["ebs_lg"]
 
 

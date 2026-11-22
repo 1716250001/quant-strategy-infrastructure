@@ -4,6 +4,7 @@
 锚点（09 #12）：**同种子重跑逐位一致**；产物含 p05/p50/p95；双侧 p 值；
 边界不伪造（不可算 ⇒ NaN/None，不填 0）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -20,20 +21,36 @@ from btf.analytics.bootstrap import (
 
 pytestmark = [pytest.mark.l1]
 
-R = [0.004, -0.002, 0.006, -0.001, 0.003, 0.005, -0.004, 0.002,
-     0.001, -0.003, 0.007, 0.0, -0.002, 0.004, 0.003]
+R = [
+    0.004,
+    -0.002,
+    0.006,
+    -0.001,
+    0.003,
+    0.005,
+    -0.004,
+    0.002,
+    0.001,
+    -0.003,
+    0.007,
+    0.0,
+    -0.002,
+    0.004,
+    0.003,
+]
 
 
 class TestStatistics:
     def test_annualized_sharpe_known_case(self):
         # mean=0.02, 样本 std=0.01 ⇒ 2×√252
         got = annualized_sharpe([0.01, 0.02, 0.03], annualization=252)
-        assert got == pytest.approx(2 * 252 ** 0.5, rel=1e-12)
+        assert got == pytest.approx(2 * 252**0.5, rel=1e-12)
 
     def test_sharpe_degenerate_is_nan_not_zero(self):
-        assert annualized_sharpe([0.01]) != annualized_sharpe([0.01])   # NaN
-        assert annualized_sharpe([0.01, 0.01, 0.01]) != \
-            annualized_sharpe([0.01, 0.01, 0.01])                       # std=0 ⇒ NaN
+        assert annualized_sharpe([0.01]) != annualized_sharpe([0.01])  # NaN
+        assert annualized_sharpe([0.01, 0.01, 0.01]) != annualized_sharpe(
+            [0.01, 0.01, 0.01]
+        )  # std=0 ⇒ NaN
 
     def test_max_drawdown_known_path(self):
         # nav: 1.10 → 0.88 → 0.924；峰值 1.10 ⇒ mdd = −20%
@@ -42,7 +59,7 @@ class TestStatistics:
     def test_annualized_return_geometric(self):
         # 10 个 1% ⇒ 几何年化 = 1.01^(252/10 × 10) − 1 = 1.01^252 − 1
         got = annualized_return([0.01] * 10, annualization=252)
-        assert got == pytest.approx(1.01 ** 252 - 1.0, rel=1e-12)
+        assert got == pytest.approx(1.01**252 - 1.0, rel=1e-12)
 
     def test_percentile_nearest_rank(self):
         assert percentile([1, 2, 3, 4, 5], 0.5) == 3
@@ -97,23 +114,25 @@ class TestBootstrapCi:
 
 class TestPermutation:
     def test_p_value_bounds(self):
-        out = permutation_pvalue(R, scheme="sign", statistic="sharpe",
-                                 n_permutations=300, seed=0)
+        out = permutation_pvalue(R, scheme="sign", statistic="sharpe", n_permutations=300, seed=0)
         assert 0.0 <= out["p_value"] <= 1.0
         assert out["null_summary"]["n"] == 300
 
     def test_order_scheme_for_drawdown(self):
-        out = permutation_pvalue([0.05, -0.1, 0.04, -0.02, 0.03],
-                                 scheme="order", statistic="max_drawdown",
-                                 n_permutations=200, seed=0)
+        out = permutation_pvalue(
+            [0.05, -0.1, 0.04, -0.02, 0.03],
+            scheme="order",
+            statistic="max_drawdown",
+            n_permutations=200,
+            seed=0,
+        )
         assert out["observed"] <= 0.0
         assert 0.0 <= out["p_value"] <= 1.0
 
     def test_constant_series_nan_observed(self):
-        out = permutation_pvalue([0.0] * 10, scheme="sign",
-                                 statistic="sharpe", n_permutations=50)
-        assert out["observed"] != out["observed"]      # NaN
-        assert out["p_value"] is None                  # 不可算 ⇒ None（不伪造）
+        out = permutation_pvalue([0.0] * 10, scheme="sign", statistic="sharpe", n_permutations=50)
+        assert out["observed"] != out["observed"]  # NaN
+        assert out["p_value"] is None  # 不可算 ⇒ None（不伪造）
 
     def test_unknown_statistic_rejected(self):
         with pytest.raises(ValueError, match="statistic"):
@@ -123,11 +142,9 @@ class TestPermutation:
 class TestNoiseBaseline:
     def test_percentile_extremes(self):
         pool = [x / 1000.0 for x in range(-100, 101)]
-        high = noise_baseline(pool, n_hold=20, observed=99.0, n_draws=200,
-                              seed=0)
+        high = noise_baseline(pool, n_hold=20, observed=99.0, n_draws=200, seed=0)
         assert high["observed_percentile"] == 1.0
-        low = noise_baseline(pool, n_hold=20, observed=-99.0, n_draws=200,
-                             seed=0)
+        low = noise_baseline(pool, n_hold=20, observed=-99.0, n_draws=200, seed=0)
         assert low["observed_percentile"] == 0.0
 
     def test_empty_pool_rejected(self):

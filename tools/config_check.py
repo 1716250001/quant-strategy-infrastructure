@@ -50,6 +50,7 @@ tools/config_check.py — 配置完整性检查（单一真源）
     else:
         print(res.summary)
 """
+
 import os
 import sys
 
@@ -82,14 +83,14 @@ FLOORS = [
 #   故**不可**与那五处合并计数，也不可由 config.py 导出（否则等于把
 #   "反向清单"混进"正向清单"，判据 ⑦ 会失去证伪能力）。
 NON_BACKFILL_TABLES = {
-    "metadata":       "元数据目录（stock_basic / fund_basic / trade_cal / cb_basic 等）",
-    "income":         "download-full 下载（利润表）",
-    "balancesheet":   "download-full 下载（资产负债表）",
-    "cashflow":       "download-full 下载（现金流量表）",
+    "metadata": "元数据目录（stock_basic / fund_basic / trade_cal / cb_basic 等）",
+    "income": "download-full 下载（利润表）",
+    "balancesheet": "download-full 下载（资产负债表）",
+    "cashflow": "download-full 下载（现金流量表）",
     "fina_indicator": "download-full 下载（财务指标）",
-    "fund_nav":       "fund_nav_update 每日更新（基金净值）",
-    "custom_index":   "build_micro_index 产出（本地自建指数）",
-    "fund":           "QDII 研究产物（2026-10-06；fund_basic_E 全字段 + qdii6/qdii7 分批行情/净值）",
+    "fund_nav": "fund_nav_update 每日更新（基金净值）",
+    "custom_index": "build_micro_index 产出（本地自建指数）",
+    "fund": "QDII 研究产物（2026-10-06；fund_basic_E 全字段 + qdii6/qdii7 分批行情/净值）",
     # global_index 已于 2026-10-31 归档（§238）：与 index_global 完全重复
     #   （后者 22 标的/252,291 行/1896 年起），且数据停在 20261005。
     #   归档路径：备份/归档文件/market_data-global_index-20261031/
@@ -102,7 +103,7 @@ NON_BACKFILL_TABLES = {
     #         early_days / category / status
     #   行数: 2945（= fund_basic market=E 纯场内，2026-10-18 清 18 幽灵码后）
     #   status: 28 只源端实证为空（tushare fund_basic 返回 None，真·无法补）
-    "derived":        "派生补表容器（EE-FUND-4/G1 §30；fund_basic_patch 首笔交易所行情日，独立 derived 区不 mutate 上游）",
+    "derived": "派生补表容器（EE-FUND-4/G1 §30；fund_basic_patch 首笔交易所行情日，独立 derived 区不 mutate 上游）",
 }
 
 
@@ -110,9 +111,9 @@ class ConfigCheckResult:
     """检查结果（一份数据，两个消费者各自渲染）"""
 
     def __init__(self):
-        self.failures = []          # list[str]：每条都是可直接展示的完整句子
-        self.checks_done = []       # 已执行的判据名（用于摘要）
-        self.summary_extra = ""     # 磁盘类判据的摘要（⑥⑦⑧）
+        self.failures = []  # list[str]：每条都是可直接展示的完整句子
+        self.checks_done = []  # 已执行的判据名（用于摘要）
+        self.summary_extra = ""  # 磁盘类判据的摘要（⑥⑦⑧）
 
     @property
     def ok(self):
@@ -122,8 +123,10 @@ class ConfigCheckResult:
     def summary(self):
         if not self.ok:
             return f"{len(self.failures)} 项异常"
-        return (f"(下限检查 {len(FLOORS)} 项通过 | 关键常量在位 | "
-                f"判重主键无缺口 | 组结构完整{self.summary_extra})")
+        return (
+            f"(下限检查 {len(FLOORS)} 项通过 | 关键常量在位 | "
+            f"判重主键无缺口 | 组结构完整{self.summary_extra})"
+        )
 
     def render(self, indent="      "):
         """把失败项渲染成多行文本（供断言消息使用）"""
@@ -159,9 +162,10 @@ def _pk_column_names(table, root):
     files = sorted(f for f in os.listdir(d) if f.endswith(".parquet"))
     if not files:
         return None, "无 parquet 文件"
-    for f in (files[0], files[-1]):        # 首尾各试一次（防个别文件损坏）
+    for f in (files[0], files[-1]):  # 首尾各试一次（防个别文件损坏）
         try:
             import pyarrow.parquet as pq
+
             return set(pq.ParquetFile(os.path.join(d, f)).schema_arrow.names), None
         except Exception as e:
             err = str(e)[:50]
@@ -212,11 +216,11 @@ def check_config(check_disk=True):
     if shrunk:
         res.failures.append(
             f"配置疑似被误删（条目数低于下限）: {shrunk}\n"
-            f"    → 若是有意精简，请同步下调 tools/config_check.py 的 FLOORS")
+            f"    → 若是有意精简，请同步下调 tools/config_check.py 的 FLOORS"
+        )
 
     # ② 关键常量存在且非空
-    for const, val in [("MARKET_DATA_DIR", MARKET_DATA_DIR),
-                       ("META_DIR", META_DIR)]:
+    for const, val in [("MARKET_DATA_DIR", MARKET_DATA_DIR), ("META_DIR", META_DIR)]:
         if not val or not isinstance(val, str):
             res.failures.append(f"{const} 缺失或非法: {val!r}")
     res.checks_done.append("constants")
@@ -232,8 +236,8 @@ def check_config(check_disk=True):
     res.checks_done.append("pk_coverage")
     if no_pk:
         res.failures.append(
-            f"以下表缺少 DB_AUDIT_PKEYS 归宿（应配主键或显式 None）: "
-            f"{sorted(no_pk)}")
+            f"以下表缺少 DB_AUDIT_PKEYS 归宿（应配主键或显式 None）: {sorted(no_pk)}"
+        )
 
     # ④ 每日更新组非空且有 core
     res.checks_done.append("groups")
@@ -251,12 +255,11 @@ def check_config(check_disk=True):
             return bool(str(v.get("reason", "")).strip())
         return False
 
-    no_reason = [k for k, v in (DAILY_UPDATE_EXEMPT or {}).items()
-                 if not _has_reason(v)]
+    no_reason = [k for k, v in (DAILY_UPDATE_EXEMPT or {}).items() if not _has_reason(v)]
     if no_reason:
         res.failures.append(
-            f"DAILY_UPDATE_EXEMPT 以下条目未写原因（豁免必须给理由）: "
-            f"{sorted(no_reason)}")
+            f"DAILY_UPDATE_EXEMPT 以下条目未写原因（豁免必须给理由）: {sorted(no_reason)}"
+        )
 
     # ⑤b 日期列双轨一致性（E-03，2026-10-11 三轮架构审查）
     #   现状（实测：顶层 79 键 / 条目级 15 处 / 分歧 0 处）:
@@ -268,22 +271,24 @@ def check_config(check_disk=True):
     #   ⚠ 35 张表无顶层映射（多为静态/无日期列的表）**不在约束范围**——
     #     条目级未声明 date_col 时不参与比对（设计内，非缺口）。
     date_conflict = []
-    for src, tag in ((BACKFILL_TARGETS, "BACKFILL_TARGETS"),
-                     (DAILY_UPDATE_EXTRA, "DAILY_UPDATE_EXTRA")):
+    for src, tag in (
+        (BACKFILL_TARGETS, "BACKFILL_TARGETS"),
+        (DAILY_UPDATE_EXTRA, "DAILY_UPDATE_EXTRA"),
+    ):
         for name, conf in src.items():
             dc = (conf or {}).get("date_col")
             top = TABLE_DATE_COL.get(name)
             if not dc:
                 continue
             if top != dc:
-                date_conflict.append(
-                    f"{name}({tag}.date_col={dc!r} vs TABLE_DATE_COL={top!r})")
+                date_conflict.append(f"{name}({tag}.date_col={dc!r} vs TABLE_DATE_COL={top!r})")
     res.checks_done.append("date_col_consistency")
     if date_conflict:
         res.failures.append(
             f"日期列双轨不一致（条目级 vs 顶层映射）: {date_conflict}\n"
             f"    → 口径：**条目级 date_col 为条目真源，TABLE_DATE_COL 为派生索引**，"
-            f"两处必须同值；改一处须同步改另一处")
+            f"两处必须同值；改一处须同步改另一处"
+        )
 
     # ⑥⑦⑧ 需要读磁盘（只读 parquet 元数据）
     if not check_disk:
@@ -314,21 +319,26 @@ def check_config(check_disk=True):
         res.failures.append(
             f"以下表的 DB_AUDIT_PKEYS 键名不存在于数据列中 → 判重会**静默失效**: "
             f"{bad_pk}\n"
-            f"    → 请改为真实存在的列，或显式 None（=跳过判重）")
+            f"    → 请改为真实存在的列，或显式 None（=跳过判重）"
+        )
 
     # ⑦ 反向归属：磁盘上的表必须在配置里有归宿（或属已知外部表）
     #    这是"条目被误删"的精准捕捉 —— ① 的条目数下限有容差，本判据没有。
-    orphan = sorted(t for t in disk
-                    if t not in BACKFILL_TARGETS
-                    and t not in DAILY_UPDATE_EXTRA
-                    and t not in NON_BACKFILL_TABLES)
+    orphan = sorted(
+        t
+        for t in disk
+        if t not in BACKFILL_TARGETS
+        and t not in DAILY_UPDATE_EXTRA
+        and t not in NON_BACKFILL_TABLES
+    )
     res.checks_done.append("orphan_disk")
     if orphan:
         res.failures.append(
             f"磁盘上以下表在配置中无归属（BACKFILL_TARGETS / DAILY_UPDATE_EXTRA）: "
             f"{orphan}\n"
             f"    → 若是新表请补登记；若是外部流水线产出，请加入 "
-            f"config_check.NON_BACKFILL_TABLES 并写明来源")
+            f"config_check.NON_BACKFILL_TABLES 并写明来源"
+        )
 
     # ⑧ 正向覆盖：配置的每张表必须"已建库 / 已豁免 / 死结"，不允许悬空
     #    （tier X 或 enabled=False 本身已是"明确不拉"的标记）
@@ -340,26 +350,28 @@ def check_config(check_disk=True):
             continue
         if name in disk:
             continue
-        leaked.append(f"{name}(tier={conf.get('tier') or '-'},"
-                      f"mode={conf.get('mode')})")
+        leaked.append(f"{name}(tier={conf.get('tier') or '-'},mode={conf.get('mode')})")
     res.checks_done.append("coverage")
     if leaked:
         res.failures.append(
             f"以下表已配置但**从未拉取、且无任何归宿**（静默数据缺口）: {leaked}\n"
             f"    → 请三选一：补拉取 / 加入 DAILY_UPDATE_EXEMPT（附原因）/ "
-            f"标 tier=X 或 enabled=False")
+            f"标 tier=X 或 enabled=False"
+        )
 
-    res.summary_extra = (f" | 主键列名{len(DB_AUDIT_PKEYS) - unverified}张已验"
-                         f"(未建库{unverified}张跳过) | 磁盘归属无孤儿")
+    res.summary_extra = (
+        f" | 主键列名{len(DB_AUDIT_PKEYS) - unverified}张已验"
+        f"(未建库{unverified}张跳过) | 磁盘归属无孤儿"
+    )
     return res
 
 
 def main(argv=None):
     """独立运行：python -m tools.config_check"""
     import io
+
     try:
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8",
-                                      errors="replace")
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     except Exception:
         pass
     r = check_config()

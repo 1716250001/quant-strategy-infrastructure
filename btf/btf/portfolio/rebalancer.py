@@ -8,6 +8,7 @@
 确定性纪律：同 (target, portfolio, states, data) ⇒ 同订单清单——
 订单排序固定（卖先买后，同侧按 symbol 字典序），数量只依赖输入。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -57,11 +58,17 @@ class FullRebalancer:
             side = OrderSide.BUY if delta > 0 else OrderSide.SELL
             qty = abs(delta)
             if side is OrderSide.BUY and qty < self._lot(sym):
-                continue                     # 不足一手：不生成买单
-            draft = Order(order_id="", symbol=sym, side=side,
-                          order_type=OrderType.MARKET, qty=qty,
-                          limit_price=None, created_at=target.rebalance_date,
-                          tag="rebalance")
+                continue  # 不足一手：不生成买单
+            draft = Order(
+                order_id="",
+                symbol=sym,
+                side=side,
+                order_type=OrderType.MARKET,
+                qty=qty,
+                limit_price=None,
+                created_at=target.rebalance_date,
+                tag="rebalance",
+            )
             (sells if side is OrderSide.SELL else buys).append(draft)
         # 卖先买后（T+1 现金链：回笼资金供买单；撮合同序）；同侧 symbol 序
         return sells + buys
@@ -108,8 +115,9 @@ class ThresholdRebalancer(FullRebalancer):
 
     contract_version = CONTRACT_VERSION
 
-    def __init__(self, instruments: Mapping[str, Instrument] | None = None,
-                 threshold: float = 0.05):
+    def __init__(
+        self, instruments: Mapping[str, Instrument] | None = None, threshold: float = 0.05
+    ):
         super().__init__(instruments)
         if not 0 <= threshold < 1:
             raise ValueError(f"threshold 须 ∈ [0,1)，得 {threshold!r}")
@@ -123,7 +131,7 @@ class ThresholdRebalancer(FullRebalancer):
     ) -> dict[str, int]:
         target_qty = super()._target_qty(target, portfolio, data)
         if self.threshold <= 0:
-            return target_qty                  # 0 → 差额法全等
+            return target_qty  # 0 → 差额法全等
         tv = portfolio.total_value()
         if tv <= 0:
             return target_qty
@@ -136,7 +144,7 @@ class ThresholdRebalancer(FullRebalancer):
                 continue
             current_weight = pos.qty * bar.close / tv
             if abs(current_weight - weight) <= self.threshold:
-                target_qty[sym] = pos.qty      # 带内：保持现状（不动）
+                target_qty[sym] = pos.qty  # 带内：保持现状（不动）
         return target_qty
 
 

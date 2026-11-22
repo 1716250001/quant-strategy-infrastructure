@@ -16,6 +16,7 @@
 
 禁令：不改四表数据、不自动补数、不改任何判据。
 """
+
 import glob
 import json
 import os
@@ -30,12 +31,20 @@ from common.parquet_store import _atomic_write_parquet
 from config import MARKET_DATA_DIR, META_DIR, PROJECT_DIR
 
 TABLES = ("fund_daily", "fund_nav", "fund_adj", "fund_share")
-_HERE = os.path.dirname(os.path.abspath(__file__))          # tools/db
+_HERE = os.path.dirname(os.path.abspath(__file__))  # tools/db
 KG_PATH = os.path.join(_HERE, "data", "known_gaps.json")
-CODE_ROOT = os.path.dirname(os.path.dirname(_HERE))         # 代码/
+CODE_ROOT = os.path.dirname(os.path.dirname(_HERE))  # 代码/
 PATCH_PATH = os.path.join(MARKET_DATA_DIR, "derived", "fund_basic_patch.parquet")
-PATCH_COLS = ["ts_code", "name", "fund_type", "list_date", "first_trade_date",
-              "early_days", "category", "status"]
+PATCH_COLS = [
+    "ts_code",
+    "name",
+    "fund_type",
+    "list_date",
+    "first_trade_date",
+    "early_days",
+    "category",
+    "status",
+]
 _NAN_TOKENS = ("", "nan", "<NA>", "None")
 
 
@@ -50,8 +59,7 @@ def e_codes(basic):
 def status_nan_set(basic):
     """当前 market=E 中 status 为空的码集合（与 R20/R22 同口径）。"""
     e = basic[basic["market"] == "E"]
-    mask = (e["status"].isna()
-            | e["status"].astype(str).isin(_NAN_TOKENS))
+    mask = e["status"].isna() | e["status"].astype(str).isin(_NAN_TOKENS)
     return sorted(str(c) for c in e.loc[mask, "ts_code"])
 
 
@@ -64,8 +72,7 @@ def coverage_missing(codes, stores, registered=None):
     """
     es = set(codes)
     registered = registered or {}
-    return {t: sorted(es - set(stores.get(t, ())) - set(registered.get(t, ())))
-            for t in TABLES}
+    return {t: sorted(es - set(stores.get(t, ())) - set(registered.get(t, ()))) for t in TABLES}
 
 
 def rebuild_patch(basic, first_map):
@@ -81,8 +88,9 @@ def rebuild_patch(basic, first_map):
         late     = early_days < −30（首笔行情晚于上市日 >30 天）
         ok       = 其余（含 −30…0 的小幅「上市后未立即成交」）
     """
-    base = basic.loc[basic["market"] == "E",
-                     ["ts_code", "name", "fund_type", "list_date", "status"]].copy()
+    base = basic.loc[
+        basic["market"] == "E", ["ts_code", "name", "fund_type", "list_date", "status"]
+    ].copy()
     base["first_trade_date"] = base["ts_code"].map(first_map).astype("str")
     ld = pd.to_datetime(base["list_date"], format="%Y%m%d", errors="coerce")
     ft = pd.to_datetime(base["first_trade_date"], format="%Y%m%d", errors="coerce")
@@ -98,8 +106,10 @@ def rebuild_patch(basic, first_map):
 
 def first_trade_dates(table="fund_daily", root=MARKET_DATA_DIR):
     """全表 first_trade_date：{ts_code: 'YYYYMMDD'}（只读 ts_code/trade_date 两列）。"""
-    frames = [pd.read_parquet(f, columns=["ts_code", "trade_date"])
-              for f in sorted(glob.glob(os.path.join(root, table, "*.parquet")))]
+    frames = [
+        pd.read_parquet(f, columns=["ts_code", "trade_date"])
+        for f in sorted(glob.glob(os.path.join(root, table, "*.parquet")))
+    ]
     if not frames:
         return {}
     df = pd.concat(frames, ignore_index=True)
@@ -145,8 +155,7 @@ def sync_evidence_status(kg, status_map):
     n, changed = 0, {}
     for t in TABLES:
         ev = kg.get(t, {}).get("source_empty_evidence")
-        items = (ev.items() if isinstance(ev, dict)
-                 else [(x.get("ts_code"), x) for x in (ev or [])])
+        items = ev.items() if isinstance(ev, dict) else [(x.get("ts_code"), x) for x in (ev or [])]
         for c, v in items:
             if not isinstance(v, dict) or "status" not in v:
                 continue
@@ -176,8 +185,9 @@ def register_source_empty(kg, code, name, status, today):
         rec = {"probe_rows": 0, "status": st, "probed_at": today}
         if isinstance(ev, list):
             ev = [x for x in ev if str(x.get("ts_code")) != code]
-            ev.append({"ts_code": code, "name": name, "status": st,
-                       "probe_rows": 0, "probed_at": today})
+            ev.append(
+                {"ts_code": code, "name": name, "status": st, "probe_rows": 0, "probed_at": today}
+            )
             ev.sort(key=lambda x: str(x.get("ts_code")))
             entry["source_empty_evidence"] = ev
         else:
@@ -197,8 +207,9 @@ def _check_invariants(kg):
             ev_codes = {str(x.get("ts_code")) for x in ev}
         assert reg == ev_codes, f"{t} 注册表/证据错位: {sorted(reg ^ ev_codes)[:5]}"
         if "source_empty_count" in entry:
-            assert entry["source_empty_count"] == len(reg), \
+            assert entry["source_empty_count"] == len(reg), (
                 f"{t} source_empty_count={entry['source_empty_count']} ≠ {len(reg)}"
+            )
 
 
 # ============================================================
@@ -215,8 +226,11 @@ def _diff_patch(old, new):
             continue
         eq = (a[c] == b[c]) | (a[c].isna() & b[c].isna())
         out[c] = int((~eq).sum())
-    return out, sorted(set(new["ts_code"]) - set(old["ts_code"])), \
-        sorted(set(old["ts_code"]) - set(new["ts_code"]))
+    return (
+        out,
+        sorted(set(new["ts_code"]) - set(old["ts_code"])),
+        sorted(set(old["ts_code"]) - set(new["ts_code"])),
+    )
 
 
 def _regress_tail(n=40):
@@ -224,8 +238,13 @@ def _regress_tail(n=40):
     try:
         r = subprocess.run(
             [sys.executable, "-X", "utf8", "main.py", "regress"],
-            cwd=CODE_ROOT, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=3600)
+            cwd=CODE_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=3600,
+        )
         lines = ((r.stdout or "") + (r.stderr or "")).strip().splitlines()
         return r.returncode, lines[-n:]
     except Exception as e:
@@ -248,15 +267,17 @@ def run(apply=False, verbose=True):
 
     # ---- 2. 四表覆盖 ----
     from common import reader
+
     stores = {t: set(reader.codes_from_store(t)) for t in TABLES}
-    registered = {t: set(map(str, kg.get(t, {}).get("source_empty", [])))
-                  for t in TABLES}
+    registered = {t: set(map(str, kg.get(t, {}).get("source_empty", []))) for t in TABLES}
     missing = coverage_missing(codes, stores, registered)
     print("\n[2] 四表覆盖（未覆盖且未登记）：")
     for t in TABLES:
-        print(f"    {t:12s} 库内 {len(stores[t]):5d} 码 | 已登记源端空 "
-              f"{len(registered[t]):3d} | 可执行缺口 {len(missing[t])} 只"
-              + (f" → {missing[t]}" if missing[t] else ""))
+        print(
+            f"    {t:12s} 库内 {len(stores[t]):5d} 码 | 已登记源端空 "
+            f"{len(registered[t]):3d} | 可执行缺口 {len(missing[t])} 只"
+            + (f" → {missing[t]}" if missing[t] else "")
+        )
 
     # ---- 3. 探针（只探未覆盖码；fund_daily limit=1）----
     probe_codes = sorted({c for t in TABLES for c in missing[t]})
@@ -266,11 +287,13 @@ def run(apply=False, verbose=True):
     to_register, should_fill, probe_fail = [], [], []
     if probe_codes:
         from fetch.base import RateLimiter, get_pro, ts_call_with_retry
+
         pro, limiter = get_pro(), RateLimiter()
         print(f"\n[3] 探针 {len(probe_codes)} 只（fund_daily，limit=1）：")
         for code in probe_codes:
-            df = ts_call_with_retry(pro, "fund_daily", limiter,
-                                    {"ts_code": code, "limit": 1}, verbose=verbose)
+            df = ts_call_with_retry(
+                pro, "fund_daily", limiter, {"ts_code": code, "limit": 1}, verbose=verbose
+            )
             if df is None:
                 probe_fail.append(code)
                 print(f"    {code}  探针失败（不登记，留待重跑）")
@@ -285,32 +308,41 @@ def run(apply=False, verbose=True):
 
     # ---- 4. 注册表对账 ----
     from tools.research.fund_stale import apply_fix, detect
+
     det = detect()
     n_stale = sum(len(x["stale"]) for x in det)
     print(f"\n[4] 注册表对账：stale 合计 {n_stale}")
     for x in det:
-        print(f"    {x['table']:12s} stale={len(x['stale']):3d} stale_late={len(x['stale_late']):3d}"
-              + (f" → {x['stale'][:5]}" if x["stale"] else ""))
+        print(
+            f"    {x['table']:12s} stale={len(x['stale']):3d} stale_late={len(x['stale_late']):3d}"
+            + (f" → {x['stale'][:5]}" if x["stale"] else "")
+        )
     n_status, status_changes = sync_evidence_status(kg, status_map)
-    print(f"    evidence.status 同步: {n_status} 处"
-          + (f" → {status_changes}" if status_changes else ""))
+    print(
+        f"    evidence.status 同步: {n_status} 处"
+        + (f" → {status_changes}" if status_changes else "")
+    )
 
     # ---- 5/6. 声明重算 ----
     new_nan = status_nan_set(basic)
     old_nan = sorted(str(c) for c in kg.get("fund_basic_status_nan", []))
     print(f"\n[5] market_e_count: {old_count} → {n_e}")
-    print(f"[6] fund_basic_status_nan: {len(old_nan)} → {len(new_nan)}"
-          f"（多={sorted(set(new_nan) - set(old_nan))[:5]} "
-          f"少={sorted(set(old_nan) - set(new_nan))[:5]}）")
+    print(
+        f"[6] fund_basic_status_nan: {len(old_nan)} → {len(new_nan)}"
+        f"（多={sorted(set(new_nan) - set(old_nan))[:5]} "
+        f"少={sorted(set(old_nan) - set(new_nan))[:5]}）"
+    )
 
     # ---- 7. 重建补表 ----
     new_patch = rebuild_patch(basic, first_trade_dates())
     old_patch = pd.read_parquet(PATCH_PATH) if os.path.exists(PATCH_PATH) else None
     patch_same = old_patch is not None and old_patch.equals(new_patch)
-    print(f"\n[7] 补表：旧 {0 if old_patch is None else len(old_patch)} 行 → "
-          f"新 {len(new_patch)} 行 | early_days>0="
-          f"{int((new_patch['early_days'] > 0).sum())} | "
-          f"category={new_patch['category'].value_counts().to_dict()}")
+    print(
+        f"\n[7] 补表：旧 {0 if old_patch is None else len(old_patch)} 行 → "
+        f"新 {len(new_patch)} 行 | early_days>0="
+        f"{int((new_patch['early_days'] > 0).sum())} | "
+        f"category={new_patch['category'].value_counts().to_dict()}"
+    )
     if old_patch is not None:
         diffs, added, dropped = _diff_patch(old_patch, new_patch)
         print(f"    与旧表按码对齐：新增码={added} 丢失码={dropped} 差异列={diffs}")
@@ -318,8 +350,13 @@ def run(apply=False, verbose=True):
         print("    旧补表不存在（将全量新建）")
 
     # ---- 判定是否需要变更 ----
-    kg_changed = (bool(n_stale) or bool(to_register) or bool(n_status)
-                  or old_count != n_e or old_nan != new_nan)
+    kg_changed = (
+        bool(n_stale)
+        or bool(to_register)
+        or bool(n_status)
+        or old_count != n_e
+        or old_nan != new_nan
+    )
     needs = kg_changed or not patch_same
     print(f"\n[变更判定] known_gaps={kg_changed} patch={'有变化' if not patch_same else '无变化'}")
 
@@ -332,8 +369,9 @@ def run(apply=False, verbose=True):
         print("\n[幂等] 零变更，未写盘")
     else:
         # ---- 备份 → 写盘 ----
-        bak_dir = os.path.join(PROJECT_DIR, "备份", "归档文件",
-                               f"bak-{datetime.now():%Y%m%d}-pre-meta-close")
+        bak_dir = os.path.join(
+            PROJECT_DIR, "备份", "归档文件", f"bak-{datetime.now():%Y%m%d}-pre-meta-close"
+        )
         os.makedirs(bak_dir, exist_ok=True)
         # 备份只写一次：同日重跑不得用「已被改过的现状」覆盖最早的原始备份
         _bk_kg = os.path.join(bak_dir, "known_gaps.json")
@@ -355,8 +393,10 @@ def run(apply=False, verbose=True):
         kg["fund_basic_status_nan"] = new_nan
         _check_invariants(kg)
         _save_kg(kg)
-        print(f"[写入] known_gaps.json：market_e_count={n_e}、status_nan={len(new_nan)}、"
-              f"新登记={to_register}")
+        print(
+            f"[写入] known_gaps.json：market_e_count={n_e}、status_nan={len(new_nan)}、"
+            f"新登记={to_register}"
+        )
 
         if not patch_same:
             os.makedirs(os.path.dirname(PATCH_PATH), exist_ok=True)

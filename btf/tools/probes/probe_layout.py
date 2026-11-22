@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """PoC-1 前置实测：主库 17 表布局与样例数据（一次性探查脚本，不入包）。"""
+
 import sys
 from pathlib import Path
 
@@ -7,10 +8,22 @@ sys.stdout.reconfigure(encoding="utf-8")
 root = Path(r"D:\全量数据\market_data")
 
 TABLES = [
-    "daily", "adj_factor", "stk_limit", "suspend_d", "namechange",
-    "dividend", "moneyflow", "index_daily", "daily_basic", "fina_indicator",
-    "fund_daily", "etf_limit", "index_weight", "index_dailybasic",
-    "new_share", "fx_daily",
+    "daily",
+    "adj_factor",
+    "stk_limit",
+    "suspend_d",
+    "namechange",
+    "dividend",
+    "moneyflow",
+    "index_daily",
+    "daily_basic",
+    "fina_indicator",
+    "fund_daily",
+    "etf_limit",
+    "index_weight",
+    "index_dailybasic",
+    "new_share",
+    "fx_daily",
 ]
 for table in TABLES:
     d = root / table

@@ -12,6 +12,7 @@
 4. **P0-NEW-7 第二层**：`save_metrics` 数值守卫——非数值混入时**指名报错**，
    而不是在跑完之后抛 `could not convert string to float`。
 """
+
 from __future__ import annotations
 
 import json
@@ -54,19 +55,19 @@ class TestSaveMetricsGuard:
         cfg = {"schema_version": "backtest.v1"}
         manifest = store.create_run(cfg)
         with pytest.raises(ValueError, match=r"benchmark_symbol|只允许数值"):
-            store.save_metrics(manifest.run_id,
-                               {"total_return": 0.1,
-                                "benchmark_symbol": "000300.SH"})
+            store.save_metrics(
+                manifest.run_id, {"total_return": 0.1, "benchmark_symbol": "000300.SH"}
+            )
 
     def test_numeric_metrics_ok_and_nan_to_null(self, tmp_path):
         store = LocalRunStore(tmp_path)
         manifest = store.create_run({"schema_version": "backtest.v1"})
-        store.save_metrics(manifest.run_id,
-                           {"total_return": 0.1, "sharpe_ratio": float("nan")})
-        raw = json.loads((store.run_dir(manifest.run_id) / "metrics.json")
-                         .read_text(encoding="utf-8"))["metrics"]
+        store.save_metrics(manifest.run_id, {"total_return": 0.1, "sharpe_ratio": float("nan")})
+        raw = json.loads(
+            (store.run_dir(manifest.run_id) / "metrics.json").read_text(encoding="utf-8")
+        )["metrics"]
         assert raw["total_return"] == 0.1
-        assert raw["sharpe_ratio"] is None          # NaN → null（严格 JSON）
+        assert raw["sharpe_ratio"] is None  # NaN → null（严格 JSON）
 
 
 class TestManifestAssemblyNotes:
@@ -75,7 +76,8 @@ class TestManifestAssemblyNotes:
     def test_roundtrip(self):
         manifest = RunManifest.skeleton(
             {"schema_version": "backtest.v1"},
-            assembly_notes=["宇宙期间并集：5690 标的（跨期新增 623 只）"])
+            assembly_notes=["宇宙期间并集：5690 标的（跨期新增 623 只）"],
+        )
         again = RunManifest.from_dict(manifest.to_dict())
         assert again.assembly_notes == manifest.assembly_notes
 
@@ -93,17 +95,21 @@ class TestUniverseSpanFallback:
         from btf.data.memory import MemoryFeed
         from btf.domain.types import AssetClass, Instrument
 
-        old = Instrument(symbol="000001.SZ", asset_class=AssetClass.STOCK,
-                         lot_size=100, list_date=D("20100101"),
-                         delist_date=D("20170101"))
-        new = Instrument(symbol="688001.SH", asset_class=AssetClass.STOCK,
-                         lot_size=100, list_date=D("20190722"))
+        old = Instrument(
+            symbol="000001.SZ",
+            asset_class=AssetClass.STOCK,
+            lot_size=100,
+            list_date=D("20100101"),
+            delist_date=D("20170101"),
+        )
+        new = Instrument(
+            symbol="688001.SH", asset_class=AssetClass.STOCK, lot_size=100, list_date=D("20190722")
+        )
         feed = MemoryFeed([], {}, {"000001.SZ": old, "688001.SH": new})
 
         at_start = {i.symbol for i in feed.universe(D("20160104"))}
-        span = {i.symbol for i in feed.universe_span(D("20160104"),
-                                                     D("20250923"))}
-        assert at_start == {"000001.SZ"}          # 新标的起点未上市
+        span = {i.symbol for i in feed.universe_span(D("20160104"), D("20250923"))}
+        assert at_start == {"000001.SZ"}  # 新标的起点未上市
         assert span == {"000001.SZ", "688001.SH"}  # 期间并集两者都在
 
     def test_mixed_feed_delegate_without_span(self):
@@ -115,19 +121,18 @@ class TestUniverseSpanFallback:
             contract_version = CONTRACT_VERSION
 
             def universe(self, date):
-                inst = Instrument(symbol="000001.SZ",
-                                  asset_class=AssetClass.STOCK, lot_size=100)
+                inst = Instrument(symbol="000001.SZ", asset_class=AssetClass.STOCK, lot_size=100)
                 return [inst]
 
         feed = MixedDailyFeed(Path("."))
-        feed._delegate = _LegacyFeed()            # 注入"旧版"委托
+        feed._delegate = _LegacyFeed()  # 注入"旧版"委托
         span = feed.universe_span(D("20160104"), D("20161231"))
         assert [i.symbol for i in span] == ["000001.SZ"]
 
 
 requires_index = pytest.mark.skipif(
-    not (Path(MARKET_DATA_DIR) / "index_daily").is_dir(),
-    reason=f"主库不可用: {MARKET_DATA_DIR}")
+    not (Path(MARKET_DATA_DIR) / "index_daily").is_dir(), reason=f"主库不可用: {MARKET_DATA_DIR}"
+)
 
 
 @requires_index
@@ -147,10 +152,10 @@ class TestSharedBenchmarkStore:
                 "initial_cash": 1_000_000,
             },
             "data": {"feed": FEED_NAME},
-            "risk": {"rules": [], "allow_empty_chain": True},   # X-7 逃生声明
+            "risk": {"rules": [], "allow_empty_chain": True},  # X-7 逃生声明
             "report": {"benchmark": "000300.SH"},
         }
-        rt = BTFRuntime().load_config(cfg).build()      # 装配期守卫：装载 index_daily
+        rt = BTFRuntime().load_config(cfg).build()  # 装配期守卫：装载 index_daily
         store = rt._data_store
         assert store is not None, "runtime 未持共享表级缓存（Z-3 回归）"
         loads_after_guard = store.stats()["loads"]
@@ -158,15 +163,22 @@ class TestSharedBenchmarkStore:
 
         # run 期取数（同批年份，同标的）→ 必须**零新装载**（原实现两个私有
         # store → 同一批年份读两遍）。快照取 5 日（相对指标样本方差需 n≥3）
-        snapshots = [{"date": d, "total_value": v} for d, v in (
-            ("20150105", 1_000_000.0), ("20150106", 1_010_000.0),
-            ("20150107", 1_005_000.0), ("20150108", 1_020_000.0),
-            ("20150109", 1_015_000.0))]
+        snapshots = [
+            {"date": d, "total_value": v}
+            for d, v in (
+                ("20150105", 1_000_000.0),
+                ("20150106", 1_010_000.0),
+                ("20150107", 1_005_000.0),
+                ("20150108", 1_020_000.0),
+                ("20150109", 1_015_000.0),
+            )
+        ]
         metrics = rt._relative_metrics_for("000300.SH", snapshots, analysis={})
         assert metrics, "相对指标为空"
         assert store.stats()["loads"] == loads_after_guard, (
             f"run 期重复装载 index_daily（双重 IO 回归）："
-            f"{loads_after_guard} → {store.stats()['loads']}")
+            f"{loads_after_guard} → {store.stats()['loads']}"
+        )
 
     def test_too_short_series_raises_benchmark_error(self):
         """边界：2 日序列 fail-closed 抛 `BenchmarkError`（而非 ZeroDivisionError）。
@@ -191,12 +203,12 @@ class TestAssemblyNotesReachReport:
             "run": {
                 "strategy": "tests.fixtures.buyhold:ConfigBuyHold",
                 "params": {"symbol": "000001.SZ", "weight": 0.9},
-                "universe": {"source": "all"},        # 触发期间并集笔记
+                "universe": {"source": "all"},  # 触发期间并集笔记
                 "period": {"start": "2015-01-05", "end": "2015-01-09"},
                 "initial_cash": 1_000_000,
             },
             "data": {"feed": FEED_NAME},
-            "risk": {"rules": [], "allow_empty_chain": True},   # X-7 逃生声明
+            "risk": {"rules": [], "allow_empty_chain": True},  # X-7 逃生声明
         }
         store = LocalRunStore(tmp_path)
         rt = BTFRuntime().load_config(cfg).build()
@@ -204,8 +216,7 @@ class TestAssemblyNotesReachReport:
         result = rt.run(store=store)
         run_id = result.run_id
 
-        manifest = json.loads((store.run_dir(run_id) / "manifest.json")
-                              .read_text(encoding="utf-8"))
+        manifest = json.loads((store.run_dir(run_id) / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["assembly_notes"], "口径笔记未落盘（P1-NEW-5 回归）"
 
         # 报告渲染：口径与装配披露区含该笔记（`build()` 即 HTML 字符串）

@@ -7,6 +7,7 @@
     ② 性能/披露：宇宙超限按字典序前缀抽样，`sampled_symbols` 与报告注记可见；
     ③ 产物（CC-6）：run 目录 `data_quality_report.json` 恒定落盘（含"为何没校验"）。
 """
+
 from __future__ import annotations
 
 import json
@@ -18,30 +19,64 @@ import pytest
 from btf.experiment.store import LocalRunStore
 from btf.runtime import BTFRuntime, DataQualityError
 
-DAYS = ["20240102", "20240103", "20240104", "20240105", "20240108",
-        "20240109", "20240110", "20240111", "20240112", "20240115"]
+DAYS = [
+    "20240102",
+    "20240103",
+    "20240104",
+    "20240105",
+    "20240108",
+    "20240109",
+    "20240110",
+    "20240111",
+    "20240112",
+    "20240115",
+]
 SYM, SYM2 = "600000.SH", "300001.SZ"
 
 
-def _build_master(root: Path, *, bad_vol: bool = False,
-                  st_breach: bool = False) -> None:
+def _build_master(root: Path, *, bad_vol: bool = False, st_breach: bool = False) -> None:
     (root / "metadata").mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.Table.from_pylist([
-        {"exchange": "SSE", "cal_date": d, "is_open": 1,
-         "pretrade_date": DAYS[max(0, i - 1)]}
-        for i, d in enumerate(DAYS)]), root / "metadata" / "trade_cal.parquet")
-    pq.write_table(pa.Table.from_pylist([
-        {"ts_code": SYM, "name": "浦发银行", "list_date": "19991110",
-         "delist_date": None},
-        {"ts_code": SYM2, "name": "特锐德", "list_date": "20091030",
-         "delist_date": None}]), root / "metadata" / "stock_basic.parquet")
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "exchange": "SSE",
+                    "cal_date": d,
+                    "is_open": 1,
+                    "pretrade_date": DAYS[max(0, i - 1)],
+                }
+                for i, d in enumerate(DAYS)
+            ]
+        ),
+        root / "metadata" / "trade_cal.parquet",
+    )
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {"ts_code": SYM, "name": "浦发银行", "list_date": "19991110", "delist_date": None},
+                {"ts_code": SYM2, "name": "特锐德", "list_date": "20091030", "delist_date": None},
+            ]
+        ),
+        root / "metadata" / "stock_basic.parquet",
+    )
 
     def rows(sym: str) -> list[dict]:
         # SYM 在 DAYS[0] **全日停牌** → 该日**不产出行**（主库实测口径）
         days = [d for d in DAYS if not (sym == SYM and d == DAYS[0])]
-        out = [{"ts_code": sym, "trade_date": d, "open": 10.0, "high": 10.0,
-                "low": 10.0, "close": 10.0, "pre_close": 10.0,
-                "vol": 1000.0, "amount": 10_000.0} for d in days]
+        out = [
+            {
+                "ts_code": sym,
+                "trade_date": d,
+                "open": 10.0,
+                "high": 10.0,
+                "low": 10.0,
+                "close": 10.0,
+                "pre_close": 10.0,
+                "vol": 1000.0,
+                "amount": 10_000.0,
+            }
+            for d in days
+        ]
         if bad_vol and sym == SYM:
             out[0]["vol"] = -1.0
         if st_breach and sym == SYM:
@@ -53,34 +88,63 @@ def _build_master(root: Path, *, bad_vol: bool = False,
 
     for table in ("daily",):
         (root / table).mkdir(parents=True, exist_ok=True)
-        pq.write_table(pa.Table.from_pylist(rows(SYM) + rows(SYM2)),
-                       root / table / "2024.parquet")
+        pq.write_table(pa.Table.from_pylist(rows(SYM) + rows(SYM2)), root / table / "2024.parquet")
     for table, cols in (
-            ("stk_limit", {"up_limit": 11.0, "down_limit": 9.0}),
-            ("adj_factor", {"adj_factor": 1.0})):
+        ("stk_limit", {"up_limit": 11.0, "down_limit": 9.0}),
+        ("adj_factor", {"adj_factor": 1.0}),
+    ):
         (root / table).mkdir(parents=True, exist_ok=True)
-        pq.write_table(pa.Table.from_pylist(
-            [{"ts_code": s, "trade_date": d, **cols}
-             for s in (SYM, SYM2) for d in DAYS]),
-            root / table / "2024.parquet")
+        pq.write_table(
+            pa.Table.from_pylist(
+                [{"ts_code": s, "trade_date": d, **cols} for s in (SYM, SYM2) for d in DAYS]
+            ),
+            root / table / "2024.parquet",
+        )
     (root / "suspend_d").mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.Table.from_pylist([
-        {"ts_code": SYM, "trade_date": DAYS[0], "suspend_timing": None,
-         "suspend_type": "S"}]), root / "suspend_d" / "2024.parquet")
+    pq.write_table(
+        pa.Table.from_pylist(
+            [{"ts_code": SYM, "trade_date": DAYS[0], "suspend_timing": None, "suspend_type": "S"}]
+        ),
+        root / "suspend_d" / "2024.parquet",
+    )
     (root / "dividend").mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.Table.from_pylist([
-        {"ts_code": SYM, "ex_date": "20240109", "pay_date": "20240109",
-         "record_date": "20240108", "ann_date": "20231201",
-         "div_proc": "实施", "stk_bo_rate": None, "stk_co_rate": None,
-         "cash_div": 0.1, "end_date": "20231231"}]),
-        root / "dividend" / "2024.parquet")
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "ts_code": SYM,
+                    "ex_date": "20240109",
+                    "pay_date": "20240109",
+                    "record_date": "20240108",
+                    "ann_date": "20231201",
+                    "div_proc": "实施",
+                    "stk_bo_rate": None,
+                    "stk_co_rate": None,
+                    "cash_div": 0.1,
+                    "end_date": "20231231",
+                }
+            ]
+        ),
+        root / "dividend" / "2024.parquet",
+    )
     if st_breach:
         # ST 在册区间（namechange）：SYM 自 DAYS[2] 起为 ST（无结束日）
         (root / "namechange").mkdir(parents=True, exist_ok=True)
-        pq.write_table(pa.Table.from_pylist([
-            {"ts_code": SYM, "name": "*ST 浦发", "start_date": DAYS[2],
-             "end_date": None, "ann_date": DAYS[1], "change_reason": "ST"}]),
-            root / "namechange" / "2024.parquet")
+        pq.write_table(
+            pa.Table.from_pylist(
+                [
+                    {
+                        "ts_code": SYM,
+                        "name": "*ST 浦发",
+                        "start_date": DAYS[2],
+                        "end_date": None,
+                        "ann_date": DAYS[1],
+                        "change_reason": "ST",
+                    }
+                ]
+            ),
+            root / "namechange" / "2024.parquet",
+        )
 
 
 def _config(root: Path, **quality) -> dict:
@@ -93,10 +157,12 @@ def _config(root: Path, **quality) -> dict:
             "period": {"start": "2024-01-02", "end": "2024-01-15"},
             "initial_cash": 100_000,
         },
-        "data": {"feed": "tushare_parquet", "feed_params": {"root": str(root)},
-                 **({"quality": quality} if quality else {})},
-        "execution": {"handler": "next_open", "cost_model": "flat_rate",
-                      "rebalancer": "full"},
+        "data": {
+            "feed": "tushare_parquet",
+            "feed_params": {"root": str(root)},
+            **({"quality": quality} if quality else {}),
+        },
+        "execution": {"handler": "next_open", "cost_model": "flat_rate", "rebalancer": "full"},
         "risk": {"rules": [], "allow_empty_chain": True},
     }
 
@@ -115,8 +181,9 @@ def test_default_records_and_discloses(tmp_path: Path):
     assert artifact.is_file(), "run 目录缺 data_quality_report.json"
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["ok"] is True
-    assert all(r["checked_rows"] > 0 for r in payload["rules"]
-               if r["rule"] != "CC-7"), "空洞披露"      # CC-7 事件型：无送转 ⇒ 0 合法
+    assert all(r["checked_rows"] > 0 for r in payload["rules"] if r["rule"] != "CC-7"), (
+        "空洞披露"
+    )  # CC-7 事件型：无送转 ⇒ 0 合法
 
 
 def test_strict_raises_on_findings(tmp_path: Path):
@@ -159,8 +226,10 @@ class TestCC2STBranch:
         rt = BTFRuntime().load_config(_config(root)).build()
         rt.run(store=LocalRunStore(tmp_path / "runs"))
         payload = json.loads(
-            (tmp_path / "runs" / rt.last_run_id / "data_quality_report.json"
-             ).read_text(encoding="utf-8"))
+            (tmp_path / "runs" / rt.last_run_id / "data_quality_report.json").read_text(
+                encoding="utf-8"
+            )
+        )
         assert payload["st_source"] == "namechange"
         assert payload["st_pairs_count"] > 0
 
@@ -176,7 +245,7 @@ class TestCC2STBranch:
 def test_disabled_is_disclosed_not_silent(tmp_path: Path):
     """enabled=false：**披露**"为什么没校验"（不得静默跳过）。"""
     root = tmp_path / "market"
-    _build_master(root, bad_vol=True)          # 数据其实是脏的
+    _build_master(root, bad_vol=True)  # 数据其实是脏的
     rt = BTFRuntime().load_config(_config(root, enabled=False)).build()
     assert rt.data_quality["enabled"] is False
     assert "配置关闭" in rt.data_quality["note"]

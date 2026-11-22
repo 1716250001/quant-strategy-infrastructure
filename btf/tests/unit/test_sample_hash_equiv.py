@@ -6,6 +6,7 @@
 本文件钉死「Arrow 入参 ≡ list 入参」，覆盖空列／单行／恰好 stride 倍数／
 多 chunk（ChunkedArray）。
 """
+
 from __future__ import annotations
 
 import hashlib

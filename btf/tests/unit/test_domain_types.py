@@ -3,6 +3,7 @@
 
 锚点：04 §8.2.1-8.2.3 签名语义；E2 ETF 子类规则；TradingDate 互转。
 """
+
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
@@ -59,7 +60,8 @@ class TestInstrument:
     def test_delisted_is_first_class(self):
         """退市股一等公民（幸存者偏差治理）：delist_date 非空可构造、可入池。"""
         inst = Instrument(
-            symbol="600002.SH", asset_class=AssetClass.STOCK,
+            symbol="600002.SH",
+            asset_class=AssetClass.STOCK,
             list_date=TradingDate(date(1997, 7, 28)),
             delist_date=TradingDate(date(2019, 5, 17)),
         )
@@ -86,7 +88,12 @@ class TestBoardRuleE2:
             symbol="510300.SH", asset_class=AssetClass.ETF, etf_subclass=EtfSubclass.STOCK
         )
         assert rule_for(stock_etf).t_plus == 1
-        for sub in (EtfSubclass.BOND, EtfSubclass.GOLD, EtfSubclass.CROSS_BORDER, EtfSubclass.MONEY):
+        for sub in (
+            EtfSubclass.BOND,
+            EtfSubclass.GOLD,
+            EtfSubclass.CROSS_BORDER,
+            EtfSubclass.MONEY,
+        ):
             etf = Instrument(symbol="511180.SH", asset_class=AssetClass.ETF, etf_subclass=sub)
             assert rule_for(etf).t_plus == 0, f"{sub} 应为 T+0"
 
@@ -99,9 +106,15 @@ class TestBoardRuleE2:
 class TestBarAndLimit:
     def _bar(self, close: float) -> Bar:
         return Bar(
-            symbol="X", date=TradingDate(date(2024, 1, 2)),
-            open=close, high=close, low=close, close=close,
-            volume=100.0, amount=1000.0, pre_close=close,
+            symbol="X",
+            date=TradingDate(date(2024, 1, 2)),
+            open=close,
+            high=close,
+            low=close,
+            close=close,
+            volume=100.0,
+            amount=1000.0,
+            pre_close=close,
         )
 
     def test_bar_units_contract(self):
@@ -111,8 +124,8 @@ class TestBarAndLimit:
 
     def test_touch_limit_tolerance(self):
         """涨跌停触及容差 1e-4（相对比较）——黄金集 G2 断言的数值基础。"""
-        assert touch_limit_up(10.0, 10.0)                 # 恰好
-        assert touch_limit_up(10.0 * (1 - LIMIT_PRICE_TOL), 10.0)   # 容差内
+        assert touch_limit_up(10.0, 10.0)  # 恰好
+        assert touch_limit_up(10.0 * (1 - LIMIT_PRICE_TOL), 10.0)  # 容差内
         assert not touch_limit_up(10.0 * (1 - 2 * LIMIT_PRICE_TOL), 10.0)  # 容差外
         assert touch_limit_down(9.0, 9.0)
         assert touch_limit_down(9.0 * (1 + LIMIT_PRICE_TOL), 9.0)
@@ -121,4 +134,4 @@ class TestBarAndLimit:
     def test_no_limit_constraint(self):
         assert not touch_limit_up(100.0, None)
         assert not touch_limit_down(0.1, None)
-        assert not touch_limit_up(100.0, 0.0)   # 非法涨停价（0/负）视为无约束
+        assert not touch_limit_up(100.0, 0.0)  # 非法涨停价（0/负）视为无约束

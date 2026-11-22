@@ -5,6 +5,7 @@
   且两次结果逐项相同（Z-2 脏读守卫）。
 - **T-7**：容量触顶 ⇒ `evictions > 0`，且 80% 告警**只打一次**。
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,8 +28,7 @@ D3 = TradingDate.from_iso(2015, 1, 7)
 
 
 def _inst(sym: str) -> Instrument:
-    return Instrument(symbol=sym, asset_class=AssetClass.STOCK, board="main",
-                      lot_size=100)
+    return Instrument(symbol=sym, asset_class=AssetClass.STOCK, board="main", lot_size=100)
 
 
 class HistoryProbe(StrategyBase):
@@ -42,8 +42,7 @@ class HistoryProbe(StrategyBase):
         pass
 
     def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
-        self.seen.append([ctx.history(s, date)[0].date.to_ymd()
-                          for s in self.symbols])
+        self.seen.append([ctx.history(s, date)[0].date.to_ymd() for s in self.symbols])
 
 
 def _feed(symbols: list[str]) -> MemoryFeed:
@@ -53,19 +52,29 @@ def _feed(symbols: list[str]) -> MemoryFeed:
             px = 10.0 + i + (d.to_ymd() != D1.to_ymd())
             bars.append(make_bar(sym, d, px, px, px, px, px - 0.1))
             states[(d.to_ymd(), sym)] = TradingState(
-                symbol=sym, date=d, limit_up_price=round(px * 1.1, 2),
-                limit_down_price=round(px * 0.9, 2), is_suspended=False,
-                is_st=False, is_delisted=False, is_limit_up=False,
-                is_limit_down=False)
-    return MemoryFeed(bars, states,
-                      instruments={s: _inst(s) for s in symbols})
+                symbol=sym,
+                date=d,
+                limit_up_price=round(px * 1.1, 2),
+                limit_down_price=round(px * 0.9, 2),
+                is_suspended=False,
+                is_st=False,
+                is_delisted=False,
+                is_limit_up=False,
+                is_limit_down=False,
+            )
+    return MemoryFeed(bars, states, instruments={s: _inst(s) for s in symbols})
 
 
 def _engine(symbols: list[str]) -> tuple[Engine, HistoryProbe]:
     probe = HistoryProbe(symbols)
-    eng = Engine(_feed(symbols), probe, start=D1, end=D3,
-                 instruments={s: _inst(s) for s in symbols},
-                 cross_section=symbols)
+    eng = Engine(
+        _feed(symbols),
+        probe,
+        start=D1,
+        end=D3,
+        instruments={s: _inst(s) for s in symbols},
+        cross_section=symbols,
+    )
     return eng, probe
 
 
@@ -79,10 +88,11 @@ def test_t6_same_engine_two_runs_rebuilds_cache():
     cache2 = eng._ctx_history_cache
     assert cache2 is not cache1, "缓存未重建（跨 run 脏读风险）"
     assert len(cache1) > 0 and cache2.misses > 0, "第二轮未重新装载"
-    assert [s.to_dict() if hasattr(s, "to_dict") else s for s in r1.snapshots] \
-        == [s.to_dict() if hasattr(s, "to_dict") else s for s in r2.snapshots]
+    assert [s.to_dict() if hasattr(s, "to_dict") else s for s in r1.snapshots] == [
+        s.to_dict() if hasattr(s, "to_dict") else s for s in r2.snapshots
+    ]
     assert len(r1.orders) == len(r2.orders)
-    assert probe.seen[len(seen1):] == seen1
+    assert probe.seen[len(seen1) :] == seen1
 
 
 def test_t7_cache_capacity_warning_once(monkeypatch, caplog):

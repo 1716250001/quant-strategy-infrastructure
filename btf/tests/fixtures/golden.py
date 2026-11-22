@@ -12,6 +12,7 @@
     - 再平衡：full（差额法 + 整手 + 卖先买后）
     - 风控：空链（放行 + 告警——避免风控差异混入记账对账）
 """
+
 from __future__ import annotations
 
 import json
@@ -50,8 +51,7 @@ class ScriptedTargets(StrategyBase):
     故此处不可调换（G7 卖先买后资金链断言的成立前提）。
     """
 
-    def __init__(self, targets: dict[str, dict[str, float]],
-                 orders: list[dict] | None = None):
+    def __init__(self, targets: dict[str, dict[str, float]], orders: list[dict] | None = None):
         self.targets = targets
         self.orders_by_date: dict[str, list[dict]] = {}
         for order in orders or []:
@@ -60,11 +60,18 @@ class ScriptedTargets(StrategyBase):
     def on_close(self, ctx: StrategyContext, date: TradingDate) -> None:
         ymd = date.to_ymd()
         for draft in self.orders_by_date.get(ymd, []):
-            ctx.submit_order(Order(
-                order_id="", symbol=draft["symbol"],
-                side=OrderSide(draft["side"]), order_type=OrderType.MARKET,
-                qty=int(draft["qty"]), limit_price=None, created_at=date,
-                tag="golden_explicit"))
+            ctx.submit_order(
+                Order(
+                    order_id="",
+                    symbol=draft["symbol"],
+                    side=OrderSide(draft["side"]),
+                    order_type=OrderType.MARKET,
+                    qty=int(draft["qty"]),
+                    limit_price=None,
+                    created_at=date,
+                    tag="golden_explicit",
+                )
+            )
         target = self.targets.get(ymd)
         if target is not None:
             ctx.submit_target(TargetPortfolio(date, target))
@@ -105,38 +112,52 @@ def case_to_feed(case: dict) -> tuple[object, dict[str, Instrument]]:
         )
     bars = []
     for b in data["bars"]:
-        bars.append(Bar(symbol=b["symbol"], date=D(b["date"]),
-                        open=float(b["open"]), high=float(b["high"]),
-                        low=float(b["low"]), close=float(b["close"]),
-                        volume=float(b.get("vol", 0.0)),
-                        amount=float(b.get("amount", 0.0)),
-                        pre_close=float(b.get("pre_close", 0.0))))
+        bars.append(
+            Bar(
+                symbol=b["symbol"],
+                date=D(b["date"]),
+                open=float(b["open"]),
+                high=float(b["high"]),
+                low=float(b["low"]),
+                close=float(b["close"]),
+                volume=float(b.get("vol", 0.0)),
+                amount=float(b.get("amount", 0.0)),
+                pre_close=float(b.get("pre_close", 0.0)),
+            )
+        )
     states: dict[tuple[str, str], TradingState] = {}
     rows = data.get("states")
     if rows:
         for s in rows:
             states[(s["date"], s["symbol"])] = TradingState(
-                symbol=s["symbol"], date=D(s["date"]),
+                symbol=s["symbol"],
+                date=D(s["date"]),
                 limit_up_price=_opt_float(s.get("limit_up")),
                 limit_down_price=_opt_float(s.get("limit_down")),
                 is_suspended=bool(s.get("suspended", False)),
                 is_st=bool(s.get("is_st", False)),
                 is_delisted=bool(s.get("delisted", False)),
-                is_limit_up=False, is_limit_down=False,
+                is_limit_up=False,
+                is_limit_down=False,
             )
     else:
         for b in data["bars"]:
             pre = b.get("pre_close") or b["close"]
             states[(b["date"], b["symbol"])] = TradingState(
-                symbol=b["symbol"], date=D(b["date"]),
+                symbol=b["symbol"],
+                date=D(b["date"]),
                 limit_up_price=round(float(pre) * 1.1, 2),
                 limit_down_price=round(float(pre) * 0.9, 2),
-                is_suspended=False, is_st=False, is_delisted=False,
-                is_limit_up=False, is_limit_down=False,
+                is_suspended=False,
+                is_st=False,
+                is_delisted=False,
+                is_limit_up=False,
+                is_limit_down=False,
             )
     actions = [
         CorporateAction(
-            symbol=a["symbol"], ex_date=D(a["ex_date"]),
+            symbol=a["symbol"],
+            ex_date=D(a["ex_date"]),
             pay_date=D(a["pay_date"]) if a.get("pay_date") else None,
             record_date=D(a["record_date"]) if a.get("record_date") else None,
             cash_div_per_share=float(a.get("cash_div_per_share", 0.0)),
@@ -145,8 +166,13 @@ def case_to_feed(case: dict) -> tuple[object, dict[str, Instrument]]:
         )
         for a in data.get("actions", [])
     ]
-    feed = MemoryFeed(bars=bars, states=states, instruments=instruments,
-                      dates=[D(d) for d in data["dates"]], actions=actions)
+    feed = MemoryFeed(
+        bars=bars,
+        states=states,
+        instruments=instruments,
+        dates=[D(d) for d in data["dates"]],
+        actions=actions,
+    )
     return feed, instruments
 
 
@@ -158,20 +184,26 @@ def run_case(case: dict) -> object:
     """
     feed, instruments = case_to_feed(case)
     dates = [D(d) for d in case["data"]["dates"]]
-    strategy = ScriptedTargets(case["plan"]["targets"],
-                               case["plan"].get("orders"))
+    strategy = ScriptedTargets(case["plan"]["targets"], case["plan"].get("orders"))
     vpp = (case["plan"].get("execution") or {}).get("volume_participation")
-    handler = NextOpenHandler(cost_model=AShareTieredFeeModel(),
-                              slippage_model=None, instruments=instruments,
-                              volume_participation=vpp)
+    handler = NextOpenHandler(
+        cost_model=AShareTieredFeeModel(),
+        slippage_model=None,
+        instruments=instruments,
+        volume_participation=vpp,
+    )
     engine = Engine(
-        feed, strategy, start=dates[0], end=dates[-1],
+        feed,
+        strategy,
+        start=dates[0],
+        end=dates[-1],
         initial_cash=float(case["plan"]["initial_cash"]),
-        handler=handler, rebalancer=FullRebalancer(instruments=instruments),
-        risk_manager=RuleChainManager([]), instruments=instruments,
+        handler=handler,
+        rebalancer=FullRebalancer(instruments=instruments),
+        risk_manager=RuleChainManager([]),
+        instruments=instruments,
     )
     return engine.run()
 
 
-__all__ = ["CASES_DIR", "ScriptedTargets", "case_to_feed", "load_case",
-           "run_case"]
+__all__ = ["CASES_DIR", "ScriptedTargets", "case_to_feed", "load_case", "run_case"]

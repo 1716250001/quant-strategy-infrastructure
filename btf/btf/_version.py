@@ -132,4 +132,5 @@ K-1 P15 零成交 fail-loud／P17 feed 路由／C-3 判据统一；K-2 P10 第�
 ＋ **工具落点治理**（`tools/_paths.py::SCRATCH_ROOT`，`stkdiv_audit` 不再污染仓内）。
 计数 **1249**（非 L5 1227 ＋ L5 22）。
 """
+
 __version__ = "7.0.0"

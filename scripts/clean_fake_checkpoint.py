@@ -18,6 +18,7 @@ Tushare `index_weight` 服务端当日累计配额耗尽后**静默返回空 Dat
     python scripts/clean_fake_checkpoint.py --table index_weight          # 预览
     python scripts/clean_fake_checkpoint.py --table index_weight --apply  # 备份后写
 """
+
 import argparse
 import collections
 import json
@@ -100,8 +101,11 @@ def main():
     with open(CKPT, encoding="utf-8") as f:
         after = json.load(f)
     got = len(after.get(a.table, {}).get("completed", []))
-    other = {k: len(v.get("completed", [])) for k, v in after.items()
-             if k != a.table and isinstance(v, dict)}
+    other = {
+        k: len(v.get("completed", []))
+        for k, v in after.items()
+        if k != a.table and isinstance(v, dict)
+    }
     print(f"[完成] {a.table} 断点 {len(keys):,} -> {got:,}（应={len(kept):,}）")
     print(f"[核对] 其他表键数: {len(other)} 张（未改动）")
     return 0 if got == len(kept) else 1

@@ -25,6 +25,7 @@ optimize/validate（RC-15/16）+ **check/cold-backup/runs/show**——后四条�
 + **api Facade**（v0.5 V5-7）：`btf.run / btf.report / btf.dataset` 顶层函数
 （`btf/api.py` 惰性暴露——与 CLI 同链路等价，见模块 docstring 的等价性口径）。
 """
+
 from btf._version import __version__  # noqa: F401 —— 包根 re-export（惯例接口）
 
 

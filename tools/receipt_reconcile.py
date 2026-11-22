@@ -18,6 +18,7 @@ CLI:
 
 依赖: pandas + pyarrow（跟随主 venv），不引第三方
 """
+
 import argparse
 import hashlib
 import os
@@ -28,16 +29,18 @@ import pandas as pd
 
 def sha256(path):
     h = hashlib.sha256()
-    with open(path, 'rb') as f:
-        for chunk in iter(lambda: f.read(8192), b''):
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
+
 
 def load(path):
     if not os.path.exists(path):
         print(f"❌ 路径不存在: {path}")
         sys.exit(2)
     return pd.read_parquet(path)
+
 
 def main():
     p = argparse.ArgumentParser(description="回执对账断言工具")
@@ -52,7 +55,7 @@ def main():
     old = load(args.old) if args.old else None
 
     # 列名检查
-    key_cols = [c.strip() for c in args.key.split(',')]
+    key_cols = [c.strip() for c in args.key.split(",")]
     for c in key_cols:
         if c not in new.columns:
             print(f"❌ new 表无列: {c}（可用: {list(new.columns)}）")
@@ -61,20 +64,20 @@ def main():
             print(f"❌ old 表无列: {c}")
             sys.exit(2)
 
-    dim_cols = [c.strip() for c in args.dims.split(',') if c.strip()]
+    dim_cols = [c.strip() for c in args.dims.split(",") if c.strip()]
     for c in dim_cols:
         if c not in new.columns:
             print(f"❌ new 表无 dim 列: {c}")
             sys.exit(2)
 
-    print(f"{'='*72}")
+    print(f"{'=' * 72}")
     print("receipt_reconcile — §64.4 回执对账断言工具")
-    print(f"{'='*72}")
+    print(f"{'=' * 72}")
 
     # ① 行数 + 唯一键数
-    print(f"\n{'─'*72}")
+    print(f"\n{'─' * 72}")
     print("① 行数 / 唯一键数")
-    print(f"{'─'*72}")
+    print(f"{'─' * 72}")
     print(f"  new 行数:          {len(new):,}")
     print(f"  new 唯一键数:      {new[key_cols].drop_duplicates().shape[0]:,}")
     for c in key_cols:
@@ -85,15 +88,19 @@ def main():
         print(f"  old 行数:          {len(old):,}")
         print(f"  old 唯一键数:      {old[key_cols].drop_duplicates().shape[0]:,}")
         print(f"  old 文件 sha256:   {sha256(args.old)[:16]}...")
-        print(f"  行数差 (new-old):  {len(new)-len(old):+,}")
+        print(f"  行数差 (new-old):  {len(new) - len(old):+,}")
 
     # ② 集合差
     if old is not None:
-        print(f"\n{'─'*72}")
+        print(f"\n{'─' * 72}")
         print(f"② 集合差（按 {key_cols} 唯一键）")
-        print(f"{'─'*72}")
-        old_keys = set(old[key_cols].agg(tuple, axis=1) if len(key_cols)>1 else old[key_cols[0]].tolist())
-        new_keys = set(new[key_cols].agg(tuple, axis=1) if len(key_cols)>1 else new[key_cols[0]].tolist())
+        print(f"{'─' * 72}")
+        old_keys = set(
+            old[key_cols].agg(tuple, axis=1) if len(key_cols) > 1 else old[key_cols[0]].tolist()
+        )
+        new_keys = set(
+            new[key_cols].agg(tuple, axis=1) if len(key_cols) > 1 else new[key_cols[0]].tolist()
+        )
         only_old = sorted(old_keys - new_keys)
         only_new = sorted(new_keys - old_keys)
         common = old_keys & new_keys
@@ -101,15 +108,15 @@ def main():
         print(f"  仅新有 (added):     {len(only_new):,}")
         print(f"  共有 (common):      {len(common):,}")
         if only_old:
-            print(f"  仅旧样本（{min(args.samples, len(only_old))}）: {only_old[:args.samples]}")
+            print(f"  仅旧样本（{min(args.samples, len(only_old))}）: {only_old[: args.samples]}")
         if only_new:
-            print(f"  仅新样本（{min(args.samples, len(only_new))}）: {only_new[:args.samples]}")
+            print(f"  仅新样本（{min(args.samples, len(only_new))}）: {only_new[: args.samples]}")
 
     # ③ dims 列变更
     if old is not None and dim_cols:
-        print(f"\n{'─'*72}")
+        print(f"\n{'─' * 72}")
         print(f"③ 共有行中各列变更（按 {key_cols} 对齐）")
-        print(f"{'─'*72}")
+        print(f"{'─' * 72}")
         old_map = old.set_index(key_cols) if len(key_cols) > 1 else old.set_index(key_cols[0])
         new_map = new.set_index(key_cols) if len(key_cols) > 1 else new.set_index(key_cols[0])
         common_keys = sorted(common)
@@ -141,7 +148,10 @@ def main():
                 for k in common_keys:
                     ov = old_map.loc[k, c]
                     nv = new_map.loc[k, c]
-                    if not ((pd.isna(ov) and pd.isna(nv)) or (not pd.isna(ov) and not pd.isna(nv) and str(ov)==str(nv))):
+                    if not (
+                        (pd.isna(ov) and pd.isna(nv))
+                        or (not pd.isna(ov) and not pd.isna(nv) and str(ov) == str(nv))
+                    ):
                         changed_samples.append(f"    {k}: {ov} → {nv}")
                         shown += 1
                         if shown >= args.samples:
@@ -150,18 +160,19 @@ def main():
                     print(s)
 
     # ④ 空值计数
-    print(f"\n{'─'*72}")
+    print(f"\n{'─' * 72}")
     print("④ 每列空值计数")
-    print(f"{'─'*72}")
+    print(f"{'─' * 72}")
     for col in new.columns:
         n_total = len(new)
         n_null = new[col].isna().sum()
         non_null = n_total - n_null
-        print(f"  {col}: {non_null:,} 非空 / {n_null:,} 空 ({100*non_null/n_total:.1f}%)")
+        print(f"  {col}: {non_null:,} 非空 / {n_null:,} 空 ({100 * non_null / n_total:.1f}%)")
 
-    print(f"\n{'='*72}")
+    print(f"\n{'=' * 72}")
     print("完成 (RC=0)")
-    print(f"{'='*72}")
+    print(f"{'=' * 72}")
+
 
 if __name__ == "__main__":
     main()

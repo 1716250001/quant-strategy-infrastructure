@@ -5,6 +5,7 @@ module:Class 加载范式（06 §11.5 run.strategy）：构造参数经 run.para
 注入（装配期——与 doc §8.3.2 init(ctx, config) 的已实证偏差，见
 btf/strategy/base.py 模块注记）。
 """
+
 from __future__ import annotations
 
 from btf.domain.contracts import CONTRACT_VERSION

@@ -25,6 +25,7 @@
     python tools/cold_backup.py --verify <目录>     # 校验既有冷备
 退出码：0=成功 / 1=失败
 """
+
 from __future__ import annotations
 
 import argparse
@@ -43,11 +44,28 @@ from _paths import BACKUP_ROOT
 DEFAULT_OUT = BACKUP_ROOT
 
 #: 纳入冷备的顶层条目（源码 + 配置 + 文档 + 测试 + 工具）
-INCLUDE = ("btf", "tests", "tools", "schemas", "examples",
-           "pyproject.toml", "CHANGELOG.md", "README.md", "docs")
+INCLUDE = (
+    "btf",
+    "tests",
+    "tools",
+    "schemas",
+    "examples",
+    "pyproject.toml",
+    "CHANGELOG.md",
+    "README.md",
+    "docs",
+)
 #: 排除规则（派生/缓存/产物）
-EXCLUDE_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-                ".plugin_baseline_history.jsonl.d", "runs", "dist", "build"}
+EXCLUDE_DIRS = {
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".plugin_baseline_history.jsonl.d",
+    "runs",
+    "dist",
+    "build",
+}
 EXCLUDE_SUFFIX = {".pyc", ".pyo", ".log"}
 
 
@@ -73,8 +91,7 @@ def _sha256(path: Path) -> str:
 
 
 def _version() -> str:
-    for line in (ROOT / "btf" / "_version.py").read_text(
-            encoding="utf-8").splitlines():
+    for line in (ROOT / "btf" / "_version.py").read_text(encoding="utf-8").splitlines():
         if line.startswith("__version__"):
             return line.split("=")[1].strip().strip("\"'")
     raise SystemExit("[error] 未找到 __version__（btf/_version.py）")
@@ -102,12 +119,12 @@ def backup(out_root: Path, reason: str) -> Path:
                 out_path = src_root / rel
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, out_path)
-                entries.append({"file": rel.as_posix(), "sha256": _sha256(path),
-                                "bytes": path.stat().st_size})
+                entries.append(
+                    {"file": rel.as_posix(), "sha256": _sha256(path), "bytes": path.stat().st_size}
+                )
         else:
             shutil.copy2(src, dst)
-            entries.append({"file": name, "sha256": _sha256(src),
-                            "bytes": src.stat().st_size})
+            entries.append({"file": name, "sha256": _sha256(src), "bytes": src.stat().st_size})
 
     if not entries:
         raise SystemExit("[error] 未收集到任何文件（INCLUDE 配置或源缺失）")
@@ -122,17 +139,18 @@ def backup(out_root: Path, reason: str) -> Path:
         "files": entries,
     }
     (target / "MANIFEST.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (target / "SHA256SUMS.txt").write_text(
-        "".join(f"{e['sha256']}  btf-src/{e['file']}\n" for e in entries),
-        encoding="utf-8")
+        "".join(f"{e['sha256']}  btf-src/{e['file']}\n" for e in entries), encoding="utf-8"
+    )
     (target / "COLD_BACKUP.md").write_text(
         f"""# btf 冷备（{version}）
 
-- 生成时间：{manifest['created_at']}
+- 生成时间：{manifest["created_at"]}
 - 依据：{reason}
 - 源：`{ROOT}`
-- 规模：**{manifest['file_count']} 文件 / {manifest['total_bytes'] / 1024:.0f} KB**
+- 规模：**{manifest["file_count"]} 文件 / {manifest["total_bytes"] / 1024:.0f} KB**
 
 ## 还原步骤
 
@@ -147,7 +165,9 @@ xcopy /E /I "btf-src" "<目标目录>"
 
 - `MANIFEST.json`：逐文件 sha256 + 计数（机器可读）
 - `SHA256SUMS.txt`：`sha256sum -c SHA256SUMS.txt` 可用（工作目录 = 本目录）
-""", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
     return target
 
 
@@ -172,8 +192,9 @@ def verify(target: Path) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="btf 跨版本源码冷备")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="备份根目录")
-    parser.add_argument("--reason", default="手动冷备",
-                        help="依据（写入 MANIFEST；v1.0 定版请写明）")
+    parser.add_argument(
+        "--reason", default="手动冷备", help="依据（写入 MANIFEST；v1.0 定版请写明）"
+    )
     parser.add_argument("--verify", metavar="DIR", help="校验既有冷备目录")
     args = parser.parse_args(argv)
 
@@ -193,8 +214,10 @@ def main(argv: list[str] | None = None) -> int:
     target = backup(Path(args.out), args.reason)
     manifest = json.loads((target / "MANIFEST.json").read_text(encoding="utf-8"))
     print(f"[ok] 冷备完成：{target}")
-    print(f"     版本 {manifest['version']} | {manifest['file_count']} 文件 | "
-          f"{manifest['total_bytes'] / 1024:.0f} KB | 依据={manifest['reason']}")
+    print(
+        f"     版本 {manifest['version']} | {manifest['file_count']} 文件 | "
+        f"{manifest['total_bytes'] / 1024:.0f} KB | 依据={manifest['reason']}"
+    )
     problems = verify(target)
     if problems:
         print(f"[fail] 冷备自校验失败（{len(problems)} 处）")

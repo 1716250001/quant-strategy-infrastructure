@@ -57,8 +57,7 @@ def calc_vr(df, vol_col="vol", short=5, long=20):
             return 1.0
         return vol_short / vol_long
     except Exception as exc:
-        print(f"[indicators] 量比计算失败（按 nan）: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(f"[indicators] 量比计算失败（按 nan）: {type(exc).__name__}: {exc}", file=sys.stderr)
         return np.nan
 
 
@@ -337,8 +336,7 @@ def detect_divergence(price, dif):
 # ============================================================
 # KDJ
 # ============================================================
-def calc_kdj(high=None, low=None, close=None, n=14, smooth=False,
-             m1=3, m2=3):
+def calc_kdj(high=None, low=None, close=None, n=14, smooth=False, m1=3, m2=3):
     """
     KDJ指标计算 (统一版)
 
@@ -371,8 +369,8 @@ def calc_kdj(high=None, low=None, close=None, n=14, smooth=False,
     length = len(close)
     rsv_arr = np.full(length, 50.0)
     for i in range(n - 1, length):
-        llv = np.min(low[i - n + 1:i + 1])
-        hhv = np.max(high[i - n + 1:i + 1])
+        llv = np.min(low[i - n + 1 : i + 1])
+        hhv = np.max(high[i - n + 1 : i + 1])
         if hhv != llv:
             rsv_arr[i] = (close[i] - llv) / (hhv - llv) * 100.0
         else:
@@ -411,7 +409,7 @@ def calc_rsi(close, n=14):
     """RSI(14)"""
     if len(close) < n + 1:
         return np.nan
-    deltas = np.diff(close[-n - 1:])
+    deltas = np.diff(close[-n - 1 :])
     gain = np.mean(deltas[deltas > 0]) if np.any(deltas > 0) else 0
     loss = -np.mean(deltas[deltas < 0]) if np.any(deltas < 0) else 1e-9
     return 100 - 100 / (1 + gain / loss)

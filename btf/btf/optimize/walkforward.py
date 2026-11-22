@@ -41,6 +41,7 @@
 落盘纪律：每折的 `manifest` 经**装配披露**记录「折号 / 训练窗 / 测试窗 /
 参数」（`assembly_notes`）——"训练/测试区间入 manifest"由此成立（09 #11）。
 """
+
 from __future__ import annotations
 
 import importlib
@@ -52,8 +53,13 @@ from typing import Any
 
 from btf.domain.types import TradingDate
 
-__all__ = ["DEFAULT_WARMUP_BARS", "Window", "declared_lookback",
-           "run_walk_forward", "split_windows"]
+__all__ = [
+    "DEFAULT_WARMUP_BARS",
+    "Window",
+    "declared_lookback",
+    "run_walk_forward",
+    "split_windows",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +70,7 @@ DEFAULT_WARMUP_BARS = 252
 
 #: 策略**声明所需历史 bar 数**的约定属性名（duck-typing：类属性或返回 int 的可调用；
 #: 只读，不装配、不运行）。
-_WARMUP_DECL_ATTRS = ("lookback_bars", "required_lookback_bars",
-                      "min_history_bars")
+_WARMUP_DECL_ATTRS = ("lookback_bars", "required_lookback_bars", "min_history_bars")
 
 
 def _lookback_probe(config: Mapping[str, Any]) -> tuple[int | None, str]:
@@ -81,9 +86,10 @@ def _lookback_probe(config: Mapping[str, Any]) -> tuple[int | None, str]:
         return (None, "无 run.strategy")
     try:
         from btf.runtime._runtime import inject_strategy_paths
+
         inject_strategy_paths(run_cfg)
         cls = getattr(importlib.import_module(module_name), class_name)
-    except Exception as exc:           # 注入/导入失败 ⇒ 降级，但**原因可区分**
+    except Exception as exc:  # 注入/导入失败 ⇒ 降级，但**原因可区分**
         return (None, f"导入失败：{type(exc).__name__}: {exc}")
     for attr in _WARMUP_DECL_ATTRS:
         val = getattr(cls, attr, None)
@@ -92,7 +98,7 @@ def _lookback_probe(config: Mapping[str, Any]) -> tuple[int | None, str]:
         if callable(val):
             try:
                 val = val()
-            except Exception:                       # 声明不可用 ⇒ 视为未声明
+            except Exception:  # 声明不可用 ⇒ 视为未声明
                 continue
         if isinstance(val, int) and not isinstance(val, bool) and val > 0:
             return (int(val), "strategy")
@@ -109,8 +115,7 @@ def declared_lookback(config: Mapping[str, Any]) -> int | None:
     return _lookback_probe(config)[0]
 
 
-def _resolve_warmup(config: Mapping[str, Any],
-                    explicit: int | None) -> tuple[int, str, str]:
+def _resolve_warmup(config: Mapping[str, Any], explicit: int | None) -> tuple[int, str, str]:
     """→ `(warmup_bars, source, why)`；source ∈ `explicit`／`auto:strategy`／
     `auto:default_252`／`legacy_zero`（§107.3.2-4/5）；`why` 供 WARN 文案分化。"""
     if explicit is not None:
@@ -126,9 +131,16 @@ def _resolve_warmup(config: Mapping[str, Any],
 
 #: 汇总统计的候选指标键（逐折交集存在者才进 summary；含基准项——配基准时）
 _SUMMARY_KEYS = (
-    "sharpe_ratio", "annualized_return", "total_return", "max_drawdown",
-    "calmar_ratio", "information_ratio", "annualized_excess",
-    "excess_return", "n_fills", "n_trading_days",
+    "sharpe_ratio",
+    "annualized_return",
+    "total_return",
+    "max_drawdown",
+    "calmar_ratio",
+    "information_ratio",
+    "annualized_excess",
+    "excess_return",
+    "n_fills",
+    "n_trading_days",
 )
 
 
@@ -145,10 +157,8 @@ class Window:
     def as_dict(self) -> dict[str, Any]:
         return {
             "index": self.index,
-            "train": {"start": self.train_start.to_ymd(),
-                      "end": self.train_end.to_ymd()},
-            "test": {"start": self.test_start.to_ymd(),
-                     "end": self.test_end.to_ymd()},
+            "train": {"start": self.train_start.to_ymd(), "end": self.train_end.to_ymd()},
+            "test": {"start": self.test_start.to_ymd(), "end": self.test_end.to_ymd()},
         }
 
 
@@ -194,18 +204,21 @@ def split_windows(
         if test_end_idx >= n:
             break
         train_start_idx = 0 if mode == "anchored" else i * step
-        out.append(Window(
-            index=len(out) + 1,
-            train_start=days[train_start_idx],
-            train_end=days[train_end_idx],
-            test_start=days[test_start_idx],
-            test_end=days[test_end_idx],
-        ))
+        out.append(
+            Window(
+                index=len(out) + 1,
+                train_start=days[train_start_idx],
+                train_end=days[train_end_idx],
+                test_start=days[test_start_idx],
+                test_end=days[test_end_idx],
+            )
+        )
         i += 1
     if not out:
         raise ValueError(
             f"窗口不足：交易日 {n} 天装不下 train={train}+gap={gap}+test={test}"
-            f"（mode={mode}）——请缩短窗口或扩大回测区间")
+            f"（mode={mode}）——请缩短窗口或扩大回测区间"
+        )
     return out
 
 
@@ -215,9 +228,9 @@ def _iso(day: TradingDate) -> str:
     return f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}"
 
 
-def _fold_period(config: Mapping[str, Any], window: Window,
-                 which: str, *, warm_start: TradingDate | None = None
-                 ) -> dict[str, Any]:
+def _fold_period(
+    config: Mapping[str, Any], window: Window, which: str, *, warm_start: TradingDate | None = None
+) -> dict[str, Any]:
     """配置 → 指定段的 period 覆盖（浅复制；`run.period` 单点替换）。
 
     **R58′（N60）**：`which="test"` 且给 `warm_start` 时——**只提前起点**给策略
@@ -236,8 +249,7 @@ def _fold_period(config: Mapping[str, Any], window: Window,
     return cfg
 
 
-def _metrics_of(rt: Any, result: Any, *,
-                test_start: TradingDate | None = None) -> dict[str, float]:
+def _metrics_of(rt: Any, result: Any, *, test_start: TradingDate | None = None) -> dict[str, float]:
     """折内指标——与 `bt run` 同一单点（含基准相对项与名字表）。
 
     **R58′（N60）硬要求——指标隔离**：给 `test_start` 时，**先丢弃日期
@@ -255,13 +267,14 @@ def _metrics_of(rt: Any, result: Any, *,
         snaps = [s for s in snaps if s.date.to_ymd() >= lo]
         fills = [f for f in fills if f.fill_date.to_ymd() >= lo]
     return compute_run_metrics(
-        snaps, fills, rt._analysis_config(),
+        snaps,
+        fills,
+        rt._analysis_config(),
         analyzer_names=rt._analyzer_names(),
         extras=rt._benchmark_metrics,
         # R61′（N63）：逐笔口径与落盘路径同源（折算早于窗口起点的
         # 事件对空队列是 no-op，无需额外过滤）
-        consolidations=normalize_consolidations(
-            getattr(result, "consolidations", ())),
+        consolidations=normalize_consolidations(getattr(result, "consolidations", ())),
     )
 
 
@@ -303,18 +316,21 @@ def run_walk_forward(
             "策略未声明 lookback（`lookback_bars`）⇒ OOS 折 warm-up 采用**保守默认** "
             f"{DEFAULT_WARMUP_BARS} 交易日（warmup_source=auto:default_252；"
             f"原因：{warm_why}）；"
-            "可用 `--warmup N` 显式指定（`--warmup 0` 复现旧行为）")
+            "可用 `--warmup N` 显式指定（`--warmup 0` 复现旧行为）"
+        )
         logger.warning("walk-forward：%s", notes[-1])
     elif warm_src == "legacy_zero":
         notes.append(
             "warm-up 显式关闭（`--warmup 0`）＝**旧行为对照档**——长 lookback 策略"
-            "可能样本外假阴性（N60），仅用于回归比对")
+            "可能样本外假阴性（N60），仅用于回归比对"
+        )
         logger.warning("walk-forward：%s", notes[-1])
 
-    windows = split_windows(days, train=train, test=test, step=step, mode=mode,
-                            purge=purge, embargo=embargo)
+    windows = split_windows(
+        days, train=train, test=test, step=step, mode=mode, purge=purge, embargo=embargo
+    )
     step_eff = test if step is None else step
-    idx_of = {d.to_ymd(): i for i, d in enumerate(days)}     # 交易日粒度反查
+    idx_of = {d.to_ymd(): i for i, d in enumerate(days)}  # 交易日粒度反查
 
     def _fold_runtime(period_cfg: Mapping[str, Any]) -> Any:
         """**T-18（19 号 §149 D-1）**：折内**只跳哈希门禁**（水位门禁照旧）。
@@ -328,31 +344,35 @@ def run_walk_forward(
 
     folds: list[dict[str, Any]] = []
     for w in windows:
-        fold: dict[str, Any] = {"index": w.index, **{k: v for k, v in
-                                                     w.as_dict().items()
-                                                     if k != "index"}}
+        fold: dict[str, Any] = {
+            "index": w.index,
+            **{k: v for k, v in w.as_dict().items() if k != "index"},
+        }
         ts_ymd, te_ymd = w.test_start.to_ymd(), w.test_end.to_ymd()
         ts_idx = idx_of.get(ts_ymd, 0)
         te_idx = idx_of.get(te_ymd, ts_idx)
-        eff_warm = min(warm_bars, max(0, ts_idx))            # 历史不足 ⇒ 取可用
+        eff_warm = min(warm_bars, max(0, ts_idx))  # 历史不足 ⇒ 取可用
         if eff_warm < warm_bars:
             notes.append(
                 f"折 {w.index}：可用历史 {ts_idx} 日 < 请求 warm-up {warm_bars}"
-                f" ⇒ 实际取 {eff_warm} 日（已披露）")
+                f" ⇒ 实际取 {eff_warm} 日（已披露）"
+            )
         warm_start = days[ts_idx - eff_warm] if eff_warm else w.test_start
         fold["warmup_bars"] = eff_warm
         fold["exec_range"] = {
-            "start": warm_start.to_ymd(), "end": te_ymd,
-            "n_days": te_idx - (ts_idx - eff_warm) + 1}
-        fold["metric_range"] = {
-            "start": ts_ymd, "end": te_ymd, "n_days": te_idx - ts_idx + 1}
+            "start": warm_start.to_ymd(),
+            "end": te_ymd,
+            "n_days": te_idx - (ts_idx - eff_warm) + 1,
+        }
+        fold["metric_range"] = {"start": ts_ymd, "end": te_ymd, "n_days": te_idx - ts_idx + 1}
         note = (
             f"Walk-Forward 折 {w.index}/{len(windows)}（RC-15）："
             f"训练窗 {w.train_start.to_ymd()}~{w.train_end.to_ymd()} / "
             f"测试窗 {ts_ymd}~{te_ymd}"
             f"（mode={mode}, window={train}, test={test}, step={step_eff}, "
             f"purge={purge}, embargo={embargo}, warmup={eff_warm}"
-            f"[{warm_src}]）")
+            f"[{warm_src}]）"
+        )
         if include_is:
             rt_tr = _fold_runtime(_fold_period(config, w, "train"))
             rt_tr.assembly_notes.append(note + "｜段=训练（IS）")
@@ -361,34 +381,32 @@ def run_walk_forward(
         else:
             fold["train_metrics"] = None
 
-        rt_te = _fold_runtime(
-            _fold_period(config, w, "test", warm_start=warm_start))
+        rt_te = _fold_runtime(_fold_period(config, w, "test", warm_start=warm_start))
         rt_te.assembly_notes.append(
             note + f"｜段=测试（OOS，判定只看本段；exec 含热身 {eff_warm} 日，"
-                   f"指标口径仅 {ts_ymd}~{te_ymd}）")
+            f"指标口径仅 {ts_ymd}~{te_ymd}）"
+        )
         res_te = rt_te.run(store=store, persist=persist)
-        fold["test_metrics"] = _metrics_of(rt_te, res_te,
-                                           test_start=w.test_start)
+        fold["test_metrics"] = _metrics_of(rt_te, res_te, test_start=w.test_start)
         fold["run_id"] = getattr(res_te, "run_id", None)
         # **T-18（§149 D-1）**：披露"本折是否跳过了哈希门禁"（未声明版本的配置
         # 不会到这里 ⇒ 恒 None，不会误报）
-        fold["version_gate"] = ("skipped_walk_forward"
-                                if getattr(rt_te, "version_gate_skipped_hash", False)
-                                else None)
+        fold["version_gate"] = (
+            "skipped_walk_forward" if getattr(rt_te, "version_gate_skipped_hash", False) else None
+        )
         folds.append(fold)
 
     summary: dict[str, dict[str, float]] = {}
     for key in _SUMMARY_KEYS:
         vals = [f["test_metrics"].get(key) for f in folds]
-        vals = [float(v) for v in vals
-                if isinstance(v, (int, float)) and v == v]
+        vals = [float(v) for v in vals if isinstance(v, (int, float)) and v == v]
         if not vals:
             continue
         summary[key] = {
             "n": len(vals),
             "mean": statistics.fmean(vals),
             "median": statistics.median(vals),
-            "min": min(vals),          # ← "不得只报最优"：最差折在册
+            "min": min(vals),  # ← "不得只报最优"：最差折在册
             "max": max(vals),
             "stdev": statistics.stdev(vals) if len(vals) > 1 else 0.0,
         }
@@ -397,13 +415,22 @@ def run_walk_forward(
         logger.warning(
             "walk-forward：数据版本门禁的**哈希门禁按折跳过**"
             "（version_gate=skipped_walk_forward；anchor_date 水位门禁仍生效）"
-            "——折区间为整段子区间，实算指纹必然不同（机制约束，非换数）")
+            "——折区间为整段子区间，实算指纹必然不同（机制约束，非换数）"
+        )
     return {
-        "spec": {"mode": mode, "window": train, "test": test,
-                 "step": step_eff, "purge": purge, "embargo": embargo,
-                 "persist": persist, "include_is": include_is,
-                 "warmup": warm_bars, "warmup_source": warm_src,
-                 "warmup_requested": warmup},
+        "spec": {
+            "mode": mode,
+            "window": train,
+            "test": test,
+            "step": step_eff,
+            "purge": purge,
+            "embargo": embargo,
+            "persist": persist,
+            "include_is": include_is,
+            "warmup": warm_bars,
+            "warmup_source": warm_src,
+            "warmup_requested": warmup,
+        },
         "n_folds": len(windows),
         "folds": folds,
         "summary": summary,
@@ -413,9 +440,14 @@ def run_walk_forward(
         "version_gate_note": (
             "数据版本门禁：**哈希门禁按折跳过**（version_gate=skipped_walk_forward），"
             "anchor_date 水位门禁仍生效——折区间为整段冻结区间的子区间，"
-            "实算指纹必然与整段声明不同（机制约束，非换数）" if skipped_gate else None),
-        "note": ("逐折 OOS 指标全量输出（含最差折）；summary 含 min/max——"
-                 "不得只报最优。**只报数字、不判定策略有效**（ADR-13）。"
-                 "**OOS 折含 warm-up**（exec_range 含热身；metric_range 仅 test "
-                 "段——指标口径已隔离，R58′/N60）"),
+            "实算指纹必然与整段声明不同（机制约束，非换数）"
+            if skipped_gate
+            else None
+        ),
+        "note": (
+            "逐折 OOS 指标全量输出（含最差折）；summary 含 min/max——"
+            "不得只报最优。**只报数字、不判定策略有效**（ADR-13）。"
+            "**OOS 折含 warm-up**（exec_range 含热身；metric_range 仅 test "
+            "段——指标口径已隔离，R58′/N60）"
+        ),
     }

@@ -6,6 +6,7 @@
     - 数据变化→指纹变化（修正敏感性；用 tmp 目录模拟）
     - fast 档耗时实测（全库 [待验证] 项落定的证据）
 """
+
 from __future__ import annotations
 
 import time
@@ -46,12 +47,14 @@ class TestSensitivity:
     def _make_fake(self, tmp_path: Path) -> Path:
         d = tmp_path / "stk_limit"
         d.mkdir()
-        t = pa.table({
-            "ts_code": ["000001.SZ", "000002.SZ"],
-            "trade_date": ["20240102", "20240102"],
-            "up_limit": [11.0, 12.0],
-            "down_limit": [9.0, 10.0],
-        })
+        t = pa.table(
+            {
+                "ts_code": ["000001.SZ", "000002.SZ"],
+                "trade_date": ["20240102", "20240102"],
+                "up_limit": [11.0, 12.0],
+                "down_limit": [9.0, 10.0],
+            }
+        )
         pq.write_table(t, d / "2024.parquet")
         return tmp_path
 
@@ -61,7 +64,8 @@ class TestSensitivity:
         d1 = compute(["stk_limit"], root).digest
         t = pq.read_table(root / "stk_limit" / "2024.parquet")
         t = t.set_column(
-            t.schema.get_field_index("trade_date"), "trade_date",
+            t.schema.get_field_index("trade_date"),
+            "trade_date",
             pa.array(["20240103", "20240102"]),
         )
         pq.write_table(t, root / "stk_limit" / "2024.parquet")
@@ -75,7 +79,8 @@ class TestSensitivity:
         d1 = compute(["stk_limit"], root, mode="full").digest
         t = pq.read_table(root / "stk_limit" / "2024.parquet")
         t = t.set_column(
-            t.schema.get_field_index("up_limit"), "up_limit",
+            t.schema.get_field_index("up_limit"),
+            "up_limit",
             pa.array([11.5, 12.0]),
         )
         pq.write_table(t, root / "stk_limit" / "2024.parquet")
@@ -88,10 +93,19 @@ class TestSensitivity:
         root = self._make_fake(tmp_path)
         d1 = compute(["stk_limit"], root).digest
         t = pq.read_table(root / "stk_limit" / "2024.parquet")
-        t = pa.concat_tables([t, pa.table({
-            "ts_code": ["000003.SZ"], "trade_date": ["20240102"],
-            "up_limit": [5.0], "down_limit": [4.0],
-        })])
+        t = pa.concat_tables(
+            [
+                t,
+                pa.table(
+                    {
+                        "ts_code": ["000003.SZ"],
+                        "trade_date": ["20240102"],
+                        "up_limit": [5.0],
+                        "down_limit": [4.0],
+                    }
+                ),
+            ]
+        )
         pq.write_table(t, root / "stk_limit" / "2024.parquet")
         d2 = compute(["stk_limit"], root).digest
         assert d1 != d2

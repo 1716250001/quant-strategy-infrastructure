@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """年文件日期有序性检测（B1 优化机会验证：有序 → iter_day_slices 可跳过 sort_by）。"""
+
 import sys
 from pathlib import Path
 
@@ -23,5 +24,7 @@ for table in ("daily", "fund_daily"):
         ok = n <= 1 or bool(pc.all(pc.less_equal(col.slice(0, n - 1), col.slice(1))).as_py())
         if not ok:
             unsorted_files.append(p.name)
-    print(f"{table}: {len(list(d.glob('*.parquet')))} 个年文件，非有序 {len(unsorted_files)} 个"
-          + (f" -> {unsorted_files[:5]}" if unsorted_files else "（全部日期有序 ✓）"))
+    print(
+        f"{table}: {len(list(d.glob('*.parquet')))} 个年文件，非有序 {len(unsorted_files)} 个"
+        + (f" -> {unsorted_files[:5]}" if unsorted_files else "（全部日期有序 ✓）")
+    )

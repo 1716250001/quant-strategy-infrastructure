@@ -4,6 +4,7 @@
 验收样例 = 06 §11.5 示例原文（含 1_000_000 YAML 1.1 整数、flow 集合、
 嵌套 rules 段）；H2：rules 段规则参数字面量拒绝 + override:true 强制。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -49,14 +50,14 @@ class TestSample06:
     def test_sample_validates(self):
         cfg = load_config(SAMPLE_06)
         validate(cfg)
-        assert cfg["run"]["initial_cash"] == 1_000_000   # YAML 1.1 下划线整数
+        assert cfg["run"]["initial_cash"] == 1_000_000  # YAML 1.1 下划线整数
         assert cfg["rules"]["source"] == "mirror_json"
-        assert "completeness" not in cfg["data"]   # 19 号 P1-5：死键已删除
-        assert "benchmark" in cfg["report"]        # 基准对比键（R2.5 消费）
+        assert "completeness" not in cfg["data"]  # 19 号 P1-5：死键已删除
+        assert "benchmark" in cfg["report"]  # 基准对比键（R2.5 消费）
 
     def test_defaults_fill_execution(self):
         cfg = load_config(SAMPLE_06)
-        assert cfg["execution"]["rebalancer"] == "full"   # 默认层补齐
+        assert cfg["execution"]["rebalancer"] == "full"  # 默认层补齐
         assert cfg["risk"]["rules"][1] == {"name": "cash_check"}
 
     def test_defaults_standalone_minimal(self):
@@ -72,8 +73,8 @@ data:
         cfg = load_config(minimal)
         validate(cfg)
         assert cfg["execution"]["handler"] == "next_open"
-        assert cfg["execution"]["cost_model"] == "tiered_v1"   # M2 5.1 默认分段费率
-        assert "completeness" not in cfg["data"]        # 19 号 P1-5：死键已删
+        assert cfg["execution"]["cost_model"] == "tiered_v1"  # M2 5.1 默认分段费率
+        assert "completeness" not in cfg["data"]  # 19 号 P1-5：死键已删
         # X-7（Q1=A）：默认层**不声明**逃生开关 → 空链装配期即 ConfigError
         assert "allow_empty_chain" not in cfg["risk"]
 
@@ -84,24 +85,25 @@ class TestLayeredMerge:
         assert cfg["execution"]["cost_model"] == "flat_rate"
 
     def test_yaml_overrides_env(self):
-        cfg = load_config(SAMPLE_06,
-                          environ={"BTF_EXECUTION__COST_MODEL": "flat_rate"})
+        cfg = load_config(SAMPLE_06, environ={"BTF_EXECUTION__COST_MODEL": "flat_rate"})
         assert cfg["execution"]["cost_model"] == "tiered_v1"
 
     def test_cli_overrides_yaml(self):
-        cfg = load_config(SAMPLE_06,
-                          overrides={"execution": {"cost_model": "zero"}})
+        cfg = load_config(SAMPLE_06, overrides={"execution": {"cost_model": "zero"}})
         assert cfg["execution"]["cost_model"] == "zero"
-        assert cfg["execution"]["handler"] == "next_open"   # 其余键保留
+        assert cfg["execution"]["handler"] == "next_open"  # 其余键保留
 
     def test_env_value_coercion(self):
         """类型推断：字符串 → int / bool（X-6：原用 `BTF_DATA__COMPLETENESS__`
         为已删除的死键背书，改用真实存在的 `run.params` 路径）。"""
-        cfg = load_config(None, environ={
-            "BTF_RUN__INITIAL_CASH": "2000000",
-            "BTF_RUN__PARAMS__TOP_K": "3",
-            "BTF_RUN__UNIVERSE__INCLUDE_DELISTED": "false",
-        })
+        cfg = load_config(
+            None,
+            environ={
+                "BTF_RUN__INITIAL_CASH": "2000000",
+                "BTF_RUN__PARAMS__TOP_K": "3",
+                "BTF_RUN__UNIVERSE__INCLUDE_DELISTED": "false",
+            },
+        )
         assert cfg["run"]["initial_cash"] == 2_000_000
         assert cfg["run"]["params"]["top_k"] == 3
         assert cfg["run"]["universe"]["include_delisted"] is False
@@ -121,18 +123,16 @@ class TestLayeredMerge:
         base = {"a": {"x": 1, "y": 2}, "b": 1}
         deep_merge(base, {"a": {}})
         assert base == {"a": {}, "b": 1}
-        deep_merge(base, {"b": {"k": 1}})          # 非 dict base → 整替
+        deep_merge(base, {"b": {"k": 1}})  # 非 dict base → 整替
         assert base["b"] == {"k": 1}
-        deep_merge(base, {"b": {}})                # 空 dict 亦整替
+        deep_merge(base, {"b": {}})  # 空 dict 亦整替
         assert base["b"] == {}
 
     def test_empty_handler_params_clears_default(self):
         """RC-02 端到端（配置层）：显式 `handler_params: {}` ⇒ 取消默认 VPP。"""
         cfg = load_config(None)
-        assert cfg["execution"]["handler_params"] == {
-            "volume_participation": 0.05}          # 默认启用
-        merged = load_config(
-            None, overrides={"execution": {"handler_params": {}}})
+        assert cfg["execution"]["handler_params"] == {"volume_participation": 0.05}  # 默认启用
+        merged = load_config(None, overrides={"execution": {"handler_params": {}}})
         assert merged["execution"]["handler_params"] == {}
 
 
@@ -143,30 +143,38 @@ class TestH2RulesLiteralRejection:
         return cfg
 
     def test_rule_literal_rejected(self):
-        cfg = self._rules_cfg({
-            "source": "mirror_json",
-            "params": {"pe_ttm_max": 30},     # 规则参数字面量（H2 红线）
-        })
+        cfg = self._rules_cfg(
+            {
+                "source": "mirror_json",
+                "params": {"pe_ttm_max": 30},  # 规则参数字面量（H2 红线）
+            }
+        )
         with pytest.raises(ConfigError) as e:
             validate(cfg)
         msg = str(e.value)
         assert "rules" in msg and "'params' was unexpected" in msg
 
     def test_override_requires_true(self):
-        cfg = self._rules_cfg({
-            "source": "mirror_json",
-            "overrides": [{"rule": "l2_filter", "param": "pe_ttm_max",
-                           "value": 30, "override": False}],
-        })
+        cfg = self._rules_cfg(
+            {
+                "source": "mirror_json",
+                "overrides": [
+                    {"rule": "l2_filter", "param": "pe_ttm_max", "value": 30, "override": False}
+                ],
+            }
+        )
         with pytest.raises(ConfigError):
             validate(cfg)
 
     def test_explicit_override_passes(self):
-        cfg = self._rules_cfg({
-            "source": "mirror_json",
-            "overrides": [{"rule": "l2_filter", "param": "pe_ttm_max",
-                           "value": 30, "override": True}],
-        })
+        cfg = self._rules_cfg(
+            {
+                "source": "mirror_json",
+                "overrides": [
+                    {"rule": "l2_filter", "param": "pe_ttm_max", "value": 30, "override": True}
+                ],
+            }
+        )
         validate(cfg)
 
 
@@ -204,9 +212,10 @@ class TestValidationMessages:
 class TestMask:
     def test_sensitive_keys_masked(self):
         cfg = {
-            "data": {"feed": "tushare_parquet",
-                     "feed_params": {"tushare_token": "SECRET",
-                                     "root": "<DATA_ROOT>"}},
+            "data": {
+                "feed": "tushare_parquet",
+                "feed_params": {"tushare_token": "SECRET", "root": "<DATA_ROOT>"},
+            },
             "run": {"api_key": "abc", "initial_cash": 100},
             "report": {"password": "x", "sections": ["summary"]},
         }

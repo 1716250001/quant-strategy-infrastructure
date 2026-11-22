@@ -46,6 +46,7 @@
   python -m tools.db_schema_align fix --all            # 修复全部有漂移的表
 ⚠ 修复会写库；先 `scan` 看清范围，必要时先冷备。
 """
+
 import argparse
 import os
 import sys
@@ -70,16 +71,19 @@ def year_files(table, root=None):
     d = os.path.join(root or MARKET_DATA_DIR, table)
     if not os.path.isdir(d):
         return []
-    return sorted(f for f in os.listdir(d)
-                  if f.endswith(".parquet") and len(f) == 12 and f[:4].isdigit())
+    return sorted(
+        f for f in os.listdir(d) if f.endswith(".parquet") and len(f) == 12 and f[:4].isdigit()
+    )
 
 
 def scan(tables=None, root=None):
     """→ {表名: {schema_sig: [文件, ...]}}（只含漂移表）。"""
     root = root or MARKET_DATA_DIR
     names = tables or sorted(
-        e for e in os.listdir(root)
-        if os.path.isdir(os.path.join(root, e)) and not e.startswith("."))
+        e
+        for e in os.listdir(root)
+        if os.path.isdir(os.path.join(root, e)) and not e.startswith(".")
+    )
     drift = {}
     for t in names:
         fs = year_files(t, root)
@@ -115,8 +119,10 @@ def canonical_schema(schemas):
     sets = {frozenset(o) for o in orders}
     if len(sets) > 1:
         miss = set.union(*sets) - set.intersection(*sets)
-        return None, (f"列集合不一致（结构差异，非类型差异；差异列 {sorted(miss)[:6]}"
-                      f"）——补列超出本工具授权，须另行裁决")
+        return None, (
+            f"列集合不一致（结构差异，非类型差异；差异列 {sorted(miss)[:6]}"
+            f"）——补列超出本工具授权，须另行裁决"
+        )
     # 按列名聚合类型（列序可能不同 ⇒ 不能按下标对齐）
     types_by_col: dict[str, list] = {}
     for s in schemas:
@@ -129,11 +135,11 @@ def canonical_schema(schemas):
     for name in canon_names:
         cand = types_by_col[name]
         if not cand or all(pa.types.is_null(t) for t in cand):
-            fields.append(pa.field(name, pa.null()))     # 全分区皆空列
+            fields.append(pa.field(name, pa.null()))  # 全分区皆空列
             continue
         cand = [t for t in cand if not pa.types.is_null(t)]
         if len(cand) == 1:
-            fields.append(pa.field(name, cand[0]))       # 唯一实型（含 double 等）
+            fields.append(pa.field(name, cand[0]))  # 唯一实型（含 double 等）
             continue
         names_s = {str(t) for t in cand}
         if names_s <= {"string", "large_string"}:
@@ -184,13 +190,15 @@ def fix(table, root=None):
                 fixed.append(f)
             except Exception as e:
                 failed.append(f"{f}: {str(e)[:70]}")
-    note = (f"canonical={why}；变体 {len(sigs)} 种；已修 {len(fixed)} 个分区 "
-            f"{fixed[:6]}{'…' if len(fixed) > 6 else ''}")
+    note = (
+        f"canonical={why}；变体 {len(sigs)} 种；已修 {len(fixed)} 个分区 "
+        f"{fixed[:6]}{'…' if len(fixed) > 6 else ''}"
+    )
     return len(fixed), failed, note
 
 
 def main(argv=None):
-    try:                       # GBK 控制台下 ⚠ 等符号会让 print 抛错（同 doctor 教训）
+    try:  # GBK 控制台下 ⚠ 等符号会让 print 抛错（同 doctor 教训）
         sys.stdout.reconfigure(errors="replace")
     except Exception:
         pass
@@ -222,7 +230,7 @@ def main(argv=None):
         print("未指定表名（或用 --all）；无动作")
         return 2
     n_fail = 0
-    fixed_summary = []                     # (表, 修的分区数)——结构性变更记库版本用
+    fixed_summary = []  # (表, 修的分区数)——结构性变更记库版本用
     for t in targets:
         n, failed, note = fix(t)
         print(f"[{t}] {note}")
@@ -236,9 +244,12 @@ def main(argv=None):
     if fixed_summary and not n_fail:
         try:
             from common.db_version import record as _dbv
-            _dbv([s.split("(")[0] for s in fixed_summary],
-                 note=f"跨分区 schema 对齐 {', '.join(fixed_summary)}",
-                 structural=True)
+
+            _dbv(
+                [s.split("(")[0] for s in fixed_summary],
+                note=f"跨分区 schema 对齐 {', '.join(fixed_summary)}",
+                structural=True,
+            )
         except Exception as e:
             print(f"    [WARN] db_version 记录失败（不影响主流程）: {str(e)[:80]}")
     return 1 if n_fail else 0

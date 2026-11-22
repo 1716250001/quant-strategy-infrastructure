@@ -8,6 +8,7 @@
 
 纪律（ADR-13）：本模块只输出数字，**不判定"策略有效/无效"**。
 """
+
 from __future__ import annotations
 
 import math
@@ -55,18 +56,18 @@ class TestSharpeStderr:
     def test_zero_sr_normal_case(self):
         """SR=0、正态 ⇒ SE = 1/√(n−1)（教科书式）。"""
         assert sharpe_stderr(0.0, n_periods=N_PERIODS) == pytest.approx(
-            1 / math.sqrt(N_PERIODS - 1))
+            1 / math.sqrt(N_PERIODS - 1)
+        )
 
     def test_positive_skew_shrinks_stderr(self):
         base = sharpe_stderr(0.1, n_periods=N_PERIODS, skew=0.0, kurt=3.0)
-        assert sharpe_stderr(0.1, n_periods=N_PERIODS, skew=0.5,
-                             kurt=3.0) < base
-        assert sharpe_stderr(0.1, n_periods=N_PERIODS, skew=-0.5,
-                             kurt=3.0) > base
+        assert sharpe_stderr(0.1, n_periods=N_PERIODS, skew=0.5, kurt=3.0) < base
+        assert sharpe_stderr(0.1, n_periods=N_PERIODS, skew=-0.5, kurt=3.0) > base
 
     def test_fat_tails_inflate_stderr(self):
-        assert sharpe_stderr(0.1, n_periods=N_PERIODS, kurt=6.0) > \
-            sharpe_stderr(0.1, n_periods=N_PERIODS)
+        assert sharpe_stderr(0.1, n_periods=N_PERIODS, kurt=6.0) > sharpe_stderr(
+            0.1, n_periods=N_PERIODS
+        )
 
     def test_period_guard(self):
         with pytest.raises(ValueError):
@@ -78,12 +79,10 @@ class TestProbabilisticSharpe:
         low = probabilistic_sharpe(0.05, n_periods=N_PERIODS)
         high = probabilistic_sharpe(0.15, n_periods=N_PERIODS)
         assert high > low
-        assert (probabilistic_sharpe(0.1, n_periods=1000)
-                > probabilistic_sharpe(0.1, n_periods=100))
+        assert probabilistic_sharpe(0.1, n_periods=1000) > probabilistic_sharpe(0.1, n_periods=100)
 
     def test_zero_sr_gives_half(self):
-        assert probabilistic_sharpe(0.0, sr0=0.0,
-                                    n_periods=N_PERIODS) == pytest.approx(0.5)
+        assert probabilistic_sharpe(0.0, sr0=0.0, n_periods=N_PERIODS) == pytest.approx(0.5)
 
     def test_annualized_conversion(self):
         assert annualized_to_period(0.1 * math.sqrt(252)) == pytest.approx(0.1)
@@ -93,13 +92,12 @@ class TestProbabilisticSharpe:
 
 class TestDeflatedSharpe:
     def test_n1_equals_psr(self):
-        assert deflated_sharpe(0.1, n_periods=N_PERIODS, n_trials=1) \
-            == pytest.approx(probabilistic_sharpe(0.1, sr0=0.0,
-                                                  n_periods=N_PERIODS))
+        assert deflated_sharpe(0.1, n_periods=N_PERIODS, n_trials=1) == pytest.approx(
+            probabilistic_sharpe(0.1, sr0=0.0, n_periods=N_PERIODS)
+        )
 
     def test_decreases_with_n_trials(self):
-        values = [deflated_sharpe(0.1, n_periods=N_PERIODS, n_trials=n)
-                  for n in (1, 10, 100, 1000)]
+        values = [deflated_sharpe(0.1, n_periods=N_PERIODS, n_trials=n) for n in (1, 10, 100, 1000)]
         assert values == sorted(values, reverse=True)
 
     def test_expected_max_sharpe_positive_and_grows(self):
@@ -123,7 +121,7 @@ class TestMoments:
         with pytest.raises(ValueError):
             sharpe_moments([0.01, 0.02])
         with pytest.raises(ValueError):
-            sharpe_moments([0.01, 0.01, 0.01])       # 方差 0
+            sharpe_moments([0.01, 0.01, 0.01])  # 方差 0
 
 
 @pytest.fixture(scope="module")
@@ -148,6 +146,5 @@ class TestZeroSignalAnchor:
     def test_dsr_penalty_shrinks_with_total_trials(self, best_zero_signal):
         """把"历史累计试验数"也算进 N ⇒ DSR 进一步下降（越试越不可信）。"""
         dsr_432 = dsr_from_returns(list(best_zero_signal), n_trials=N_TRIALS)
-        dsr_4320 = dsr_from_returns(list(best_zero_signal),
-                                    n_trials=N_TRIALS * 10)
+        dsr_4320 = dsr_from_returns(list(best_zero_signal), n_trials=N_TRIALS * 10)
         assert dsr_4320 < dsr_432

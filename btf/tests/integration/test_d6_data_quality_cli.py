@@ -6,6 +6,7 @@
 退出码契约（D6-3）：0 = `report.ok`（CC-7 只报不阻断）／1 = 存在阻断型 finding／
 2 = 用法或前置错误（日期格式、表名打错、数据根不可用）。
 """
+
 from __future__ import annotations
 
 import json
@@ -30,11 +31,19 @@ def _write(root, table: str, rows: list[dict]) -> None:
 def _daily(*, bad: bool = False) -> list[dict]:
     rows = []
     for d in DAYS:
-        row = {"ts_code": SYM, "trade_date": d, "open": 10.0, "high": 10.0,
-               "low": 10.0, "close": 10.0, "pre_close": 10.0, "vol": 1000.0,
-               "amount": 10000.0}
+        row = {
+            "ts_code": SYM,
+            "trade_date": d,
+            "open": 10.0,
+            "high": 10.0,
+            "low": 10.0,
+            "close": 10.0,
+            "pre_close": 10.0,
+            "vol": 1000.0,
+            "amount": 10000.0,
+        }
         if bad:
-            row["high"] = 9.0        # high < close ⇒ CC-1 自相矛盾
+            row["high"] = 9.0  # high < close ⇒ CC-1 自相矛盾
         rows.append(row)
     return rows
 
@@ -44,25 +53,38 @@ def root(tmp_path):
     """合成主库（干净基线：CC-1..CC-5 全 PASS；无 dividend ⇒ CC-7 合法 0）。"""
     r = tmp_path / "market"
     (r / "metadata").mkdir(parents=True)
-    pq.write_table(pa.Table.from_pylist([
-        {"exchange": "SSE", "cal_date": d, "is_open": 1,
-         "pretrade_date": DAYS[max(0, i - 1)]}
-        for i, d in enumerate(DAYS)]), r / "metadata" / "trade_cal.parquet")
-    pq.write_table(pa.Table.from_pylist([
-        {"ts_code": SYM, "name": "浦发银行", "list_date": "19991110",
-         "delist_date": None}]), r / "metadata" / "stock_basic.parquet")
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "exchange": "SSE",
+                    "cal_date": d,
+                    "is_open": 1,
+                    "pretrade_date": DAYS[max(0, i - 1)],
+                }
+                for i, d in enumerate(DAYS)
+            ]
+        ),
+        r / "metadata" / "trade_cal.parquet",
+    )
+    pq.write_table(
+        pa.Table.from_pylist(
+            [{"ts_code": SYM, "name": "浦发银行", "list_date": "19991110", "delist_date": None}]
+        ),
+        r / "metadata" / "stock_basic.parquet",
+    )
     _write(r, "daily", _daily())
-    _write(r, "stk_limit", [
-        {"ts_code": SYM, "trade_date": d, "up_limit": 11.0, "down_limit": 9.0}
-        for d in DAYS])
-    _write(r, "adj_factor", [
-        {"ts_code": SYM, "trade_date": d, "adj_factor": 1.0} for d in DAYS])
+    _write(
+        r,
+        "stk_limit",
+        [{"ts_code": SYM, "trade_date": d, "up_limit": 11.0, "down_limit": 9.0} for d in DAYS],
+    )
+    _write(r, "adj_factor", [{"ts_code": SYM, "trade_date": d, "adj_factor": 1.0} for d in DAYS])
     return r
 
 
 def _args(root, *extra: str) -> list[str]:
-    return ["data", "quality", "--start", DAYS[0], "--end", DAYS[-1],
-            "--root", str(root), *extra]
+    return ["data", "quality", "--start", DAYS[0], "--end", DAYS[-1], "--root", str(root), *extra]
 
 
 def test_clean_subset_rc0(root, capsys):
@@ -87,8 +109,9 @@ def test_out_of_bounds_rows_rc1(root, capsys):
 
 def test_bad_date_format_rc2(root, capsys):
     """`--start 2026-11-09` 非 YYYYMMDD ⇒ RC=2 ＋ `[error]`（不跑校验）。"""
-    rc = main(["data", "quality", "--start", "2026-11-09",
-               "--end", "20261109", "--root", str(root)])
+    rc = main(
+        ["data", "quality", "--start", "2026-11-09", "--end", "20261109", "--root", str(root)]
+    )
     cap = capsys.readouterr()
     assert rc == 2
     assert "[error]" in cap.err and "YYYYMMDD" in cap.err
@@ -139,7 +162,7 @@ def test_json_stdout_is_single_object(root, capsys):
     rc = main(_args(root, "--json"))
     cap = capsys.readouterr()
     assert rc == 0
-    payload = json.loads(cap.out)          # 横幅混入即解析失败
+    payload = json.loads(cap.out)  # 横幅混入即解析失败
     assert payload["contract_version"] == "dataquality.v1"
     assert payload["ok"] is True
     assert "[ok] quality" in cap.err

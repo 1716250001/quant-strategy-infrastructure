@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 tools/check_coverage.py — 可转债与 ETF/LOF 数据覆盖检查
 ========================================================
@@ -11,6 +11,7 @@ tools/check_coverage.py — 可转债与 ETF/LOF 数据覆盖检查
   python tools/check_coverage.py --history      # 基金历史起点对账（EE-FUND-1 B1）
   python tools/check_coverage.py --history --strict   # 非零退出码
 """
+
 import argparse
 import glob
 import os
@@ -39,8 +40,9 @@ def _scan_with_date(table, check_date):
     只读命中当日的数据一次，再集合对比。
     """
     codes_all = set(reader.codes_from_store(table))
-    day = reader.read_range(table, columns=["ts_code", "trade_date"],
-                            start_date=check_date, end_date=check_date)
+    day = reader.read_range(
+        table, columns=["ts_code", "trade_date"], start_date=check_date, end_date=check_date
+    )
     has_today = set(day["ts_code"].unique()) if not day.empty else set()
     return codes_all, has_today, codes_all - has_today
 
@@ -76,7 +78,8 @@ def check_cb(check_date):
 
     if without_data:
         missing = active_cb[active_cb["ts_code"].isin(without_data)][
-            ["ts_code", "bond_short_name", "list_date", "delist_date", "exchange"]]
+            ["ts_code", "bond_short_name", "list_date", "delist_date", "exchange"]
+        ]
         no_file = [c for c in without_data if c not in codes_all]
         has_file = [c for c in without_data if c in codes_all]
         print("\n   其中:")
@@ -85,13 +88,17 @@ def check_cb(check_date):
         if has_file:
             print("\n   有文件但无当日数据的前10只:")
             for _, r in missing[missing["ts_code"].isin(has_file)].head(10).iterrows():
-                print(f"     {r['ts_code']:12s} {r['bond_short_name']:10s} "
-                      f"list={r['list_date']} exch={r['exchange']}")
+                print(
+                    f"     {r['ts_code']:12s} {r['bond_short_name']:10s} "
+                    f"list={r['list_date']} exch={r['exchange']}"
+                )
         if no_file:
             print("\n   无文件的前10只:")
             for _, r in active_cb[active_cb["ts_code"].isin(no_file)].head(10).iterrows():
-                print(f"     {r['ts_code']:12s} {r['bond_short_name']:10s} "
-                      f"list={r['list_date']} exch={r['exchange']}")
+                print(
+                    f"     {r['ts_code']:12s} {r['bond_short_name']:10s} "
+                    f"list={r['list_date']} exch={r['exchange']}"
+                )
 
 
 # ============================================================
@@ -133,13 +140,17 @@ def check_fund(check_date):
         if no_file:
             print("\n   无文件的前10只:")
             for _, r in active_fund[active_fund["ts_code"].isin(no_file)].head(10).iterrows():
-                print(f"     {r['ts_code']:12s} {r['name']:20s} "
-                      f"type={r['fund_type']} list={r['list_date']}")
+                print(
+                    f"     {r['ts_code']:12s} {r['name']:20s} "
+                    f"type={r['fund_type']} list={r['list_date']}"
+                )
         if has_file:
             print("\n   有文件但无当日数据的前10只:")
             for _, r in active_fund[active_fund["ts_code"].isin(has_file)].head(10).iterrows():
-                print(f"     {r['ts_code']:12s} {r['name']:20s} "
-                      f"type={r['fund_type']} list={r['list_date']}")
+                print(
+                    f"     {r['ts_code']:12s} {r['name']:20s} "
+                    f"type={r['fund_type']} list={r['list_date']}"
+                )
 
     # 5. ETF 类型细分
     print("\n5. 在市ETF（基金类型=ETF）覆盖率:")
@@ -161,10 +172,10 @@ def check_fund(check_date):
 # 三、基金历史起点对账（EE-FUND-1 B1）
 # ============================================================
 _FUND_HISTORY_TABLES = [
-    ("fund_daily",  "trade_date"),
-    ("fund_nav",    "nav_date"),
-    ("fund_adj",    "trade_date"),
-    ("fund_share",  "trade_date"),
+    ("fund_daily", "trade_date"),
+    ("fund_nav", "nav_date"),
+    ("fund_adj", "trade_date"),
+    ("fund_share", "trade_date"),
 ]
 
 
@@ -240,12 +251,15 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
     # 读「已核验源端空」注册表（§25：逃生口撤销后的唯一豁免通道，逐码登记）
     _kg_path = os.path.join(os.path.dirname(__file__), "db", "data", "known_gaps.json")
     import json as _json
+
     try:
         with open(_kg_path, encoding="utf-8") as _f:
             _kg = _json.load(_f)
     except Exception as exc:
-        print(f"[check_coverage] 读 known_gaps 失败（按无登记处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[check_coverage] 读 known_gaps 失败（按无登记处理）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         _kg = {}
 
     fund_basic = pd.read_parquet(os.path.join(META_DIR, "fund_basic.parquet"))
@@ -316,24 +330,36 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
             if _ld is None or (first_map[tc] - _ld).days <= 30:
                 stale_late.append(tc)
         if stale_reg:
-            print(f"\n  ⚠ {table}: source_empty 注册表中有 {len(stale_reg)} 只库内已有数据"
-                  f"（注册表须清理）: {stale_reg[:5]}")
+            print(
+                f"\n  ⚠ {table}: source_empty 注册表中有 {len(stale_reg)} 只库内已有数据"
+                f"（注册表须清理）: {stale_reg[:5]}"
+            )
         if stale_late:
-            print(f"\n  ⚠ {table}: source_late_start 注册表中有 {len(stale_late)} 只 gap 已消失"
-                  f"（注册表须清理）: {stale_late[:5]}")
+            print(
+                f"\n  ⚠ {table}: source_late_start 注册表中有 {len(stale_late)} 只 gap 已消失"
+                f"（注册表须清理）: {stale_late[:5]}"
+            )
 
         total_a += len(a_list)
         total_b += len(b_list)
         total_s += len(s_list)
         total_sb += len(sb_list)
-        detail[table] = {"A": a_list, "B": b_list, "S": s_list, "SB": sb_list,
-                         "stale_registered": stale_reg, "stale_late": stale_late}
+        detail[table] = {
+            "A": a_list,
+            "B": b_list,
+            "S": s_list,
+            "SB": sb_list,
+            "stale_registered": stale_reg,
+            "stale_late": stale_late,
+        }
 
         if len(a_list) + len(b_list) + len(s_list) + len(sb_list) == 0:
             continue
 
-        print(f"\n  {table}: A={len(a_list)} B={len(b_list)} "
-              f"S={len(s_list)}(源端空) SB={len(sb_list)}(源端晚起点)")
+        print(
+            f"\n  {table}: A={len(a_list)} B={len(b_list)} "
+            f"S={len(s_list)}(源端空) SB={len(sb_list)}(源端晚起点)"
+        )
         if a_list:
             print("    A 类（库内 0 行·未登记）TOP 10:")
             for tc, nm in a_list[:10]:
@@ -345,8 +371,10 @@ def check_fund_history(strict=False, return_detail=False, scope="full"):
                 print(f"      {tc:12s} {nm[:20]:20s} gap={gap:4d}d")
 
     print(f"\n===== 汇总（scope={scope}）=====")
-    print(f"A 类合计: {total_a}  B 类合计: {total_b}  "
-          f"S 类（已登记源端空）: {total_s}  SB 类（已登记源端晚起点）: {total_sb}")
+    print(
+        f"A 类合计: {total_a}  B 类合计: {total_b}  "
+        f"S 类（已登记源端空）: {total_s}  SB 类（已登记源端晚起点）: {total_sb}"
+    )
     # 诚实门禁：只看未登记的可执行缺口；注册表失真同样红（由 R17 细查）
     rc = 1 if (strict and (total_a > 0 or total_b > 0)) else 0
 
@@ -373,16 +401,19 @@ def run(date=None, history=False, strict=False, scope="full"):
 
 def main():
     parser = argparse.ArgumentParser(description="数据覆盖检查")
-    parser.add_argument("date", nargs="?", default=None,
-                        help="检查日期 YYYYMMDD (默认: 自动获取最近交易日)")
-    parser.add_argument("--history", action="store_true",
-                        help="基金历史起点对账（EE-FUND-1 B1）")
-    parser.add_argument("--strict", action="store_true",
-                        help="与 --history 联用：存在 A/B 缺口时非零退出码")
-    parser.add_argument("--scope",
-                        choices=("full", "fund_daily", "fund_nav", "fund_adj", "fund_share"),
-                        default="full",
-                        help="历史对账范围：full（四表全跑，默认）/ 单表名")
+    parser.add_argument(
+        "date", nargs="?", default=None, help="检查日期 YYYYMMDD (默认: 自动获取最近交易日)"
+    )
+    parser.add_argument("--history", action="store_true", help="基金历史起点对账（EE-FUND-1 B1）")
+    parser.add_argument(
+        "--strict", action="store_true", help="与 --history 联用：存在 A/B 缺口时非零退出码"
+    )
+    parser.add_argument(
+        "--scope",
+        choices=("full", "fund_daily", "fund_nav", "fund_adj", "fund_share"),
+        default="full",
+        help="历史对账范围：full（四表全跑，默认）/ 单表名",
+    )
     args = parser.parse_args()
 
     rc = run(args.date, history=args.history, strict=args.strict, scope=args.scope)

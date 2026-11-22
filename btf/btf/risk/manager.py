@@ -9,6 +9,7 @@ M1 范围：协议全集 + RuleChainManager（空链放行+警告，04 §8.5 扩
 降级策略）。三条内置规则（risk/rules.py）与引擎 pre_check 接线归 M2
 任务 5.2（本轮交付）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -53,8 +54,8 @@ class RiskVerdict:
     """规则裁决（不可变值对象）。"""
 
     kind: VerdictKind
-    qty: int | None = None            # REDUCE：缩量后目标数量
-    reason_code: str | None = None    # REJECT：机器可读原因
+    qty: int | None = None  # REDUCE：缩量后目标数量
+    reason_code: str | None = None  # REJECT：机器可读原因
 
     @classmethod
     def allow(cls) -> RiskVerdict:
@@ -72,8 +73,9 @@ class RiskVerdict:
 class RiskRule(Protocol):
     """风控规则插件（NautilusTrader RiskEngine 思想）：预检订单 → 裁决。"""
 
-    def check(self, order: Order, portfolio: PortfolioRiskView,
-              states: Mapping[str, TradingState]) -> RiskVerdict: ...
+    def check(
+        self, order: Order, portfolio: PortfolioRiskView, states: Mapping[str, TradingState]
+    ) -> RiskVerdict: ...
 
 
 class RiskManager(Protocol):
@@ -81,8 +83,12 @@ class RiskManager(Protocol):
 
     rules: Sequence[RiskRule]
 
-    def pre_check(self, orders: Sequence[Order], portfolio: PortfolioRiskView,
-                  states: Mapping[str, TradingState]) -> list[Order]: ...
+    def pre_check(
+        self,
+        orders: Sequence[Order],
+        portfolio: PortfolioRiskView,
+        states: Mapping[str, TradingState],
+    ) -> list[Order]: ...
 
 
 class RuleChainManager:
@@ -106,8 +112,12 @@ class RuleChainManager:
         if not self.rules:
             logger.warning("风控规则链为空：全部订单放行（04 §8.5 扩展点 6 降级策略）")
 
-    def pre_check(self, orders: Sequence[Order], portfolio: PortfolioRiskView,
-                  states: Mapping[str, TradingState]) -> list[Order]:
+    def pre_check(
+        self,
+        orders: Sequence[Order],
+        portfolio: PortfolioRiskView,
+        states: Mapping[str, TradingState],
+    ) -> list[Order]:
         for rule in self.rules:
             hook = getattr(rule, "on_batch_start", None)
             if hook is not None:
@@ -119,16 +129,19 @@ class RuleChainManager:
             for rule in self.rules:
                 verdict = rule.check(order, portfolio, states)
                 if verdict.kind is not VerdictKind.ALLOW:
-                    break                     # 首个非 ALLOW 生效
+                    break  # 首个非 ALLOW 生效
             if verdict.kind is VerdictKind.REJECT:
-                self.batch_rejections.append(
-                    (order, verdict.reason_code or "risk:unknown"))
+                self.batch_rejections.append((order, verdict.reason_code or "risk:unknown"))
                 continue
-            if (verdict.kind is VerdictKind.REDUCE
-                    and verdict.qty is not None and verdict.qty < order.qty):
+            if (
+                verdict.kind is VerdictKind.REDUCE
+                and verdict.qty is not None
+                and verdict.qty < order.qty
+            ):
                 if verdict.qty <= 0:
                     self.batch_rejections.append(
-                        (order, verdict.reason_code or "risk:reduced_to_zero"))
+                        (order, verdict.reason_code or "risk:reduced_to_zero")
+                    )
                     continue
                 order = replace(order, qty=verdict.qty)
             out.append(order)

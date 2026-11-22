@@ -15,6 +15,7 @@
       生产链路**必须**传——原注释"不造私有缓存"因此在传参缺失时与事实不符
       （累计第 12 处「声明 vs 事实」）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -30,8 +31,12 @@ class IndexSeriesError(RuntimeError):
 
 
 def load_index_closes(
-    symbol: str, start_ymd: str, end_ymd: str, *,
-    trading_days: Sequence[str], root: Path | None = None,
+    symbol: str,
+    start_ymd: str,
+    end_ymd: str,
+    *,
+    trading_days: Sequence[str],
+    root: Path | None = None,
     store: object | None = None,
 ) -> tuple[list[str], list[float]]:
     """基准指数收盘序列（按 `trading_days` 对齐；缺日抛错）。"""
@@ -44,19 +49,25 @@ def load_index_closes(
     closes: dict[str, float] = {}
     for year in range(int(start_ymd[:4]), int(end_ymd[:4]) + 1):
         for (_code, day), value in store.values_by_symbol_day(
-                "index_daily", year, [symbol], "close").items():
+            "index_daily", year, [symbol], "close"
+        ).items():
             closes[day] = float(value)
     missing = [d for d in days if d not in closes or not closes[d] > 0]
     if missing:
         raise IndexSeriesError(
             f"基准 {symbol} 在 {len(missing)} 个策略交易日无收盘价"
-            f"（缺日禁止前向填充）：{missing[:5]}…")
+            f"（缺日禁止前向填充）：{missing[:5]}…"
+        )
     return days, [closes[d] for d in days]
 
 
 def probe_index_coverage(
-    symbol: str, start_ymd: str, end_ymd: str, *,
-    root: Path | None = None, store: object | None = None,
+    symbol: str,
+    start_ymd: str,
+    end_ymd: str,
+    *,
+    root: Path | None = None,
+    store: object | None = None,
 ) -> int:
     """区间内基准可用收盘日数（**装配期守卫**；P1-NEW-6，19 号 §23.1/§23.3）。
 
@@ -74,7 +85,8 @@ def probe_index_coverage(
     n = 0
     for year in range(int(start_ymd[:4]), int(end_ymd[:4]) + 1):
         for (_code, day), value in store.values_by_symbol_day(
-                "index_daily", year, [symbol], "close").items():
+            "index_daily", year, [symbol], "close"
+        ).items():
             if start_ymd <= day <= end_ymd and value is not None:
                 n += 1
     return n

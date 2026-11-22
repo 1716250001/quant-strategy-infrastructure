@@ -42,6 +42,7 @@ alt/list_backfill.py — 通用 list 模式引擎（建库 / 轮转更新 / 整�
   两者**互不可见**，故并列输出（§140 R6-1 修的就是"只看前者 ⇒ 显示 done=0 假象"）。
   新增/删除键属接口变更，须先获批（§142 R6R-2）后再动。
 """
+
 import argparse
 import hashlib
 import json
@@ -54,7 +55,7 @@ from datetime import datetime, timedelta
 
 try:
     import msvcrt  # §185 R15-1UP：Windows 原生排他文件锁
-except ImportError:                    # 非 Windows ⇒ 降级（跳过加锁，首次告警）
+except ImportError:  # 非 Windows ⇒ 降级（跳过加锁，首次告警）
     msvcrt = None
 _MVSCRT_WARNED = False
 
@@ -117,8 +118,11 @@ class RotateState:
                 with open(path, encoding="utf-8") as f:
                     self.data = json.load(f)
             except Exception as exc:
-                print(f"[alt.list_backfill] 断点文件加载失败（按空处理）{path}: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                print(
+                    f"[alt.list_backfill] 断点文件加载失败（按空处理）{path}: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 self.data = {}
 
     def last_done(self, table, symbol):
@@ -138,7 +142,7 @@ class RotateState:
         day = day or datetime.now().strftime("%Y-%m-%d")
 
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        assert_writable(self.path)          # 锁前先过写入守卫（失败不入锁）
+        assert_writable(self.path)  # 锁前先过写入守卫（失败不入锁）
         # 锁文件 = 独立文件（**不锁数据文件本身**，避免与 os.replace 冲突）；
         # ⚠ 永不删除锁文件——删掉会破坏互斥（§185 R15-1UP-e）
         lock_path = self.path + ".lock"
@@ -165,7 +169,7 @@ class RotateState:
                     raise ValueError("顶层不是 dict")
                 self.data = latest
             except FileNotFoundError:
-                pass                      # 首次写：内存副本即可
+                pass  # 首次写：内存副本即可
             except Exception as e:
                 # §182 R15-1b：重读失败不得静默 → 回退内存副本并告警
                 print(f"[WARN] rotate_state 重读失败，回退内存副本: {e}")
@@ -214,9 +218,12 @@ class RotateState:
             try:
                 age = (today - datetime.strptime(d, "%Y-%m-%d")).days
             except Exception as exc:
-                print(f"[alt.list_backfill] 水位日期解析失败 {d!r}（按极老处理）: "
-                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
-                age = 10 ** 6
+                print(
+                    f"[alt.list_backfill] 水位日期解析失败 {d!r}（按极老处理）: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
+                age = 10**6
             if age <= rd:
                 fresh += 1
             else:
@@ -244,9 +251,22 @@ UNTIL_MAX_ROLL_HOURS = 12
 class ProgressHeartbeat:
     """进度心跳文件（§128 T1-1）—— 原子写，14 个字段名冻结（看门狗按此解析）。"""
 
-    FIELDS = ("table", "pid", "phase", "started_at", "updated_at", "done", "total",
-              "pct", "rate_sym_per_s", "eta_min", "last_batch", "batch_ok",
-              "batch_fail", "until")
+    FIELDS = (
+        "table",
+        "pid",
+        "phase",
+        "started_at",
+        "updated_at",
+        "done",
+        "total",
+        "pct",
+        "rate_sym_per_s",
+        "eta_min",
+        "last_batch",
+        "batch_ok",
+        "batch_fail",
+        "until",
+    )
 
     def __init__(self, table, phase, total, until=None):
         self.path = os.path.join(ALT_META_DIR, f"{table}_progress.json")
@@ -305,8 +325,10 @@ def parse_until(spec_str, now=None):
         if not (0 <= hh <= 23 and 0 <= mm <= 59):
             raise ValueError
     except Exception as exc:
-        print(f"[alt.list_backfill] --until 解析失败 {spec_str!r}: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[alt.list_backfill] --until 解析失败 {spec_str!r}: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return None, f"--until 格式非法: {spec_str!r}（应为 HH:MM）"
     now = now or datetime.now()
     target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
@@ -315,8 +337,7 @@ def parse_until(spec_str, now=None):
     roll = target + timedelta(days=1)
     if (roll - now).total_seconds() <= UNTIL_MAX_ROLL_HOURS * 3600:
         return roll, ""
-    return None, (f"--until {s} 已过期（当前 {now.strftime('%H:%M')}），"
-                  f"请检查时刻")
+    return None, (f"--until {s} 已过期（当前 {now.strftime('%H:%M')}），请检查时刻")
 
 
 # ============================================================
@@ -348,8 +369,8 @@ def _read_alt_table(name):
     files = list_parquet_files(d, sort=True, with_dir=True)
     if not files:
         raise FileNotFoundError(
-            f"alt 库无此表: {d}（universe_from 指向的清单表；"
-            f"若为派生清单，请先按派单生成）")
+            f"alt 库无此表: {d}（universe_from 指向的清单表；若为派生清单，请先按派单生成）"
+        )
     return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
 
 
@@ -373,13 +394,14 @@ def load_universe(sp, verbose=True):
     else:
         raise ValueError(
             f"{sp.name}: universe_from 为空——请用 --symbols 显式指定标的，"
-            f"或在 spec 中声明 'master:<表名>' / alt 内清单表名")
+            f"或在 spec 中声明 'master:<表名>' / alt 内清单表名"
+        )
     col = sp.universe_col
     if col not in df.columns:
         raise KeyError(f"清单表 {table} 缺少列 '{col}'（实际: {list(df.columns)[:12]}）")
     s = df[col].astype(str)
     if sp.universe_xform == "strip_hk_suffix":
-        s = s.str.replace(r"\.HK$", "", regex=True)      # "00700.HK" → "00700"
+        s = s.str.replace(r"\.HK$", "", regex=True)  # "00700.HK" → "00700"
     elif sp.universe_xform:
         raise ValueError(f"未知 universe_xform: {sp.universe_xform!r}")
     seen, out = set(), []
@@ -389,8 +411,11 @@ def load_universe(sp, verbose=True):
             seen.add(x)
             out.append(x)
     if verbose:
-        print(f"[清单] {sp.name} ← {label}.{col}"
-              f"（变换 {sp.universe_xform or '原样'}）→ {len(out):,} 只", flush=True)
+        print(
+            f"[清单] {sp.name} ← {label}.{col}"
+            f"（变换 {sp.universe_xform or '原样'}）→ {len(out):,} 只",
+            flush=True,
+        )
     return out
 
 
@@ -406,28 +431,31 @@ def select_batch(symbols, sp, state, budget=None, verbose=True):
         # 这样日更（不带 budget）仍会自然跳过、月度任务（带 18052）能跑全量。
         if budget:
             k = min(int(budget), len(symbols))
-            ordered = sorted(symbols,
-                             key=lambda s: (state.last_done(sp.name, s) or ""))
+            ordered = sorted(symbols, key=lambda s: state.last_done(sp.name, s) or "")
             todo = ordered[:k]
             if verbose:
-                print(f"[批次] rotate_days=0 + --budget-syms={int(budget):,}"
-                      f" → 全量模式，本轮 {len(todo):,} 只（最久未拉优先）", flush=True)
+                print(
+                    f"[批次] rotate_days=0 + --budget-syms={int(budget):,}"
+                    f" → 全量模式，本轮 {len(todo):,} 只（最久未拉优先）",
+                    flush=True,
+                )
             return todo
         todo = [s for s in symbols if not state.last_done(sp.name, s)]
         if verbose:
-            print(f"[批次] rotate_days=0（不轮转）→ 未拉过 {len(todo):,} 只",
-                  flush=True)
+            print(f"[批次] rotate_days=0（不轮转）→ 未拉过 {len(todo):,} 只", flush=True)
         return todo
     k = budget or math.ceil(len(symbols) / sp.rotate_days)
     k = min(k, len(symbols))
-    ordered = sorted(symbols, key=lambda s: (state.last_done(sp.name, s) or ""))
+    ordered = sorted(symbols, key=lambda s: state.last_done(sp.name, s) or "")
     todo = ordered[:k]
     if verbose and todo:
         oldest = state.last_done(sp.name, todo[0]) or "（从未拉）"
-        print(f"[批次] K={k} 只（=ceil({len(symbols):,}/{sp.rotate_days})"
-              f"{'；--budget-syms 覆盖' if budget else ''}）"
-              f" => 请求 ≈ {k * 2} 条（价格+因子两表合计）｜队首水位={oldest}",
-              flush=True)
+        print(
+            f"[批次] K={k} 只（=ceil({len(symbols):,}/{sp.rotate_days})"
+            f"{'；--budget-syms 覆盖' if budget else ''}）"
+            f" => 请求 ≈ {k * 2} 条（价格+因子两表合计）｜队首水位={oldest}",
+            flush=True,
+        )
     return todo
 
 
@@ -453,6 +481,7 @@ def _table_disk_rows(name):
     if not files:
         return 0, 0
     import pyarrow.parquet as pq
+
     n_rows = 0
     for f in files:
         try:
@@ -487,14 +516,17 @@ def _guard_schedule_state(sp, state, rebuild, dry_run, verbose=True):
     if n_files == 0 or n_rows <= 0:
         return
     print("=" * 84)
-    print(f"[R6-2] 拒绝执行：{sp.name} 的 RotateState 无记录，"
-          f"但盘上已有 {n_files} 个分区 / {n_rows:,} 行数据")
-    print("  两套记录互不可见（AltCheckpoint vs RotateState）——若继续，"
-          "select_batch 会把全部标的当成「从未拉过」重新拉一遍。")
+    print(
+        f"[R6-2] 拒绝执行：{sp.name} 的 RotateState 无记录，"
+        f"但盘上已有 {n_files} 个分区 / {n_rows:,} 行数据"
+    )
+    print(
+        "  两套记录互不可见（AltCheckpoint vs RotateState）——若继续，"
+        "select_batch 会把全部标的当成「从未拉过」重新拉一遍。"
+    )
     print("  处置（二选一）：")
     print("    ① 确认确需全量重拉 ⇒ 追加 --rebuild（显式越过本保护）")
-    print("    ② 只想看进度 ⇒ python -m alt.list_backfill --table "
-          f"{sp.name} --status")
+    print(f"    ② 只想看进度 ⇒ python -m alt.list_backfill --table {sp.name} --status")
     print("=" * 84)
     raise SystemExit(4)
 
@@ -503,10 +535,12 @@ def _guard_schedule_state(sp, state, rebuild, dry_run, verbose=True):
 # 三、拉取（串行 + limiter）
 # ============================================================
 # §170 R14-1：R7-1 补丁白名单（只登记实测确认的接口，禁前缀/模糊匹配）
-_R71_FUNCS = frozenset({
-    "stock_hk_financial_indicator_em",            # §151 R7-1（hk_fina_snap，8 只）
-    "stock_financial_us_analysis_indicator_em",   # §170 R14-1（us_fina_ind，实测约 24%）
-})
+_R71_FUNCS = frozenset(
+    {
+        "stock_hk_financial_indicator_em",  # §151 R7-1（hk_fina_snap，8 只）
+        "stock_financial_us_analysis_indicator_em",  # §170 R14-1（us_fina_ind，实测约 24%）
+    }
+)
 # §182 R15-5：本进程内 R7-1 归类次数（仅用于汇总行括注，不回滚 limiter 统计）
 _R71_HITS = 0
 
@@ -516,11 +550,12 @@ def fetch_one(sp, symbol, limiter, url):
     返回 (symbol, DataFrame|None, err)；成功时**注入标的列**（接口不返回）。
     """
     import akshare as ak
+
     fn = getattr(ak, sp.func, None)
     if fn is None:
         return symbol, None, f"akshare 无此函数: {sp.func}"
     kw = dict(sp.params)
-    kw[sp.symbol_param or "symbol"] = symbol          # 接口参数名（akshare 惯例 symbol）
+    kw[sp.symbol_param or "symbol"] = symbol  # 接口参数名（akshare 惯例 symbol）
     df, ok, err = limiter.call(lambda: fn(**kw), url)
     if not ok:
         # §151 R7-1 + §170 R14-1：源端对「无数据标的」返回 None ⇒ akshare 内部抛 TypeError。
@@ -531,10 +566,12 @@ def fetch_one(sp, symbol, limiter, url):
         # 白名单逐条登记依据：
         #   · stock_hk_financial_indicator_em —— §151 R7-1（hk_fina_snap，8 只）
         #   · stock_financial_us_analysis_indicator_em —— §170 R14-1（us_fina_ind，实测约 24%）
-        if (sp.func in _R71_FUNCS
-                and err
-                and err.startswith("TypeError")
-                and "'NoneType' object is not subscriptable" in err):
+        if (
+            sp.func in _R71_FUNCS
+            and err
+            and err.startswith("TypeError")
+            and "'NoneType' object is not subscriptable" in err
+        ):
             global _R71_HITS
             _R71_HITS += 1
             print(f"    [R7-1] {symbol} akshare 空响应异常已归类 empty（{sp.name}）")
@@ -543,7 +580,7 @@ def fetch_one(sp, symbol, limiter, url):
     if df is None or len(df) == 0:
         return symbol, None, "empty"
     d = df.copy()
-    d[sp.symbol_col or "symbol"] = symbol             # 注入**标的列**（与 subset 一致）
+    d[sp.symbol_col or "symbol"] = symbol  # 注入**标的列**（与 subset 一致）
     return symbol, d, None
 
 
@@ -556,6 +593,7 @@ def fetch_batch(sp, symbols, limiter, url):
          没有名称列才退化为逗号拼接的批次标识。
     """
     import akshare as ak
+
     fn = getattr(ak, sp.func, None)
     if fn is None:
         return None, f"akshare 无此函数: {sp.func}"
@@ -614,10 +652,13 @@ def flush_buffer(sp, buf, dest_dir=None):
     raw = pd.concat([d for _, d in buf], ignore_index=True)
     norm, warns = alt_io.normalize(raw, sp)
     res = alt_io.save(norm, sp, dest_dir=dest_dir)
-    return {"ok": bool(res.get("ok")), "rows": res.get("rows", 0),
-            "added": res.get("added", 0),
-            "warnings": list(warns) + list(res.get("warnings", [])),
-            "errors": list(res.get("errors", []))}
+    return {
+        "ok": bool(res.get("ok")),
+        "rows": res.get("rows", 0),
+        "added": res.get("added", 0),
+        "warnings": list(warns) + list(res.get("warnings", [])),
+        "errors": list(res.get("errors", [])),
+    }
 
 
 # ============================================================
@@ -640,12 +681,14 @@ def _verify_shadow(sp, new_dir, verbose=True):
         n = len(pd.read_parquet(os.path.join(new_dir, f), columns=[sp.date_col]))
         if n <= 0:
             raise RuntimeError(
-                f"[F-9 守卫] 影子目录分区为空: {f}（0 行）——"
-                f"空分区不得进正式目录（正式目录零改动）")
+                f"[F-9 守卫] 影子目录分区为空: {f}（0 行）——空分区不得进正式目录（正式目录零改动）"
+            )
         counts[f] = n
     if verbose:
-        print(f"[校验] 影子目录 {len(files)} 分区 / {sum(counts.values()):,} 行"
-              f"（逐分区非空 OK，按 {sp.date_col} 计）")
+        print(
+            f"[校验] 影子目录 {len(files)} 分区 / {sum(counts.values()):,} 行"
+            f"（逐分区非空 OK，按 {sp.date_col} 计）"
+        )
     return counts
 
 
@@ -677,9 +720,12 @@ def _official_partition_state(sp):
             rows = len(pd.read_parquet(p, columns=[sp.date_col]))
             state[f] = {"rows": rows, "sha256": _sha256_file(p)}
         except Exception as exc:
-            print(f"[alt.list_backfill] 影子分片读取失败 {p}（保守按非空处理）: "
-                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
-            state[f] = {"rows": -1, "sha256": ""}   # 读失败 ⇒ 保守按"非空"处理
+            print(
+                f"[alt.list_backfill] 影子分片读取失败 {p}（保守按非空处理）: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            state[f] = {"rows": -1, "sha256": ""}  # 读失败 ⇒ 保守按"非空"处理
     return state
 
 
@@ -711,27 +757,30 @@ def _switch_shadow(sp, new_dir, official_state=None, verbose=True):
     if verbose and official_state:
         n_rows = sum(st["rows"] for st in official_state.values() if st["rows"] > 0)
         f0, st0 = next(iter(official_state.items()))
-        print(f"[快照] 切换前正式目录 {len(official_state)} 分区 / {n_rows:,} 行"
-              f"｜sha256（示例 {f0}）={st0['sha256'][:12]}…"
-              f"（全量已记，供 `__old` 逐位对账；B2/§10.6）")
+        print(
+            f"[快照] 切换前正式目录 {len(official_state)} 分区 / {n_rows:,} 行"
+            f"｜sha256（示例 {f0}）={st0['sha256'][:12]}…"
+            f"（全量已记，供 `__old` 逐位对账；B2/§10.6）"
+        )
     new_set = set(new_files)
-    missing = sorted(f for f, st in official_state.items()
-                     if st["rows"] != 0 and f not in new_set)
+    missing = sorted(f for f, st in official_state.items() if st["rows"] != 0 and f not in new_set)
     if missing:
         raise RuntimeError(
             f"[F-9 守卫] 影子目录缺少正式目录已有分区 {missing}——"
             f"直接切换会静默删除这些分区，已中止（正式目录零改动）。"
             f"可能原因：rebuild 中断 / 某年拉取全空 / 误用 --symbols 部分标的。"
             f"若确认某分区确应废弃（如源端撤回数据），"
-            f"请手动清理 official 对应 .parquet 后重跑")
-    dropped_empty = sorted(f for f, st in official_state.items()
-                           if st["rows"] == 0 and f not in new_set)
+            f"请手动清理 official 对应 .parquet 后重跑"
+        )
+    dropped_empty = sorted(
+        f for f, st in official_state.items() if st["rows"] == 0 and f not in new_set
+    )
     if dropped_empty and verbose:
         print(f"[F-11] 弃置 official 空分区 {dropped_empty}（0 行，无数据损失）")
 
     os.makedirs(official, exist_ok=True)
     if os.path.isdir(old):
-        shutil.rmtree(old)                    # 只保留 1 轮
+        shutil.rmtree(old)  # 只保留 1 轮
     os.makedirs(old, exist_ok=True)
     moved_old = 0
     for f in sorted(os.listdir(official)):
@@ -744,8 +793,7 @@ def _switch_shadow(sp, new_dir, official_state=None, verbose=True):
         moved_new += 1
     shutil.rmtree(new_dir, ignore_errors=True)
     if verbose:
-        print(f"[切换] 旧文件 {moved_old} → {old}（保留 1 轮）；"
-              f"新文件 {moved_new} → {official}")
+        print(f"[切换] 旧文件 {moved_old} → {old}（保留 1 轮）；新文件 {moved_new} → {official}")
         print(f"  回退（如需）: 将 {old} 下的 .parquet 覆盖回 {official} 后重跑本命令")
     return moved_new
 
@@ -772,11 +820,15 @@ def _check_rebuild_coverage(sp, universe, done_syms, verbose=True):
         if missing:
             head = ", ".join(missing[:10])
             more = "…" if len(missing) > 10 else ""
-            print(f"[F-14] 覆盖率 {cov['done']:,}/{cov['universe']:,} WARN"
-                  f"——缺失 {len(missing)} 只（{head}{more}）")
-            print(f"  ① 已跳过其水位 ⇒ 下轮轮转（≤{sp.rotate_days} 天）优先自愈；"
-                  f"② 立即补拉: python -m alt.list_backfill --table {sp.name} "
-                  f"--symbols {','.join(missing[:20])}")
+            print(
+                f"[F-14] 覆盖率 {cov['done']:,}/{cov['universe']:,} WARN"
+                f"——缺失 {len(missing)} 只（{head}{more}）"
+            )
+            print(
+                f"  ① 已跳过其水位 ⇒ 下轮轮转（≤{sp.rotate_days} 天）优先自愈；"
+                f"② 立即补拉: python -m alt.list_backfill --table {sp.name} "
+                f"--symbols {','.join(missing[:20])}"
+            )
         else:
             print(f"[F-14] 覆盖率 {cov['done']:,}/{cov['universe']:,} OK（无缺失）")
     return cov
@@ -789,23 +841,35 @@ def _check_rebuild_coverage(sp, universe, done_syms, verbose=True):
 DEPRECATED_TABLES = {"us_daily_qfq"}
 
 
-def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
-        batch=None, yes=False, verbose=True, until=None):
+def run(
+    table,
+    *,
+    symbols=None,
+    budget=None,
+    rebuild=False,
+    dry_run=False,
+    batch=None,
+    yes=False,
+    verbose=True,
+    until=None,
+):
     global _R71_HITS
-    _R71_HITS = 0                       # §182 R15-5：本表统计从 0 起
+    _R71_HITS = 0  # §182 R15-5：本表统计从 0 起
     sp = spec_mod.get(table)
     # §159 R10-C4′（P0）：废弃表黑名单——归档后 R6-2 的"盘上无数据即放行"会自动失效，
     # 任何手动跑 --table us_daily_qfq 都会重建一份脏表（源端算法错误，本地无法清洗）。
     if sp.name in DEPRECATED_TABLES:
         raise SystemExit(
             f"[废弃] {sp.name} 已归档（§159）：源端复权算法错误、本地无法清洗。"
-            f"需要美股复权价请走 wind，或用 us_daily_raw + us_qfq_factor")
+            f"需要美股复权价请走 wind，或用 us_daily_raw + us_qfq_factor"
+        )
     if sp.mode != "list":
         raise SystemExit(f"{table}: mode={sp.mode!r} 不是 'list'（本引擎仅处理 list 表）")
     if rebuild and symbols:
         raise SystemExit(
             "--rebuild 与 --symbols 互斥（F-9 守卫）：rebuild 必须全量 universe——"
-            "部分标的的影子目录必然缺分区，切换即静默丢数据")
+            "部分标的的影子目录必然缺分区，切换即静默丢数据"
+        )
     # §128 T2：分段停机点先解析（格式错/已过期一律立即退出码 2，不落任何东西）
     until_dt, until_err = parse_until(until)
     if until_err:
@@ -814,11 +878,11 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
     ensure_alt_dirs()
     url = guess_url(sp.func)
     if verbose:
-        print(f"[配置] {sp.name} | func={sp.func} params={sp.params} | 档位={url}",
-              flush=True)
+        print(f"[配置] {sp.name} | func={sp.func} params={sp.params} | 档位={url}", flush=True)
 
-    universe = ([s.strip() for s in symbols.split(",")] if symbols
-                else load_universe(sp, verbose=verbose))
+    universe = (
+        [s.strip() for s in symbols.split(",")] if symbols else load_universe(sp, verbose=verbose)
+    )
     universe = [s for s in universe if s]
     if not universe:
         raise SystemExit("清单为空，无可拉标的")
@@ -838,11 +902,17 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
 
     # 轮转进度摘要（零请求）
     fresh, stale, oldest, newest = state.progress(sp.name, universe, sp.rotate_days)
-    print(f"[轮转] 进度：新鲜 {fresh:,} / 陈旧或未拉 {stale:,}（共 {len(universe):,}）"
-          f"｜最旧水位 {oldest or '—'}｜最新 {newest or '—'}", flush=True)
-    print(f"[计划] {mode_label}：本轮 {len(todo):,} 只 => 本表请求 ≈ {len(todo):,} 条"
-          f"（单表口径；sina 20/分 => 约 {len(todo) / 20:.0f} 分钟）"
-          f"｜价格+因子两表合计 {len(todo) * 2:,} 条", flush=True)
+    print(
+        f"[轮转] 进度：新鲜 {fresh:,} / 陈旧或未拉 {stale:,}（共 {len(universe):,}）"
+        f"｜最旧水位 {oldest or '—'}｜最新 {newest or '—'}",
+        flush=True,
+    )
+    print(
+        f"[计划] {mode_label}：本轮 {len(todo):,} 只 => 本表请求 ≈ {len(todo):,} 条"
+        f"（单表口径；sina 20/分 => 约 {len(todo) / 20:.0f} 分钟）"
+        f"｜价格+因子两表合计 {len(todo) * 2:,} 条",
+        flush=True,
+    )
 
     if dry_run:
         print("\n[DRY-RUN] 未发请求、未写库。样例队首:", todo[:5], flush=True)
@@ -864,7 +934,7 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
 
     limiter = AltRateLimiter(dry_run=False, verbose=verbose)
     ckpt = AltCheckpoint()
-    _patch_requests_timeout(SOCKET_TIMEOUT)   # akshare 的 requests 无超时会长挂起（us 实测）
+    _patch_requests_timeout(SOCKET_TIMEOUT)  # akshare 的 requests 无超时会长挂起（us 实测）
 
     dest_dir = None
     if rebuild:
@@ -875,9 +945,9 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
 
     stat = {"ok": 0, "empty": 0, "fail": 0, "rows": 0, "added": 0}
     errs = []
-    done_syms = []              # F-15：**落盘成功批次**收编（成功+返空；rebuild 水位/覆盖率只认这些）
-    buf = []                    # [(symbol, df), ...] 待落盘
-    batch_syms = []             # 本批已处理（ok + empty），flush 成功后统一记水位
+    done_syms = []  # F-15：**落盘成功批次**收编（成功+返空；rebuild 水位/覆盖率只认这些）
+    buf = []  # [(symbol, df), ...] 待落盘
+    batch_syms = []  # 本批已处理（ok + empty），flush 成功后统一记水位
     t0 = time.time()
     batch_size = batch or HK_BATCH_SIZE
 
@@ -885,7 +955,7 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
     phase = "build" if (rebuild or (budget is not None and budget >= len(universe))) else "rotate"
     hb = ProgressHeartbeat(sp.name, phase, len(universe), until=until)
     hb.write(done=0)
-    persisted = 0                 # 本次运行**落盘成功**的只数（心跳 done 的来源）
+    persisted = 0  # 本次运行**落盘成功**的只数（心跳 done 的来源）
     last_batch_n = 0
     stopped_by_until = False
 
@@ -898,8 +968,10 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         if r["ok"]:
             stat["added"] += r["added"]
             if buf:
-                print(f"    [落盘] {len(buf)} 只 → 新增 {r['added']:,} 行"
-                      f"（累计 {stat['added']:,}）", flush=True)
+                print(
+                    f"    [落盘] {len(buf)} 只 → 新增 {r['added']:,} 行（累计 {stat['added']:,}）",
+                    flush=True,
+                )
             if not rebuild:
                 # 先落盘、后记（INV-3）：水位与一次性断点在此统一推进（含 empty）
                 state.mark_done(sp.name, batch_syms)
@@ -912,8 +984,9 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
             # 心跳**只在 flush 成功后**更新（失败保持旧 updated_at，看门狗才识别得出卡死）
             persisted += n_batch
             last_batch_n = n_batch
-            hb.write(done=persisted, last_batch=n_batch,
-                     batch_ok=stat["ok"], batch_fail=stat["fail"])
+            hb.write(
+                done=persisted, last_batch=n_batch, batch_ok=stat["ok"], batch_fail=stat["fail"]
+            )
         else:
             errs.append(f"flush: {r['errors'][:1]}")
             print(f"    [落盘失败] 不记水位（下次重拉）: {str(r['errors'][:1])[:120]}")
@@ -926,7 +999,7 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         d, err = fetch_batch(sp, syms, limiter, url)
         if err == "empty":
             stat["empty"] += 1
-            batch_syms.extend(syms)        # 空响应按批入列（flush ok 后统一收编）
+            batch_syms.extend(syms)  # 空响应按批入列（flush ok 后统一收编）
         elif err:
             stat["fail"] += 1
             errs.append(f"batch({len(syms)}只): {err}")
@@ -937,57 +1010,74 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
             buf.append((",".join(syms), d))
             batch_syms.extend(syms)
         _flush()
-        print(f"    [批拉取] {sp.name} | {len(syms)} 只 → {len(d) if d is not None else 0} 行"
-              f" | 失败={stat['fail']}", flush=True)
+        print(
+            f"    [批拉取] {sp.name} | {len(syms)} 只 → {len(d) if d is not None else 0} 行"
+            f" | 失败={stat['fail']}",
+            flush=True,
+        )
     else:
-      for i, sym in enumerate(todo, 1):
-        # §128 T2：到点**不再发起新批次**（在标的边界停，绝不截断在途请求）
-        if until_dt is not None and datetime.now() >= until_dt:
-            stopped_by_until = True
-            print(f"\n[until] 到达 {until}，停止发起新批次"
-                  f"（已处理 {len(batch_syms)} 只待落盘）", flush=True)
-            break
-        s, d, err = fetch_one(sp, sym, limiter, url)
-        batch_syms.append(s)
-        if err == "empty":
-            stat["empty"] += 1            # F-15：随批入列（_flush ok 后统一收编）
-        elif err:
-            stat["fail"] += 1
-            errs.append(f"{s}: {err}")
-            batch_syms.remove(s)          # 失败不记水位
-        else:
-            stat["ok"] += 1
-            stat["rows"] += len(d)
-            buf.append((s, d))            # F-15：随批入列（非即时 append）
+        for i, sym in enumerate(todo, 1):
+            # §128 T2：到点**不再发起新批次**（在标的边界停，绝不截断在途请求）
+            if until_dt is not None and datetime.now() >= until_dt:
+                stopped_by_until = True
+                print(
+                    f"\n[until] 到达 {until}，停止发起新批次（已处理 {len(batch_syms)} 只待落盘）",
+                    flush=True,
+                )
+                break
+            s, d, err = fetch_one(sp, sym, limiter, url)
+            batch_syms.append(s)
+            if err == "empty":
+                stat["empty"] += 1  # F-15：随批入列（_flush ok 后统一收编）
+            elif err:
+                stat["fail"] += 1
+                errs.append(f"{s}: {err}")
+                batch_syms.remove(s)  # 失败不记水位
+            else:
+                stat["ok"] += 1
+                stat["rows"] += len(d)
+                buf.append((s, d))  # F-15：随批入列（非即时 append）
 
-        if _should_flush(buf, batch_syms, batch_size):
-            _flush()
-        if i % 200 == 0 or i == len(todo):
-            el = time.time() - t0
-            rate = i / max(el, 1)
-            print(f"    {i:,}/{len(todo):,} | 成功 {stat['ok']:,} 空 {stat['empty']} "
-                  f"失败 {stat['fail']} | {rate:.2f} 只/s | "
-                  f"剩余≈{(len(todo) - i) / max(rate, 0.01) / 60:.0f} 分钟", flush=True)
+            if _should_flush(buf, batch_syms, batch_size):
+                _flush()
+            if i % 200 == 0 or i == len(todo):
+                el = time.time() - t0
+                rate = i / max(el, 1)
+                print(
+                    f"    {i:,}/{len(todo):,} | 成功 {stat['ok']:,} 空 {stat['empty']} "
+                    f"失败 {stat['fail']} | {rate:.2f} 只/s | "
+                    f"剩余≈{(len(todo) - i) / max(rate, 0.01) / 60:.0f} 分钟",
+                    flush=True,
+                )
     _flush()
 
     el = time.time() - t0
     # §128 T2 4.2：退出前必须写最后一次心跳（updated_at 即退出时刻）
     _fin = datetime.now().astimezone().isoformat(timespec="milliseconds")
     if stopped_by_until:
-        hb.write(done=persisted, last_batch=last_batch_n,
-                 batch_ok=stat["ok"], batch_fail=stat["fail"],
-                 extra={"until_stop": True, "finished_at": _fin})
+        hb.write(
+            done=persisted,
+            last_batch=last_batch_n,
+            batch_ok=stat["ok"],
+            batch_fail=stat["fail"],
+            extra={"until_stop": True, "finished_at": _fin},
+        )
         print(f"[until] 到达 {until}，已 flush {persisted} 只后退出")
     else:
-        hb.write(done=persisted, last_batch=last_batch_n,
-                 batch_ok=stat["ok"], batch_fail=stat["fail"],
-                 extra={"finished_at": _fin})
+        hb.write(
+            done=persisted,
+            last_batch=last_batch_n,
+            batch_ok=stat["ok"],
+            batch_fail=stat["fail"],
+            extra={"finished_at": _fin},
+        )
     print("\n" + "=" * 84)
     print(f"[完成] {sp.name} | {mode_label}")
-    print(f"  成功 {stat['ok']:,} | 返空 {stat['empty']} | 失败 {stat['fail']} | "
-          f"拉取 {stat['rows']:,} 行 | 落盘新增 {stat['added']:,} 行 | 耗时 {el / 60:.1f} 分钟")
-    print(f"  {limiter.status_str()}"
-          + (f"（含已归类空响应 {_R71_HITS}）" if _R71_HITS else ""))
+    print(
+        f"  成功 {stat['ok']:,} | 返空 {stat['empty']} | 失败 {stat['fail']} | "
+        f"拉取 {stat['rows']:,} 行 | 落盘新增 {stat['added']:,} 行 | 耗时 {el / 60:.1f} 分钟"
+    )
+    print(f"  {limiter.status_str()}" + (f"（含已归类空响应 {_R71_HITS}）" if _R71_HITS else ""))
     if errs:
         print(f"  失败样例（前 5）: {errs[:5]}")
 
@@ -997,20 +1087,22 @@ def run(table, *, symbols=None, budget=None, rebuild=False, dry_run=False,
         cov = _check_rebuild_coverage(sp, universe, done_syms, verbose=verbose)  # F-14
         counts = _verify_shadow(sp, dest_dir, verbose=verbose)
         total = sum(counts.values())
-        moved = _switch_shadow(sp, dest_dir, official_state=official_state,
-                               verbose=verbose)
+        moved = _switch_shadow(sp, dest_dir, official_state=official_state, verbose=verbose)
         # 切换成功后刷新水位与断点：**只标 done_syms**（F-14：失败标的不标 ⇒
         # 下轮轮转优先重拉自愈；此前标全量 universe 会把失败也记成"已完成"）
         state.mark_done(sp.name, done_syms)
         ckpt.mark_done(sp.name, done_syms)
-        print(f"[rebuild] done: {moved} 分区 / {total:,} 行 → 正式目录；"
-              f"水位已刷新（{len(set(done_syms)):,}/{len(universe):,} 只）")
+        print(
+            f"[rebuild] done: {moved} 分区 / {total:,} 行 → 正式目录；"
+            f"水位已刷新（{len(set(done_syms)):,}/{len(universe):,} 只）"
+        )
     else:
         fresh, stale, oldest, newest = state.progress(sp.name, universe, sp.rotate_days)
-        print(f"  [轮转] 进度更新：新鲜 {fresh:,} / 陈旧或未拉 {stale:,}"
-              f"｜最旧 {oldest or '—'}｜最新 {newest or '—'}")
-    return {"table": sp.name, "stat": stat, "errors": errs,
-            "coverage": cov, "dry_run": False}
+        print(
+            f"  [轮转] 进度更新：新鲜 {fresh:,} / 陈旧或未拉 {stale:,}"
+            f"｜最旧 {oldest or '—'}｜最新 {newest or '—'}"
+        )
+    return {"table": sp.name, "stat": stat, "errors": errs, "coverage": cov, "dry_run": False}
 
 
 # ============================================================
@@ -1025,8 +1117,11 @@ def _ckpt_done_counts():
     try:
         ck = AltCheckpoint()
     except Exception as exc:
-        print(f"[alt.list_backfill] AltCheckpoint 初始化失败（按空处理）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[alt.list_backfill] AltCheckpoint 初始化失败（按空处理）: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return {}
     out = {}
     for t, rec in (ck.data or {}).items():
@@ -1047,8 +1142,7 @@ def show_status(table=None, verbose=True, json_out=False):
       RotateState 有记录的表**输出逐字不变**（R6-4），仅对"RotateState 无记录
       但一次性断点有 done"的表追加一行说明，消除"done=0"假象。
     """
-    tables = ([table] if table else
-              [s.name for s in spec_mod.ALL_SPECS if s.mode == "list"])
+    tables = [table] if table else [s.name for s in spec_mod.ALL_SPECS if s.mode == "list"]
     state = RotateState()
     ck_done = _ckpt_done_counts()
 
@@ -1056,8 +1150,7 @@ def show_status(table=None, verbose=True, json_out=False):
         out = {}
         for t in tables:
             sp = spec_mod.get(t)
-            item = {"total": None, "fresh": None, "stale": None,
-                    "oldest": None, "newest": None}
+            item = {"total": None, "fresh": None, "stale": None, "oldest": None, "newest": None}
             if not (sp.universe_from or ""):
                 item["error"] = "no universe_from"
             else:
@@ -1066,20 +1159,23 @@ def show_status(table=None, verbose=True, json_out=False):
                 except Exception as e:
                     item["error"] = str(e)[:120]
                 else:
-                    fresh, stale, oldest, newest = state.progress(
-                        t, uni, sp.rotate_days)
-                    item.update({"total": len(uni), "fresh": fresh,
-                                 "stale": stale,
-                                 "oldest": oldest or None,
-                                 "newest": newest or None})
+                    fresh, stale, oldest, newest = state.progress(t, uni, sp.rotate_days)
+                    item.update(
+                        {
+                            "total": len(uni),
+                            "fresh": fresh,
+                            "stale": stale,
+                            "oldest": oldest or None,
+                            "newest": newest or None,
+                        }
+                    )
             item["rotate_done"] = len(state.data.get(t, {}) or {})
             item["checkpoint_done"] = ck_done.get(t, 0)
             out[t] = item
         print(json.dumps(out, ensure_ascii=False))
         return 0
 
-    print(f"{'表名':<18}{'标的':>8}{'新鲜':>8}{'陈旧/未拉':>10}"
-          f"{'最旧水位':>14}{'最新水位':>14}")
+    print(f"{'表名':<18}{'标的':>8}{'新鲜':>8}{'陈旧/未拉':>10}{'最旧水位':>14}{'最新水位':>14}")
     print("-" * 80)
     for t in tables:
         sp = spec_mod.get(t)
@@ -1091,14 +1187,17 @@ def show_status(table=None, verbose=True, json_out=False):
             except Exception as e:
                 print(f"{t:<18}  清单读取失败: {str(e)[:50]}")
             else:
-                fresh, stale, oldest, newest = state.progress(
-                    t, uni, sp.rotate_days)
-                print(f"{t:<18}{len(uni):>8,}{fresh:>8,}{stale:>10,}"
-                      f"{oldest or '—':>14}{newest or '—':>14}")
+                fresh, stale, oldest, newest = state.progress(t, uni, sp.rotate_days)
+                print(
+                    f"{t:<18}{len(uni):>8,}{fresh:>8,}{stale:>10,}"
+                    f"{oldest or '—':>14}{newest or '—':>14}"
+                )
         # R6-1：RotateState 无记录但一次性断点有 done ⇒ 追加真实进度（不覆盖原行）
         if not state.data.get(t) and ck_done.get(t, 0) > 0:
-            print(f"{'':<18}  ↳ AltCheckpoint done={ck_done[t]:,}"
-                  f"（RotateState 无记录；两套记录互不可见，§140 R6-1）")
+            print(
+                f"{'':<18}  ↳ AltCheckpoint done={ck_done[t]:,}"
+                f"（RotateState 无记录；两套记录互不可见，§140 R6-1）"
+            )
     return 0
 
 
@@ -1106,27 +1205,46 @@ def show_status(table=None, verbose=True, json_out=False):
 # 八、CLI
 # ============================================================
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        description="alt 库 list 模式引擎（建库 / 轮转更新 / 整表重建）")
+    ap = argparse.ArgumentParser(description="alt 库 list 模式引擎（建库 / 轮转更新 / 整表重建）")
     ap.add_argument("--table", help="表名（spec 中 mode='list' 的表）")
-    ap.add_argument("--symbols", nargs="+",
-                    help='指定标的（调试用，跳过轮转选批）。'
-                         '⚠ PowerShell 下必须加引号保全前导零：--symbols "00700,00981"')
-    ap.add_argument("--budget-syms", type=int, default=None, dest="budget",
-                    help="本轮最多拉 N 只（覆盖 ceil(n/rotate_days)）")
-    ap.add_argument("--batch", type=int, default=None,
-                    help=f"flush 批大小（只），默认 {HK_BATCH_SIZE}")
-    ap.add_argument("--rebuild", action="store_true",
-                    help="整表重建（影子目录 __new → 校验 → 文件级原子替换）")
+    ap.add_argument(
+        "--symbols",
+        nargs="+",
+        help="指定标的（调试用，跳过轮转选批）。"
+        '⚠ PowerShell 下必须加引号保全前导零：--symbols "00700,00981"',
+    )
+    ap.add_argument(
+        "--budget-syms",
+        type=int,
+        default=None,
+        dest="budget",
+        help="本轮最多拉 N 只（覆盖 ceil(n/rotate_days)）",
+    )
+    ap.add_argument(
+        "--batch", type=int, default=None, help=f"flush 批大小（只），默认 {HK_BATCH_SIZE}"
+    )
+    ap.add_argument(
+        "--rebuild", action="store_true", help="整表重建（影子目录 __new → 校验 → 文件级原子替换）"
+    )
     ap.add_argument("--dry-run", action="store_true", help="只打印计划，不发请求")
     ap.add_argument("--status", action="store_true", help="轮转进度总览（零请求）")
-    ap.add_argument("--json", action="store_true", dest="json_out",
-                    help="rebuild 完成时在 stdout 末尾输出版本化覆盖率 JSON（B1/O-1）")
-    ap.add_argument("--strict-coverage", action="store_true",
-                    help="rebuild 覆盖率缺失（missing>0）时退出码 3；默认关（告警不阻断）")
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_out",
+        help="rebuild 完成时在 stdout 末尾输出版本化覆盖率 JSON（B1/O-1）",
+    )
+    ap.add_argument(
+        "--strict-coverage",
+        action="store_true",
+        help="rebuild 覆盖率缺失（missing>0）时退出码 3；默认关（告警不阻断）",
+    )
     ap.add_argument("--yes", action="store_true", help="跳过确认")
-    ap.add_argument("--until", default=None,
-                    help="分段停机点 HH:MM（到点不再发起新批次，在途批次完成并落盘后退出 0）")
+    ap.add_argument(
+        "--until",
+        default=None,
+        help="分段停机点 HH:MM（到点不再发起新批次，在途批次完成并落盘后退出 0）",
+    )
     args = ap.parse_args(argv)
 
     if args.status:
@@ -1141,17 +1259,26 @@ def main(argv=None):
         print("需 --table（或不带参数用 --status 看总览）")
         return 2
     sym_arg = ",".join(args.symbols) if args.symbols else None
-    res = run(args.table, symbols=sym_arg, budget=args.budget,
-              rebuild=args.rebuild, dry_run=args.dry_run, batch=args.batch,
-              yes=args.yes, until=args.until)
+    res = run(
+        args.table,
+        symbols=sym_arg,
+        budget=args.budget,
+        rebuild=args.rebuild,
+        dry_run=args.dry_run,
+        batch=args.batch,
+        yes=args.yes,
+        until=args.until,
+    )
     # ── B1（O-1）：机读覆盖率（版本化 JSON，仅 rebuild 且有覆盖数据时输出）──
     cov = (res or {}).get("coverage")
     if args.json_out and cov is not None:
-        payload = {"schema": "alt-list-rebuild-coverage/1",
-                   "table": res.get("table"),
-                   "universe": cov["universe"],
-                   "done": cov["done"],
-                   "missing": cov["missing"]}
+        payload = {
+            "schema": "alt-list-rebuild-coverage/1",
+            "table": res.get("table"),
+            "universe": cov["universe"],
+            "done": cov["done"],
+            "missing": cov["missing"],
+        }
         print(json.dumps(payload, ensure_ascii=False))
     # 退出码策略：默认"告警不阻断"（0）；--strict-coverage 时 missing>0 ⇒ 3
     if args.strict_coverage and cov and cov["missing"]:

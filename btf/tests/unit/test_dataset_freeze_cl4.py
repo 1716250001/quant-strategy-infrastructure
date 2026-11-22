@@ -10,6 +10,7 @@
 
 真入口（含主库实算同源核对）见 `tests/integration/test_dataset_freeze_l4_cl4.py`。
 """
+
 from __future__ import annotations
 
 import json
@@ -31,12 +32,20 @@ def _info(hash_: str = "sha256:abc123", anchor: str = "2024-06-30") -> dict:
         "anchor_date": anchor,
         "mode": "meta",
         "tables_detail": {
-            "daily": {"table": "daily", "row_count": 1234,
-                      "date_min": "2024-01-02", "date_max": "2024-06-28",
-                      "sample_hash": "x"},
-            "stock_basic": {"table": "stock_basic", "row_count": 5911,
-                            "date_min": None, "date_max": None,
-                            "sample_hash": "y"},
+            "daily": {
+                "table": "daily",
+                "row_count": 1234,
+                "date_min": "2024-01-02",
+                "date_max": "2024-06-28",
+                "sample_hash": "x",
+            },
+            "stock_basic": {
+                "table": "stock_basic",
+                "row_count": 5911,
+                "date_min": None,
+                "date_max": None,
+                "sample_hash": "y",
+            },
         },
     }
 
@@ -54,11 +63,10 @@ def _freeze_dir(tmp_path: Path) -> Path:
 class TestFreezePayloadCl4:
     def test_fields_complete_and_hash_passthrough(self):
         """判据 A：R1 五字段齐备；`content_hash` 与 BB-1 实算**逐字同源**。"""
-        payload = freeze_payload(_info(), period={"start": "2024-01-01",
-                                                  "end": "2024-06-30"},
-                                 root=str(MARKET_DATA_DIR))
-        for key in ("anchor_date", "tables", "content_hash", "mode",
-                    "created_at"):
+        payload = freeze_payload(
+            _info(), period={"start": "2024-01-01", "end": "2024-06-30"}, root=str(MARKET_DATA_DIR)
+        )
+        for key in ("anchor_date", "tables", "content_hash", "mode", "created_at"):
             assert payload.get(key) not in (None, "", []), key
         assert payload["content_hash"] == "sha256:abc123"
         assert payload["anchor_date"] == "2024-06-30"
@@ -75,8 +83,8 @@ class TestFreezeWriteCl4:
     def test_created_then_readonly(self, _freeze_dir: Path):
         """判据 C：首建 ⇒ `created`；文件**只读**；内容=载荷。"""
         result = write_freeze_manifest(
-            freeze_payload(_info(), period={"start": "a", "end": "b"},
-                           root="r"), _freeze_dir)
+            freeze_payload(_info(), period={"start": "a", "end": "b"}, root="r"), _freeze_dir
+        )
         assert result["action"] == "created"
         path = result["path"]
         assert path.name == "2024-06-30.json"
@@ -88,12 +96,12 @@ class TestFreezeWriteCl4:
     def test_same_anchor_same_hash_is_idempotent(self, _freeze_dir: Path):
         """判据 B（幂等）：同 anchor ＋ 同哈希 ⇒ 不覆写、内容逐字不变。"""
         first = write_freeze_manifest(
-            freeze_payload(_info(), period={"start": "a", "end": "b"},
-                           root="r"), _freeze_dir)
+            freeze_payload(_info(), period={"start": "a", "end": "b"}, root="r"), _freeze_dir
+        )
         before = first["path"].read_bytes()
         second = write_freeze_manifest(
-            freeze_payload(_info(), period={"start": "a", "end": "b"},
-                           root="r"), _freeze_dir)
+            freeze_payload(_info(), period={"start": "a", "end": "b"}, root="r"), _freeze_dir
+        )
         assert second["action"] == "idempotent"
         assert second["path"] == first["path"]
         assert first["path"].read_bytes() == before, "幂等路径被覆写（R3 违例）"
@@ -101,30 +109,35 @@ class TestFreezeWriteCl4:
     def test_same_anchor_diff_hash_conflicts(self, _freeze_dir: Path):
         """判据 B（冲突）：同 anchor 不同哈希 ⇒ **显式冲突**、旧清单不动。"""
         first = write_freeze_manifest(
-            freeze_payload(_info(), period={"start": "a", "end": "b"},
-                           root="r"), _freeze_dir)
+            freeze_payload(_info(), period={"start": "a", "end": "b"}, root="r"), _freeze_dir
+        )
         before = first["path"].read_text(encoding="utf-8")
         with pytest.raises(FileExistsError, match="冻结冲突"):
             write_freeze_manifest(
-                freeze_payload(_info(hash_="sha256:DIFFERENT"),
-                               period={"start": "a", "end": "b"}, root="r"),
-                _freeze_dir)
+                freeze_payload(
+                    _info(hash_="sha256:DIFFERENT"), period={"start": "a", "end": "b"}, root="r"
+                ),
+                _freeze_dir,
+            )
         assert first["path"].read_text(encoding="utf-8") == before
 
     def test_distinct_anchor_two_files(self, _freeze_dir: Path):
         """不同 anchor ⇒ 两份可见差异的清单（判据 B 前段）。"""
         a = write_freeze_manifest(
-            freeze_payload(_info(anchor="2024-06-30"),
-                           period={"start": "a", "end": "b"}, root="r"),
-            _freeze_dir)
+            freeze_payload(_info(anchor="2024-06-30"), period={"start": "a", "end": "b"}, root="r"),
+            _freeze_dir,
+        )
         b = write_freeze_manifest(
-            freeze_payload(_info(hash_="sha256:second", anchor="2023-12-29"),
-                           period={"start": "a", "end": "b"}, root="r"),
-            _freeze_dir)
+            freeze_payload(
+                _info(hash_="sha256:second", anchor="2023-12-29"),
+                period={"start": "a", "end": "b"},
+                root="r",
+            ),
+            _freeze_dir,
+        )
         assert a["path"].name == "2024-06-30.json"
         assert b["path"].name == "2023-12-29.json"
-        assert json.loads(b["path"].read_text(encoding="utf-8"))[
-            "content_hash"] == "sha256:second"
+        assert json.loads(b["path"].read_text(encoding="utf-8"))["content_hash"] == "sha256:second"
 
 
 class TestFreezeRejectsMemoryFeedCl4:
@@ -160,9 +173,7 @@ class TestFreezeRejectsMemoryFeedCl4:
             "risk": {"rules": [], "allow_empty_chain": True},
         }
         path = tmp_path / "mem.yaml"
-        path.write_text(yaml.safe_dump(cfg, allow_unicode=True),
-                        encoding="utf-8")
+        path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
         fdir = tmp_path / "freeze"
-        assert main(["dataset", "freeze", "--config", str(path),
-                     "--out", str(fdir)]) == 1
+        assert main(["dataset", "freeze", "--config", str(path), "--out", str(fdir)]) == 1
         assert not fdir.exists() or not list(fdir.iterdir())

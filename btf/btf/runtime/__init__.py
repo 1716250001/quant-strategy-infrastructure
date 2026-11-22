@@ -23,6 +23,7 @@
 （不参与 `Layered architecture` 的分层序号，故不构成逆向依赖）；
 入口层（cli/api）→ runtime 的边由契约新 10 的**门面豁免**显式留痕。
 """
+
 from btf.runtime._runtime import (
     MIN_OPTIMIZE_TRADING_DAYS,
     SHORT_PERIOD_TRADING_DAYS,

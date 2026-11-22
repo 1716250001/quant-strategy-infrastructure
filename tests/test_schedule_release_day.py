@@ -3,6 +3,7 @@
 
 对应 E1（漂移修复）／E2（季频）／E3（无记录）／E5（幂等）＋月末夹紧边界。
 """
+
 from datetime import date
 
 from config.schedule import RELEASE_DAY, SCHEDULE
@@ -16,9 +17,11 @@ def test_e1_ppi_drift_fixed():
 
 
 def test_e1_other_monthly_tables():
-    for name, day, last in (("cn_cpi", 9, "2026-11-09"),
-                            ("cn_m", 12, "2026-11-12"),
-                            ("sf_month", 12, "2026-11-12")):
+    for name, day, last in (
+        ("cn_cpi", 9, "2026-11-09"),
+        ("cn_m", 12, "2026-11-12"),
+        ("sf_month", 12, "2026-11-12"),
+    ):
         assert is_due("M", last, today=date(2026, 12, day - 1), name=name) is False
         assert is_due("M", last, today=date(2026, 12, day), name=name) is True
 
@@ -33,8 +36,7 @@ def test_e2_gdp_quarter_anchor():
 
 def test_e3_no_record_always_due():
     for name in list(SCHEDULE) + list(RELEASE_DAY):
-        assert is_due(SCHEDULE.get(name, "M"), None, today=date(2026, 12, 31),
-                      name=name) is True
+        assert is_due(SCHEDULE.get(name, "M"), None, today=date(2026, 12, 31), name=name) is True
 
 
 def test_e5_idempotent():

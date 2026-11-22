@@ -7,6 +7,7 @@
 约定（R58′/§107.3.2-4）：策略以**类属性 `lookback_bars`** 声明所需历史 bar 数
 （`declared_lookback()` 只读类属性，不装配、不运行）。
 """
+
 from __future__ import annotations
 
 from btf.domain.contracts import CONTRACT_VERSION
@@ -38,7 +39,7 @@ class LongLookbackStrategy(StrategyBase):
             return
         bars = ctx.history(self.symbol, date, n_bars=self.lookback_bars)
         if len(bars) < self.lookback_bars:
-            return                                   # 历史不足 ⇒ 饿死（不静默交易）
+            return  # 历史不足 ⇒ 饿死（不静默交易）
         ctx.submit_target(TargetPortfolio(date, {self.symbol: self.weight}))
         self._done = True
 

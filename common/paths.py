@@ -10,6 +10,7 @@ common/paths.py — 全项目路径的唯一解析入口
 用法：
     from common.paths import DATA_DIR, REPORT_DIR, ensure_dir, data_file
 """
+
 import os
 
 from config import (
@@ -35,8 +36,8 @@ from config import (
 )
 
 # ── 派生目录（此前由各脚本自行推算）─────────────────────────
-REPORT_DIR = os.path.join(DOC_DIR, "日报")                 # HTML 日报输出
-DIVERGENCE_DIR = os.path.join(SIGNALS_DIR, "divergence")   # 背离候选池/触发信号
+REPORT_DIR = os.path.join(DOC_DIR, "日报")  # HTML 日报输出
+DIVERGENCE_DIR = os.path.join(SIGNALS_DIR, "divergence")  # 背离候选池/触发信号
 
 __all__ = [
     "ADJ_FACTOR_DIR",

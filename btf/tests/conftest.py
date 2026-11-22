@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """pytest 全局夹具：tools/ 脚本目录入 sys.path（构建器/参考计算器单测用）。"""
+
 import sys
 from pathlib import Path
 

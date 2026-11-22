@@ -15,15 +15,20 @@ def _alt_tier_choices():
     """
     try:
         from alt.spec import TIERS
+
         return list(TIERS)
     except Exception as exc:
-        print(f"[cli.alt_cmds] 导入 alt.spec.TIERS 失败（不限制取值）: "
-              f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"[cli.alt_cmds] 导入 alt.spec.TIERS 失败（不限制取值）: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return None
+
 
 def cmd_alt_update(args):
     """alt 库每日增量更新（P0~P4 分级 + 新鲜度自检）"""
     from alt.update import main as alt_main
+
     _banner("alt-update alt 库每日增量更新")
     argv = []
     if args.tier:
@@ -42,22 +47,26 @@ def cmd_alt_update(args):
         argv.append("--list")
     alt_main(argv)
 
+
 def cmd_alt_audit(args):
     """alt 库数据体检（断点/重复/缺口/规模/隔离）"""
     from alt.audit import main as alt_main
+
     _banner("alt-audit alt 库数据体检")
     argv = []
-    for flag, on in (("--checkpoint", args.checkpoint),
-                     ("--date-sets", args.date_sets),
-                     ("--dupes", args.dupes),
-                     ("--gaps", args.gaps),
-                     ("--scale", args.scale),
-                     ("--isolation", args.isolation),
-                     ("--snapshot", args.snapshot),
-                     ("--json", args.json),
-                     ("--fix-dupes", args.fix_dupes),
-                     ("--confirm-gaps", args.confirm_gaps),
-                     ("--apply", args.apply)):
+    for flag, on in (
+        ("--checkpoint", args.checkpoint),
+        ("--date-sets", args.date_sets),
+        ("--dupes", args.dupes),
+        ("--gaps", args.gaps),
+        ("--scale", args.scale),
+        ("--isolation", args.isolation),
+        ("--snapshot", args.snapshot),
+        ("--json", args.json),
+        ("--fix-dupes", args.fix_dupes),
+        ("--confirm-gaps", args.confirm_gaps),
+        ("--apply", args.apply),
+    ):
         if on:
             argv.append(flag)
     if args.only:
@@ -68,9 +77,11 @@ def cmd_alt_audit(args):
             argv.append(args.report)
     alt_main(argv)
 
+
 def cmd_alt_backfill(args):
     """alt 库历史回补（akshare 备用源）"""
     from alt.backfill import main as alt_main
+
     _banner("alt-backfill alt 库历史回补")
     argv = []
     if args.tier:
@@ -89,9 +100,11 @@ def cmd_alt_backfill(args):
         argv.append("--list")
     alt_main(argv)
 
+
 def cmd_alt_us(args):
     """美股建库（alt 库 mode=list 专用入口）"""
     from alt.us_backfill import main as alt_main
+
     _banner("alt-us 美股建库")
     argv = []
     if args.universe:
@@ -114,9 +127,11 @@ def cmd_alt_us(args):
         argv.append("--yes")
     alt_main(argv)
 
+
 def cmd_alt_verify(args):
     """alt 表规格校验（只读）"""
     from alt.verify_spec import main as alt_main
+
     _banner("alt-verify alt 表规格校验")
     argv = []
     if args.tier:

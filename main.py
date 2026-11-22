@@ -6,6 +6,7 @@
   - cmd_gap_update / cmd_leverage / cmd_etf_flow
                   ← tools/regress_pipeline.py:346 R5 断言 `hasattr(m, f)`
 """
+
 # 兼容面 re-export（R5 断言/回归导入依赖）：以下 4 名非未用导入 —— 禁删（§339 §3 第 3 类）
 from cli import main
 from cli.fetch_cmds import cmd_gap_update  # noqa: F401
