@@ -26,7 +26,7 @@ python -m pip install -e .
 
 # 2) 版本与门禁
 bt --version          # btf 7.0.0
-bt check              # 十项质量门，须 10/10
+bt check              # 十项质量门，须 10/10（--full 追加 L5 → 11/11，约 64 分钟）
 
 # 3) 跑一个自带示例
 bt run --config examples/config_rotation.yaml
@@ -51,7 +51,7 @@ btf/
 ├─ schemas/          配置 JSON Schema（backtest.v1.json，唯一一份）
 ├─ examples/         示例策略 rotation.py + 示例配置（不进 wheel）
 ├─ tools/            常驻工具 28 个（门禁脚本 / 对账 / 复跑 / 冷备 / 审计）
-├─ tests/            1320 项（l1–l5 + smoke 五层）
+├─ tests/            1344 项（l1–l5 + smoke 五层）
 ├─ benchmarks/       B1–B5 基准留档
 ├─ CHANGELOG.md      版本留痕（Keep a Changelog）
 └─ pyproject.toml    ruff + import-linter 十契约 + pytest 标记
@@ -95,7 +95,7 @@ run:
 
 | 命令 | 用途 |
 |---|---|
-| `bt check` | 十项质量门（改代码前后都跑） |
+| `bt check` | 十项质量门（改代码前后都跑；`--full` 追加 L5 22 例，约 64 分钟） |
 | `bt run --config <yaml>` | 跑回测（`--delisted-settlement carry\|writeoff\|writeoff_at_delist` 三档） |
 | `bt runs --latest 5` | 列最近几个 run 的摘要（只读） |
 | `bt show --run <id>` | 单 run 的 manifest + 指标摘要（只读） |

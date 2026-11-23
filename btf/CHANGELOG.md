@@ -18,6 +18,11 @@
   finding／2=用法或前置错误；表名未登记或盘上无分片一律 RC=2（19 号 §275；`954c845`）
 - 补「**已登记表零分片 ⇒ RC=2**」负向例：覆盖「表名合法、盘上没有」形态的假绿
   （19 号 §276；`9a665d3`）
+- **REQ-20261122-03 CLI 可用性（btf 侧）**：`check --full` 追加 L5（22 例，约 64
+  分钟；默认 10 项不变）；`test --layer` 合法值 `l1–l5/all`（非法 rc=2）；
+  `report`/`verify`/`show --latest` 与 `runs --json`；`optimize --resume STATE_JSON`
+  （状态 schema=1、逐组原子写、config/grid/objective 同源校验、幂等续跑）；
+  `data quality` 默认按 `namechange` PIT 推导 ST，`--st-symbols` 覆盖、`--no-st` 关闭。
 
 ### 修复（Fixed）
 

@@ -17,7 +17,7 @@
 | `parser.py` | `build_parser()` 与 `_EPILOG` 示例；注册全部命令；`_NoSuppressSubcommands` 让 `help=SUPPRESS` 的别名不出现在 `--help` |
 | `_shared.py` | 公共参数小工具：`_add_date` / `_add_dry_run` / `_add_json`、`_banner`、`_today` |
 | `fetch_cmds.py` | 数据拉取类 8 命令，转接 `fetch.daily_update` / `fund_nav_update` / `full_download` / `cb_download` / `backfill` / `schedule_runner` / `redtide_supply` |
-| `db_cmds.py` | 库治理/速查命令与 `_DB_FAMILY` 定义（10 个 db 子命令 + 3 个专用子命令），转接 `tools.db.*` 与 `tools.ckpt_tool` |
+| `db_cmds.py` | 库治理/速查命令与 `_DB_FAMILY` 定义（10 个 db 子命令 + 4 个专用子命令：`meta-close`/`backup`/`stale-fix`/`health`），转接 `tools.db.*` 与 `tools.ckpt_tool` |
 | `alt_cmds.py` | alt 库 5 命令；`_alt_tier_choices()` 动态取 `alt.spec.TIERS`，不硬编码档位 |
 | `research_cmds.py` | 研究与指数/基金 6 命令，转接 `tools.research.*` |
 | `misc_cmds.py` | 覆盖体检、环境自检、推送测试、LOF 导出、`config-check`，转接 `tools.*` 与 `push.pushplus` |
@@ -27,13 +27,18 @@
 | 命令族 | 命令 | 实现模块 |
 | --- | --- | --- |
 | 数据拉取 | `gap-update` `intraday-update` `redtide-supply` `fund-nav` `download-full` `download-cb` `backfill` `schedule` | `fetch_cmds.py` |
-| 库治理 / 速查 | `db {audit,schema,report,clean,migrate,freshness,scale-check,schema-align,fingerprint,ckpt,meta-close,backup,stale-fix}`、`regress` `freshness` `peek` | `db_cmds.py` |
+| 库治理 / 速查 | `db {audit,schema,report,clean,migrate,freshness,scale-check,schema-align,fingerprint,ckpt,meta-close,backup,stale-fix,health}`、`regress` `freshness` `peek` | `db_cmds.py` |
 | alt 库 | `alt-update` `alt-audit` `alt-backfill` `alt-us` `alt-verify` | `alt_cmds.py` |
 | 研究 / 指数 / 基金 | `micro-index` `factor-lib` `fund-pool` `manager-profile` `leverage` `etf-flow` | `research_cmds.py` |
 | 体检 / 推送 / 导出 | `check-coverage` `check-consumer` `doctor` `push-test` `lof-list` `lof-export` `config-check` | `misc_cmds.py` |
 | 参数与分发 | 全部命令的参数定义 / 执行入口 / 公共参数 | `parser.py` / `app.py` / `_shared.py` |
 
 隐藏别名（10 个）：`db-clean` `db-audit` `db-schema` `db-report` `db-migrate` `db-freshness` `db-scale-check` `db-schema-align` `db-fingerprint` `ckpt`，与对应 `db <sub>` 等价。
+
+可见命令 **30**（`--help` 分四组：数据维护 14 / 研究分析 11 / 推送导出 3 / 诊断 2）；`db` 子命令 **14**。
+
+`db health`：默认轻量（doctor 摘要＋freshness＋audit/fingerprint 缓存，>7 天「过期」；
+首次请 `--full` 建立缓存），`--full` 才跑全量 audit+fingerprint，`--strict` 任一不健康 ⇒ rc=1，`--json` stdout 单对象。
 
 ## 与其他包的关系
 
@@ -52,6 +57,8 @@
 - `app.main` 对 `None` 按 0 处理（只读命令兼容）；业务命令必须显式返回 `int`。
 - 实例锁冲突固定归 `1`（`fetch/schedule_runner._InstanceLock` 以 `SystemExit` 退出）。
 - `--json` 模式只约束 stdout 为纯 JSON，不改变退出码；失败提示写 stderr。
+- **唯一例外**：`db scale-check --json PATH` 是文件输出（历史接口，保留不变）；其余 `db`
+  命令的 `--json` 均为 stdout。新脚本优先用 `--out PATH` 落盘。
 - 计划任务 bat 依赖 `if errorlevel 1`；业务失败必须落到 `1`，否则 `FAIL_MAIN` 分支不会触发。
 - 已知缺口：`fetch/full_download.run_download`、`fetch/cb_download.run_cb_download`、`fetch/backfill.run_backfill` 的内部失败计数尚未返回，D2 只接通异常路径；`fund-nav` 的失败计数随 D4 的 `fund_nav_update` 改造提供，CLI 已支持 dict / 三元组两种透传形态。
 
@@ -59,7 +66,7 @@
 
 - `main.py` 的 `build_parser` / `cmd_gap_update` / `cmd_leverage` / `cmd_etf_flow` re-export 被 `regress_pipeline` R5 断言依赖，禁删。
 - 10 个隐藏别名保留注册（R1 契约依赖），只隐藏 `--help`，不摘出 choices。
-- 写命令默认干跑：`--dry-run` 与 `--apply` 同时给出时按干跑执行（`db clean`/`db migrate`/`db backup` 等）。
+- 写命令默认干跑：`--apply` 与 `--execute` 同义（`db backup`/`db ckpt`/`db stale-fix`/`db meta-close`/`schedule`），`--dry-run` 始终优先（如 `db clean`/`db migrate`/`db backup`）。
 - `--json` 模式 stdout 必须为纯 JSON，`app.main` 不追加完成语；`config-check` 用 `sys.exit` 传播非零退出码。
 - 命令层不得复制业务判断：`cmd_schedule` 仅做 argparse→`fetch.schedule_runner.run()` 转接，`--refresh` 拒绝逻辑留在执行器。
 - 档位/可选值不得硬编码（如 alt tier 动态取自 `alt.spec.TIERS`）。

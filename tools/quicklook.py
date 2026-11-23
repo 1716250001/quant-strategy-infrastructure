@@ -126,6 +126,8 @@ def run_freshness(tables=None, show_all=False, stale_days=None, verbose=True, as
       - 新版：默认全部 208 张表；`stale_days` = ds（内容落后**自然日**）≥ N。
     口径已切到新版自然日双条件；新增调用一律走 `tools.db.freshness.run()`。
     保留签名是为了 `main()`（本文件）与历史调用点不炸。
+
+    strict 退出码由 CLI 层（`cmd_freshness`）计算；本函数只返回 rows。
     """
     from tools.db import freshness as _f
 

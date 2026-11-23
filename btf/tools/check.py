@@ -43,6 +43,7 @@
 退出码: 0=全绿 / 1=有失败项
 """
 
+import argparse
 import os
 import re
 import subprocess
@@ -79,6 +80,13 @@ FLAKES_ANNOTATED: list[str] = []
 PYTEST_BASETEMP = Path(
     os.environ.get(
         "BTFTOOL_CHECK_PYTEST_BASETEMP", ROOT.parent / "_scratch" / "pytest_tmp" / "check"
+    )
+)
+#: `--full` 的 L5 长测独立临时根（与第 3 项分根，避免残留互污）。
+PYTEST_L5_BASETEMP = Path(
+    os.environ.get(
+        "BTFTOOL_CHECK_PYTEST_L5_BASETEMP",
+        ROOT.parent / "_scratch" / "pytest_tmp" / "check_l5",
     )
 )
 
@@ -134,7 +142,14 @@ def _ruff_all() -> bool:
     return lint_ok and fmt_ok
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="btf 十项架构门禁")
+    ap.add_argument(
+        "--full",
+        action="store_true",
+        help="追加 L5 长测（22 例，约 64 分钟；默认关闭）",
+    )
+    args = ap.parse_args(argv)
     results = [
         _ruff_all(),
         run("2/10 import-linter 架构铁律", [str(LINT_IMPORTS)]),
@@ -154,17 +169,34 @@ def main() -> int:
         ),
         run("10/10 插件边界基线（契约 6；GG-6②）", [PY, "tools/check_plugin_boundary.py"]),
     ]
+    if args.full:
+        results.append(
+            run(
+                "附加 L5 长测（22 例）",
+                [
+                    PY,
+                    "-m",
+                    "pytest",
+                    "tests",
+                    "-m",
+                    "l5",
+                    "-v",
+                    "--basetemp",
+                    str(PYTEST_L5_BASETEMP),
+                ],
+            )
+        )
     n_pass = sum(results)
-    print(f"\n{'=' * 40}\nbt check: {n_pass}/10 通过")
+    print(f"\n{'=' * 40}\nbt check: {n_pass}/{len(results)} 通过")
     print(f"逐项日志（N4①）：{LOG_DIR / RUN_STAMP}")
     if FLAKES_ANNOTATED:
         print(
             "⚠ 冷启动偶发（N4③，**不隐藏**）："
             + "；".join(f"{n}（首次失败/复跑通过）" for n in FLAKES_ANNOTATED)
         )
-    if n_pass != 10:
+    if n_pass != len(results):
         print("失败项请附**逐项日志**原样回执（19 号 §67.7 硬约束 5）")
-    return 0 if n_pass == 10 else 1
+    return 0 if n_pass == len(results) else 1
 
 
 if __name__ == "__main__":

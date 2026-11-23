@@ -127,6 +127,34 @@ def test_unknown_table_rc2(root, capsys):
     assert "[ok]" not in cap.out
 
 
+def test_st_symbols_override_triggers_cc2(root, capsys):
+    """R2203 G1-1：`--st-symbols` 让 CC-2 的 ST 5% 分支生效（+8% 介于两档之间）。
+
+    无 namechange 时默认 WARN + 按板块 10% 判 ⇒ +8% 通过；显式覆盖为 ST 后
+    按 5% 判 ⇒ 必须检出（rc=1），且 JSON 披露 `st_source=override`。
+    """
+    rows = _daily()
+    rows[1]["pre_close"] = 10.0
+    rows[1]["open"] = 10.0
+    rows[1]["high"] = 10.9
+    rows[1]["low"] = 9.9
+    rows[1]["close"] = 10.8  # +8%
+    _write(root, "daily", rows)
+
+    rc = main(_args(root, "--json"))
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["st_source"] == "unavailable"
+    assert payload["st_applied"] is False
+
+    rc = main(_args(root, "--st-symbols", SYM, "--json"))
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["st_source"] == "override"
+    assert payload["st_applied"] is True
+    assert payload["st_pairs_count"] == len(DAYS)
+
+
 def test_registered_table_without_shards_rc2(root, capsys):
     """已登记表但在该 root 下零分片 ⇒ RC=2（**不得**静默出空报告/假绿）。
 

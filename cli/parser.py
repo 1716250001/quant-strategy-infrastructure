@@ -16,6 +16,7 @@ from cli.db_cmds import (
     _DB_FAMILY,
     cmd_db_backup,
     cmd_db_group,
+    cmd_db_health,
     cmd_db_meta_close,
     cmd_db_stale_fix,
     cmd_freshness,
@@ -51,6 +52,16 @@ from cli.research_cmds import (
 )
 
 _EPILOG = """
+命令分组（30，组内按字母序）:
+  【数据维护】backfill / check-coverage / check-consumer / db / download-cb /
+              download-full / freshness / fund-nav / gap-update / intraday-update /
+              peek / redtide-supply / regress / schedule
+  【研究分析】alt-audit / alt-backfill / alt-update / alt-us / alt-verify /
+              etf-flow / factor-lib / fund-pool / leverage / manager-profile /
+              micro-index
+  【推送导出】lof-export / lof-list / push-test
+  【诊断】config-check / doctor
+
 示例:
   # 数据维护
   python main.py gap-update                     每日增量更新（走 backfill 引擎）
@@ -120,6 +131,10 @@ _EPILOG = """
 已归档命令（2026-09-30 P1-1 删除入口，不再占命令槽）: fetch / report / all /
 fix-resonance / daily-report / wind-index / scan-divergence / divergence-trigger /
 monitor / qidian / qidian-legacy —— 代码与恢复说明见 _archive/ 对应目录。
+
+兼容别名（10，与 db 子命令等价；不占 --help 主列表）:
+  db-clean / db-audit / db-schema / db-report / db-migrate / db-freshness /
+  db-scale-check / db-schema-align / db-fingerprint / ckpt
 """
 
 
@@ -170,7 +185,8 @@ def build_parser():
         default=None,
         help="复核窗口交易日数（默认3；用于修复断点已记但当日数据残缺的情况）",
     )
-    p.add_argument("--only", default=None, help="只跑指定表, 逗号分隔")
+    p.add_argument("--only", default=None, help="只跑指定表, 逗号分隔（优先于 --group）")
+    p.add_argument("--table", default=None, help="--only 的兼容别名（两者同给不同值 ⇒ rc=2）")
     p.set_defaults(func=cmd_gap_update)
 
     p = sub.add_parser(
@@ -255,7 +271,12 @@ def build_parser():
         "--budget", type=int, default=2000, help="单轮请求预算（默认 2000；超限 RC=2 并列跳过清单）"
     )
     p.add_argument("--apply", action="store_true", help="实际执行（不加则等同 --dry-run）")
-    p.add_argument("--dry-run", action="store_true", help="只输出计划，不发请求（默认行为）")
+    p.add_argument(
+        "--execute", action="store_true", dest="apply", help="与 --apply 同义（主推写法）"
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="只输出计划，不发请求（默认行为；优先于 --apply）"
+    )
     p.add_argument(
         "--refresh",
         action="store_true",
@@ -290,7 +311,11 @@ def build_parser():
     p.set_defaults(func=cmd_check_consumer)
 
     # ── 库维护：db 命令族（2026-09-30 P3 / DB-M4）──
-    db = sub.add_parser("db", help="数据库命令族（audit/schema/report/clean/migrate/ckpt）")
+    db = sub.add_parser(
+        "db",
+        help="数据库命令族（14 子命令：audit/schema/report/clean/migrate/freshness/"
+        "scale-check/schema-align/fingerprint/ckpt/meta-close/backup/stale-fix/health）",
+    )
     db_sub = db.add_subparsers(dest="db_command", metavar="<subcommand>")
     db.set_defaults(func=cmd_db_group)
     for _sub, _flat, _add_args, _help in _DB_FAMILY:
@@ -301,12 +326,28 @@ def build_parser():
         _add_args(sub.add_parser(_flat, help=argparse.SUPPRESS))
 
     p = db_sub.add_parser(
+        "health",
+        help="数据库健康摘要（默认轻量；首次请用 --full 建立缓存；C-P2-7）",
+    )
+    p.add_argument(
+        "--full",
+        action="store_true",
+        help="真跑 db audit + fingerprint 并刷新缓存（默认只读摘要/缓存，不跑全量）",
+    )
+    p.add_argument("--strict", action="store_true", help="红/黄/缓存过期/体检失败 ⇒ exit 1")
+    _add_json(p, help_text="stdout 输出健康摘要 JSON（单对象）")
+    p.set_defaults(func=cmd_db_health)
+
+    p = db_sub.add_parser(
         "meta-close", help="元数据刷新后的 R12 收尾（声明重算/补表重建；干跑/--apply）"
     )
     p.add_argument(
         "--apply",
         action="store_true",
         help="写盘（先自动备份 known_gaps 与补表），并整跑 regress 自检",
+    )
+    p.add_argument(
+        "--execute", action="store_true", dest="apply", help="与 --apply 同义（主推写法）"
     )
     p.add_argument(
         "--dry-run",
@@ -320,6 +361,9 @@ def build_parser():
     p.add_argument("--mirror", action="store_true", help="日备（默认干跑，只打印计划）")
     p.add_argument("--execute", action="store_true", help="真正执行日备（硬链快照＋校验）")
     p.add_argument(
+        "--apply", action="store_true", dest="execute", help="与 --execute 同义（主推写法）"
+    )
+    p.add_argument(
         "--dry-run", action="store_true", help="显式干跑（与 --execute 同时给出时以干跑为准）"
     )
     p.set_defaults(func=cmd_db_backup)
@@ -327,6 +371,12 @@ def build_parser():
     p = db_sub.add_parser("stale-fix", help="基金 source_empty 注册表对账（干跑/--apply）")
     p.add_argument(
         "--apply", action="store_true", help="清理 stale 并同步 evidence/count（先自备份）"
+    )
+    p.add_argument(
+        "--execute", action="store_true", dest="apply", help="与 --apply 同义（主推写法）"
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="显式干跑（默认行为；与 --apply 同给时以干跑为准）"
     )
     _add_json(p, help_text="输出对账回执 JSON")
     p.set_defaults(func=cmd_db_stale_fix)
@@ -351,6 +401,17 @@ def build_parser():
         type=int,
         default=None,
         help="只显示 ds（内容落后自然日数）≥ N 的表（⚠ 旧版是交易日，已改口径）",
+    )
+    strict = p.add_mutually_exclusive_group()
+    strict.add_argument(
+        "--strict",
+        dest="strict",
+        action="store_true",
+        default=True,
+        help="存在红/黄表时 exit 1（默认）",
+    )
+    strict.add_argument(
+        "--no-strict", dest="strict", action="store_false", help="恒 exit 0（旧行为）"
     )
     _add_json(p, help_text="输出新鲜度 JSON（机器可读；不打印横幅）")
     p.set_defaults(func=cmd_freshness)

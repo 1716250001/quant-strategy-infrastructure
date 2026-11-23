@@ -116,3 +116,42 @@ def test_db_audit_section_count_in_docs():
         if hits == 0:
             problems.append(f"{path}:— 声明值=缺「db audit N 段」；实测值={AUDIT_SECTIONS} 段")
     assert not problems, "\n".join(problems)
+
+
+#: R2203 G4 计数口径（03 §六；`db` 因 G3 新增 health 由 13 → 14）
+MAIN_VISIBLE_COMMANDS = 30
+DB_SUBCOMMANDS = 14
+HIDDEN_ALIASES = 10
+
+
+def test_main_cli_command_counts():
+    """主工程可见命令 == 30、隐藏别名 == 10、`db` 子命令 == 14。"""
+    import argparse
+
+    from cli.parser import build_parser
+
+    parser = build_parser()
+    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    visible = [a.dest for a in sub._choices_actions if a.help is not argparse.SUPPRESS]
+    hidden = [a.dest for a in sub._choices_actions if a.help is argparse.SUPPRESS]
+    db_parser = sub.choices["db"]
+    db_sub = next(a for a in db_parser._actions if isinstance(a, argparse._SubParsersAction))
+    db_visible = [a.dest for a in db_sub._choices_actions if a.help is not argparse.SUPPRESS]
+
+    problems: list[str] = []
+    if len(visible) != MAIN_VISIBLE_COMMANDS:
+        problems.append(
+            f"cli/parser.py:— 声明值=可见命令 {MAIN_VISIBLE_COMMANDS}；"
+            f"实测值={len(visible)}（{sorted(visible)}）"
+        )
+    if len(hidden) != HIDDEN_ALIASES:
+        problems.append(
+            f"cli/parser.py:— 声明值=隐藏别名 {HIDDEN_ALIASES}；"
+            f"实测值={len(hidden)}（{sorted(hidden)}）"
+        )
+    if len(db_visible) != DB_SUBCOMMANDS:
+        problems.append(
+            f"cli/parser.py:— 声明值=db 子命令 {DB_SUBCOMMANDS}；"
+            f"实测值={len(db_visible)}（{sorted(db_visible)}）"
+        )
+    assert not problems, "\n".join(problems)

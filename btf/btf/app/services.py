@@ -133,6 +133,7 @@ def run_data_quality(
     price_tables: Sequence[str] = ("daily",),
     limit_tables: Sequence[str] = ("stk_limit",),
     symbols: set[str] | None = None,
+    st_symbols: set[tuple[str, str]] | None = None,
 ) -> Any:
     """`bt data quality`（**D-6**／19 号 §275）：把 `quality.run_checks` 暴露为 CLI。
 
@@ -145,11 +146,9 @@ def run_data_quality(
     3. 未登记表（`ReaderError`）同样归一为 `ValueError`（表现层不 import data 层
        异常类型）。
 
-    ⛔ `st_symbols` 不传（CLI 无 ST 名单来源）⇒ CC-2 的 ST 分支不生效，
-    **主板 ST 股 5%~10% 的越界会漏检（假阴性方向，finding 偏少）**——
-    与 `data/quality.py::run_checks` docstring 及
-    `tests/unit/test_data_quality.py::test_cc2_st_branch_is_triggerable` 同源；
-    CLI 侧须 `[warn]` 显式声明。
+    `st_symbols`：区间内 ST `(symbol, ymd)` 集合，原样透传给 `run_checks` 的
+    CC-2 5% 上限分支。CLI 用 `derive_st_symbols` 从 `namechange` 推导；取不到
+    时必须 WARN/JSON 披露（铁律新 16），不得静默按板块上限判。
     """
     from btf.config.paths import MARKET_DATA_DIR
     from btf.data.parquet_reader import ReaderError, table_files
@@ -172,7 +171,38 @@ def run_data_quality(
         symbols=symbols,
         price_tables=tuple(price_tables),
         limit_tables=tuple(limit_tables),
+        st_symbols=st_symbols,
     )
+
+
+def derive_st_symbols(
+    root: str | Path | None,
+    start_ymd: str,
+    end_ymd: str,
+    symbols: set[str] | None,
+    *,
+    override_codes: set[str] | None = None,
+) -> tuple[str, set[tuple[str, str]]]:
+    """推导区间内 ST `(symbol, ymd)` 集合（与装配期同源）。
+
+    - `override_codes` 非 None：`st_source="override"`，把给定代码按区间内全部
+      交易日展开（`--st-symbols` 语义）；
+    - 否则读 `namechange`：`st_source="namechange"`（源表可用；集合可为空）或
+      `"unavailable"`（源表缺失/损坏，集合恒空，调用方必须 WARN）。
+    """
+    from btf.config.paths import MARKET_DATA_DIR
+    from btf.data.quality import calendar_days
+    from btf.data.state import StateSynthesizer
+
+    base = Path(root) if root else MARKET_DATA_DIR
+    cal = calendar_days(base, start_ymd, end_ymd)
+    if override_codes is not None:
+        return "override", {(code, day) for code in override_codes for day in cal}
+    synth = StateSynthesizer(base)
+    source = synth.st_source()
+    if source != "namechange":
+        return source, set()
+    return source, synth.st_pairs(start_ymd, end_ymd, symbols, cal=cal)
 
 
 def quality_blocking_findings(report: Any) -> int:
@@ -821,9 +851,12 @@ def _run_tool_script(script_name: str, args: Sequence[str]) -> int:
     return subprocess.call([sys.executable, str(script), *args])
 
 
-def run_gate_check() -> int:
-    """`bt check`：十项架构门禁（委托 `tools/check.py`；退出码原样透传）。"""
-    return _run_tool_script("check.py", [])
+def run_gate_check(*, full: bool = False) -> int:
+    """`bt check`：十项架构门禁（委托 `tools/check.py`；退出码原样透传）。
+
+    `full=True` 追加 L5 长测（22 例）；默认关闭，避免提交门禁被长测拖慢。
+    """
+    return _run_tool_script("check.py", ["--full"] if full else [])
 
 
 def cold_backup(

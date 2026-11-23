@@ -442,3 +442,15 @@ def test_t_f_btf_readme_count_guard():
         f"（口径=全量 collect，非 L5 不计）"
         for g in bad
     )
+
+
+def test_t_g_layer_choices_guard():
+    """T-G：`bt test --layer` 合法值 == l1–l5 + all（R2203 G2）。"""
+    import argparse
+
+    from btf.cli.main import build_parser
+
+    parser = build_parser()
+    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    action = next(a for a in sub.choices["test"]._actions if a.dest == "layer")
+    assert tuple(action.choices) == ("l1", "l2", "l3", "l4", "l5", "all")

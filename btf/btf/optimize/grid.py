@@ -21,10 +21,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import weakref
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from itertools import product
 from math import isnan
@@ -395,14 +397,25 @@ def _execute_payloads(
     payloads: Sequence[tuple[dict[str, Any], dict[str, Any]]],
     n_workers: int,
     config: Mapping[str, Any],
+    on_result: Callable[[int, dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     """组合执行器（网格与邻域扫描**共用**；RC-07 复用同一进程池链路）。
 
     `n_workers <= 0` → 内联顺序执行（测试注入型 feed / 调试）；否则进程池
-    + 跨组合共享预热（IO-7）。
+    + 跨组合共享预热（IO-7）。`on_result(序号, 结果)` 在每组完成时回调
+    （G2b `--resume` 借此逐组落状态；序号 = payloads 下标）。
     """
+    out: list[dict[str, Any]] = []
+
+    def _emit(position: int, item: dict[str, Any]) -> None:
+        if on_result is not None:
+            on_result(position, item)
+        out.append(item)
+
     if n_workers <= 0:
-        return [_run_single(p) for p in payloads]
+        for position, payload in enumerate(payloads):
+            _emit(position, _run_single(payload))
+        return out
     warm = _warm_args(config)
     shm_spec, shm_handles = _shm_create(config)
     try:
@@ -411,9 +424,109 @@ def _execute_payloads(
             initializer=_worker_setup,
             initargs=(warm, shm_spec),
         ) as pool:
-            return list(pool.map(_run_single, payloads))
+            for position, item in enumerate(pool.map(_run_single, payloads)):
+                _emit(position, item)
+        return out
     finally:
         _shm_destroy(shm_handles)
+
+
+# ─────────────────────────────────────────────────────────────
+# G2b（REQ-20261122-03）：`--resume` 断点续跑状态文件
+# ─────────────────────────────────────────────────────────────
+_STATE_SCHEMA = 1
+
+#: 状态文件里每组合保留的原始字段（rank/psr/dsr 每次重算，不落盘）
+_STATE_FIELDS = ("params", "metrics", "n_days", "n_fills", "returns_stats")
+
+
+def _combo_key(params: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    """参数组合的规范键（路径排序 + 值 JSON 化；用于校验状态与网格同源）。"""
+    return tuple(
+        sorted(
+            (str(path), json.dumps(value, sort_keys=True, default=str))
+            for path, value in params.items()
+        )
+    )
+
+
+def _resume_digest(
+    config: Mapping[str, Any], grid: Mapping[str, Sequence[Any]], objective: str
+) -> str:
+    """`config + grid + objective` 的稳定摘要（不一致 ⇒ 拒绝混跑）。"""
+    payload = {
+        "config": config,
+        "grid": {path: list(grid[path]) for path in sorted(grid)},
+        "objective": objective,
+    }
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _load_resume_state(
+    path: Path, digest: str, combos: Sequence[Mapping[str, Any]], objective: str
+) -> dict[int, dict[str, Any]]:
+    """读状态文件；不存在 → 空（首次运行）；不合法/不同源 → ValueError。"""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    try:
+        state = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"--resume 状态文件不是合法 JSON：{path}（{exc}）") from exc
+    if not isinstance(state, dict) or state.get("schema") != _STATE_SCHEMA:
+        raise ValueError(f"--resume 状态文件 schema 不支持（期望 {_STATE_SCHEMA}）：{path}")
+    if state.get("digest") != digest:
+        raise ValueError(
+            f"--resume 状态文件与本次 --config/--grid/--objective 不一致：{path}"
+            "（拒绝把不同扫描的结果混在一起；请换新状态文件或复用原命令）"
+        )
+    items = state.get("completed")
+    if not isinstance(items, list):
+        raise ValueError(f"--resume 状态文件缺少 completed 数组：{path}")
+    completed: dict[int, dict[str, Any]] = {}
+    for item in items:
+        try:
+            index = int(item["index"])
+            params = item["params"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"--resume 状态文件 completed 项缺 index/params：{path}") from exc
+        if not 0 <= index < len(combos) or _combo_key(params) != _combo_key(combos[index]):
+            raise ValueError(f"--resume 状态文件第 {index} 组与本次网格不一致：{path}")
+        if any(item.get(name) is None for name in ("metrics", "n_days")):
+            raise ValueError(f"--resume 状态文件第 {index} 组缺 metrics/n_days：{path}")
+        if not isinstance(item["metrics"], dict) or objective not in item["metrics"]:
+            raise ValueError(
+                f"--resume 状态文件第 {index} 组 metrics 缺 objective={objective}：{path}"
+            )
+        completed[index] = {name: item.get(name) for name in _STATE_FIELDS}
+    return completed
+
+
+def _write_resume_state(
+    path: Path,
+    digest: str,
+    grid: Mapping[str, Sequence[Any]],
+    objective: str,
+    n_combos: int,
+    completed: Mapping[int, Mapping[str, Any]],
+) -> None:
+    """原子写状态（tmp → fsync → os.replace；每完成一组调用一次）。"""
+    from datetime import datetime
+
+    from btf.experiment.store import atomic_write_text
+
+    state = {
+        "schema": _STATE_SCHEMA,
+        "digest": digest,
+        "objective": objective,
+        "grid": {path_name: list(grid[path_name]) for path_name in sorted(grid)},
+        "n_combos": n_combos,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "completed": [{"index": index, **completed[index]} for index in sorted(completed)],
+    }
+    atomic_write_text(path, json.dumps(state, ensure_ascii=False, indent=2, default=str))
 
 
 def _perturb_points(
@@ -472,6 +585,7 @@ class GridSearchOptimizer:
         workers: int | None = None,
         n_trials_declared: int = 0,
         perturb: Sequence[float] | None = None,
+        resume_path: str | Path | None = None,
     ) -> dict[str, Any]:
         """执行网格：config（已合并的配置 dict）+ grid（路径 → 取值列表）。
 
@@ -494,6 +608,11 @@ class GridSearchOptimizer:
         **RC-07（2026-10-05）**：`perturb=[δ…]` ⇒ 返回 ``perturbation``
         块（top1 数值型参数的 p×(1±δ) 邻域扫描：`range` / `std` /
         `relative_degradation` / `sensitive`；未传 ⇒ ``None``）。
+
+        **G2b（REQ-20261122-03）**：`resume_path` ⇒ 状态文件逐组原子写
+        （schema=1：digest/grid/objective/completed）；已存在则校验同源后
+        只跑未完成组合（幂等）；启用时报告增 ``resume_state`` /
+        ``n_resumed``，默认不传 ⇒ 产物与改动前一致。
         """
         paths = sorted(grid)
         if not paths:
@@ -511,7 +630,25 @@ class GridSearchOptimizer:
             payloads.append((cfg, combo))
 
         n_workers = workers if workers is not None else self.workers
-        results = _execute_payloads(payloads, n_workers, config)
+        # G2b（REQ-20261122-03）：`--resume` —— 每完成一组原子写状态；重启后
+        # 校验 config/grid/objective 同源并只跑未完成组合（幂等、不重复）。
+        resume = Path(resume_path) if resume_path is not None else None
+        digest = _resume_digest(config, grid, objective) if resume is not None else ""
+        completed: dict[int, dict[str, Any]] = (
+            _load_resume_state(resume, digest, combos, objective) if resume is not None else {}
+        )
+        pending = [index for index in range(len(payloads)) if index not in completed]
+        n_resumed = len(combos) - len(pending)
+
+        def _record(position: int, item: dict[str, Any]) -> None:
+            index = pending[position]
+            completed[index] = {name: item.get(name) for name in _STATE_FIELDS}
+            if resume is not None:
+                _write_resume_state(resume, digest, grid, objective, len(combos), completed)
+
+        if pending:
+            _execute_payloads([payloads[i] for i in pending], n_workers, config, on_result=_record)
+        results = [completed[index] for index in range(len(combos))]
 
         def objective_of(item: dict[str, Any]) -> float:
             value = item["metrics"].get(objective)
@@ -613,7 +750,7 @@ class GridSearchOptimizer:
                 "points": block_points,
             }
 
-        return {
+        report = {
             "objective": objective,
             "n_combos": len(combos),
             "param_dim": len(paths),
@@ -635,3 +772,7 @@ class GridSearchOptimizer:
                 for item in ranked[:10]
             ],
         }
+        if resume is not None:  # G2b：仅在启用 --resume 时增字段（默认产物不漂移）
+            report["resume_state"] = str(resume)
+            report["n_resumed"] = n_resumed
+        return report

@@ -31,12 +31,19 @@ def cmd_gap_update(args):
     _banner("gap-update 每日增量更新")
     target_date = args.date.replace("-", "") if args.date else None
     groups = tuple(x.strip() for x in args.group.split(",") if x.strip())
+    # C-P3-2（G3）：--table 是 --only 的兼容别名；两者同给不同值 ⇒ rc=2。
+    only = getattr(args, "only", None)
+    table = getattr(args, "table", None)
+    if only and table and only != table:
+        print("  [ERROR] --only 与 --table 取值不同，拒绝执行（只给一个即可）", file=sys.stderr)
+        return 2
+    only = only or table
     result = run_daily_update(
         target_date=target_date,
         dry_run=args.dry_run,
         groups=groups,
         lookback=getattr(args, "lookback", None),
-        only=getattr(args, "only", None),
+        only=only,
     )
     failed = _failed_count(result)
     if failed:

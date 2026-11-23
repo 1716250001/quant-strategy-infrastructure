@@ -376,6 +376,19 @@ def _args_run(p: argparse.ArgumentParser) -> None:
 # ─────────────────────────────────────────────────────────────
 # ③ report
 # ─────────────────────────────────────────────────────────────
+def _resolve_run_id(args: argparse.Namespace) -> str | None:
+    """`--run` 或 `--latest` → run_id；无产物时返回 None（由调用方转 rc=1）。"""
+    if getattr(args, "run", None):
+        return args.run
+    from btf.app import list_runs
+
+    rows = list_runs(out_dir=getattr(args, "out_dir", None), latest=1)
+    if not rows:
+        print("[error] 无 run 产物，无法 --latest", file=sys.stderr)
+        return None
+    return rows[0].run_id
+
+
 def _cmd_report(args: argparse.Namespace) -> int:
     """bt report --run <run_id>：由产物再生成 HTML 报告（幂等）。
 
@@ -383,8 +396,11 @@ def _cmd_report(args: argparse.Namespace) -> int:
     """
     from btf.app import build_report_file
 
+    run_id = _resolve_run_id(args)
+    if run_id is None:
+        return 1
     try:
-        out = build_report_file(args.run, out=args.out, out_dir=args.out_dir)
+        out = build_report_file(run_id, out=args.out, out_dir=args.out_dir)
     except FileNotFoundError as exc:
         print(f"[error] {exc}", file=sys.stderr)
         return 1
@@ -393,7 +409,9 @@ def _cmd_report(args: argparse.Namespace) -> int:
 
 
 def _args_report(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--run", required=True, help="run_id")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--run", help="run_id")
+    g.add_argument("--latest", action="store_true", help="取最近一个 run（配合 --out-dir）")
     p.add_argument("--out", help="输出 HTML 路径（默认 run 目录/report.html）")
     p.add_argument("--out-dir", help="RunStore 根目录（默认产物目录）")
 
@@ -406,8 +424,11 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     from btf.runtime import BTFRuntime, make_store
 
     store = make_store(args.out_dir)
+    run_id = _resolve_run_id(args)
+    if run_id is None:
+        return 1
     try:
-        report = BTFRuntime().verify_run(args.run, store=store)
+        report = BTFRuntime().verify_run(run_id, store=store)
     except FileNotFoundError as exc:
         print(f"[error] {exc}", file=sys.stderr)
         return 1
@@ -429,7 +450,9 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
 
 def _args_verify(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--run", required=True, help="run_id")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--run", help="run_id")
+    g.add_argument("--latest", action="store_true", help="取最近一个 run（配合 --out-dir）")
     p.add_argument("--out-dir", help="RunStore 根目录（默认产物目录）")
 
 
@@ -506,7 +529,12 @@ def _cmd_test(args: argparse.Namespace) -> int:
 
 
 def _args_test(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--layer", default="l1", help="测试层标记：l1|l2|l3|l4|l5|all")
+    p.add_argument(
+        "--layer",
+        default="l1",
+        choices=("l1", "l2", "l3", "l4", "l5", "all"),
+        help="测试层标记：l1|l2|l3|l4|l5|all（默认 l1）",
+    )
     p.add_argument("--pattern", help="pytest -k 表达式")
     p.add_argument("--path", help="测试路径（默认全量）")
 
@@ -726,21 +754,75 @@ def _cmd_data_quality(args: argparse.Namespace) -> int:
     limit = tuple(args.limit_tables or ("stk_limit",))
     # 人话走 stderr 还是 stdout：`--json` 时 stdout 只许一个 JSON 对象
     chatter = sys.stderr if args.json else sys.stdout
+    if args.st_symbols and args.no_st:
+        print("[error] --st-symbols 与 --no-st 互斥", file=sys.stderr)
+        return 2
+
+    # ST 名单（裁定 #6）：namechange 默认推导；--st-symbols 覆盖；--no-st 关闭。
+    st_source = "disabled" if args.no_st else "unavailable"
+    st_symbols: set[tuple[str, str]] | None = None
+    ov_codes: set[str] = set()
+    if args.st_symbols:
+        ov_codes = {s.strip() for s in args.st_symbols.split(",") if s.strip()}
+        if not ov_codes:
+            print("[error] --st-symbols 为空（逗号分隔的 ts_code 列表）", file=sys.stderr)
+            return 2
+        try:
+            from btf.app import derive_st_symbols
+
+            st_source, st_symbols = derive_st_symbols(
+                args.root, start, end, symbols, override_codes=ov_codes
+            )
+        except Exception as exc:  # 取不到 = 不可用（不静默）
+            st_source = "unavailable"
+            st_symbols = None
+            print(
+                f"[warn] ST 名单获取失败：{type(exc).__name__}: {exc}",
+                file=chatter,
+            )
+    elif not args.no_st:
+        try:
+            from btf.app import derive_st_symbols
+
+            st_source, st_symbols = derive_st_symbols(args.root, start, end, symbols)
+        except Exception as exc:  # 取不到 = 不可用（不静默）
+            st_source = "unavailable"
+            st_symbols = None
+            print(
+                f"[warn] ST 名单获取失败：{type(exc).__name__}: {exc}",
+                file=chatter,
+            )
+
     print(
         f"[info] quality 开始：price={'/'.join(price)} "
         f"limit={'/'.join(limit)} 区间 {start}→{end} "
         f"{'全库' if symbols is None else f'{len(symbols)} 只'}",
         file=chatter,
     )
-    print(
-        "[warn] 未提供 ST 名单：CC-2 的 ST 分支（主板 ST 5% 上限）不生效，"
-        "ST 股按板块常规档判 ⇒ 主板 ST 股 5%~10% 的越界会**漏检**"
-        "（假阴性方向，finding 偏少）",
-        file=chatter,
-    )
+    if st_source == "unavailable":
+        print(
+            "[warn] ST 名单不可用（namechange 缺失/取不到）：CC-2 的 ST 分支不生效，"
+            "ST 股按板块常规档判 ⇒ 主板 ST 股 5%~10% 的越界会**漏检**"
+            "（假阴性方向，finding 偏少）",
+            file=chatter,
+        )
+    elif st_source == "disabled":
+        print("[info] ST 分支已关闭（--no-st）", file=chatter)
+    elif st_source == "override":
+        print(f"[info] ST 名单：用户覆盖 {len(ov_codes)} 只（区间内全部交易日）", file=chatter)
+    elif not st_symbols:
+        print("[info] ST 名单：namechange 无 ST 记录", file=chatter)
+    else:
+        print(f"[info] ST 名单：namechange {len(st_symbols)} 条（code,date）", file=chatter)
     try:
         report = run_data_quality(
-            args.root, start, end, price_tables=price, limit_tables=limit, symbols=symbols
+            args.root,
+            start,
+            end,
+            price_tables=price,
+            limit_tables=limit,
+            symbols=symbols,
+            st_symbols=st_symbols,
         )
     except (ValueError, FileNotFoundError) as exc:
         print(f"[error] 用法/前置错误：{exc}", file=sys.stderr)
@@ -749,6 +831,9 @@ def _cmd_data_quality(args: argparse.Namespace) -> int:
         print(f"[error] quality 失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
     payload = report.as_dict()
+    payload["st_source"] = st_source
+    payload["st_applied"] = bool(st_symbols)
+    payload["st_pairs_count"] = len(st_symbols or ())
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -813,6 +898,12 @@ def _args_data(p: argparse.ArgumentParser) -> None:
         help="quality：涨跌停表（可重复；缺省 stk_limit）",
     )
     p.add_argument("--symbols", help="quality：逗号分隔 ts_code（缺省全库）")
+    p.add_argument(
+        "--st-symbols",
+        help="quality：逗号分隔 ST ts_code，区间内全部交易日按 ST 处理；"
+        "覆盖 namechange 推导；与 --no-st 互斥",
+    )
+    p.add_argument("--no-st", action="store_true", help="quality：关闭 ST 分支（对照/排障）")
     p.add_argument("--root", help="quality：数据根（缺省 paths.MARKET_DATA_DIR）")
     p.add_argument(
         "--json", action="store_true", help="quality：stdout 只输出 JSON（人话走 stderr）"
@@ -925,9 +1016,18 @@ def _cmd_optimize(args: argparse.Namespace) -> int:
     # 经 registry 名字表取优化器（铁律 5：cli 不直连 optimize——传递依赖
     # runtime→engine 会触发 import-linter 拦截；名字表即声明制消费方式）
     optimizer = registry.create(registry.OPTIMIZER, "grid_search", {"workers": args.workers})
-    report = optimizer.run(
-        config, grid, objective=args.objective, n_trials_declared=args.n_trials, perturb=perturb
-    )
+    try:
+        report = optimizer.run(
+            config,
+            grid,
+            objective=args.objective,
+            n_trials_declared=args.n_trials,
+            perturb=perturb,
+            resume_path=getattr(args, "resume", None),
+        )
+    except ValueError as exc:  # G2b：状态文件不合法/不同源 ⇒ 用法错误
+        print(f"[error] {exc}", file=sys.stderr)
+        return 2
 
     # CL-1（19 号 §72.2 / 报告 D 篇 P2-5）：**短区间默认阻断**。判据 = 实算样本
     # 长度（`n_trading_days`，与 RC-06 披露同源——"样本不足 ⇒ 排序无意义"）。
@@ -964,6 +1064,11 @@ def _cmd_optimize(args: argparse.Namespace) -> int:
             f"选择的依据（{tail}）"
         )
 
+    if report.get("n_resumed"):
+        print(
+            f"[info] resume：跳过已完成 {report['n_resumed']} 组"
+            f"（{report['n_combos'] - report['n_resumed']} 组本次执行）"
+        )
     print(
         f"[ok] grid_search：{report['n_combos']} 组 × {report['workers']} 进程"
         f" | objective={report['objective']}"
@@ -1053,6 +1158,12 @@ def _args_optimize(p: argparse.ArgumentParser) -> None:
         "阈值/override 记入产物 short_period_override）",
     )
     p.add_argument("--out", help="结果 JSON 输出路径（可选）")
+    p.add_argument(
+        "--resume",
+        metavar="STATE_JSON",
+        help="断点续跑状态文件：不存在则创建；存在则校验 --config/--grid/"
+        "--objective 一致后跳过已完成组合（每完成一组原子写；重复执行幂等）",
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1067,11 +1178,16 @@ def _cmd_check(args: argparse.Namespace) -> int:
     """
     from btf.app import run_gate_check
 
-    return run_gate_check()
+    return run_gate_check(full=getattr(args, "full", False))
 
 
 def _args_check(p: argparse.ArgumentParser) -> None:
-    """门禁**不接受参数**：加开关 = 加"跑得不一样"的可能（口径唯一优先）。"""
+    """默认十项；`--full` 追加 L5 长测（22 例，约 64 分钟）。"""
+    p.add_argument(
+        "--full",
+        action="store_true",
+        help="追加 L5 长测（22 例，约 64 分钟；默认关闭）",
+    )
 
 
 def _cmd_cold_backup(args: argparse.Namespace) -> int:
@@ -1116,6 +1232,26 @@ def _cmd_runs(args: argparse.Namespace) -> int:
     from btf.app import list_runs
 
     rows = list_runs(out_dir=args.out_dir, latest=args.latest)
+    if getattr(args, "json", False):
+        import json
+
+        print(
+            json.dumps(
+                [
+                    {
+                        "run_id": row.run_id,
+                        "status": row.status,
+                        "created": row.created,
+                        "metrics": dict(row.metrics),
+                        "note": row.note,
+                    }
+                    for row in rows
+                ],
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+        return 0
     if not rows:
         print("[info] 无 run 产物（先 `bt run --config <yaml>`，或用 --out-dir 指定产物根）")
         return 0
@@ -1133,6 +1269,7 @@ def _cmd_runs(args: argparse.Namespace) -> int:
 def _args_runs(p: argparse.ArgumentParser) -> None:
     p.add_argument("--latest", type=int, metavar="N", help="只列最近 N 个（按 run 目录时间倒序）")
     p.add_argument("--out-dir", help="RunStore 根目录（默认产物目录）")
+    p.add_argument("--json", action="store_true", help="输出 JSON 数组（stdout，机器可读）")
 
 
 def _cmd_show(args: argparse.Namespace) -> int:
@@ -1143,8 +1280,11 @@ def _cmd_show(args: argparse.Namespace) -> int:
     """
     from btf.app import run_detail
 
+    run_id = _resolve_run_id(args)
+    if run_id is None:
+        return 1
     try:
-        detail = run_detail(args.run, out_dir=args.out_dir)
+        detail = run_detail(run_id, out_dir=args.out_dir)
     except (FileNotFoundError, ValueError) as exc:
         print(f"[error] {exc}", file=sys.stderr)
         return 1
@@ -1195,7 +1335,9 @@ def _cmd_show(args: argparse.Namespace) -> int:
 
 
 def _args_show(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--run", required=True, help="run_id")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--run", help="run_id")
+    g.add_argument("--latest", action="store_true", help="取最近一个 run（配合 --out-dir）")
     p.add_argument("--out-dir", help="RunStore 根目录（默认产物目录）")
 
 
@@ -1487,8 +1629,8 @@ COMMANDS: dict[str, tuple[CommandHandler, str, ArgAdder]] = {
 }
 
 
-def main(argv: list[str] | None = None) -> int:
-    _utf8()
+def build_parser() -> argparse.ArgumentParser:
+    """构建 `bt` 顶层解析器（供测试/文档守卫复用；`main` 只负责分发）。"""
     parser = argparse.ArgumentParser(
         prog="bt",
         description="btf 回测工具（十四命令族：config-check/run/report/"
@@ -1504,8 +1646,12 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     for name, (_handler, help_text, add_args) in sorted(COMMANDS.items()):
         add_args(sub.add_parser(name, help=help_text))
+    return parser
 
-    args = parser.parse_args(argv)
+
+def main(argv: list[str] | None = None) -> int:
+    _utf8()
+    args = build_parser().parse_args(argv)
     handler: Any = COMMANDS[args.command][0]
     return handler(args)
 

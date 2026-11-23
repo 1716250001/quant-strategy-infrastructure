@@ -117,16 +117,18 @@
 
 | 子命令 | 用途 | 关键参数 / 默认 |
 |---|---|---|
-| `db ckpt --show` | 断点 × 磁盘交叉核对（只读） | `--json`；`--fix` 按磁盘回填；`--clear` 清虚记；`--table T`；默认干跑，`--execute` 才写 |
+| `db ckpt --show` | 断点 × 磁盘交叉核对（只读） | `--json`；`--fix` 按磁盘回填；`--clear` 清虚记；`--table T`；默认干跑，`--execute`/`--apply` 才写 |
 | `db audit` | 全库体检 **5 段**：`checkpoint` / `dup` / `truncation` / `gap` / `scale` | `--section all`（或逗号组合） `--only T` `--exact` `--json` |
 | `db scale-check` | 数值域量级锚体检（≠ `db audit --section scale` 的目录/字节规模） | `--report`（默认） `--stats` `--tables T` `--json P` `--out P` |
 | `db schema-align` | 跨年度分区 schema 漂移扫描/修复（≠ `db schema` 的建表定义校验） | `scan` / `fix` `[tables ...]` `--all` |
 | `db fingerprint` | 全库指纹门禁（独立，不与 `db audit` 合并） | `--build` `--verify` `--report` `--deep` `--allow-added` `--root` `--baseline` |
-| `db meta-close` | 元数据刷新后的 R12 收尾（声明重算/补表重建） | 默认干跑；`--apply` 写盘（先自动备份）并整跑 `regress` |
-| `db backup` | 日备（硬链快照＋校验） | `--status` 只读；`--mirror` 日备（默认干跑）；`--execute` 真跑 |
-| `db stale-fix` | 基金 `source_empty` 注册表对账 | 默认干跑；`--apply` 清理并同步 evidence/count（先自备份）；`--json` |
+| `db meta-close` | 元数据刷新后的 R12 收尾（声明重算/补表重建） | 默认干跑；`--apply`/`--execute` 写盘（先自动备份）并整跑 `regress` |
+| `db backup` | 日备（硬链快照＋校验） | `--status` 只读；`--mirror` 日备（默认干跑）；`--execute`/`--apply` 真跑 |
+| `db stale-fix` | 基金 `source_empty` 注册表对账 | 默认干跑（`--dry-run` 显式优先）；`--apply`/`--execute` 清理并同步 evidence/count（先自备份）；`--json` |
+| `db health` | 数据库健康摘要（默认轻量） | 首次 `--full` 建立 audit/fingerprint 缓存；`--strict` 红/黄/缓存过期 ⇒ rc=1；`--json` |
 
-> 计数口径：`doctor` 现为 **13 组 / 32 项**（13 个 `check_*` 分组）；`db audit` 为 **5 段**。
+> 计数口径：`doctor` 现为 **13 组 / 32 项**（13 个 `check_*` 分组）；`db audit` 为 **5 段**；`db` 子命令 **14 个**。
+> `db freshness` 与顶层 `freshness` 默认 **strict**（红/黄 rc=1，读不全 rc=3）；`--no-strict` 退回旧恒 0；`db report --quiet` 只写文件不打印明细。
 
 ## 九、T-01 六步日更 bat（2026-11-22 D9）
 

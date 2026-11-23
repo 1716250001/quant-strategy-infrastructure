@@ -22,15 +22,18 @@
 硬约束（CC-FIX-2R Step4）
 -------------------------
 1. **只读**：不写数据文件、不写断点、不建目录。
-2. **恒 exit 0**；仅 `--strict` 时发现红/黄才非零。
+2. **只读**：不写数据文件、不写断点、不建目录。
+3. **CLI 默认 strict**（2026-11-22 裁定）：红/黄 → exit 1、读不全 → 3；
+   `--no-strict` 恢复旧行为恒 0。库调用 `run(strict=False)` 仍默认 0。
 3. 断点缺时间戳（F3 之前的旧文件）→ 显示"未知"，不算错、不改配置"修绿"。
 
 用法
 ----
-    python main.py db freshness                 # 全部表
+    python main.py db freshness                 # 全部表（默认 strict）
     python main.py db freshness --only daily    # 只看几张（逗号分隔）
     python main.py db freshness --json          # 机器可读
-    python main.py db freshness --strict        # 有红/黄时 exit 1
+    python main.py db freshness --no-strict     # 恒 exit 0（旧行为）
+    python main.py freshness --no-strict        # 顶层速查同口径
 """
 
 import calendar
@@ -491,7 +494,7 @@ def render(rows, n_total=None):
             )
         )
     lines.append("说明: ds=内容最新日期距今天数, dw=文件最新 mtime 距今天数; dw≤7 视为刚写过→绿")
-    lines.append("      默认恒 exit 0；--strict 时存在红/黄才非零")
+    lines.append("      CLI 默认 strict：红/黄 exit 1、读不全 exit 3；--no-strict 恒 0")
     return "\n".join(lines)
 
 
