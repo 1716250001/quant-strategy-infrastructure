@@ -337,6 +337,14 @@ DAILY_UPDATE_GROUPS = OrderedDict(
                 #   原 mode=by_code 且不在任何日更组 ⇒ 从未被调度、2024 分区仅 1 行；
                 #   改 by_date + date_param=ann_date（同 fund_div），每日 1 请求、约 1~2 行。
                 "forecast",
+                # 2026-11-28 REQ-20261126-01: fund_share（ETF/LOF 份额）接入日更
+                #   根因：本表此前**结构性无日常增量通道**（fund_nav 通道从不写 fund_share），
+                #   唯一写入口 by_code backfill 又被「断点 completed + 库内已有代码」双闸门
+                #   永久跳过 ⇒ 2,271 只中 1,761 只停在 20260918。
+                #   形态：mode=by_date（单日约 1,744 只，.OF 由 market_filter 剔除）；
+                #   份额 T+1 发布，17:30 取到 T-1 属正常；当日空不记 done，
+                #   由 lookback=3 在次日自动兜底（不加入 _T1_PUBLISH_TABLES）。
+                "fund_share",
             ],
         ),
     ]

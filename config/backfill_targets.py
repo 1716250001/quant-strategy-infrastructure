@@ -147,11 +147,27 @@ BACKFILL_TARGETS = OrderedDict(
             {
                 "api": "fund_share",
                 "desc": "基金份额规模",
-                "mode": "by_code",
-                "codes": "fund_etf",
+                "mode": "by_date",
+                "date_param": "trade_date",
+                "date_col": "trade_date",
+                "subset": ["ts_code", "trade_date"],
                 "max_rows": 5000,
+                "start": "19980327",
+                "market_filter": ["SH", "SZ"],
                 "tier": "A",
-                "note": "汇金ETF化趋势判断口径",
+                "note": "汇金ETF化趋势判断口径。"
+                "★2026-11-28 REQ-20261126-01 纳入日更(extend组)：mode 由 by_code 改 by_date —— "
+                "实证接口支持 trade_date 按日拉全市场（20261127 单日 1,744 行/1,744 只）。"
+                "根因：本表此前**无任何日常增量通道**，唯一写入口 by_code backfill 又被"
+                "「断点 completed + 库内已有代码」双闸门永久跳过 ⇒ 2026-09-18 起大面积停更。"
+                "六条实证口径（F1 §8.2）：① 445 只 20260630 为半年披露应然，不按日频补；"
+                "② 100 只 REITs（508xxx/180xxx）周频披露、滞后 2–4 日为常态；"
+                "③ .OF 场外码不入本表，按 market_filter=[SH,SZ] 落盘前剔除；"
+                "④ 服务端单页硬顶 3,000（limit=5000 仍返 3,000），20260930 实测 26,640 行/9 页，"
+                "已登记 BACKFILL_PAGE_CONF=(3000,12)；"
+                "⑤ 份额 T+1 发布，17:30 日更取到 T-1 属正常，当日空由 lookback=3 次日兜底"
+                "（未按接口族类推加入 _T1_PUBLISH_TABLES）；"
+                "⑥ 不引入第二真源，国家队 API 缓存仅作对照，看板继续读本表。",
             },
         ),
         (

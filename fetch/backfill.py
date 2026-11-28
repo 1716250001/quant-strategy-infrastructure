@@ -58,6 +58,7 @@ from config import (
     BACKFILL_PARALLEL_TARGETS,
     BACKFILL_TARGETS,
     FETCH_MAX_WORKERS,
+    FUND_CODE_PATTERN,
     MARKET_DATA_DIR,
 )
 from fetch.backfill_io import (  # noqa: F401
@@ -1060,6 +1061,26 @@ def run_target(
                 _resolve_empty_date(name, dt, cp, struct_ct, kind=kind)
                 cp.mark_fetched(name, rows=0)  # CC-FIX-7：成功但返空也要记
             else:
+                # REQ-20261126-01（T4/T11）：通用 market_filter —— by_date 入口按
+                #   「市场后缀 + 6 位码」双白名单过滤（抽自 fund_daily market=O 特例：
+                #   按日横截面返回全市场，含本表不收录的场外/畸形码）。
+                #   fund_share：源端单日含约 2.4 万只 .OF；另有 7 位分级子份额码
+                #   （如 1500011.SZ），末尾也是 .SZ，仅按后缀过滤会漏放进表。
+                #   ⇒ 后缀 ∈ market_filter 且完整码匹配 FUND_CODE_PATTERN（6 位 + 场内后缀）。
+                #   ⚠ 仅当条目配置了 market_filter 才生效；未配的表行为逐字不变。
+                _mkt = conf.get("market_filter")
+                if _mkt and "ts_code" in df.columns:
+                    _code = df["ts_code"].astype(str)
+                    _suffix_ok = _code.str.split(".").str[-1].isin(_mkt)
+                    _form_ok = _code.str.match(FUND_CODE_PATTERN)
+                    _mask = _suffix_ok & _form_ok
+                    _n_drop = int((~_mask).sum())
+                    if _n_drop:
+                        print(
+                            f"  [过滤] {name} {dt}: market_filter={'/'.join(_mkt)}+6位码 "
+                            f"剔除 {_n_drop} 行（场外/畸形码）"
+                        )
+                    df = df[_mask]
                 # EE-FUND-9A: 过滤 market=O 场外码（仅 fund_daily 生效）
                 if _fund_daily_o_codes is not None and "ts_code" in df.columns:
                     _mask = ~df["ts_code"].isin(_fund_daily_o_codes)
@@ -1317,6 +1338,7 @@ def list_targets():
     print()
     print(f"  {'接口':20s} {'档':3s} {'模式':9s} {'布局':8s} {'断点':>8s} {'每日更新':10s} 说明")
     print("  " + "-" * 92)
+    _done_mismatch = []
 
     for name, conf in sorted(
         BACKFILL_TARGETS.items(), key=lambda kv: (str(kv[1].get("tier", "Z")), kv[0])
@@ -1331,7 +1353,25 @@ def list_targets():
                 file=sys.stderr,
             )
             layout = "?"
-        done = len(cp.get(name, {}).get("completed", []))
+        done_raw = len(cp.get(name, {}).get("completed", []))
+        done = done_raw
+        # T13（REQ-20261126-01）：by_date 的“完成度”= completed ∩ expected。
+        #   直接 len(completed) 会把域外日期（季末/快照日后/历史混键）算进来，
+        #   造成 7,110 vs 6,945 的误导；交集口径才与“应有任务”可比。
+        if conf.get("mode") == "by_date":
+            try:
+                _exp, _kind = expected_task_count(name, conf)
+                if _kind == "date" and _exp is not None:
+                    done = len(
+                        {str(x) for x in cp.get(name, {}).get("completed", [])}
+                        & {str(x) for x in _exp}
+                    )
+            except Exception as exc:
+                print(
+                    f"[fetch.backfill] 完成度交集计算失败 {name}（显示原始数）: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
         # 每日更新归属（语义要区分"不适用"与"漏登"）
         if conf.get("tier") == "X" or conf.get("enabled") is False:
             daily = "⛔死结"
@@ -1346,9 +1386,18 @@ def list_targets():
         else:
             daily = "n/a"  # 非日更形态（by_code/once/paged 等），本就不适用
         desc = conf.get("desc", "")[:20]
+        if done != done_raw:
+            _done_mismatch.append(f"{name}({done_raw}→{done})")
         print(f"  {name:20s} {tier!s:3s} {mode:9s} {layout:8s} {done:8,d} {daily:10s} {desc}")
 
     print("  " + "-" * 92)
+    _note = "  注: by_date 完成度 = completed ∩ expected（expected 按体检快照日 20261113）"
+    if _done_mismatch:
+        _show = ", ".join(_done_mismatch[:8]) + (
+            f" ...等 {len(_done_mismatch)} 张" if len(_done_mismatch) > 8 else ""
+        )
+        _note += f"；已剔除域外日期: {_show}"
+    print(_note)
     print("  每日更新组: " + " / ".join(f"{g}={len(m)}" for g, m in DAILY_UPDATE_GROUPS.items()))
     print(f"  豁免清单: {len(DAILY_UPDATE_EXEMPT)} 项（已在 config 注明原因）")
     print("\n  提示: 断点数为 0 但不代表未拉 —— once/single 类可能已完成（见 db-audit）")

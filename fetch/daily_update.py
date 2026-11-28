@@ -125,6 +125,42 @@ def engine_supports_daily(conf):
 
 
 # ============================================================
+# 汇总口径（T10：部分失败不得被吞）
+# ============================================================
+def _summarize_results(plan, results, core_names):
+    """把 run_target 结果汇总为 (ok, fail, partial_core, partial_extend, missing)。
+
+    ⚠ 2026-11-28 REQ-20261126-01 T10：原汇总只看 `rec is None` / `rec["failed"]`，
+    **不看 `rec["fail"]`** —— 某日某表内部调用失败（df=None）时，表内 fail=1，
+    汇总仍判“成功”、gap-update rc=0，只在一行进度里出现“失败=1”，违反红线
+    “失败不得吞”。现口径：
+      - core 组 fail>0 → 计失败（rc=1，阻断）；
+      - extend 组 fail>0 → 不计失败（避免单表拖垮 T-01），但必须进 WARN/日志清单；
+      - 调用整体异常（rec None / rec.failed）仍按失败处理。
+    """
+    plan_names = {name for name, *_ in plan}
+    partial_core, partial_extend, missing = [], [], []
+    ok_n = fail_n = 0
+    for name in plan_names:
+        rec = next((r for n, r in results if n == name), None)
+        if rec is None or rec.get("failed"):
+            fail_n += 1
+            missing.append(name)
+            continue
+        fail_ct = int(rec.get("fail") or 0)
+        if fail_ct <= 0:
+            ok_n += 1
+            continue
+        if name in core_names:
+            fail_n += 1
+            partial_core.append((name, fail_ct))
+        else:
+            ok_n += 1
+            partial_extend.append((name, fail_ct))
+    return ok_n, fail_n, partial_core, partial_extend, missing
+
+
+# ============================================================
 # 缺口计算
 # ============================================================
 def resolve_gaps(name, conf, target_date, lookback):
@@ -463,17 +499,28 @@ def run_daily_update(
     print("\n" + "=" * 78)
     print("  每日增量更新完成 — 汇总")
     print("=" * 78)
-    ok_n = fail_n = 0
+    core_names = set(DAILY_UPDATE_GROUPS.get("core", []))
+    ok_n, fail_n, partial_core, partial_extend, _missing = _summarize_results(
+        plan, results, core_names
+    )
+    partial_map = dict(partial_core) | dict(partial_extend)
+    partial_core_names = {n for n, _ in partial_core}
     for name, _conf, dates, _info in plan:
         rec = next((r for n, r in results if n == name), None)
         if rec is None or rec.get("failed"):
-            fail_n += 1
             failed_tables.append(name)
             print(f"  [✗] {name:16s} 未完成")
+            continue
+        # T10：表内部分失败必须可见（core 阻断 / extend 非阻断但进 WARN+日志）
+        if name in partial_map:
+            tag = "core 阻断" if name in core_names else "extend 非阻断"
+            print(f"  [!] {name:16s} 部分失败 fail={partial_map[name]}（{tag}）")
+            failed_tables.append(name)
+        # dates=None 表示全量重拉类（任务数在运行期才确定），不显示"目标N天"
+        scope = "全量重拉" if dates is None else f"目标{len(dates):>3d}天"
+        if name in partial_core_names:
+            print(f"  [✗] {name:16s} {scope}  成功{rec.get('done', 0):>3d}（含部分失败）")
         else:
-            ok_n += 1
-            # dates=None 表示全量重拉类（任务数在运行期才确定），不显示"目标N天"
-            scope = "全量重拉" if dates is None else f"目标{len(dates):>3d}天"
             print(f"  [✓] {name:16s} {scope}  成功{rec.get('done', 0):>3d}")
     elapsed = time.time() - t_all
     print(f"\n  成功={ok_n} 失败={fail_n} | 总耗时={elapsed / 60:.1f} 分钟")
@@ -487,6 +534,7 @@ def run_daily_update(
         log_event(
             f"[daily_update] target={target_date} ok={ok_n} fail={fail_n} "
             f"failed={sorted(set(failed_tables))} "
+            f"partial_core={partial_core} partial_extend={partial_extend} "
             f"gap_s={t_all - t_step1:.1f} run_s={elapsed:.1f}"
         )
     except Exception:

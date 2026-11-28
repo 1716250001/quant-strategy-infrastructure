@@ -1175,9 +1175,13 @@ def audit_gaps(verbose=True):
         #   直接比对字符串会每天误报。改用周期键后，同一周期的不同端点视为同一任务。
         freq = conf.get("freq", "day")
         done_keys = {_period_key(d, mode, freq) for d in done}
-        miss_keys = {_period_key(e, mode, freq) for e in expect} - done_keys
+        exp_keys = {_period_key(e, mode, freq) for e in expect}
+        miss_keys = exp_keys - done_keys
         miss = sorted({e for e in expect if _period_key(e, mode, freq) in miss_keys})
         miss = [str(x) for x in miss]
+        # T13（REQ-20261126-01）：by_date 的“已完成”显示 completed ∩ expected，
+        #   避免历史混键/域外日期（fund_share 曾显示 7,110 vs 应有 6,945）误导。
+        done_eff = len(done_keys & exp_keys) if mode == "by_date" else len(done)
 
         # ── 数据口径校验（仅 by_date）──
         # 断点会把"调用成功但返空"也记为完成，导致缺口被隐瞒。
@@ -1212,6 +1216,7 @@ def audit_gaps(verbose=True):
                 "name": name,
                 "mode": mode,
                 "done": len(done),
+                "done_eff": done_eff,
                 "expect": len(expect),
                 "missing": len(miss),
                 "category": _gap_category(name, conf),
@@ -1227,7 +1232,7 @@ def audit_gaps(verbose=True):
             # 真缺口（日更表）高亮，设计性差额与周期表用普通样式
             cat_tag = "★" + cat if cat == GAP_CAT_DAILY else " " + cat
             print(
-                f"  {name:18s} {mode:9s} {len(done):8d} {len(expect):8d} "
+                f"  {name:18s} {mode:9s} {done_eff:8d} {len(expect):8d} "
                 f"{ratio:7.1f}% {len(miss):7d}  {cat_tag:4s}{stale_tag}"
             )
             if data_stale and data_latest:

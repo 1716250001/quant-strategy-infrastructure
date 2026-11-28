@@ -8,8 +8,9 @@
 1. 一张表只管「什么时候拉」，**不管拉什么** —— 取数参数一律来自
    `config.backfill_targets.BACKFILL_TARGETS`（禁止在本文件复制粘贴配置）。
 2. 排班集合 = `BACKFILL_TARGETS` −（`DAILY_UPDATE_GROUPS` 全部组 − `DAILY_UPDATE_EXTRA`
-   − `PERIODIC_UPDATE_TARGETS`）= **57 张**（2026-11-10 复算，与派单 §二逐字一致）。
-   其中 24 张已定性为「不再进排班」（见 `EXCLUDED`），**实际在册 33 张**
+   − `PERIODIC_UPDATE_TARGETS`）= **56 张**（2026-11-28 复算：fund_share 转入日更组后
+   由 57 降为 56，与派单 §二口径同构）。
+   其中 23 张已定性为「不再进排班」（见 `EXCLUDED`），**实际在册 33 张**
    （CC-FIX-15 前为 21／36）。
 3. alt 侧：`alt.spec.BY_NAME` 102 张**全部**已由 `main.py alt-update` 按
    `spec.update_every_days` 更新（无日更组、无孤立表）⇒ 本表差集为空，**不重复排班**。
@@ -61,7 +62,7 @@ RELEASE_DAY = {
 }
 
 # ============================================================
-# 在册 33 张（57 − 24 已定性）
+# 在册 33 张（56 − 23 已定性）
 # ============================================================
 SCHEDULE = {
     # ── D：日频源端且无专用日更通道 ──
@@ -110,15 +111,19 @@ SCHEDULE = {
 GRAYSCALE = ("fut_trade_cal", "hk_tradecal", "us_tradecal", "new_share", "index_monthly")
 
 # ============================================================
-# 57 − 33 = 24 张不进排班（逐张给依据；判据 1「零遗漏」靠这张表对账）
+# 56 − 33 = 23 张不进排班（逐张给依据；判据 1「零遗漏」靠这张表对账）
 # ============================================================
 EXCLUDED = {
     # ⛔ 启用级阻断（CC-FIX-15 §二）：源端列集少于库内，覆盖写会丢列
     "cn_pmi": "源端列集变更（59 vs 65 列，缺 PMI012000），CC-FIX-14 §381 停单；"
     "裁定前禁止排班/覆盖写",
     # 双通道（CC-FIX-15 §三.2）：由专用通道承载，避免同表双写链路冲突
+    # ⚠ fund_share 原在此列（理由“由 fund-nav 独立通道承载”）是**错误前提** ——
+    #   `fetch/fund_nav_update.py` 从不写 fund_share。REQ-20261126-01（2026-11-28）
+    #   已将其改 by_date 并纳入 DAILY_UPDATE_GROUPS["extend"]，同时移出本清单。
+    #   ⛔ 禁止再以“由 X 通道承载”名义把 fund_share 写回 EXCLUDED
+    #   （回归 tests/test_schedule_config.py 有负例）。
     "fund_nav": "由 fund-nav 独立通道承载，避免同表双写链路冲突",
-    "fund_share": "由 fund-nav 独立通道承载，避免同表双写链路冲突",
     # 已停更（STALE_BY_DESIGN，CC-FIX-6/12 定性）
     "gz_index": "已停更（源端 2019-03-04 冻结，shibor 已覆盖）",
     "shibor_quote": "已停更（SHELVED，维持 2016 现状）",

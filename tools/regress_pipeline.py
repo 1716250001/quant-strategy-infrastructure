@@ -83,6 +83,93 @@ def check(name, fn):
 
 
 # ============================================================
+# R10 扩面（REQ-20261126-01 T7）：归宿判定与承载方实证（T8）
+# ============================================================
+#: EXCLUDED 中「由 X 通道承载」的条目 → 承载方代码文件（相对代码根）。
+#: T8 要求逐条断言承载方真的引用该表；新增此类理由必须先在此登记路径。
+EXCLUDED_CARRIER_CHECKS = {
+    "fund_nav": "fetch/fund_nav_update.py",
+}
+
+
+def check_excluded_carriers(excluded, code_root):
+    """T8：`EXCLUDED` 里“由 X 通道承载”的条目，X 必须真实引用该表。
+
+    返回问题清单（空 = 通过）。判据：
+      ① 理由含“承载” → 必须在 EXCLUDED_CARRIER_CHECKS 登记承载方路径；
+      ② 承载方文件必须存在；
+      ③ 文件全文必须出现该表名（实证引用，不靠口头声明）。
+    """
+    problems = []
+    for name, reason in excluded.items():
+        if "承载" not in str(reason):
+            continue
+        rel = EXCLUDED_CARRIER_CHECKS.get(name)
+        if not rel:
+            problems.append(f"{name}(未登记承载方路径)")
+            continue
+        path = os.path.join(code_root, rel)
+        if not os.path.isfile(path):
+            problems.append(f"{name}(承载方文件不存在 {rel})")
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except Exception as exc:
+            problems.append(f"{name}(读取承载方失败 {type(exc).__name__})")
+            continue
+        if name not in text:
+            problems.append(f"{name}({rel} 未引用该表)")
+    return problems
+
+
+def r10_dispositions(
+    backfill_targets, daily_extra, daily_groups, exempt, periodic, schedule, excluded
+):
+    """R10 扩面：每张「按日/按区间/按代码」表必须明确归宿（T7）。
+
+    归宿 = 日更组 / 周期更新通道 / 日更豁免 / 周期排班 / EXCLUDED。
+    返回 (cand, orphans)。抽成纯函数以便负例测试（不依赖真实配置）。
+
+    ⚠ by_code 表此前**完全不在断言视野**（2026-11-28 fund_share 事故的制度盲区）：
+      它既不是 by_date/by_range，也不一定在日更组，于是“无归宿”可以长期静默。
+    """
+    in_group = {}
+    for g, members in daily_groups.items():
+        for m in members:
+            in_group[m] = g
+
+    daily_modes = ("by_date", "by_range", "by_code")
+    cand = {}
+    for src, tag in ((daily_extra, "EXTRA"), (backfill_targets, "BACKFILL")):
+        for name, conf in src.items():
+            if conf.get("mode") in daily_modes or name in in_group:
+                cand[name] = {
+                    "mode": conf.get("mode"),
+                    "freq": conf.get("freq", "day"),
+                    "src": tag,
+                    "tier": conf.get("tier"),
+                    "enabled": conf.get("enabled", True),
+                }
+
+    orphans = []
+    for name, info in cand.items():
+        if info["freq"] != "day":
+            continue  # 周/月线机制豁免
+        if info["tier"] == "X" or info["enabled"] is False:
+            continue  # 死结接口机制豁免
+        if name in in_group:
+            continue
+        if name in exempt or name in periodic or name in schedule:
+            continue
+        # R5：EXCLUDED 的**理由为空不算归宿**（防 {"x": ""}/{"x": None} 冒充“已定性”）。
+        if name in excluded and excluded[name] is not None and str(excluded[name]).strip():
+            continue
+        orphans.append(f"{name}(tier={info['tier'] or '-'},mode={info['mode']})")
+    return cand, orphans
+
+
+# ============================================================
 # C-3（18 号 §421）：known_gaps 登记 × 库内实据 双向断言
 # ============================================================
 # 为什么需要（§414.4 实证）：R20 原本只查 `source_empty_count == len(...)` 的自洽性，
@@ -120,6 +207,9 @@ SOURCE_EMPTY_FLOOR = {
     "share_float": 347,
 }
 SOURCE_EMPTY_DATES_FLOOR = {
+    # REQ-20261126-01 T12（2026-11-28）：fund_share 1998-03-30~2005-12-20
+    #   共 1,536 天源端确空（B1 逐日探针 1,536/1,536 全 0 行 + 83 只基金全历史交叉验证）。
+    "fund_share": 1536,
     "block_trade": 356,
     "ggt_top10": 134,
     "hsgt_top10": 102,
@@ -749,7 +839,7 @@ def _run_all():
     _say(f"\n{SEP}\n  R10 每日更新清单完整性\n{SEP}")
 
     def r10():
-        """每张「按日/按区间」表必须明确"跑或不跑"，不允许悬空。
+        """每张「按日/按区间/按代码」表必须明确"跑或不跑"，不允许悬空。
 
         背景（2026-09-19 实证）:
           "属性定义"（BACKFILL_TARGETS / DAILY_UPDATE_EXTRA）与"执行白名单"
@@ -790,6 +880,15 @@ def _run_all():
           区分 ③④ 与 ②：前者是"机制上不该跑"，后者是"能跑但选择不跑"。
           能跑而未登记者一律报错，逼出"要么纳入、要么写理由"的决定。
 
+        ⚠ 2026-11-28 T7 扩面：候选纳入 **by_code** 表，归宿扩为五态：
+          日更组 / PERIODIC_UPDATE_TARGETS / DAILY_UPDATE_EXEMPT / SCHEDULE / EXCLUDED。
+          旧实现只扫 by_date/by_range ⇒ by_code 且不在组的表（fund_share）完全在
+          断言视野之外，是本次“77.5% 标的停更无人发现”的制度盲区。
+
+        ⚠ T8 承载方实证：EXCLUDED 中“由 X 通道承载”的条目，X 的代码文件必须
+          真实引用该表（`EXCLUDED_CARRIER_CHECKS`）；否则红。fund_share 曾以
+          “由 fund-nav 承载”为由停调，实际 `fund_nav_update.py` 从不写它。
+
         另附反向检查: 组里的表必须都有属性定义，否则跑到它时会拿不到配置。
         """
         from config import (
@@ -797,7 +896,9 @@ def _run_all():
             DAILY_UPDATE_EXEMPT,
             DAILY_UPDATE_EXTRA,
             DAILY_UPDATE_GROUPS,
+            PERIODIC_UPDATE_TARGETS,
         )
+        from config.schedule import EXCLUDED, SCHEDULE
 
         # 引擎真正支持"日更"的判据 —— **从 daily_update 导入，单一真源**
         # （2026-09-22 改造）:
@@ -814,41 +915,41 @@ def _run_all():
             for m in members:
                 in_group[m] = g
 
-        # 汇总候选表（属性定义来源）:
-        #   ① 模式属日更范畴（by_date / by_range）
-        #   ② **所有已在组里的表** —— 必须纳入，否则无法校验其 mode 是否真被支持
-        #      （index_global 是 by_code 且只在组里，漏掉它就漏掉了「假纳入」检查）
-        daily_modes = ("by_date", "by_range")
-        cand = {}
-        for src, tag in ((DAILY_UPDATE_EXTRA, "EXTRA"), (BACKFILL_TARGETS, "BACKFILL")):
-            for name, conf in src.items():
-                if conf.get("mode") in daily_modes or name in in_group:
-                    cand[name] = {
-                        "mode": conf.get("mode"),
-                        "freq": conf.get("freq", "day"),
-                        "src": tag,
-                        "tier": conf.get("tier"),
-                        "enabled": conf.get("enabled", True),
-                    }
-
-        # ① 前向：每张表都有归宿
-        leaked = []
-        for name, info in cand.items():
-            if info["freq"] != "day":
-                continue  # ③ 机制豁免: 周线/月线
-            if info["tier"] == "X" or info["enabled"] is False:
-                continue  # ④ 机制豁免: 死结接口
-            if name in in_group:
-                continue  # ① 已纳入
-            if name in DAILY_UPDATE_EXEMPT:
-                continue  # ② 刻意豁免
-            leaked.append(f"{name}(tier={info['tier'] or '-'},{info['mode']})")
+        # ① 前向：每张表都有归宿（**T7 扩面：by_code 也纳入候选**）
+        #   旧实现只扫 by_date/by_range ⇒ by_code 且不在组的表完全在断言视野外，
+        #   2026-11-28 fund_share 事故即此制度盲区。现归宿五选一：
+        #   日更组 / 周期更新通道 / 日更豁免 / 周期排班 / EXCLUDED（附理由）。
+        cand, leaked = r10_dispositions(
+            BACKFILL_TARGETS,
+            DAILY_UPDATE_EXTRA,
+            DAILY_UPDATE_GROUPS,
+            DAILY_UPDATE_EXEMPT,
+            PERIODIC_UPDATE_TARGETS,
+            SCHEDULE,
+            EXCLUDED,
+        )
 
         assert not leaked, (
-            f"以下「按日/按区间」表既未纳入每日更新、也未登记豁免: {leaked}\n"
-            f"    → 请二选一：加入 DAILY_UPDATE_GROUPS，或写入 DAILY_UPDATE_EXEMPT（附原因）\n"
+            f"以下「按日/按区间/按代码」表既未纳入任何更新通道、也未登记归宿: {leaked}\n"
+            f"    → 五选一：DAILY_UPDATE_GROUPS / PERIODIC_UPDATE_TARGETS / "
+            f"DAILY_UPDATE_EXEMPT / SCHEDULE / EXCLUDED（附理由）\n"
             f"    （这类漏登不报错，只会让数据静默逐日变旧。\n"
-            f"      by_range 族在 2026-09-21 前一直漏在断言视野外，实证 shibor 静默落后 3 天）"
+            f"      by_range 族在 2026-09-21 前、by_code 族在 2026-11-28 前一直漏在断言视野外）"
+        )
+
+        # ①a R5：EXCLUDED 的每条理由必须非空（空串 = 静默垃圾桶）
+        ex_empty = [k for k, v in EXCLUDED.items() if v is None or not str(v).strip()]
+        assert not ex_empty, (
+            f"EXCLUDED 以下条目理由为空（等于未定性）: {ex_empty}\n"
+            f"    → 写不出理由的表说明它该进日更组/周期通道；空串不算归宿"
+        )
+
+        # ①b T8 承载方实证：EXCLUDED 里“由 X 通道承载”必须真的引用该表
+        carrier_bad = check_excluded_carriers(EXCLUDED, CODE_DIR)
+        assert not carrier_bad, (
+            f"EXCLUDED 的“承载方”声明未经实证: {carrier_bad}\n"
+            f"    → 必须在 EXCLUDED_CARRIER_CHECKS 登记承载方文件，且文件中真实引用该表。\n"
+            f"    （fund_share 曾以“由 fund-nav 承载”为由停调 2 个月，实际该通道从不写它）"
         )
 
         # ② 反向：组里的表必须有属性定义
@@ -880,7 +981,6 @@ def _run_all():
         #   by_date / freq=day），此前**无归宿、无陈旧监控**（实证停更 4 周无人发现）。
         #   本判据把"第三态"（周期通道）也纳入"要么纳入、要么写理由"的同一条纪律。
         from config import MARKET_DATA_DIR as _MDD
-        from config import PERIODIC_UPDATE_TARGETS
 
         # 列名校验复用 config_check 的"只读 parquet 元数据"助手（同一份实现，
         # 避免第三处各写一份 schema 读取）——故 import 私有名。
@@ -923,11 +1023,14 @@ def _run_all():
         )
         n_week = n_cand - n_daily
         n_by_range = sum(1 for i in cand.values() if i["mode"] == "by_range")
+        n_by_code = sum(1 for i in cand.values() if i["mode"] == "by_code")
+        n_by_date = n_cand - n_by_range - n_by_code
         return (
-            f"({n_cand}表[by_date {n_cand - n_by_range} + by_range {n_by_range}]: "
+            f"({n_cand}表[by_date {n_by_date} + by_range {n_by_range} + by_code {n_by_code}]: "
             f"日更候选{n_daily} = 纳入{n_grp} + 豁免{n_ex} + 死结{n_dead} | "
             f"周/月线{n_week} | 反向无孤儿 | 假纳入无 | 豁免均含原因 | "
-            f"周期通道{len(PERIODIC_UPDATE_TARGETS)}表(理由/列名/无重叠))"
+            f"周期通道{len(PERIODIC_UPDATE_TARGETS)}表(理由/列名/无重叠) | "
+            f"承载方实证{len(EXCLUDED_CARRIER_CHECKS)}条)"
         )
 
     check("每日更新清单完整性", r10)

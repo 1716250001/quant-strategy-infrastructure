@@ -494,7 +494,25 @@ def _add_ckpt_args(p):
 
 
 def cmd_db_freshness(args):
-    """表级数据新鲜度（CLI 默认 strict；--no-strict 恒 exit 0）"""
+    """表级数据新鲜度（CLI 默认 strict；--no-strict 恒 exit 0）
+
+    `--per-code`（REQ-20261126-01 T6）：改为逐标的最新日期体检，
+    按披露节奏分档；默认表 fund_share。
+    """
+    if getattr(args, "per_code", False):
+        from tools.db.per_code import run as run_per_code
+
+        raise SystemExit(
+            run_per_code(
+                table=getattr(args, "table", "fund_share"),
+                asof=getattr(args, "asof", None),
+                as_json=getattr(args, "json", False),
+                json_out=getattr(args, "json_out", None),
+                top=getattr(args, "top", 20),
+                strict=getattr(args, "strict", True),
+            )
+        )
+
     from tools.db.freshness import run
 
     only = {x.strip() for x in args.only.split(",")} if getattr(args, "only", None) else None
@@ -505,6 +523,15 @@ def cmd_db_freshness(args):
 
 def _add_db_freshness_args(p):
     p.add_argument("--only", default=None, help="只看指定表, 逗号分隔")
+    p.add_argument(
+        "--per-code",
+        action="store_true",
+        help="逐标的最新日期体检（T6：按披露节奏分档，默认表 fund_share）",
+    )
+    p.add_argument("--table", default="fund_share", help="--per-code 的表名（默认 fund_share）")
+    p.add_argument("--asof", default=None, help="--per-code 快照日 YYYYMMDD（默认最近交易日）")
+    p.add_argument("--top", type=int, default=20, help="--per-code worst 展示条数（默认 20）")
+    p.add_argument("--json-out", default=None, help="--per-code JSON 落盘路径（可选）")
     strict = p.add_mutually_exclusive_group()
     strict.add_argument(
         "--strict",

@@ -131,6 +131,9 @@ DOMAINS: tuple[CheckpointDomain, ...] = (
             "forecast",
             "fund_adj",
             "fund_div",
+            # REQ-20261126-01（2026-11-28）：fund_share 由 by_code 改 by_date 日更，
+            #   断点域随之从 code 迁到 date8（否则 mark_done 会按「未登记表」拒写）。
+            "fund_share",
             "fut_daily",
             "fut_holding",
             "fut_mapping",
@@ -179,7 +182,8 @@ DOMAINS: tuple[CheckpointDomain, ...] = (
             "express",
             "fina_audit",
             "fina_mainbz",
-            "fund_share",
+            # ⚠ fund_share 2026-11-28 改 by_date 后移入 market.backfill.by_date 域；
+            #   历史 code 键（2,996 条）仍在断点文件中，但本域不再负责写入。
             "fut_index_daily",
             "index_global",
             "index_monthly",
@@ -361,10 +365,10 @@ DOMAINS: tuple[CheckpointDomain, ...] = (
             "cb_issue",
             "cb_rating",
             "fund_daily",
-            "fund_share",
             "share_float",
         ),
-        note="与主账/日更账同 (table, code) 空间，完成度以各表 PRIMARY 为准 ⇒ SUPPLEMENTARY。",
+        note="与主账/日更账同 (table, code) 空间，完成度以各表 PRIMARY 为准 ⇒ SUPPLEMENTARY。"
+        "⚠ fund_share 2026-11-28 改 by_date 后已移出本域（历史 code 键仍在文件中，只读不写）。",
     ),
     CheckpointDomain(
         id="market.daily_ckpt.code",

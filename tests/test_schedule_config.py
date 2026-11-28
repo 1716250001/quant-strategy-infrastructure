@@ -13,7 +13,7 @@ from fetch.schedule_runner import daily_names, is_due
 
 
 def _scheduled_set():
-    """57 张＝BACKFILL_TARGETS − 日更组 − 周期组。"""
+    """56 张＝BACKFILL_TARGETS − 日更组 − 周期组（fund_share 已转入日更组）。"""
     daily = set(DAILY_UPDATE_EXTRA) | set(PERIODIC_UPDATE_TARGETS)
     for group in DAILY_UPDATE_GROUPS.values():
         daily |= set(group)
@@ -21,11 +21,11 @@ def _scheduled_set():
 
 
 def test_coverage_no_omission():
-    """判据 1：57 张必须**全部**有归属（在册 33 ＋ 剔除 24，CC-FIX-15）。"""
+    """判据 1：56 张必须**全部**有归属（在册 33 ＋ 剔除 23，CC-FIX-15/F2-A）。"""
     cover = set(SCHEDULE) | set(EXCLUDED)
     assert cover == _scheduled_set()
     assert not (set(SCHEDULE) & set(EXCLUDED))
-    assert len(SCHEDULE) == 33 and len(EXCLUDED) == 24
+    assert len(SCHEDULE) == 33 and len(EXCLUDED) == 23
 
 
 def test_freq_values_valid():
@@ -34,14 +34,41 @@ def test_freq_values_valid():
 
 
 def test_cn_pmi_blocked_and_dual_channel_excluded():
-    """CC-FIX-15 A1/A2/A5：cn_pmi 退出排班但保留挂账；双通道两表剔除。"""
+    """CC-FIX-15 A1/A2/A5：cn_pmi 退出排班但保留挂账；双通道按实证归属。
+
+    ⚠ REQ-20261126-01（2026-11-28）更正：`fund_share` 的 EXCLUDED 理由
+    “由 fund-nav 独立通道承载”是错误前提（fund_nav_update.py 从不写 fund_share）。
+    该表已改 by_date 并纳入 extend 日更组，**只保留 fund_nav 在 EXCLUDED**。
+    """
     from config.tables import PENDING_REFRESH
 
     assert "cn_pmi" not in SCHEDULE and "cn_pmi" in EXCLUDED
     assert "源端列集变更" in EXCLUDED["cn_pmi"]
     assert "挂账不动" in PENDING_REFRESH["cn_pmi"]["plan"]
-    for name in ("fund_nav", "fund_share"):
-        assert name not in SCHEDULE and name in EXCLUDED
+    assert "fund_nav" not in SCHEDULE and "fund_nav" in EXCLUDED
+    assert "fund_share" not in EXCLUDED
+    assert "fund_share" in DAILY_UPDATE_GROUPS["extend"]
+
+
+def test_fund_share_must_not_return_to_excluded():
+    """负例（REQ-20261126-01 T5）：禁止把 fund_share 重新写回 EXCLUDED。
+
+    该表曾因“由 fund-nav 承载”的**未经实证**理由被移出排班，实际主通道
+    fund_nav_update.py 从不写 fund_share ⇒ 77.5% 标的自 20260918 起停更。
+    若有人再次把 fund_share 加进 EXCLUDED（无论理由措辞），本用例必须报红。
+    """
+    assert "fund_share" in DAILY_UPDATE_GROUPS["extend"], (
+        "fund_share 必须由 extend 日更组承载（by_date，单日约 1,744 只）"
+    )
+    assert "fund_share" not in EXCLUDED, (
+        "fund_share 不得重新进入 EXCLUDED：所谓“由 fund-nav 承载”是错误前提，"
+        "fetch/fund_nav_update.py 全文不写 fund_share（REQ-20261126-01 已实证）"
+    )
+    from config.backfill_targets import BACKFILL_TARGETS as _BT
+
+    assert _BT["fund_share"]["mode"] == "by_date", (
+        "fund_share 的日更形态必须是 by_date；by_code 会被断点/库内已有双闸门锁死"
+    )
 
 
 def test_grayscale_candidates_are_safe():
